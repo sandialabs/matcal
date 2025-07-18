@@ -1,0 +1,4 @@
+Cell Type,ObjectId,stress_xx,stress_xy,stress_yy,stress_yz,stress_zx,stress_zz,Block Number,Cell ID
+12,1,0,0,0,0,0,0,2,0
+12,2,0,0,0,0,0,0,3,0
+

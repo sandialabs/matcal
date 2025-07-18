@@ -1,0 +1,7 @@
+    brick x 1 y 1 z 0.1
+    vol all size 0.1
+    mesh vol all
+    block 1 vol all
+    block 1 element type HEX8
+    block 1 name "my_block"
+    export mesh "test_mesh.g"

@@ -1,0 +1,587 @@
+
+reset
+
+#{grip_radius=~grip_radius~}
+#{gauge_radius=~gauge_radius~}
+#{notch_gauge_radius=~notch_gauge_radius~}
+#{notch_radius=~notch_radius~}
+#{theta = 90}
+#{extensometer_length = ~extensometer_length~}
+#{gauge_length = ~gauge_length~}
+#{total_length = ~total_length~}
+#{fillet_radius = ~fillet_radius~}
+#{necking_region = ~necking_region~}
+#{mesh_method = ~mesh_method~}
+#{grip_contact_length=~grip_contact_length~}
+#{element_size = ~element_size~}
+#{element_type = "~element_type~"}
+#{full_field_window_height = ~full_field_window_height~}
+#{full_field_window_width = ~full_field_window_width~}
+
+#{if(element_type == "tet10" || element_type == "composite_tet")}
+#{face_element = "tri"}
+#{else}
+#{face_element = "face"}
+#{endif}
+
+#{necking_region_length = necking_region*extensometer_length/2}
+
+#{if(mesh_method == 1)}
+    #{grip_vol_element_size = element_size}
+    #{grip_surf_element_size = element_size}
+    #{gauge_vol_element_size = element_size}
+    #{gauge_surf_element_size = element_size}
+#{elseif(mesh_method == 2)}
+    #{grip_vol_element_size = element_size}
+    #{grip_surf_element_size = 3*element_size}
+    #{gauge_vol_element_size = element_size}
+    #{gauge_surf_element_size = 2*element_size}
+#{elseif(mesh_method == 3)}
+    #{grip_vol_element_size = 3*element_size}
+    #{grip_surf_element_size = 3*element_size}
+    #{gauge_vol_element_size = 2*element_size}
+    #{gauge_surf_element_size = 2*element_size}
+#{elseif(mesh_method == 4)}
+    #{grip_vol_element_size = 3*element_size}
+    #{grip_surf_element_size = 3*element_size}
+    #{gauge_vol_element_size = element_size}
+    #{gauge_surf_element_size = element_size}
+#{elseif(mesh_method == 5)}
+    #{grip_vol_element_size = 3*3*element_size}
+    #{grip_surf_element_size = 3*3*element_size}
+    #{gauge_vol_element_size = 3*element_size}
+    #{gauge_surf_element_size = 3*element_size}
+#{endif}
+
+{if(necking_region_length == 0)}
+    #{necking_region_length=notch_radius*1.2}
+{endif}
+create vertex 0 0 0
+#{vertex_1 = Id('vertex')}
+
+create vertex {gauge_radius} 0 0
+#{vertex_2 = Id('vertex')}
+
+create vertex {gauge_radius} {gauge_length/2} 0
+#{vertex_3 = Id('vertex')}
+
+create vertex {grip_radius}  {gauge_length/2} 0
+#{vertex_4 = Id('vertex')}
+
+create vertex {grip_radius}  {total_length/2} 0
+#{vertex_5 = Id('vertex')}
+
+create vertex 0 {total_length/2} 0
+#{vertex_6= Id('vertex')}
+
+create curve polyline vertex {vertex_1} {vertex_2} {vertex_3} {vertex_4} {vertex_5} {vertex_6} {vertex_1}
+
+#{curve_6= Id('curve')}
+#{curve_5= Id('curve')-1}
+#{curve_4= Id('curve')-2}
+#{curve_3= Id('curve')-3}
+#{curve_2= Id('curve')-4}
+#{curve_1= Id('curve')-5}
+
+create surface curve {curve_1} {curve_2} {curve_3} {curve_4} {curve_5} {curve_6}
+#{main_vol = Id('volume')}
+
+create cylinder height {gauge_radius}  radius {fillet_radius}
+#{cylinder_vol = Id('volume')}
+
+move volume {cylinder_vol} x {fillet_radius+gauge_radius} y {gauge_length/2} z 0
+subtract vol {cylinder_vol} from vol {main_vol}
+
+#{if(grip_radius-gauge_radius-fillet_radius > 0)}
+    create brick x {grip_radius-gauge_radius-fillet_radius} y {fillet_radius} z {gauge_radius/2}
+    #{brick_vol = Id('volume')}
+
+    move volume {brick_vol} x  {(grip_radius-gauge_radius-fillet_radius)/2} y {fillet_radius/2} z 0
+    move volume {brick_vol} x  {(gauge_radius+fillet_radius)} y {gauge_length/2} z 0
+    subtract vol {brick_vol} from vol {main_vol}
+#{endif}
+
+create cylinder height {gauge_radius}  radius {notch_radius}
+#{cylinder_vol = Id('volume')}
+move volume {cylinder_vol} x {notch_radius+notch_gauge_radius} y 0 z 0
+subtract vol {cylinder_vol} from vol {main_vol}
+
+#{if(gauge_radius-notch_gauge_radius-notch_radius > 0)}
+    create brick x {gauge_radius-notch_gauge_radius-notch_radius} y {notch_radius} z {gauge_radius}
+    #{brick_vol = Id('volume')}
+    move volume {brick_vol} x  {(gauge_radius-notch_gauge_radius-notch_radius)/2} y {notch_radius/2} z 0
+    move volume {brick_vol} x  {(notch_gauge_radius+notch_radius)} y 0 z 0
+subtract vol {brick_vol} from vol {main_vol}
+#{endif}
+
+#{surface_1 = Id('surface')}
+sweep surface {surface_1} yaxis angle {-theta}
+
+webcut vol {main_vol} with plane yplane offset {extensometer_length/2}
+#{new_vol = Id('volume')}
+group 'new_specimen' add vol {main_vol} {new_vol}
+#{new_specimen_group_id = Id("group")}
+
+webcut vol in new_specimen with plane yplane offset {gauge_length/2}
+#{new_vol = Id('volume')}
+group 'new_specimen' add vol {new_vol}
+
+webcut vol in new_specimen with plane yplane offset {necking_region_length}
+#{new_vol = Id('volume')}
+group 'new_specimen' add vol {new_vol}
+
+group "gauge_section" add vol  in new_specimen with y_coord < {gauge_length/2} and with y_coord > {necking_region_length}
+#{gauge_section_group_id = Id("group")}
+
+group 'necking_section' add vol in new_specimen with y_coord < {necking_region_length} 
+#{necking_section_group_id = Id("group")}
+
+group 'grip_section' add vol in new_specimen with y_coord > {gauge_length/2}
+#{grip_section_group_id = Id("group")}
+
+
+#{reduce_cyl_limit = 0.5}
+#{if(mesh_method <= 3)}
+    #{cyl_cut_ref_size = element_size}
+#{elseif(mesh_method == 4)}
+    #{cyl_cut_ref_size = element_size*3}
+#{elseif(mesh_method == 5)}
+    #{cyl_cut_ref_size = element_size*3*3}
+#{endif}
+#{cyl_cut_interval = floor(notch_gauge_radius/cyl_cut_ref_size)}
+#{cyl_fmod = fmod(notch_gauge_radius, cyl_cut_ref_size)}
+#{if((cyl_fmod/cyl_cut_ref_size)< reduce_cyl_limit)}
+    #{cyl_cut_interval -= 1}
+#{endif}
+
+#{cyl_cut_rad = cyl_cut_interval*cyl_cut_ref_size}
+#{if(cyl_cut_rad >=(notch_gauge_radius-cyl_cut_ref_size*reduce_cyl_limit))}
+    #{cyl_cut_interval -= 1}
+    #{cyl_cut_rad = cyl_cut_interval*cyl_cut_ref_size}
+#{endif}
+#{if(cyl_cut_rad<cyl_cut_ref_size)}
+    #{cyl_cut_rad = cyl_cut_ref_size}
+    #{cyl_cut_interval=1}
+#{endif}
+
+#{cut_at_notch_transition_to_gauge = 0}
+#{if((notch_gauge_radius+notch_radius)< gauge_radius)}
+    #{notch_curve_outer_radius = notch_gauge_radius+notch_radius}
+    #{cyl_cut_len_outside_notch_curve = cyl_cut_rad - notch_curve_outer_radius}
+    #{if(cyl_cut_len_outside_notch_curve < 0)}
+        #{cyl_cut_len_outside_notch_curve = -1*cyl_cut_len_outside_notch_curve}
+    #{endif}
+    #{cyl_cut_len_outside_notch_curve_fmod_elementsize=fmod(cyl_cut_len_outside_notch_curve,cyl_cut_ref_size)}
+    #{if(cyl_cut_len_outside_notch_curve_fmod_elementsize/cyl_cut_ref_size < 0.5 && cyl_cut_len_outside_notch_curve < cyl_cut_ref_size)}
+        #{cyl_cut_rad = notch_curve_outer_radius}
+
+    #{else}
+        #{cut_at_notch_transition_to_gauge = 1}
+    #{endif}
+#{endif}
+
+webcut volume in grip_section with cylinder radius {cyl_cut_rad} axis y
+#{new_vol = Id('volume')}
+group 'grip_section' add vol with y_coord > {gauge_length/2} except vol in grip_section
+group 'new_specimen' add vol {new_vol}
+
+webcut volume in gauge_section with cylinder radius {cyl_cut_rad} axis y
+#{new_vol = Id('volume')}
+group 'gauge_section' add vol with y_coord < {gauge_length/2} and with y_coord > {necking_region_length} except vol in gauge_section
+group 'new_specimen' add vol {new_vol} {new_vol-1}
+
+#{if(BBox_XMax("group", necking_section_group_id) > cyl_cut_rad)}
+    webcut volume in necking_section with cylinder radius {cyl_cut_rad} axis y
+    #{new_vol = Id('volume')}
+    group 'necking_section' add vol with y_coord < {necking_region_length} except vol in necking_section
+    group 'new_specimen' add vol {new_vol}
+#{endif}
+#{if(cut_at_notch_transition_to_gauge)}
+    webcut volume in grip_section with cylinder radius {notch_curve_outer_radius} axis y
+    #{new_vol = Id('volume')}
+    group 'grip_section' add vol with y_coord > {gauge_length/2} except vol in grip_section
+    group 'new_specimen' add vol {new_vol}
+
+    webcut volume in gauge_section with cylinder radius {notch_curve_outer_radius} axis y
+    #{new_vol = Id('volume')}
+    group 'gauge_section' add vol with y_coord < {gauge_length/2} and with y_coord > {necking_region_length} except vol in gauge_section
+    group 'new_specimen' add vol {new_vol} {new_vol-1}
+
+    #{if(necking_region_length>notch_radius)}
+        webcut volume in necking_section with cylinder radius {notch_curve_outer_radius} axis y
+        #{new_vol = Id('volume')}
+        group 'necking_section' add vol with y_coord < {necking_region_length} except vol in necking_section
+        group 'new_specimen' add vol {new_vol}
+    #{endif}
+#{endif}
+
+#{outter_grip_section = 0}
+#{if(grip_radius > (gauge_radius + fillet_radius))}
+    #{outter_grip_section = 1}
+    webcut volume in grip_section with cylinder radius {gauge_radius + fillet_radius} axis y
+    #{new_vol = Id('volume')}
+    group 'grip_section' add vol {new_vol}
+    group 'new_specimen' add vol {new_vol}
+#{endif}
+
+#{if(outter_grip_section)}
+    #{index = 0}
+    #{max_grip_x_loc = 0}
+    #{max_grip_x_loc_vol_index = 0}
+    #{loops = NumTypeInGroup("grip_section", "volume")}
+    #{loop(loops)}
+        #{vol_of_interest = GroupMemberId("grip_section", "volume", index )}
+        #{x_loc = GeomCentroid_X("volume", vol_of_interest)}
+        #{if(x_loc > max_grip_x_loc)}
+            #{max_grip_x_loc = x_loc}
+            #{max_grip_x_loc_vol_index = vol_of_interest}
+        #{endif}
+        #{index++}
+    #{endloop}
+    group 'outter_grip_section' add vol {max_grip_x_loc_vol_index}
+#{endif}
+
+imprint vol in new_specimen
+merge vol in new_specimen
+
+group 'surfaces_at_z_plane' add surface in vol in new_specimen  with z_coord == 0
+group 'top_grip' add surface in vol in new_specimen with y_coord > {total_length/2*0.99}
+group 'y_fixed' add surface in vol in new_specimen with y_coord == 0
+
+group 'surfs_to_exclude' add surf in surfaces_at_z_plane
+group 'surfs_to_exclude' add surf in top_grip
+group 'surfs_to_exclude' add surface in y_fixed
+
+#{index = 0}
+#{loops = NumTypeInGroup("surfaces_at_z_plane", "surface")}
+#{loop(loops)}
+    #{surf_of_interest = GroupMemberId("surfaces_at_z_plane", "surface", index )}
+    #{area = SurfaceArea(surf_of_interest)}
+    group 'axis_sym_surfs' add surface with area > {area*0.99999} and with area < {area*1.00001} in vol in new_specimen except surf in surfs_to_exclude
+    #{index++}
+#{endloop}
+
+group 'surfs_to_exclude' add surface in axis_sym_surfs
+group 'surfs_to_exclude' add surface common_to vol in grip_section
+
+#{if((grip_radius - (gauge_radius+fillet_radius))<0)}
+    # {blend_rad_theta = acos((fillet_radius-(grip_radius-gauge_radius))/fillet_radius)}
+    #{effective_fillet_radius_height =  tan(blend_rad_theta)*(fillet_radius-(grip_radius-gauge_radius))}
+    #{effective_fillet_radius_width =  grip_radius-gauge_radius}
+    
+#{else}
+    #{effective_fillet_radius_height = fillet_radius}
+    #{effective_fillet_radius_width = fillet_radius}
+#{endif}
+
+#{grip_numsplit_cut=0}
+#{grip_height = total_length/2-gauge_length/2-effective_fillet_radius_height}
+#{if((mesh_method == 4 || mesh_method == 5) && fillet_radius == effective_fillet_radius_height)}
+    #{unblended_grip_height = total_length/2-gauge_length/2-fillet_radius}
+    #{if((unblended_grip_height > 3*grip_element_size) && (fillet_radius < 2*grip_element_size))}
+        #{perfom_grip_numsplit = 1}
+        #{numsplit_surf_loc = gauge_length/2+fillet_radius+grip_element_size}
+        webcut vol in grip_section with plane yplane offset {numsplit_surf_loc}
+        #{grip_numsplit_cut=1}
+        #{new_vol = Id('volume')}
+
+        group 'grip_section' add vol {new_vol}
+        group 'new_specimen' add vol {new_vol}
+        group "mesh_method_grip_numsplit_surf" add surf in vol in grip_section with y_coord < {numsplit_surf_loc*1.0001} and with y_coord > {numsplit_surf_loc*0.999}
+    #{elseif(grip_height > 3*grip_element_size)}
+        #{perfom_grip_numsplit = 1}
+        #{numsplit_surf_loc = gauge_length/2}
+        group "mesh_method_grip_numsplit_surf" add surf in vol in gauge_section with y_coord < {numsplit_surf_loc*1.001} and with y_coord > {numsplit_surf_loc*0.999}
+    #{else}
+        #{perfom_grip_numsplit = 0}
+        group "mesh_method_grip_numsplit_surf" add surf in vol in gauge_section with y_coord < {gauge_length*0.5*1.001} and with y_coord > {gauge_length*0.5*0.999}
+        #{grip_element_size = grip_element_size/3}
+    #{endif}
+#{else}
+   #{perfom_grip_numsplit = 1}
+   #{numsplit_surf_loc = gauge_length/2}
+   group "mesh_method_grip_numsplit_surf" add surf in vol in gauge_section with y_coord < {numsplit_surf_loc*1.001} and with y_coord > {numsplit_surf_loc*0.999}
+#{endif} 
+
+#{large_fillet_radius = "false"}
+#{if((mesh_method == 4 || mesh_method == 5) && effective_fillet_radius_width > gauge_radius*2)}
+    webcut vol in grip_section with cylinder radius {effective_fillet_radius_width/3+gauge_radius} axis y
+    #{new_vol = Id('volume')}
+    group 'grip_section' add vol {new_vol}
+    #{large_fillet_radius = "true"}
+#{endif}
+
+
+imprint vol all
+merge vol all
+
+group 'side_grip' add surface in vol in grip_section with y_coord > {gauge_length/2+effective_fillet_radius_height} except surf in surfs_to_exclude
+
+nodeset 1000 surface in surfaces_at_z_plane
+nodeset 1000 name "ns_z_symmetry"
+ 
+nodeset 2000 surface in axis_sym_surfs
+nodeset 2000 name "ns_axis_symmetry"
+
+nodeset 3000 surface in y_fixed
+nodeset 3000 name "ns_y_symmetry"
+
+nodeset 4000 surface in top_grip
+nodeset 4000 name "ns_top_grip"
+
+nodeset 6000 surface in vol in gauge_section with y_coord < {extensometer_length/2*1.001} and with y_coord > {extensometer_length/2*0.999}
+nodeset 6000 name "extensometer_surf"
+
+nodeset 7000 curve with x_coord == 0
+nodeset 7000 name "fixed_x_curves"
+
+nodeset 8000 surf with x_coord < {1e-6*element_size}
+nodeset 8000 name "ns_x_symmetry"
+
+block 1000 vol in grip_section
+block 1000 name "grip_section"
+
+block 2000 vol in gauge_section
+block 2000 name "gauge_section"
+
+block 3000 vol in necking_section
+block 3000 name "necking_section"
+
+#{inner_vol_radius = cyl_cut_rad}
+#{if((cyl_cut_rad > notch_curve_outer_radius) && cut_at_notch_transition_to_gauge==1)}
+    #{inner_vol_radius = notch_curve_outer_radius}
+#{endif}
+
+group 'inner_necking_section_vol' add vol with x_coord < {inner_vol_radius/2*1.00001} and y_coord < {necking_region_length}
+group 'inner_gauge_section_vol' add vol with x_coord < {inner_vol_radius/2*1.00001} and y_coord < {gauge_length/2} except vol in inner_necking_section_vol
+group 'inner_grip_section_vol' add vol  with x_coord < {inner_vol_radius/2*1.00001} and y_coord > {gauge_length/2}
+
+#{cyl_cut_circumference_length = cyl_cut_rad*PI/2}
+#{grip_circumference_interval = ceil(cyl_cut_circumference_length/grip_vol_element_size)}
+#{if(grip_circumference_interval < 3)}
+    #{grip_circumference_interval =3}
+#{endif}
+
+#{if(element_type == "tet10"|| element_type == "composite_tet")}
+
+    vol in grip_section size {grip_vol_element_size}
+    surf in vol in grip_section size {grip_surf_element_size}
+    vol in gauge_section size {gauge_vol_element_size}
+    surf in vol in gauge_section size {gauge_surf_element_size}
+    vol in necking_section size {element_size}
+
+    block all element type tetra10
+    volume all scheme tetmesh
+    mesh vol all
+
+#{elseif(mesh_method == 1)}
+    unmerge vol all
+    unite vol in necking_section
+    unite vol in gauge_section with y_coord < {extensometer_length/2}
+    unite vol in gauge_section with y_coord > {extensometer_length/2}
+    unite vol in grip_section
+
+    #{if((notch_gauge_radius+notch_radius) - (gauge_radius-gauage_vol_element_size) < 0.5*gauage_vol_element_size)}
+        #{rad_cut = notch_gauge_radius+notch_radius}
+    #{else}
+        #{rad_cut = gauge_radius-element_size}
+    #{endif}
+    webcut vol all with cylinder radius {rad_cut} axis y
+
+    regularize vol all
+    imprint vol all
+    merge vol all
+
+    group 'necking_section' add vol in new_specimen with y_coord < {necking_region_length}
+    group 'sweep_vol' add vol in necking_section with x_coord < {(rad_cut)*cos(theta/2)}
+    #{num_sweep_vol=NumTypeInGroup("sweep_vol", "volume" )}
+    #{num_neckin_vol=NumTypeInGroup("necking_section", "volume" )}
+    #{if(num_sweep_vol >= 1)}
+        group "to_mesh_first" add vol in sweep_vol
+    #{elseif(num_neckin_vol >= 1)}
+        group "to_mesh_first" add vol in necking_section
+    #{endif}
+
+    group 'source_surf' add surf in vol in to_mesh_first with y_coord < 1e-6
+    group 'target_surf' add surf in vol in to_mesh_first with y_coord > {necking_region_length*0.99}
+
+    volume in to_mesh_first redistribute nodes off
+    volume in to_mesh_first scheme Sweep  source surface in source_surf   target surface in target_surf sweep transform least squares
+    volume in to_mesh_first  autosmooth target on  fixed imprints off  smart smooth off
+
+    vol in to_mesh_first size {element_size}
+    mesh volume in to_mesh_first
+
+    vol all size {element_size}
+    mesh vol all
+
+#{elseif(mesh_method == 2 || mesh_method == 3)}
+    vol in necking_section size  {element_size}
+    #{if(cyl_cut_interval > 0)}
+        curve with length > {0.99*cyl_cut_rad} and with length < {1.01*cyl_cut_rad} interval {cyl_cut_interval}
+    #{endif}
+    surf in vol in necking_section with z_coord < 1e-6 and x_coord > {cyl_cut_rad} scheme pave
+    mesh vol in inner_necking_section_vol
+    mesh vol in necking_section
+
+    vol in grip_section size  {grip_vol_element_size}
+    vol in gauge_section size  {gauge_vol_element_size}
+    
+    surf in vol in grip_section with z_coord == 0 size {grip_surf_element_size}
+    surf in vol in grip_section with z_coord == 0 and x_coord > {cyl_cut_rad} scheme pave
+    surf in vol in gauge_section with z_coord == 0 size {gauge_surf_element_size}
+    surf in vol in gauge_section with z_coord < 1e-6 and x_coord > {cyl_cut_rad} scheme pave
+
+    mesh vol in inner_gauge_section_vol
+
+    mesh vol in gauge_section
+
+    mesh vol in inner_grip_section_vol
+    mesh vol in grip_section
+
+#{elseif(mesh_method == 4 || mesh_method == 5)}
+    vol in grip_section size {grip_vol_element_size}
+    surf in vol in grip_section with z_coord == 0 size {grip_surf_element_size}
+    #{if(cyl_cut_interval > 0)}
+        curve with length > {0.99*cyl_cut_rad} and with length < {1.01*cyl_cut_rad} and y_coord > {extensometer_length*0.5*0.99} interval {cyl_cut_interval}
+    #{endif}
+
+    #{if(grip_circumference_interval<5)}
+    curve in surf in vol in grip_section with length > {0.9999999*cyl_cut_circumference_length} and with length < {1.000001*cyl_cut_circumference_length} interval {grip_circumference_interval}
+    #{endif}
+    
+    mesh vol in inner_grip_section_vol
+    group "grip_vols_outer_section" add vol in grip_section except vol in inner_grip_section_vol 
+
+    #{if(outter_grip_section)}
+        group "grip_vols_outer_section" remove vol in outter_grip_section
+    #{endif}
+
+    #{if((large_fillet_radius == "true") && (outter_grip_section == 1))}
+        group "grip_vols_outer_section" remove vol in grip_section with x_coord >= {0.999999*(fillet_radius+gauge_radius)/2}
+    #{else}
+        group "grip_vols_outer_section" remove vol in grip_section with x_coord > {0.999999*grip_radius/2}
+
+    #{endif}
+
+    #{index = 0}
+    #{loops = NumTypeInGroup("grip_vols_outer_section", "volume")}
+    #{loop(loops)}
+        #{vol_of_interest = GroupMemberId("grip_vols_outer_section", "volume", index )}
+        group "bottom_surf" add surf in vol {vol_of_interest} with y_coord < {1.00001*gauge_length/2}
+        group "top_surf" add surf in vol {vol_of_interest} with y_coord > {0.99999*total_length/2}
+        surf in top_surf scheme pave
+        surf in top_surf size {grip_surf_element_size}
+        volume {vol_of_interest} redistribute nodes off
+        volume {vol_of_interest} scheme Sweep  source surface in top_surf target surface in bottom_surf  sweep transform least squares
+        volume {vol_of_interest} autosmooth target on  fixed imprints off  smart smooth off        
+        delete bottom_surf
+        delete top_surf
+        
+        #{index++}
+    #{endloop}
+
+    #{if(outter_grip_section)}
+       #{outter_grip_inner_rad = gauge_radius+fillet_radius}
+        #{outer_grip_inner_rad_interval = floor(outter_grip_inner_rad)/grip_surf_element_size}
+        #{if(outer_grip_inner_rad_interval< 4) }
+            #{outer_grip_inner_rad_interval = 4}
+        #{endif}
+        curve in surf in vol in outter_grip_section with length > {(theta/180*2*outter_grip_inner_rad*0.999999)} and with length < {(theta/180*2*outter_grip_inner_rad*0.999999)} interval {outer_grip_inner_rad_interval}
+    #{endif}
+
+
+    group "gauge_vols_outer_upper_section" add vol in gauge_section with y_coord > {gauge_length/2} except vol in inner_gauge_section_vol
+    #{index = 0}
+    #{loops = NumTypeInGroup("gauge_vols_outer_upper_section", "volume")}
+    #{loop(loops)}
+    #    #{vol_of_interest = GroupMemberId("gauge_vols_outer_upper_section", "volume", index )}
+    #    group "bottom_surf" add surf in vol {vol_of_interest} with y_coord < {1.00001*extensometer_length/2}
+    #    group "top_surf" add surf in vol {vol_of_interest} with y_coord > {0.99999*gauge_length/2}
+    #    volume {vol_of_interest} redistribute nodes off
+    #    volume {vol_of_interest} scheme Sweep  source surface in top_surf   target surface in bottom_surf  sweep transform least squares
+    #    volume {vol_of_interest} autosmooth target on  fixed imprints off  smart smooth off      
+    #    delete bottom_surf
+    #    delete top_surf
+         #{index++}
+    #{endloop}
+
+    group "gauge_vols_outer_lower_section" add vol in gauge_section with y_coord < {extensometer_length/2} except vol in inner_gauge_section_vol
+    #{index = 0}
+    #{loops = NumTypeInGroup("gauge_vols_outer_lower_section", "volume")}
+    #{loop(loops)}
+    #    #{vol_of_interest = GroupMemberId("gauge_vols_outer_lower2_section", "volume", index )}
+    #    group "bottom_surf" add surf in vol {vol_of_interest} with y_coord < {1.00001*necking_region_length}
+    #    group "top_surf" add surf in vol {vol_of_interest} with y_coord > {0.99999*extensometer_length/2}
+    #    volume {vol_of_interest} redistribute nodes off
+    #    volume {vol_of_interest} scheme Sweep  source surface in top_surf   target surface in bottom_surf  sweep transform least squares
+    #    volume {vol_of_interest} autosmooth target on  fixed imprints off  smart smooth off      
+    #    delete bottom_surf
+    #    delete top_surf
+         #{index++}
+    #{endloop}
+    mesh vol in grip_section
+
+    vol in gauge_section with y_coord >  {extensometer_length/2*0.999} size {grip_vol_element_size}
+    surf in vol in gauge_section with z_coord < 1e-6 and x_coord > {cyl_cut_rad} scheme pave
+    mesh vol in inner_gauge_section_vol with y_coord > {extensometer_length/2*0.999}
+    mesh vol in gauge_section with y_coord >  {extensometer_length/2*0.999}
+
+    refine surface in vol in gauge_section with y_coord < {extensometer_length/2*1.001} and with y_coord > {extensometer_length/2*0.999} numsplit 1 depth
+
+    vol in gauge_section with y_coord > {necking_region_length*0.999}  size {gauge_vol_element_size}
+    mesh vol in inner_gauge_section_vol with y_coord > {necking_region_length/2*0.999}
+    mesh vol in gauge_section with y_coord > {necking_region_length*0.999}
+    #{if(mesh_method == 5)}
+        refine surface in vol in gauge_section with y_coord < {necking_region_length*1.001} and with y_coord > {necking_region_length*0.999} numsplit 1
+    #{endif}
+
+    vol in necking_section size {element_size}
+    surf in vol in necking_section with z_coord < 1e-6 except surf in vol in inner_necking_section_vol scheme pave
+    group "inner_necking_section_top_surf" add surf in vol in inner_necking_section_vol with y_coord > {0.99*necking_region_length}
+    group "inner_necking_section_bottom_surf" add surf in vol in inner_necking_section_vol with y_coord < {1e-6*necking_region_length}
+    group "inner_necking_section_top_surf" add surf in vol in inner_necking_section_vol with y_coord > {0.99*necking_region_length}
+    volume in inner_necking_section_vol redistribute nodes off
+    volume in inner_necking_section_vol scheme Sweep  source surface in inner_necking_section_top_surf   target surface in inner_necking_section_bottom_surf  sweep transform least squares
+    volume in inner_necking_section_vol autosmooth target on  fixed imprints off  smart smooth off
+    mesh vol in inner_necking_section_vol
+    mesh vol in necking_section
+#{endif}
+
+
+group 'necking_section_not_DIC_surfs' add surf in vol in necking_section with is_merged
+group 'necking_section_not_DIC_surfs' add surf in vol in necking_section with x_coord < {1e-6}
+group 'necking_section_not_DIC_surfs' add surf in vol in necking_section with y_coord < {1e-6}
+group 'necking_section_not_DIC_surfs' add surf in vol in necking_section with z_coord < {1e-6}
+group 'DIC_surfs' add surf in vol in necking_section except surf in necking_section_not_DIC_surfs
+
+group 'gauge_section_not_DIC_surfs' add surf in vol in gauge_section with is_merged
+group 'gauge_section_not_DIC_surfs' add surf in vol in gauge_section with x_coord < {1e-6}
+group 'gauge_section_not_DIC_surfs' add surf in vol in gauge_section with z_coord < {1e-6}
+group 'DIC_surfs' add surf in vol in gauge_section except surf in gauge_section_not_DIC_surfs
+group 'DIC_surfs' add surf in vol in necking_section except surf in necking_section_not_DIC_surfs
+
+#{if((full_field_window_height > 0) &&(full_field_window_width>0))}
+group 'DIC_faces' add {face_element} in surf in DIC_surfs with x_coord <= {full_field_window_width} and y_coord < {full_field_window_height} and z_coord >= 0 and y_coord >= 0 and x_coord >= 0
+#{num_DIC_faces = NumInGrp("DIC_faces")}
+#{index=0}
+#{loop(num_DIC_faces)}
+#{quad_id = GroupMemberId("DIC_faces", "quad", index)}
+group "nodes" add node in {face_element} {quad_id} with x_coord > {full_field_window_width}
+group "nodes" add node in {face_element} {quad_id} with y_coord > {full_field_window_height}
+#{if(NumInGrp("nodes") >=1)}
+group 'DIC_faces_to_remove' add {face_element} {quad_id}
+group "nodes" remove node all
+#{endif}
+#{index++}
+#{endloop}
+#{if(NumInGrp("DIC_faces_to_remove")>0)}
+group "DIC_faces" remove {face_element} in DIC_faces_to_remove
+#{endif}
+sideset 1000 add {face_element} in DIC_faces
+sideset 1000 name "full_field_data_surface"
+#{endif}
+
+
+nodeset 5000 node in {face_element} in surface in side_grip with y_coord > {total_length/2-grip_contact_length}
+nodeset 5000 name "ns_side_grip"

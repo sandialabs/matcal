@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+import argparse
+import logging
+
+from matcal.core.constants import MATCAL_WORKDIR_STR
+from matcal.core.plotting import MATCAL_USER_PLOT_DIR, clean_plot_dir, make_standard_plots
+from matcal.core.logger import init_file_handler
+from matcal.dakota.dakota_interfaces import make_pairwise_plots
+
+
+logger = logging.getLogger('matcal.core.plotting')
+file_handler = init_file_handler("plot_matcal.log")
+logger.addHandler(file_handler)
+
+
+def get_arguments():
+    parser_msg = "plotting utility for MatCal. Plot objectives, parameters and simulation/experiment QoIs."
+    parser = argparse.ArgumentParser(description=parser_msg, conflict_handler='resolve')
+
+    parser.add_argument("-i", "--independent_fields", type=str,
+        help="Comma separated list of independent fields to plot the other fields against.",
+        default=None)
+  
+    parser.add_argument('-pfile', "--pairwise_file", type=str,
+        help="Filename of matcal MCMC chain.", default=None)
+    
+    parser.add_argument('-dr', '--downsample_rate', type=int, 
+        help="Assign the stride of downsampling in an MCMC chain. this can dramatically speed up plotting time.",
+        default=1)
+    
+    parser.add_argument('-pdir', '--plot_dir', type=str, 
+        help="Directory to generate the plots. If this directory exists it will delete and recreate it",
+        default=MATCAL_USER_PLOT_DIR)
+
+    n_param_help_str = (f"Evaluation id number to plot. This is the "
+                        f"number in the \"{MATCAL_WORKDIR_STR}.#\" "
+                         "evaluation directory.")
+    parser.add_argument('-n', '--plot_id', type=int, 
+                        help=n_param_help_str)
+    
+    plot_model_obj_help_str = (f"This flag plots the individual model objectives on their "
+                              "own figures in addition to the total objective plots. "
+                              "This may add many more figures because it will plot "
+                              "the model objectives versus the parameters and "
+                              "the evaluation indices for each objective for each model.")
+    parser.add_argument('-pmo', '--plot_model_objectives',  
+                        help=plot_model_obj_help_str, default=False, action='store_true')
+
+    plot_experiment_data_str = (f"This flag plots plots the experiment data instead "
+                              "of the experiment quantities of interest for the calibration. ")
+    parser.add_argument('-ped', '--plot_experiment_data',  
+                        help=plot_experiment_data_str, default=False, action='store_true')
+
+    plot_simulation_data_str = (f"This flag plots plots the simulation raw data instead "
+                              "of the simulation quantities of interest for the calibration. ")
+    parser.add_argument('-psd', '--plot_simulation_data',  
+                        help=plot_simulation_data_str, default=False, action='store_true')
+
+    return parser.parse_args()
+
+
+def make_indep_fields_list(args):
+    independent_fields = _parse_var_list(args.independent_fields)
+    return independent_fields
+
+def _parse_var_list(raw_string):
+    if raw_string is not None:
+        var_list = raw_string.split(",")
+    else:
+        var_list = []
+    return var_list
+
+def _will_make_pariwise_plot(args):
+    return args.pairwise_file is not None
+
+if __name__=="__main__":
+    args = get_arguments()
+    independent_fields = make_indep_fields_list(args)
+    if args.plot_id is None:
+        plot_id = 'best'
+    else:
+        plot_id = args.plot_id
+    clean_plot_dir(args.plot_dir)
+    if _will_make_pariwise_plot(args):
+        make_pairwise_plots(args.pairwise_file, args.plot_dir, args.downsample_rate)
+    else:
+        make_standard_plots(*independent_fields, plot_dir=args.plot_dir, 
+                            plot_id=plot_id,
+                            plot_model_objectives=args.plot_model_objectives, 
+                            plot_exp_data=args.plot_experiment_data, 
+                            plot_sim_data=args.plot_simulation_data)

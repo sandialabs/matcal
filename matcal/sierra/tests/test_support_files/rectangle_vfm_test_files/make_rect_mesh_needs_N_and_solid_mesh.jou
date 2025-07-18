@@ -1,0 +1,45 @@
+# L = {L = .2}
+# W = {W = .1}
+# D = {D = .001}
+# mesh_size = {mesh_size = W/N}
+
+reset
+brick x {W} y {L} z {D}
+webcut body 1 with general plane xplane imprint merge
+
+vol all size {mesh_size}
+mesh volume all
+
+sideset 1 add surface with z_coord > {0.99999*D/2}
+sideset 1 name "dicsurface"
+
+#{if(solid_mesh=="false")}
+vol all scale 1.05 1.05 1
+block 1 add surf in sideset 1
+#{else}
+block 1 add volume all
+block 1 element type hex8
+#{endif}
+block 1 name "block_main"
+
+nodeset 1 add surface with y_coord < {0.99999*-L/2} 
+nodeset 1 name "bottom_nodes"
+
+nodeset 2 add surface  with y_coord > {0.99999*L/2} 
+nodeset 2 name "top_nodes"
+
+nodeset 3 add vertex with y_coord > {0.99999*L/2} and x_coord > {0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 3 name "fixed_x_node_set"
+
+nodeset 4 add vertex with y_coord > {0.99999*L/2} and x_coord > {0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 4 add vertex with y_coord > {0.99999*L/2} and x_coord < {-0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 4 add vertex with y_coord < {-0.99999*L/2} and x_coord < {-0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 4 name "fixed_z_node_set"
+
+nodeset 5 add surface with z_coord > {0.99999*D/2}
+nodeset  5 name "front_node_set"
+
+set exodus netcdf4 off
+set large exodus file on
+export mesh "{mesh_name}"  overwrite 
+

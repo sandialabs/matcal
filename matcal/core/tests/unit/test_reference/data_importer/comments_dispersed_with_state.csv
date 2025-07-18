@@ -1,0 +1,9 @@
+{"state_param_1":"state_string1", "state_param_2":1, "state_param_3":"state_string2"}
+$ This is a comment
+$ this is an other comment
+time, temp
+0, 100
+$ comment
+1, 200
+2, 300
+$ comment

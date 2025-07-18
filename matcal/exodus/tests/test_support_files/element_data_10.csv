@@ -1,0 +1,4 @@
+Cell Type,ObjectId,stress_xx,stress_xy,stress_yy,stress_yz,stress_zx,stress_zz,Block Number,Cell ID
+12,1,0.0121369,-2.37837e-18,0.000310173,-4.6386e-18,-0.240249,1.01982e-05,2,0
+12,2,0.0121369,-3.35527e-18,0.000310173,2.27595e-18,0.240249,1.01982e-05,3,0
+

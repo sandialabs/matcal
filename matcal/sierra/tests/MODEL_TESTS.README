@@ -1,0 +1,45 @@
+All model tests should be derived from both ModelForTestsBase in
+ matcal.test.core.test_models.py and the tests that they will be running. 
+For example, TestPythonModels in matcal.test.unit.test_models.py 
+derives from both ModelTestBase.CommonTests and PythonModelForTests which derives 
+from ModelForTestsBase.i. The first is the tests that it will run, 
+the second is the model that will be used for the tests. 
+Additional tests can be added for specific tests for that model. 
+All model tests should derive from ModelTestBase.CommonTests as 
+they are tests for all models. All classes derived from ModelFotTestsBase
+have some abstract methods and properties that must be defined so that
+they can run all common tests that the models must pass. There are no 
+MatCal core production or integration tests for models.
+
+For SIERRA models they should derive from SierraModelForTestsBase 
+or MatcalGeneratedModelForTestsBase depending on the model being added. 
+There should then be tests created in unit, integration or 
+production that test the model. The tests in unit should be fast and 
+on the order of one second. They should not build meshes or 
+run external executables. The tests in integration can build meshes 
+and simualtion files, but should not run any simulations. The production 
+tests are tests that actually run SIERRA models and potentially a few calbirations. 
+Several CommonTests exist for SIERRA specific MatCal standard models.
+These include  MatcalStandardModelUnitTestBase in matcal.test.sandia.unit, 
+MatCalStandardModelIntegrationTestBase in matcal.test.sandia.integration 
+and MatcalGeneratedModelProductionTestsBase in matcal.test.sandia.production.
+
+The main requirements for what is needed to run the MatCal generated model 
+tests are that it provides a list of data collections to run the tests with. 
+These should include different combinations of valid fields for boundary 
+condition generation. They must also include the geometry parameters 
+if required and an optional override of init_model if the standard 
+init is not applicable. 
+
+Finally, all of the models for SIERRA tests should be placed 
+in matcal.test.sandia.sierra_sm_models_for_tests or similar. They 
+should be structured similarly to one of the other MatCal generated
+standard models for tests if the are a standard model. 
+The main requirement for the MatCal generated model for 
+tests is that they provide a list of data collections to run the tests with.
+These should include different combinations of valid fields for boundary
+condition generation. This is returned through the '.boundary_condition_data_sets.'
+property. They must also include the geometry parameters
+if required ('.geo_params' property) and an optional override of '.init_model()' if the standard
+init is not applicable.
+

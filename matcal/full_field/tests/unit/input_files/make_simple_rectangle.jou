@@ -1,0 +1,18 @@
+reset
+# buffer = {buffer = 1e-9}
+# w = {w = 1 +buffer}
+# h = {h = 2*w}
+# d = {d = 1 - buffer/2}
+create surface rectangle width {w} height {h} zplane 
+move Curve 3  midpoint x {w/2} y {d + h/2} include_merged 
+curve 4 1 2 3  interval 2
+curve 4 1 2 3  scheme bias factor 1.0
+mesh curve 4 1 2 3 
+surface 1  size 
+mesh surface 1 
+set duplicate block elements off
+block 1 add surface 1 
+block 1  element type quad4
+set exodus netcdf4 off
+set large exodus file on
+export mesh "simple_rectangle.g"  overwrite 

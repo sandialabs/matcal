@@ -1,0 +1,4 @@
+time, displacement, load, file
+0, 0, 0, test_0.csv
+1, 0.01, 10, test_1.csv
+2, 0.02, 21, test_2.csv

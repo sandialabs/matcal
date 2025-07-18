@@ -1,0 +1,157 @@
+#{total_height = ~total_height~}
+#{base_height = ~base_height~}
+#{trapezoid_angle = ~trapezoid_angle~}
+#{top_width = ~top_width~}
+#{base_width = ~base_width~}
+#{thickness = ~thickness~}
+#{external_radius = ~external_radius~}
+#{internal_radius = ~internal_radius~}
+#{base_bottom_height = ~base_bottom_height~}
+#{hole_height = ~hole_height~}
+#{lower_radius_center_width = ~lower_radius_center_width~}
+#{hole_top_radius_center_width = ~hole_top_radius_center_width~}
+#{localization_region_scale = ~localization_region_scale~}
+#{element_size = ~element_size~}
+#{numsplits = ~numsplits~}
+#{large_mesh_size = ~large_mesh_size~}
+#{top_width_radius_transition_x = ~top_width_radius_transition_x~}
+#{top_width_radius_transition_y = ~top_width_radius_transition_y~}
+#{top_outer_vertex_x = ~top_outer_vertex_x~}
+#{bottom_radius_transition_x = ~bottom_radius_transition_x~}
+#{bottom_radius_transition_y = ~bottom_radius_transition_y~}
+#{middle_radius_transition_x = ~middle_radius_transition_x~}
+#{middle_radius_transition_y = ~middle_radius_transition_y~}
+#{cylinder_x_center = ~cylinder_x_center~}
+#{cylinder_y_center = ~cylinder_y_center~}
+#{cylinder_radius = ~cylinder_radius~}
+#{element_type="~element_type~"}
+
+
+#{scaled_cylinder_radius = ~scaled_cylinder_radius~}
+
+create vertex {0} {total_height} {0}
+
+create vertex {top_outer_vertex_x} {total_height} {0}
+#{vertex = Id('vertex')}
+create curve {vertex} {vertex-1}
+
+create vertex {top_width_radius_transition_x} {top_width_radius_transition_y} {0}
+#{vertex = Id('vertex')}
+create curve {vertex} {vertex-1}
+
+create vertex {top_width/2} {base_height+external_radius} {0}
+create vertex {top_width/2} {base_height} {0}
+#{vertex = Id('vertex')}
+create curve arc center vertex {vertex-1} {vertex-3} {vertex}
+
+create vertex {base_width/2} {base_height} {0}
+#{vertex = Id('vertex')}
+create curve vertex {vertex} {vertex-2}
+
+create vertex {base_width/2} 0 0
+#{vertex = Id('vertex')}
+create curve vertex {vertex} {vertex-2}
+
+create vertex 0 0 0
+#{vertex = Id('vertex')}
+create curve vertex {vertex} {vertex-2}
+
+create vertex 0 {base_bottom_height} 0
+#{vertex = Id('vertex')}
+create curve vertex {vertex} {vertex-2}
+
+create vertex {lower_radius_center_width/2} {base_bottom_height} {0}
+#{vertex = Id('vertex')}
+create curve vertex {vertex} {vertex-2}
+
+create vertex {lower_radius_center_width/2} {base_bottom_height+internal_radius} {0}
+
+create vertex {bottom_radius_transition_x} {bottom_radius_transition_y} {0}
+#{vertex = Id('vertex')}
+create curve arc center vertex {vertex-1} {vertex-3} {vertex}
+
+create vertex {middle_radius_transition_x} {middle_radius_transition_y} {0}
+#{vertex = Id('vertex')}
+create curve vertex {vertex} {vertex-2}
+
+create vertex {hole_top_radius_center_width/2} {base_bottom_height+hole_height-internal_radius} {0}
+create vertex {hole_top_radius_center_width/2} {base_bottom_height+hole_height} {0}
+#{vertex = Id('vertex')}
+create curve arc center vertex {vertex-1} {vertex-3} {vertex}
+
+create vertex 0 {base_bottom_height+hole_height} {0}
+#{vertex = Id('vertex')}
+create curve vertex {vertex} {vertex-2}
+
+create curve vertex {vertex} {vertex-25}
+
+del vertex all
+#{curve=Id('curve')}
+create surface curve {curve} {curve-1}  {curve-2}  {curve-3}  {curve-4}  {curve-5}  {curve-6}  {curve-7}  {curve-8}  {curve-9}  {curve-10}  {curve-11}  {curve-12}
+ 
+#{surface = Id('surface')}
+sweep surface {surface} vector 0 0 1 distance {thickness/2}
+#{vol=Id('volume')}
+
+create cylinder height {thickness} radius {scaled_cylinder_radius}
+#{vol=Id('volume')}
+move volume {vol} x {cylinder_x_center} y {cylinder_y_center} z 0 
+webcut volume {vol-1} tool body {vol}
+delete vol {vol}
+
+imprint vol all
+merge vol all
+
+
+
+
+#{vol=Id('volume')}
+#{top_portion_y_pos = (total_height -(base_bottom_height + hole_height))/2+base_bottom_height+hole_height}
+#{bot_portion_y_pos = (base_height)/2}
+
+group 'platten_interface_section' add vol all except vol 1
+group 'localization_section' add vol 1
+
+block 1 vol in platten_interface_section
+block 1 name "platten_interface_section"
+
+block 2 vol in localization_section
+block 2 name "localization_section"
+
+#{if(element_type == "tet10"|| element_type == "composite_tet")}
+block all element type tetra10
+volume all scheme tetmesh
+
+vol in platten_interface_section size {large_mesh_size}
+vol in localization_section size {element_size}
+
+mesh vol in localization_section
+mesh vol in platten_interface_section
+#{else}
+
+vol in platten_interface_section size {large_mesh_size}
+mesh vol in platten_interface_section
+
+#{if((numsplits > 0) && (element_type != "tet10"))}
+group 'to_numsplit' add surf is_merged in vol in localization_section
+refine surface in to_numsplit numsplit {numsplits} depth 0
+#{endif}
+
+surf in vol in localization_section with z_coord < {thickness/2*1e-5} scheme pave
+vol in localization_section size {element_size}
+mesh vol in localization_section
+
+#{endif}
+
+nodeset 1 surf with x_coord == 0
+nodeset 1 name "ns_x_symmetry"
+
+nodeset 2 surf with y_coord == 0
+nodeset 2 name "ns_y_bottom"
+
+nodeset 3 surf with z_coord == 0
+nodeset 3 name "ns_z_symmetry"
+
+nodeset 4 surf with y_coord > {0.999999*total_height}
+nodeset 4 name "ns_load"
+

@@ -1,0 +1,33 @@
+brick x 1 y 1 z 1
+#{volume_id = Id("volume")}
+volume {volume_id} interval 1
+mesh volume {volume_id}
+sideset {~side_set_offset~*(~i~+1)+1} add surface  ( at 0.5 0 0 ordinal 1 ordered )
+sideset {~side_set_offset~*(~i~+1)+1} name "ss_positive_x_state_~state~"
+sideset {~side_set_offset~*(~i~+1)+2} add surface  ( at 0 0.5 0 ordinal 1 ordered )
+sideset {~side_set_offset~*(~i~+1)+2} name "ss_positive_y_state_~state~"
+sideset {~side_set_offset~*(~i~+1)+3} add surface  ( at 0 0 0.5 ordinal 1 ordered )
+sideset {~side_set_offset~*(~i~+1)+3} name "ss_positive_z_state_~state~"
+sideset {~side_set_offset~*(~i~+1)+4} add surface  ( at -0.5 0 0 ordinal 1 ordered )
+sideset {~side_set_offset~*(~i~+1)+4} name "ss_negative_x_state_~state~"
+sideset {~side_set_offset~*(~i~+1)+5} add surface  ( at 0 -0.5 0 ordinal 1 ordered )
+sideset {~side_set_offset~*(~i~+1)+5} name "ss_negative_y_state_~state~"
+sideset {~side_set_offset~*(~i~+1)+6} add surface  ( at 0 0 -0.5 ordinal 1 ordered )
+sideset {~side_set_offset~*(~i~+1)+6} name "ss_negative_z_state_~state~"
+nodeset {~node_set_offset~*(~i~+1)+1} add surface  ( at 0.5 0 0 ordinal 1 ordered )
+nodeset {~node_set_offset~*(~i~+1)+1} name "ns_positive_x_state_~state~"
+nodeset {~node_set_offset~*(~i~+1)+2} add surface  ( at 0 0.5 0 ordinal 1 ordered )
+nodeset {~node_set_offset~*(~i~+1)+2} name "ns_positive_y_state_~state~"
+nodeset {~node_set_offset~*(~i~+1)+3} add surface  ( at 0 0 0.5 ordinal 1 ordered )
+nodeset {~node_set_offset~*(~i~+1)+3} name "ns_positive_z_state_~state~"
+nodeset {~node_set_offset~*(~i~+1)+4} add surface  ( at -0.5 0 0 ordinal 1 ordered )
+nodeset {~node_set_offset~*(~i~+1)+4} name "ns_negative_x_state_~state~"
+nodeset {~node_set_offset~*(~i~+1)+5} add surface  ( at 0 -0.5 0 ordinal 1 ordered )
+nodeset {~node_set_offset~*(~i~+1)+5} name "ns_negative_y_state_~state~"
+nodeset {~node_set_offset~*(~i~+1)+6} add surface  ( at 0 0 -0.5 ordinal 1 ordered )
+nodeset {~node_set_offset~*(~i~+1)+6} name "ns_negative_z_state_~state~"
+nodeset {~node_set_offset~*(~i~+1)+7} add vertex  ( at -0.5 -0.5 -0.5 ordinal 1 ordered )
+nodeset {~node_set_offset~*(~i~+1)+7} name "ns_negative_xyz_node_state_~state~"
+move volume  {volume_id}  x {~offset~*(~i~+1)}
+block {~block_offset~*(~i~+1)+1} add volume {volume_id}
+block {~block_offset~*(~i~+1)+1} name "block_state_~state~"

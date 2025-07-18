@@ -1,0 +1,14 @@
+reset
+brick x 1 
+volume all size .5
+mesh volume all
+set duplicate block elements off
+block 1 add volume 1 
+block 1 name "cube"
+block 1  element type hex8
+sideset 1 add surface 1  
+sideset 1 name "femsurface"
+
+set exodus netcdf4 off
+set large exodus file on
+export mesh "cube8ele.g"  overwrite 

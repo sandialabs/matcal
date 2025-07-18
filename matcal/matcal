@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+import os
+import sys
+from matcal.matcal_main import (matcal_main_identifier, 
+                                setup_and_get_input_path)
+
+
+if __name__ == "__main__":
+    main_func = matcal_main_identifier.identify()
+    if main_func == setup_and_get_input_path:
+        input_file = setup_and_get_input_path()
+        file_dir_name = os.path.dirname(input_file)
+        sys.path.append(file_dir_name)
+        if os.path.exists(input_file):
+            exec(open(input_file).read()) 
+        else:
+            raise FileNotFoundError(f"Input file \'{input_file}\' not found.")
+    else:
+        main_func()
+

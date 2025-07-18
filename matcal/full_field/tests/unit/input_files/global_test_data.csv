@@ -1,0 +1,4 @@
+time, load, displacement, file
+0, 0, 0, dic_0.csv
+1, 100, 0.02, dic_1.csv
+2, 200, 0.04, dic_2.csv
