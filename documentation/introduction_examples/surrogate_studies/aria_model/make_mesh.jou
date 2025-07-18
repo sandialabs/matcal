@@ -1,0 +1,48 @@
+reset
+# do_mesh = {do_mesh = 1}
+# do_label = {do_label = 1}
+# do_export = {do_export = 1}
+
+# W = {W = .025}
+# H_foam = {H_foam = .015}
+# H_metal = {H_metal = .01}
+
+# mesh_size = {mesh_size = H_metal / 4}
+
+
+create surface rectangle width {W} height {H_metal}
+create surface rectangle width {W} height {H_foam} 
+move Curve at 0 {-H_metal / 2} 0 midpoint location 0 {H_foam / 2} 0 include_merged 
+create surface rectangle width {W} height {H_metal}
+move Curve at 0 {H_metal / 2} 0 midpoint location 0 {-H_foam / 2} 0 include_merged 
+
+
+
+imprint vol all
+merge vol all
+
+{if(do_mesh)}
+surface all scheme trimesh
+surface all size {mesh_size}
+mesh surface all
+
+{if(do_label)}
+block 1 add surface 1
+block 1 name "metal_top"
+
+block 2 add surface 2
+block 2 name "foam"
+
+block 3 add surface 3
+block 3 name "metal_bottom"
+
+sideset 1 add curve at 0 {H_metal + H_foam / 2} 0
+sideset 1 name "exposed"
+
+block all element type tri3
+
+{if(do_export)}
+export mesh "test_block.g"  overwrite 
+{endif} # do_exportsss
+{endif} # do_label
+{endif} #do_mesh

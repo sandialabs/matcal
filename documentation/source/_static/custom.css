@@ -1,0 +1,12 @@
+.wy-nav-content {
+  max-width: none;
+}
+
+.wy-menu-vertical {
+  overflow-x:auto; 
+}
+
+a:visited {color: #3091d1;}
+.wy-menu a:visited {color: #d9d9d9;}
+.wy-side-nav-search a:visited {color: #fcfcfc;}
+

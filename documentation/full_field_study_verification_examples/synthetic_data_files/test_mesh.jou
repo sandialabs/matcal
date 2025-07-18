@@ -1,0 +1,61 @@
+
+
+reset
+#{W=3.5}
+#{H=6}
+#{thickness=0.0625 }
+create brick x {W} y {H} z {thickness/2}
+
+#{R=1.}
+
+#{theta = 35}
+#{r = W/2*(1/cosd(theta)-1)*0.70}
+#{T=W/2/cosd(theta)}
+#{h = W/2*tand(theta)}
+webcut body all with cylinder radius {R} axis z center -{W/2} 0 0
+webcut body all with cylinder radius {R} axis z center {W/2} 0 0
+webcut body all with cylinder radius {r*1.01} axis z center 0 {h} 0 
+webcut body all with cylinder radius {r*0.99} axis z center 0 {-h} 0 
+
+del vol 2 3 4 5
+#{y_cut = H/2*.7}
+webcut vol all with plane yplane offset {y_cut}
+webcut vol all with plane yplane offset -{y_cut}
+imprint vol all 
+merge vol all
+
+#{size = thickness*2}
+
+vol all size {size/3}
+vol with y_coord > {y_cut} size {size}
+vol with y_coord < {-y_cut} size {size}
+
+mesh vol with y_coord > {y_cut}
+mesh vol with y_coord < -{y_cut}
+
+refine surf is_merged numsplit 1 depth 0
+
+mesh vol all
+
+nodeset 100 surf with z_coord < 0
+nodeset 100 name "back_node_set"
+sideset 200 surf with z_coord > 0 and y_coord > -{y_cut} and y_coord < {y_cut}
+sideset 200 name "front_DIC_surf"
+nodeset 300 vertex with x_coord > {W/2*0.999} and with y_coord > {H/2*0.999} and with z_coord > {thickness/2/2*0.9999}
+nodeset 300 name "fixed_x_node_set"
+nodeset 400 surf with y_coord < {-H/2*0.9999}
+nodeset 400 name "bottom_nodes"
+nodeset 500 surf with y_coord > {H/2*0.9999}
+nodeset 500 name "top_nodes"
+vol all scale {0.0254}
+block 1 vol all
+block 1 name "block_main"
+export mesh "test_mesh.g" overwrite
+
+del block 1
+block 1 surf with z_coord > 0 and y_coord == 0
+block 1 name "block_main"
+export mesh "test_mesh_surf.g" overwrite
+
+
+

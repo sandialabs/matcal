@@ -1,0 +1,675 @@
+{
+ "BatchDataImporter": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.data_importer",
+   "module_short": "matcal",
+   "name": "BatchDataImporter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "BatchDataImporter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "BatchDataImporter"
+  }
+ ],
+ "MatFit": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matfit.fitting",
+   "module_short": "matfit.fitting",
+   "name": "MatFit"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matfit",
+   "module_short": "matfit",
+   "name": "MatFit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matfit.fitting",
+   "module_short": "matfit.fitting",
+   "name": "MatFit"
+  }
+ ],
+ "Voce": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matfit.models",
+   "module_short": "matfit.models",
+   "name": "Voce"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matfit",
+   "module_short": "matfit",
+   "name": "Voce"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matfit.models",
+   "module_short": "matfit.models",
+   "name": "BaseModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matfit",
+   "module_short": "matfit",
+   "name": "BaseModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matfit.models",
+   "module_short": "matfit.models",
+   "name": "Voce"
+  }
+ ],
+ "argmax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "int64"
+  }
+ ],
+ "data": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "Data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Data"
+  }
+ ],
+ "data_sets": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "determine_pt2_offset_yield": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "elongation_strain": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "Data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Data"
+  }
+ ],
+ "figsize": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "get_voce_params": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "matcal.core.data.DataCollection": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
+ "matcal.core.data.DataCollection.plot": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.data.DataCollection",
+   "module_short": "matcal.core.data.DataCollection",
+   "name": "plot"
+  }
+ ],
+ "matcal.core.data_analysis.determine_pt2_offset_yield": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.data_analysis",
+   "module_short": "matcal",
+   "name": "determine_pt2_offset_yield"
+  }
+ ],
+ "matcal.core.data_importer.BatchDataImporter": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.data_importer",
+   "module_short": "matcal",
+   "name": "BatchDataImporter"
+  }
+ ],
+ "matcal_save": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "np.argmax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "argmax"
+  }
+ ],
+ "np.average": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "average"
+  }
+ ],
+ "np.max": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "max"
+  }
+ ],
+ "plt.figure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "figure"
+  }
+ ],
+ "plt.hist": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "hist"
+  }
+ ],
+ "plt.rc": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "rc"
+  }
+ ],
+ "plt.xlabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "xlabel"
+  }
+ ],
+ "plt.ylabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "ylabel"
+  }
+ ],
+ "qoi_set": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "qoi_sets": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "qoi_sets.append": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
+ "solution": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "state": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.state",
+   "module_short": "matcal",
+   "name": "SolitaryState"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "SolitaryState"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "SolitaryState"
+  }
+ ],
+ "steel_elastic_mod": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "strain_at_ultimate": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
+  }
+ ],
+ "tension_data": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
+ "tension_data.items": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "ContainerCollectionBase.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ContainerCollectionBase.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ContainerCollectionBase.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "CollectionBase.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "CollectionBase.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CollectionBase.items"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.items"
+  }
+ ],
+ "tension_data.plot": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "ContainerCollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ContainerCollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ContainerCollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "CollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "CollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.plot"
+  }
+ ],
+ "tension_fig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.figure",
+   "module_short": "matplotlib.figure",
+   "name": "Figure"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Figure"
+  }
+ ],
+ "ultimate_stress": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "Data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Data"
+  }
+ ],
+ "voce_initial_point": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "voce_params": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "yield_pt": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "tuple"
+  }
+ ],
+ "yield_stress": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
+  }
+ ]
+}

@@ -1,0 +1,40 @@
+This is a summary of basic knowledge needed to run sphinx + sphinx-gallery
+
+1. The documentation can be build using the build scripts create_html and create_latex. 
+If building latex then you will need to manually compile the latex files that create_latex generates. 
+In addition, the current version of sphinx is old, and will use older versions of latex libraries. You will need to manually change the following references:
+  from :: to
+  asmath :: amsmath
+
+2. Adding to existing chapters is not too hard. Sphinx processes .rst files in a manner simialr to markdown. 
+  2.1: new lines are not processed in to new lines, to achieve a paragraph breat you will need to have a blank line between two lines of tex
+  2.2: you can insert code sections using the code block. A blank line must exist between the declaration of the block and the code, and the code must be indented to the 
+        same extent at the block name. The block will end at the first line that starts not indented. 
+        Example:
+.. code-block: python
+
+   A = 1 + 1
+   f = 2 * A
+First line of regular text after block 
+  2.3 "======" below a line will dictate that this is a major section, '----' will indicate this is a minor section. Almose all file require at least one major section title. 
+      "^^^^^" for subsubsections  and '""""""""' for paragraphs. Noete all of these markers must be atleast as long as the test they underline
+
+3. Adding a new plane text chapter requires adding a rst file with a major title to the source directory. After the file is added it must be added to the index.rst file. Add the title to the octree that exists there in the spot you want it to appear. 
+
+4. Adding a new annotated python file requires a little bit of work. Here is a brief workflow:
+  A: Create a new directory at the same level as source. 
+  B: Create a 'README.rst' file in the directory with the chapter title you want as the major title. 
+  C: Add your python file to the direcotory. It will need a leading docstring with a minor title
+  D: In source/conf.py add the new directory to the sphinx_gallery_conf dictonary in the 'example_dirs' list. 
+  E: In source/conf.py add a new target directory to the sphinx_gallery_conf dictonary in the 'gallery_dirs' list. 
+    This directory does not need to currently exist, however it needs to be in the coresponding position to the example_dir.
+  F: In source/index.rst add "/<target_dir>/index" in the coresponding position in the toctree
+
+  In the next make the new python file should be added to the document. If you are just adding an other python file to an existing chapter, 
+  you only need to add the file to correct source directory and then give it a docstring with a minor title.
+  
+5. Annotating a python script is done using sphinx-gallery. 
+  5.1 The File opens with a doc string with a minor title. This can contain other information you want to write
+  5.2 After the initial docstring, all other text needs to be in a comment. 
+  5.3 to designate a code bloc split add the split character : #%%
+  5.4 If the python script has errors in it, it might not read correctly and the resulting document will not be formated correctly. 

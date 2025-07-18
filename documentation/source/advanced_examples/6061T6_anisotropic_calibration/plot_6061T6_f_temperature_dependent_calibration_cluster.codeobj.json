@@ -1,0 +1,5665 @@
+{
+ "A_scale_factor_1032": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "A_scale_factor_1032_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "A_scale_factor_672": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "A_scale_factor_672_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "A_scale_factor_852": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "A_scale_factor_852_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "A_temp_dependence": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "A_temp_dependence_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "BatchDataImporter": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.data_importer",
+   "module_short": "matcal",
+   "name": "BatchDataImporter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "BatchDataImporter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "BatchDataImporter"
+  }
+ ],
+ "CurveBasedInterpolatedObjective": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.objective",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.objective",
+   "module_short": "matcal",
+   "name": "Objective"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Objective"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Objective"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.objective",
+   "module_short": "matcal.core.objective",
+   "name": "_ObjectiveBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ObjectiveBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ObjectiveBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  }
+ ],
+ "GradientCalibrationStudy": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal.dakota.local_calibration_studies",
+   "name": "_GradientDakotaFile"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "_GradientDakotaFile"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_GradientDakotaFile"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaCalibrationStudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationStudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationStudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaCalibrationFile"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationFile"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationFile"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaStudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaStudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaStudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaFileBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaFileBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaFileBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "_BaseTypedInputFileBlock"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_BaseTypedInputFileBlock"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_BaseTypedInputFileBlock"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "InputFileBlock"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "InputFileBlock"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "InputFileBlock"
+  }
+ ],
+ "Material": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.material",
+   "module_short": "matcal",
+   "name": "Material"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "Material"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Material"
+  }
+ ],
+ "Parameter": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "RT_calibrated_params": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "RoundUniaxialTensionModel": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  }
+ ],
+ "StateCollection": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.state",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "CollectionBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "CollectionBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CollectionBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  }
+ ],
+ "UserFunctionWeighting": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.residuals",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core.residuals",
+   "module_short": "matcal.core.residuals",
+   "name": "ResidualWeightingBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ResidualWeightingBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ResidualWeightingBase"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
+  }
+ ],
+ "Y_scale_factor_1032": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "Y_scale_factor_672": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "Y_scale_factor_852": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "all_data_fig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.figure",
+   "module_short": "matplotlib.figure",
+   "name": "Figure"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Figure"
+  }
+ ],
+ "all_results": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "collections",
+   "module_short": "collections",
+   "name": "OrderedDict"
+  }
+ ],
+ "all_results.update": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
+ "all_states": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.state",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  }
+ ],
+ "b_scale_factor_1032": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "b_scale_factor_1032_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "b_scale_factor_672": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "b_scale_factor_672_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "b_scale_factor_852": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Parameter"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "b_scale_factor_852_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "b_temp_dependence": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "b_temp_dependence_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "best_indx_1032": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "int64"
+  }
+ ],
+ "best_indx_672": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "int64"
+  }
+ ],
+ "best_indx_852": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "int64"
+  }
+ ],
+ "calibration": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  }
+ ],
+ "calibration.add_evaluation_set": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal.dakota.local_calibration_studies",
+   "name": "_GradientDakotaFile.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "_GradientDakotaFile.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_GradientDakotaFile.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaCalibrationStudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationStudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationStudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaCalibrationFile.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationFile.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationFile.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaStudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaStudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaStudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaFileBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaFileBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaFileBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyBase.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "_BaseTypedInputFileBlock.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_BaseTypedInputFileBlock.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_BaseTypedInputFileBlock.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "InputFileBlock.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "InputFileBlock.add_evaluation_set"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "InputFileBlock.add_evaluation_set"
+  }
+ ],
+ "calibration.launch": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal.dakota.local_calibration_studies",
+   "name": "_GradientDakotaFile.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "_GradientDakotaFile.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_GradientDakotaFile.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaCalibrationStudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationStudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationStudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaCalibrationFile.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationFile.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationFile.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaStudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaStudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaStudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaFileBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaFileBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaFileBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyBase.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "_BaseTypedInputFileBlock.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_BaseTypedInputFileBlock.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_BaseTypedInputFileBlock.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "InputFileBlock.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "InputFileBlock.launch"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "InputFileBlock.launch"
+  }
+ ],
+ "calibration.set_core_limit": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal.dakota.local_calibration_studies",
+   "name": "_GradientDakotaFile.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "_GradientDakotaFile.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_GradientDakotaFile.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaCalibrationStudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationStudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationStudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaCalibrationFile.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationFile.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationFile.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaStudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaStudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaStudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaFileBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaFileBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaFileBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyBase.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "_BaseTypedInputFileBlock.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_BaseTypedInputFileBlock.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_BaseTypedInputFileBlock.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "InputFileBlock.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "InputFileBlock.set_core_limit"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "InputFileBlock.set_core_limit"
+  }
+ ],
+ "calibration.set_working_directory": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal.dakota.local_calibration_studies",
+   "name": "_GradientDakotaFile.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "_GradientDakotaFile.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_GradientDakotaFile.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaCalibrationStudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationStudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationStudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaCalibrationFile.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaCalibrationFile.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaCalibrationFile.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.dakota_studies",
+   "module_short": "matcal.dakota.dakota_studies",
+   "name": "DakotaStudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaStudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaStudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota.input_file_writer",
+   "module_short": "matcal.dakota.input_file_writer",
+   "name": "DakotaFileBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.dakota",
+   "module_short": "matcal.dakota",
+   "name": "DakotaFileBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DakotaFileBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyBase.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "_BaseTypedInputFileBlock.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_BaseTypedInputFileBlock.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_BaseTypedInputFileBlock.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.input_file_writer",
+   "module_short": "matcal.core.input_file_writer",
+   "name": "InputFileBlock.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "InputFileBlock.set_working_directory"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "InputFileBlock.set_working_directory"
+  }
+ ],
+ "cm.get_cmap": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.cm",
+   "module_short": "matplotlib.cm",
+   "name": "get_cmap"
+  }
+ ],
+ "cmap": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "LinearSegmentedColormap"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "LinearSegmentedColormap"
+  }
+ ],
+ "colors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "density": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "element_size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "figsize": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "tuple"
+  }
+ ],
+ "fn": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "io",
+   "module_short": "io",
+   "name": "TextIOWrapper"
+  }
+ ],
+ "fn.write": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
+ "gauge_radius": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "geo_params": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "get_colors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "get_sandia_computing_platform": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sandia.computing_platforms",
+   "module_short": "matcal.sandia.computing_platforms",
+   "name": "get_sandia_computing_platform"
+  }
+ ],
+ "high_temp_data_collection": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
+ "high_temp_data_collection.plot": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "ContainerCollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ContainerCollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ContainerCollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "CollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "CollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CollectionBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.plot"
+  }
+ ],
+ "high_temp_data_collection.remove_field": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "ContainerCollectionBase.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ContainerCollectionBase.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ContainerCollectionBase.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "CollectionBase.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "CollectionBase.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CollectionBase.remove_field"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.remove_field"
+  }
+ ],
+ "high_temp_data_collection.states": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "ContainerCollectionBase.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ContainerCollectionBase.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ContainerCollectionBase.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.utilities",
+   "module_short": "matcal.core.utilities",
+   "name": "CollectionBase.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "CollectionBase.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CollectionBase.states"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.states"
+  }
+ ],
+ "is_sandia_cluster": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sandia.computing_platforms",
+   "module_short": "matcal.sandia.computing_platforms",
+   "name": "is_sandia_cluster"
+  }
+ ],
+ "matcal.core.data.DataCollection": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
+ "matcal.core.objective.CurveBasedInterpolatedObjective": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.objective",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective"
+  }
+ ],
+ "matcal.core.parameter_studies.LaplaceStudy": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.parameter_studies",
+   "module_short": "matcal",
+   "name": "LaplaceStudy"
+  }
+ ],
+ "matcal.core.parameters.Parameter": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.parameters",
+   "module_short": "matcal",
+   "name": "Parameter"
+  }
+ ],
+ "matcal.core.residuals.UserFunctionWeighting": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.residuals",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.residuals",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.residuals",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  }
+ ],
+ "matcal.core.state.StateCollection": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.state",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  }
+ ],
+ "matcal.dakota.local_calibration_studies.GradientCalibrationStudy": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.dakota.local_calibration_studies",
+   "module_short": "matcal",
+   "name": "GradientCalibrationStudy"
+  }
+ ],
+ "matcal.sierra.material.Material": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.sierra.material",
+   "module_short": "matcal",
+   "name": "Material"
+  }
+ ],
+ "matcal.sierra.models.RoundUniaxialTensionModel": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  }
+ ],
+ "matcal_load": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "matcal_save": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "material_file_string": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "material_filename": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "material_model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "material_name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel"
+  }
+ ],
+ "model.add_boundary_condition_data": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.add_boundary_condition_data"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.add_boundary_condition_data"
+  }
+ ],
+ "model.add_constants": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.add_constants"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.add_constants"
+  }
+ ],
+ "model.continue_when_simulation_fails": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.continue_when_simulation_fails"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.continue_when_simulation_fails"
+  }
+ ],
+ "model.name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.name"
+  }
+ ],
+ "model.run_in_queue": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.run_in_queue"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.run_in_queue"
+  }
+ ],
+ "model.set_allowable_load_drop_factor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.set_allowable_load_drop_factor"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.set_allowable_load_drop_factor"
+  }
+ ],
+ "model.set_name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.set_name"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.set_name"
+  }
+ ],
+ "model.set_number_of_cores": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RoundUniaxialTensionModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_UniaxialTensionModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_UniaxialTensionModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_UniaxialTensionModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_TensionDerivedModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_TensionDerivedModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_TensionDerivedModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SymmetricUniaxiallyLoadedModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_ThreeDimensionalStandardSierraModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_ThreeDimensionalStandardSierraModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ThreeDimensionalStandardSierraModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_CoupledStandardSierraModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_CoupledStandardSierraModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_CoupledStandardSierraModel.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelWithDeath.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelWithDeath.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelWithDeath.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_StandardSierraModelNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_StandardSierraModelNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_StandardSierraModelNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_MatcalGeneratedSierraModelNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_MatcalGeneratedSierraModelNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_MatcalGeneratedSierraModelNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.models",
+   "module_short": "matcal.sierra.models",
+   "name": "_SierraModelBaseNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal.sierra",
+   "name": "_SierraModelBaseNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_SierraModelBaseNew.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "ModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ModelBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ResultsRetriever.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ResultsRetriever.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ResultsRetriever.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.models",
+   "module_short": "matcal.core.models",
+   "name": "_ComputerControllerComponentBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ComputerControllerComponentBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ComputerControllerComponentBase.set_number_of_cores"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.set_number_of_cores"
+  }
+ ],
+ "np.ones": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ones"
+  }
+ ],
+ "objective": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.objective",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective"
+  }
+ ],
+ "objective.set_field_weights": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.objective",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "CurveBasedInterpolatedObjective.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.objective",
+   "module_short": "matcal",
+   "name": "Objective.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "Objective.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Objective.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.objective",
+   "module_short": "matcal.core.objective",
+   "name": "_ObjectiveBase.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "_ObjectiveBase.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "_ObjectiveBase.set_field_weights"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.set_field_weights"
+  }
+ ],
+ "platform": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.computing_platforms",
+   "module_short": "matcal.core.computing_platforms",
+   "name": "HPCComputingPlatform"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "HPCComputingPlatform"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "HPCComputingPlatform"
+  }
+ ],
+ "platform.get_processors_per_node": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.computing_platforms",
+   "module_short": "matcal.core.computing_platforms",
+   "name": "HPCComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "HPCComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "HPCComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.computing_platforms",
+   "module_short": "matcal.core.computing_platforms",
+   "name": "RemoteComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "RemoteComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "RemoteComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.computing_platforms",
+   "module_short": "matcal.core.computing_platforms",
+   "name": "ComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "ComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "ComputingPlatform.get_processors_per_node"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC.get_processors_per_node"
+  }
+ ],
+ "plot_comparison_by_temperature": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "plot_directions_for_temp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "plt.figure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "figure"
+  }
+ ],
+ "plt.legend": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "legend"
+  }
+ ],
+ "plt.plot": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "plot"
+  }
+ ],
+ "plt.rc": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "rc"
+  }
+ ],
+ "plt.show": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "show"
+  }
+ ],
+ "plt.xlabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "xlabel"
+  }
+ ],
+ "plt.ylabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "ylabel"
+  }
+ ],
+ "poissons_ratio": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "remove_uncalibrated_data_from_residual": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "residual_weights": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.residuals",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "UserFunctionWeighting"
+  }
+ ],
+ "scale_data_collection": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "sierra_material": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra.material",
+   "module_short": "matcal",
+   "name": "Material"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.sierra",
+   "module_short": "matcal",
+   "name": "Material"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "Material"
+  }
+ ],
+ "sim_hist_1032": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
+ "sim_hist_672": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
+ "sim_hist_852": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
+ "temp_1032_results": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults"
+  }
+ ],
+ "temp_1032_results.best.to_dict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base.StudyResults",
+   "module_short": "matcal.core.study_base.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.StudyResults",
+   "module_short": "matcal.core.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.StudyResults",
+   "module_short": "matcal.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  }
+ ],
+ "temp_1032_results.best_evaluation_index": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults.best_evaluation_index"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults.best_evaluation_index"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults.best_evaluation_index"
+  }
+ ],
+ "temp_1032_results.simulation_history": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults.simulation_history"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults.simulation_history"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults.simulation_history"
+  }
+ ],
+ "temp_1032_states": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.state",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  }
+ ],
+ "temp_672_results": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults"
+  }
+ ],
+ "temp_672_results.best.to_dict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base.StudyResults",
+   "module_short": "matcal.core.study_base.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.StudyResults",
+   "module_short": "matcal.core.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.StudyResults",
+   "module_short": "matcal.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  }
+ ],
+ "temp_672_results.best_evaluation_index": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults.best_evaluation_index"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults.best_evaluation_index"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults.best_evaluation_index"
+  }
+ ],
+ "temp_672_results.simulation_history": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults.simulation_history"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults.simulation_history"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults.simulation_history"
+  }
+ ],
+ "temp_672_states": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.state",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  }
+ ],
+ "temp_852_results": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults"
+  }
+ ],
+ "temp_852_results.best.to_dict": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base.StudyResults",
+   "module_short": "matcal.core.study_base.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.StudyResults",
+   "module_short": "matcal.core.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.StudyResults",
+   "module_short": "matcal.StudyResults",
+   "name": "ResultsAttribute.to_dict"
+  }
+ ],
+ "temp_852_results.best_evaluation_index": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults.best_evaluation_index"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults.best_evaluation_index"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults.best_evaluation_index"
+  }
+ ],
+ "temp_852_results.simulation_history": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.study_base",
+   "module_short": "matcal.core.study_base",
+   "name": "StudyResults.simulation_history"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal.core",
+   "name": "StudyResults.simulation_history"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StudyResults.simulation_history"
+  }
+ ],
+ "temp_852_states": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.state",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "StateCollection"
+  }
+ ],
+ "temp_param_ips": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "temperatures": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "y_scale_factor_1032_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "y_scale_factor_672_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "y_scale_factor_852_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "y_temp_dependence": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "y_temp_dependence_ip": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "youngs_modulus": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ]
+}

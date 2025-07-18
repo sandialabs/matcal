@@ -1,0 +1,238 @@
+"""
+304L calibrated round tension model - effect of different model options
+-----------------------------------------------------------------------
+
+.. note::
+    Useful Documentation links:
+
+    #. :ref:`Uniaxial Tension Models`
+    #. :class:`~matcal.sierra.models.RoundUniaxialTensionModel`
+    #. :class:`~matcal.core.objective_results.ObjectiveResults`
+    #. :class:`~matcal.core.parameter_studies.ParameterStudy`
+"""
+#%%
+# In this example, we look at the effect of different model options on the 
+# objective of the calibrated model. MatCal generated models have the ability to
+# model complex loading histories if time history data is provided to the
+# model for boundary condition data. In the absence of time history data, 
+# simple, idealized linear displacement functions are applied as the model
+# boundary condition. Also, thermomechanical coupling is 
+# easily activated for materials and tests where heating due to plastic work 
+# may play a role in the structural response of the specimen. Here we assess
+# the change in the objective based on these two features. We run three version of the  
+# :class:`~matcal.sierra.models.RoundUniaxialTensionModel` with 
+# the calibrated parameters from 
+# :ref:`304L stainless steel viscoplastic calibration` example.
+# The first model is the original model to use as a reference, the second model 
+# uses idealized boundary conditions and the third model has thermomechanical 
+# coupling active to assess whether significant heating was present causing thermal softening. 
+#
+# To begin, the data import, model preparation 
+# and objective specification for the tension model from the original calibration
+# are repeated.
+
+from matcal import *
+import matplotlib.pyplot as plt
+
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+plt.rc('font', size=12)
+figsize = (4.5,3.5)
+
+tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
+                                    file_type="csv", fixed_states={"temperature":530, 
+                                                                   "displacement_rate":2e-4}).batch
+tension_data = scale_data_collection(tension_data, "engineering_stress", 1000)
+
+yield_stress = Parameter("Y_0", 30, 40, 35.01)
+A = Parameter("A", 100, 300, 200)
+b = Parameter("b", 0, 3, 2.0)
+C = Parameter("C", -3, -1)
+
+sierra_material = Material("304L_viscoplastic", "304L_viscoplastic_voce_hardening.inc", 
+                           "j2_plasticity")
+
+geo_params = {"extensometer_length": 0.75,
+               "gauge_length": 1.25, 
+               "gauge_radius": 0.125, 
+               "grip_radius": 0.25, 
+               "total_length": 4, 
+               "fillet_radius": 0.188,
+               "taper": 0.0015,
+               "necking_region":0.375,
+               "element_size": 0.005,
+               "mesh_method":4, 
+               "grip_contact_length":1}
+
+from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+cores_per_node = 24
+if is_sandia_cluster():
+    platform = get_sandia_computing_platform()
+    cores_per_node = platform.processors_per_node
+
+astme8_model_orig = RoundUniaxialTensionModel(sierra_material, **geo_params)            
+astme8_model_orig.add_boundary_condition_data(tension_data)       
+astme8_model_orig.set_number_of_cores(cores_per_node)
+if is_sandia_cluster():
+    astme8_model_orig.run_in_queue("fy220213", 4)
+    astme8_model_orig.continue_when_simulation_fails()
+astme8_model_orig.set_allowable_load_drop_factor(0.5)
+astme8_model_orig.set_name("ASTME8_tension_model_orig")
+astme8_model_orig.add_constants(ref_strain_rate=1e-5)
+
+objective = CurveBasedInterpolatedObjective("engineering_strain", "engineering_stress")
+objective.set_name("stress_objective")
+
+def remove_uncalibrated_data_from_residual(engineering_strains, engineering_stresses, residuals):
+    import numpy as np
+    weights = np.ones(len(residuals))
+    weights[engineering_stresses < 38e3] = 0
+    weights[engineering_strains > 0.75] = 0
+    return weights*residuals
+
+residual_weights = UserFunctionWeighting("engineering_strain", "engineering_stress", 
+                                         remove_uncalibrated_data_from_residual)
+objective.set_field_weights(residual_weights)
+
+#%%
+# Now to setup the  simulation option effects study, we will use Python's copy
+# module to copy the ``astme8_model_orig model`` and modify the 
+# model options
+# for the new models. First, we create a model with thermomechanical 
+# coupling where the required material constants are provided by 
+# :cite:p:`MMPDS10`. 
+#
+
+from copy import deepcopy
+astme8_model_coupled = deepcopy(astme8_model_orig)
+astme8_model_coupled.activate_thermal_coupling(thermal_conductivity=1.77,
+                                      density=0.000741, 
+                                      specific_heat=4.13e+05, 
+                                      plastic_work_variable="plastic_work_heat_rate")
+astme8_model_coupled.set_name("ASTME8_tension_model_coupled")
+#%%
+# Next, we create a new boundary condition
+# data collection where we remove the "time" field from the 
+# data. With the "time" field removed, the model will 
+# be deformed to the maximum displacement in the data
+# set over the appropriate strain rate. 
+#
+modified_bc_data_collection = deepcopy(tension_data)
+modified_bc_data_collection.remove_field("time")
+#%%
+# We then create another new model and use the new data collection
+# as the data collection for boundary condition 
+# determination.
+#
+astme8_model_linear_bc = deepcopy(astme8_model_orig)
+astme8_model_linear_bc.reset_boundary_condition_data()
+astme8_model_linear_bc.add_boundary_condition_data(modified_bc_data_collection)
+astme8_model_linear_bc.set_name("ASTME8_tension_model_linear_bc")
+
+#%%
+# We will now create a :class:`~matcal.core.parameter_studies.ParameterStudy` where the only parameters
+# to be evaluated are the calibrated parameters from the initial study.
+# Each model is added to the study as a new evaluation set so that 
+# all models are run for the study. Lastly, the study core limit is set appropriately. 
+# Since our hardware can support running them all concurrently, the core limit is set to 
+# the sum of all cores requested for the models above
+# allowing all three models to be run simultaneously. 
+#
+
+param_study = ParameterStudy(yield_stress, A, b, C)
+param_study.set_working_directory("model_options_study", remove_existing=True)
+param_study.add_evaluation_set(astme8_model_orig, objective, tension_data)
+param_study.add_evaluation_set(astme8_model_coupled, objective, tension_data)
+param_study.add_evaluation_set(astme8_model_linear_bc, objective, tension_data)
+param_study.set_core_limit(112)
+calibrated_params = matcal_load("voce_calibration_results.serialized")
+calibrated_params.pop("X")
+param_study.add_parameter_evaluation(**calibrated_params)
+
+#%%
+# We launch the study and, after it finishes, we can 
+# compare the results. For our purposes, we want to assess 
+# how the objective and engineering stress-strain curves are 
+# affected by the different options. We will also 
+# plot the temperature histories from the coupled model. As 
+# a result, we manipulate the results output from this study 
+# to access the objective values and simulation data from the models. We then 
+# use Matplotlib :cite:p:`matplotlib` to plot the desired data. 
+results = param_study.launch()
+import matplotlib.pyplot as plt
+state = tension_data.state_names[0]
+orig_objective, idx = results.best_evaluation_set_objective(astme8_model_orig, 
+                                                            objective)
+orig_curves = results.best_simulation_data(astme8_model_orig, state)
+
+coupled_objective, idx = results.best_evaluation_set_objective(astme8_model_coupled, 
+                                                               objective)
+coupled_curves =  results.best_simulation_data(astme8_model_coupled, state)
+
+
+linear_bc_objective, idx = results.best_evaluation_set_objective(astme8_model_linear_bc, 
+                                                                 objective)
+linear_bc_curves = results.best_simulation_data(astme8_model_linear_bc, state)
+
+plt.figure(constrained_layout=True)
+plt.plot(orig_curves["engineering_strain"], orig_curves["engineering_stress"],
+          label="original")
+plt.plot(coupled_curves["engineering_strain"], 
+         coupled_curves["engineering_stress"], label="staggered coupling")
+plt.plot(linear_bc_curves["engineering_strain"], 
+         linear_bc_curves["engineering_stress"], label="linear BC")
+plt.xlabel("engineering strain")
+plt.ylabel("engineering_stress (psi)")
+plt.legend()
+
+#%%
+# The engineering stress-strain curves appear almost identical and indicate 
+# the model options have little effect on the results for this problem.
+
+plt.figure(constrained_layout=True)
+plt.plot(coupled_curves["time"], coupled_curves["low_temperature"],
+          color="#4575b4", label="low temperature")
+plt.plot(coupled_curves["time"], coupled_curves["med_temperature"], 
+         '-.', color="#fee090", label="average temperature")
+plt.plot(coupled_curves["time"], coupled_curves["high_temperature"], 
+         '-.', color="#d73027", label="high temperature")
+plt.xlabel("time (s)")
+plt.ylabel("temperature (R)")
+plt.legend()
+
+#%%
+# Although the engineering stress-strain curves are relatively unaffected, 
+# the coupled model is predicting a noticeable temperature increase. 
+# Even though the specimen is heating, it is not near enough to
+# appreciably effect the engineering stress-strain curves. For 
+# the slow strain rate of approximately 1e-4, such a result was 
+# expected. However, even at strain rate of only 1e-3, 
+# the temperature would be even higher than those predicted 
+# here and be more detectable in the engineering stress-strain curves.
+
+
+plt.figure(constrained_layout=True)
+import numpy as np
+objectives = np.array([orig_objective, coupled_objective, linear_bc_objective])
+x_pos = np.arange(len(objectives))
+
+plt.plot(x_pos, 
+         objectives/(orig_objective), 'o-')
+xtick_lables = [f"original model", 
+                f"coupled model", 
+                f"model with linear BCs", 
+                ]
+
+plt.xticks(x_pos, xtick_lables,rotation=90 )
+plt.ylabel("normalized objective")
+
+#%%
+# From the objective plot it is clear that these model
+# options have a small effect on the overall objective. 
+# The new results produce objectives within 1% of the original
+# and would result in similarly small changes to the calibration. 
+# As a result, further studies should use the least computationally
+# expensive model. For this case, that is the uncoupled 
+# model with idealized boundary conditions at a constant 
+# displacement rate.
+

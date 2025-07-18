@@ -1,0 +1,1 @@
+{'Y_scale_factor_672': 0.95928176415, 'A_scale_factor_672': 0.7243143013, 'b_scale_factor_672': 0.89598272366, 'Y_scale_factor_852': 0.80952423011, 'A_scale_factor_852': 0.202391, 'b_scale_factor_852': 0.62996085009, 'Y_scale_factor_1032': 0.29784125737, 'A_scale_factor_1032': 0.078213347464, 'b_scale_factor_1032': 3.72102}
