@@ -1,0 +1,10 @@
+[flake8]
+max-line-length = 160
+
+[tool.pylint.master]
+ignore-paths = ["^matcal/test/.*$"]
+[pylint.basic]
+extension-pkg-whitelist = "scipy"
+[pylint.format]
+max-line-length = 160
+disable = ["C0103", "E1101", "R1735", "C0209"]

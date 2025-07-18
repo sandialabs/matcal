@@ -1,0 +1,69 @@
+MatCal uses, but does not include or distribute, several python packages.
+Many are required for basic use of MatCal and a few are optional for use 
+with specific features. For the use of all features, the following python 
+packages are required to be installed by users in addition to 
+the MatCal install. For convenience, the packages and their licenses 
+are listed below. Note that while we attempt to keep this up-to-date, errors
+may exist. Summaries of these different licenses are at the bottom of this file.
+
+
+BSD licensed packages:
+    1.	SciPy: https://github.com/scipy/scipy/blob/main/LICENSE.txt
+    2.	scikit-learn (sklearn): https://github.com/scikit-learn/scikit-learn/blob/main/COPYING
+    3.	NumPy: https://github.com/numpy/numpy/blob/main/LICENSE.txt
+    4.	Jinja2: https://github.com/pallets/jinja/blob/main/LICENSE.txt
+    5.	Bokeh: https://github.com/bokeh/bokeh/blob/main/LICENSE.txt
+    6.	Pandas: https://github.com/pandas-dev/pandas/blob/main/LICENSE
+    7.	h5py: https://github.com/h5py/h5py/blob/master/LICENSE
+    8.	joblib: https://github.com/joblib/joblib/blob/main/LICENSE.txt
+    9.	Sphinx: https://github.com/sphinx-doc/sphinx/blob/master/LICENSE.rst
+    10.	sphinx-gallery: https://github.com/sphinx-gallery/sphinx-gallery/blob/master/LICENSE
+    11.	PyCompadre: https://github.com/sandialabs/compadre/blob/master/LICENSE.md
+
+LGPL licensed packages:
+    1.	chardet: https://github.com/chardet/chardet/blob/main/LICENSE
+    2. dakota: https://github.com/snl-dakota/dakota/blob/devel/LICENSE
+
+Python Standard Library packages:
+License information for Python Software Foundation License (https://docs.python.org/3/license.html)
+    1.	re
+    2.	filecmp
+    3.	unittest
+    4.	mmap
+    5.	gc
+    6.	csv
+    7.	random
+    8.	Socket
+    9.	io
+    10.	os
+    11.	pathlib
+    12.	pickle
+    13.	traceback
+    14.	contextlib
+    15.	getpass
+    16.	typing
+    17.	types
+    18.	json
+    19.	glob
+    20.	collections
+    21.	argparse
+    22.	logging
+    23.	sys
+    24.	shutil
+    25.	time
+    26.	io
+    27.	abc
+    28.	itertools
+    29.	concurrent
+    30.	inspect
+    31.	copy
+    32.	datetime
+    33.	numbers
+    34.	enum
+    35.	subprocess
+    36.	socket
+    37.	multiprocessing
+    38.	queue
+
+Non-standard licensed packages:
+    1.	matplotlib.pyplot: https://github.com/matplotlib/matplotlib/blob/main/LICENSE/LICENSE
