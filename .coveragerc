@@ -1,0 +1,11 @@
+[run]
+    relative_files = True
+    omit = 
+        test_*.py
+        __init__.py
+        */tests/*
+        matcal_bokeh.py
+[html]
+    directory = coverage_html
+[xml]
+    output = coverage.xml

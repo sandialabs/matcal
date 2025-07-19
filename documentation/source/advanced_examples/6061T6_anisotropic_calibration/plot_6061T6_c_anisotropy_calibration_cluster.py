@@ -43,10 +43,10 @@ figsize = (4,3)
 # :ref:`6061T6 aluminum data analysis` for more information 
 # about how these data files were setup to be imported 
 # correctly by the data importer.
-tension_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+tension_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "uniaxial_tension/processed_data/"
                                               "cleaned_[CANM]*.csv",).batch
-top_hat_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+top_hat_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "top_hat_shear/processed_data/cleaned_*.csv").batch
 
 

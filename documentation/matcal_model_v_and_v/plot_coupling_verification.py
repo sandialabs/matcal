@@ -84,12 +84,14 @@ geo_params = {"extensometer_length": 0.75,
 
 staggered_coupling = RoundUniaxialTensionModel(sierra_material, **geo_params)            
 staggered_coupling.add_boundary_condition_data(data_collection)
-from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
 num_cores = 24
 if is_sandia_cluster():
     platform = get_sandia_computing_platform()
     num_cores = platform.processors_per_node 
-    staggered_coupling.run_in_queue("fy220213", 4)
+    staggered_coupling.run_in_queue(MATCAL_WCID, 4)
     staggered_coupling.continue_when_simulation_fails()
 staggered_coupling.set_number_of_cores(num_cores)
 staggered_coupling.add_constants(ref_strain_rate=1e-5, coupling="coupled",
@@ -119,7 +121,7 @@ adiabatic = RoundUniaxialTensionModel(sierra_material, **geo_params)
 adiabatic.add_boundary_condition_data(data_collection)
 adiabatic.set_name("ASTME8_tension_model_adiabatic")
 if is_sandia_cluster():
-    adiabatic.run_in_queue("fy220213", 4)
+    adiabatic.run_in_queue(MATCAL_WCID, 4)
     adiabatic.continue_when_simulation_fails()
 adiabatic.set_number_of_cores(num_cores)
 adiabatic.add_constants(ref_strain_rate=1e-5, coupling="adiabatic", density=0.000741, 

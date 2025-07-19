@@ -71,12 +71,14 @@ astme8_model.set_name("ASTME8_tension_model")
 astme8_model.add_constants(ref_strain_rate=1e-5)
 astme8_model.add_constants(element_size=0.01, mesh_method=4)
 
-from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
 cores_per_node = 24
 if is_sandia_cluster():
     platform = get_sandia_computing_platform()
     cores_per_node = platform.processors_per_node
-    astme8_model.run_in_queue("fy220213", 2)
+    astme8_model.run_in_queue(MATCAL_WCID, 2)
     astme8_model.continue_when_simulation_fails()
 astme8_model.set_number_of_cores(cores_per_node)
 
@@ -105,7 +107,7 @@ from copy import deepcopy
 astme8_model_coarse = deepcopy(astme8_model)
 astme8_model_coarse.add_constants(element_size=0.02, mesh_method=3)
 if is_sandia_cluster():
-    astme8_model_coarse.run_in_queue("fy220213", 0.5)
+    astme8_model_coarse.run_in_queue(MATCAL_WCID, 0.5)
 astme8_model_coarse.set_name("ASTME8_tension_model_coarse")
 
 
@@ -113,14 +115,14 @@ astme8_model_coarse.set_name("ASTME8_tension_model_coarse")
 astme8_model_fine = deepcopy(astme8_model)
 astme8_model_fine.add_constants(element_size=0.005, mesh_method=4)
 if is_sandia_cluster():
-    astme8_model_fine.run_in_queue("fy220213", 4)
+    astme8_model_fine.run_in_queue(MATCAL_WCID, 4)
     astme8_model_fine.set_number_of_cores(cores_per_node*2)
 astme8_model_fine.set_name("ASTME8_tension_model_fine")
 
 astme8_model_finest = deepcopy(astme8_model)
 astme8_model_finest.add_constants(element_size=0.0025, mesh_method=4)
 if is_sandia_cluster():
-    astme8_model_finest.run_in_queue("fy220213", 4)
+    astme8_model_finest.run_in_queue(MATCAL_WCID, 4)
     astme8_model_finest.set_number_of_cores(cores_per_node*4)
 astme8_model_finest.set_name("ASTME8_tension_model_finest")
 
@@ -362,7 +364,7 @@ plt.legend()
 # to the mesh size selected above. We can then change 
 # the number of time steps the models will target.
 if is_sandia_cluster():
-    astme8_model_coarse.run_in_queue("fy220213", 2)
+    astme8_model_coarse.run_in_queue(MATCAL_WCID, 2)
     astme8_model_coarse.set_number_of_cores(cores_per_node*2)
 astme8_model_coarse.add_constants(element_size=0.005, mesh_method=4)
 astme8_model_coarse.set_number_of_time_steps(150)
@@ -370,19 +372,19 @@ astme8_model_coarse.set_number_of_time_steps(150)
 astme8_model.set_number_of_time_steps(300)
 astme8_model.add_constants(element_size=0.005, mesh_method=4)
 if is_sandia_cluster():
-    astme8_model.run_in_queue("fy220213", 4)
+    astme8_model.run_in_queue(MATCAL_WCID, 4)
     astme8_model.set_number_of_cores(cores_per_node*2)
 
 astme8_model_fine.set_number_of_time_steps(600)
 if is_sandia_cluster():
-    astme8_model_fine.run_in_queue("fy220213", 4)
+    astme8_model_fine.run_in_queue(MATCAL_WCID, 4)
     astme8_model_fine.set_number_of_cores(cores_per_node*3)
 astme8_model_fine.add_constants(element_size=0.005, mesh_method=4)
 
 astme8_model_finest = deepcopy(astme8_model_fine)
 astme8_model_finest.set_number_of_time_steps(1200)
 if is_sandia_cluster():
-    astme8_model_finest.run_in_queue("fy220213", 4)
+    astme8_model_finest.run_in_queue(MATCAL_WCID, 4)
     astme8_model_finest.set_number_of_cores(cores_per_node*4)
 astme8_model_finest.add_constants(element_size=0.005, mesh_method=4)
 astme8_model_finest.set_name("ASTME8_tension_model_finest")

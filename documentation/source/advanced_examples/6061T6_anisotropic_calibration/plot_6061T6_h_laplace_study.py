@@ -51,7 +51,7 @@ figsize = (4,3)
 # We do this in place of weighting, because zeros in the residuals 
 # can cause scaling and conditioning issues in the linear algebra
 # required for the study.
-tension_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+tension_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "uniaxial_tension/processed_data/"
                                               "cleaned_[CANM]*.csv",).batch
 
@@ -119,7 +119,7 @@ tension_model.set_number_of_cores(num_cores)
 #%%
 # Similarly, we import the top hat data and 
 # down select the data of interest for the residuals.
-top_hat_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+top_hat_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "top_hat_shear/processed_data/cleaned_*.csv").batch
 for state, state_data_list in top_hat_data_collection.items():
     for index, data in enumerate(state_data_list):

@@ -42,9 +42,9 @@ figsize = (4,3)
 # :class:`~matcal.core.data_importer.BatchDataImporter` 
 # which assigns states to the file according to the state 
 # data prepopulated in the data files. 
-tension_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+tension_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "uniaxial_tension/processed_data/cleaned_[CANM]*.csv",).batch
-high_temp_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/"
+high_temp_data_collection = BatchDataImporter("aluminum_6061_data/"
                                               "uniaxial_tension/processed_data/*6061*.csv",).batch
 all_data = tension_data_collection+high_temp_data_collection
 #%%

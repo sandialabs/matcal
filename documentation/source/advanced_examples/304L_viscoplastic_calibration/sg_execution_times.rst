@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**03:29.342** total execution time for 7 files **from advanced_examples/304L_viscoplastic_calibration**:
+**00:00.246** total execution time for 7 files **from advanced_examples/304L_viscoplastic_calibration**:
 
 .. container::
 
@@ -32,16 +32,13 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_g_uq_validation.py` (``plot_304L_g_uq_validation.py``)
-     - 03:29.342
+   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_c_tension_calibration_cluster.py` (``plot_304L_c_tension_calibration_cluster.py``)
+     - 00:00.246
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_a_data_analysis.py` (``plot_304L_a_data_analysis.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_b_initial_point_estimation.py` (``plot_304L_b_initial_point_estimation.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_c_tension_calibration_cluster.py` (``plot_304L_c_tension_calibration_cluster.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_d_tension_convergence_study_cluster.py` (``plot_304L_d_tension_convergence_study_cluster.py``)
@@ -51,5 +48,8 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py` (``plot_304L_f_tension_laplace_study_cluster.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_g_uq_validation.py` (``plot_304L_g_uq_validation.py``)
      - 00:00.000
      - 0.0

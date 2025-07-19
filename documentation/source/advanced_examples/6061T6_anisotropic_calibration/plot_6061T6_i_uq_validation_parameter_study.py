@@ -32,7 +32,7 @@ plt.rc('font', family='serif')
 plt.rc('font', size=12)
 figsize = (4,3)
 
-tension_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+tension_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "uniaxial_tension/processed_data/"
                                               "cleaned_[CANM]*.csv",).batch
 
@@ -87,7 +87,7 @@ else:
   num_cores = 8
 tension_model.set_number_of_cores(num_cores)
 
-top_hat_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+top_hat_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "top_hat_shear/processed_data/cleaned_*.csv").batch
 for state, state_data_list in top_hat_data_collection.items():
     for index, data in enumerate(state_data_list):

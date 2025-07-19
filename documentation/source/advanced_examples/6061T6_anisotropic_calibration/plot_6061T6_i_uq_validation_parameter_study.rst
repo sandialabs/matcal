@@ -55,7 +55,7 @@ data and model as we did in :ref:`6061T6 aluminum calibration with anisotropic y
     plt.rc('font', size=12)
     figsize = (4,3)
 
-    tension_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+    tension_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                                   "uniaxial_tension/processed_data/"
                                                   "cleaned_[CANM]*.csv",).batch
 
@@ -110,7 +110,7 @@ data and model as we did in :ref:`6061T6 aluminum calibration with anisotropic y
       num_cores = 8
     tension_model.set_number_of_cores(num_cores)
 
-    top_hat_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+    top_hat_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                                   "top_hat_shear/processed_data/cleaned_*.csv").batch
     for state, state_data_list in top_hat_data_collection.items():
         for index, data in enumerate(state_data_list):
@@ -179,7 +179,14 @@ data and model as we did in :ref:`6061T6 aluminum calibration with anisotropic y
 
 
 
+.. rst-class:: sphx-glr-script-out
 
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_i_uq_validation_parameter_study.py", line 25, in <module>
+        from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    ModuleNotFoundError: No module named 'matcal.sandia'
 
 
 
@@ -202,19 +209,6 @@ uncertainties using :func:`~matcal.core.parameter_studies.sample_multivariate_no
                                                           param_names=pc.get_item_names())
 
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /gpfs/knkarls/projects/matcal_devel/matcal/core/parameter_studies.py:901: RuntimeWarning: covariance is not symmetric positive-semidefinite.
-      except: # old python e.g. 3.7
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 169-172
 
 Now we set up a study so we can 
@@ -233,12 +227,6 @@ We do so using a MatCal :class:`~matcal.core.parameter_studies.ParameterStudy`.
     params_to_evaluate = zip(uncertain_parameter_sets["yield_stress"],
                              uncertain_parameter_sets["hardening"],
                              uncertain_parameter_sets["b"])
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 182-195
@@ -273,67 +261,6 @@ to add each parameter set sample to the study.
           valid_runs +=1                         
         except ValueError:
            print(f"Skipping evaluation with {params}. Parameters out of range. ")
-
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Skipping evaluation with (60.69797240107448, 7.500434013541572, -52.47612004060188). Parameters out of range. 
-    Running evaluation (44.07777321991281, 11.350513716324016, 19.56789664844877)
-    Skipping evaluation with (59.77171582716707, 5.573262559582343, -47.14406898088955). Parameters out of range. 
-    Running evaluation (39.54605343110171, 13.617433341953461, 26.5859287312661)
-    Skipping evaluation with (52.78661936087509, 7.990381048995915, -22.13329865765799). Parameters out of range. 
-    Skipping evaluation with (67.43349301353955, 5.787008005987213, -74.8379876673375). Parameters out of range. 
-    Running evaluation (36.61597497144453, 14.542335221877105, 33.460425308169086)
-    Skipping evaluation with (36.6111509419563, 11.057457305037728, 44.449842235373225). Parameters out of range. 
-    Skipping evaluation with (36.569113641899605, 12.639380032321085, 41.248411659548516). Parameters out of range. 
-    Running evaluation (42.104372094262395, 12.423968064152717, 12.909142646021238)
-    Skipping evaluation with (29.5810991148354, 14.26815641925278, 67.02258615044957). Parameters out of range. 
-    Skipping evaluation with (68.2871808591507, 6.39988582410584, -89.16060574334959). Parameters out of range. 
-    Skipping evaluation with (55.36953877995385, 10.669256371563849, -40.07050998698469). Parameters out of range. 
-    Skipping evaluation with (43.15053966437757, 13.229007536418997, 1.7750204642162757). Parameters out of range. 
-    Skipping evaluation with (47.630932041181204, 8.350747366369937, 0.9554512883403152). Parameters out of range. 
-    Skipping evaluation with (25.35535809620862, 15.774502632040193, 77.1227935327993). Parameters out of range. 
-    Running evaluation (39.97245835902828, 10.30201672597732, 34.28852461328188)
-    Running evaluation (36.1289464335037, 13.640296965742946, 39.00202143071671)
-    Skipping evaluation with (26.702028289121902, 13.826504028100727, 80.87741707421817). Parameters out of range. 
-    Skipping evaluation with (12.752115088368896, 20.576149632362593, 126.29825582976319). Parameters out of range. 
-    Running evaluation (38.12561986600198, 12.935806910053122, 32.99062312114583)
-    Skipping evaluation with (46.08719236635739, 9.416501776270115, 6.411801103204913). Parameters out of range. 
-    Skipping evaluation with (57.10310349487871, 8.233430715140173, -34.716678979558736). Parameters out of range. 
-    Skipping evaluation with (47.25040822113145, 8.244202527586875, 7.971026459206201). Parameters out of range. 
-    Skipping evaluation with (28.55286691144944, 13.995291476347107, 76.6293496162849). Parameters out of range. 
-    Skipping evaluation with (32.39102809348789, 15.275768896695627, 50.504091346061706). Parameters out of range. 
-    Skipping evaluation with (57.79717414481443, 10.715040139679871, -51.9777121970965). Parameters out of range. 
-    Skipping evaluation with (46.470807637146805, 9.445728879897194, 7.152011246016739). Parameters out of range. 
-    Skipping evaluation with (56.17216640916261, 5.109892283271432, -17.27187771866302). Parameters out of range. 
-    Running evaluation (42.2380452911066, 12.393374528158168, 19.8473126103762)
-    Skipping evaluation with (49.21521810996259, 8.30948929961988, 0.39885627488313347). Parameters out of range. 
-    Skipping evaluation with (58.819823569978084, 7.209942159481205, -40.6472837052733). Parameters out of range. 
-    Running evaluation (39.518367665952596, 11.69106404026709, 35.53893070646238)
-    Skipping evaluation with (51.86017808152326, 6.502900717100381, -6.189814036902101). Parameters out of range. 
-    Skipping evaluation with (32.75293389806615, 16.545112033714652, 46.010753383340145). Parameters out of range. 
-    Skipping evaluation with (35.22877782748134, 14.49354277236981, 41.900790170502944). Parameters out of range. 
-    Running evaluation (39.77028740679799, 11.31102205747298, 33.83609984978275)
-    Skipping evaluation with (48.747264203042775, 9.404778490143826, -9.928812871522867). Parameters out of range. 
-    Running evaluation (42.849995768231665, 12.71841471272473, 13.444978510565416)
-    Skipping evaluation with (29.51555472952239, 13.21717162498855, 67.5668091525443). Parameters out of range. 
-    Running evaluation (36.521970661620635, 14.770401881404666, 33.457865198083574)
-    Running evaluation (39.74238163717077, 13.253461419932497, 18.57171498478901)
-    Skipping evaluation with (37.56725954397998, 10.050754155546258, 47.877397254108). Parameters out of range. 
-    Running evaluation (39.118240757182114, 13.116180654163731, 25.719564753788475)
-    Skipping evaluation with (61.2559825935969, 7.115378825042032, -55.31483607539827). Parameters out of range. 
-    Skipping evaluation with (46.70235919220539, 10.379173525571561, 0.21416767659715852). Parameters out of range. 
-    Skipping evaluation with (29.304802078810543, 15.083129635645454, 67.17520562716226). Parameters out of range. 
-    Skipping evaluation with (33.704500351676415, 13.724094788225134, 51.97887181926332). Parameters out of range. 
-    Skipping evaluation with (63.00870521883044, 7.835972449116559, -61.55838706153457). Parameters out of range. 
-    Running evaluation (40.897720135972506, 10.876573484971429, 29.151359639057603)
-
 
 
 
@@ -376,57 +303,6 @@ We use functions to simplify the plotting processes.
                            "displacement", "load")
 
 
-
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_001.png
-         :alt: temperature_5.330700e+02_direction_R11
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_001.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_002.png
-         :alt: temperature_5.330700e+02_direction_R22
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_002.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_003.png
-         :alt: temperature_5.330700e+02_direction_R33
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_003.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_004.png
-         :alt: direction_R23
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_004.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_005.png
-         :alt: direction_R12
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_005.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_006.png
-         :alt: direction_R31
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_i_uq_validation_parameter_study_006.png
-         :class: sphx-glr-multi-img
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 242-254
 
 In the plots, the simulation results for the simulated samples
@@ -445,7 +321,7 @@ as the uncertain parameter distributions for the parameters.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (14 minutes 24.195 seconds)
+   **Total running time of the script:** (0 minutes 0.002 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_i_uq_validation_parameter_study.py:

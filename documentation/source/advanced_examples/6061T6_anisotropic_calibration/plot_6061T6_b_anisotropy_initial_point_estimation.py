@@ -47,17 +47,17 @@ plt.rc('font', size=12)
 # example to see how we extracted these data 
 # from the engineering stress strain curves. 
 
-all_RD_metrics_CA = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+all_RD_metrics_CA = FileData("aluminum_6061_data/uniaxial_tension/"
                              "RD_aluminum_AL_6061_tension_stress_metrics_CA.csv")
-all_LT_metrics_CA = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+all_LT_metrics_CA = FileData("aluminum_6061_data/uniaxial_tension/"
                              "LT_aluminum_AL_6061_tension_stress_metrics_CA.csv")
-all_ST_metrics_CA = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+all_ST_metrics_CA = FileData("aluminum_6061_data/uniaxial_tension/"
                              "ST_aluminum_AL_6061_tension_stress_metrics_CA.csv")
-all_RD_metrics_NM = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+all_RD_metrics_NM = FileData("aluminum_6061_data/uniaxial_tension/"
                              "RD_aluminum_AL_6061_tension_stress_metrics_NM.csv")
-all_LT_metrics_NM = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+all_LT_metrics_NM = FileData("aluminum_6061_data/uniaxial_tension/"
                              "LT_aluminum_AL_6061_tension_stress_metrics_NM.csv")
-all_ST_metrics_NM = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+all_ST_metrics_NM = FileData("aluminum_6061_data/uniaxial_tension/"
                              "ST_aluminum_AL_6061_tension_stress_metrics_NM.csv")
 
 #%%
@@ -241,11 +241,11 @@ plt.ylabel("PDF")
 # The load at 0.005" displacement extracted in the previous example 
 # is saved to a file.  
 # Once again, we import that data using :func:`~matcal.core.data_importer.FileData`. 
-all_top_hat_12_metrics = FileData("ductile_failure_aluminum_6061_data/top_hat_shear/"
+all_top_hat_12_metrics = FileData("aluminum_6061_data/top_hat_shear/"
                                    "RTS_TRS_aluminum_AL_6061_top_hat_metrics.csv")
-all_top_hat_23_metrics = FileData("ductile_failure_aluminum_6061_data/top_hat_shear/"
+all_top_hat_23_metrics = FileData("aluminum_6061_data/top_hat_shear/"
                                    "RST_SRT_aluminum_AL_6061_top_hat_metrics.csv")
-all_top_hat_31_metrics = FileData("ductile_failure_aluminum_6061_data/top_hat_shear/"
+all_top_hat_31_metrics = FileData("aluminum_6061_data/top_hat_shear/"
                                    "STR_TSR_aluminum_AL_6061_top_hat_metrics.csv")
 
 #%%

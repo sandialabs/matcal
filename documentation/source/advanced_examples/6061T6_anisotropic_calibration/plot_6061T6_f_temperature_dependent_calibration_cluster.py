@@ -42,7 +42,7 @@ figsize = (6,4)
 # and remove the ``time`` field as it is not required
 # for the boundary condition determination for this calibration. 
 # See :ref:`Uniaxial tension solid mechanics boundary conditions`.
-high_temp_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/"
+high_temp_data_collection = BatchDataImporter("aluminum_6061_data/"
                                               "uniaxial_tension/processed_data/*6061*.csv",).batch
 high_temp_data_collection = scale_data_collection(high_temp_data_collection, 
                                                   "engineering_stress", 1000)

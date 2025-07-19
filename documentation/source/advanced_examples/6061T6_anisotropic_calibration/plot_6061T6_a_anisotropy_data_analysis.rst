@@ -148,7 +148,7 @@ so that the units are in psi.
 
 .. code-block:: Python
 
-    tension_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+    tension_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                                   "uniaxial_tension/processed_data/"
                                                   "cleaned_[CANM]*.csv",).batch
     tension_data_collection = scale_data_collection(tension_data_collection, 
@@ -202,7 +202,7 @@ and only has the ``direction`` state variable.
 
 .. code-block:: Python
 
-    top_hat_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+    top_hat_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                                   "top_hat_shear/processed_data/cleaned_*.csv").batch
     print(top_hat_data_collection.state_names)
 
@@ -488,7 +488,7 @@ finite element calibration for the material model.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.882 seconds)
+   **Total running time of the script:** (0 minutes 2.817 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_a_anisotropy_data_analysis.py:

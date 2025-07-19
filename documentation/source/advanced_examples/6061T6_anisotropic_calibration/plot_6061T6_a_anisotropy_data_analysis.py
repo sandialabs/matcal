@@ -112,7 +112,7 @@ figsize = (4,3)
 # 
 # The tension data is imported first and scaled 
 # so that the units are in psi.
-tension_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+tension_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "uniaxial_tension/processed_data/"
                                               "cleaned_[CANM]*.csv",).batch
 tension_data_collection = scale_data_collection(tension_data_collection, 
@@ -134,7 +134,7 @@ print(tension_data_collection.state_names)
 # using the :class:`~matcal.core.data_importer.BatchDataImporter`.
 # This testing was only completed at room temperature 
 # and only has the ``direction`` state variable.
-top_hat_data_collection = BatchDataImporter("ductile_failure_aluminum_6061_data/" 
+top_hat_data_collection = BatchDataImporter("aluminum_6061_data/" 
                                               "top_hat_shear/processed_data/cleaned_*.csv").batch
 print(top_hat_data_collection.state_names)
 

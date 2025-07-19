@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matcal import *
-from matcal.sandia.computing_platforms import is_sandia_cluster
+from site_matcal.sandia.computing_platforms import is_sandia_cluster
 
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')

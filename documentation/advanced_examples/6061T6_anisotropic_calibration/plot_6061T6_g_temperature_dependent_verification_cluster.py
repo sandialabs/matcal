@@ -34,7 +34,8 @@ setting our default plotting options.
 """
 
 from matcal import *
-from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -101,7 +102,7 @@ model.set_allowable_load_drop_factor(0.70)
 if is_sandia_cluster():       
     platform = get_sandia_computing_platform()   
     model.set_number_of_cores(platform.get_processors_per_node())
-    model.run_in_queue("fy220213", 0.5)
+    model.run_in_queue(MATCAL_WCID, 0.5)
     model.continue_when_simulation_fails()
 else:
     model.set_number_of_cores(8)

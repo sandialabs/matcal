@@ -83,22 +83,46 @@ from the engineering stress strain curves.
 .. code-block:: Python
 
 
-    all_RD_metrics_CA = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+    all_RD_metrics_CA = FileData("aluminum_6061_data/uniaxial_tension/"
                                  "RD_aluminum_AL_6061_tension_stress_metrics_CA.csv")
-    all_LT_metrics_CA = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+    all_LT_metrics_CA = FileData("aluminum_6061_data/uniaxial_tension/"
                                  "LT_aluminum_AL_6061_tension_stress_metrics_CA.csv")
-    all_ST_metrics_CA = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+    all_ST_metrics_CA = FileData("aluminum_6061_data/uniaxial_tension/"
                                  "ST_aluminum_AL_6061_tension_stress_metrics_CA.csv")
-    all_RD_metrics_NM = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+    all_RD_metrics_NM = FileData("aluminum_6061_data/uniaxial_tension/"
                                  "RD_aluminum_AL_6061_tension_stress_metrics_NM.csv")
-    all_LT_metrics_NM = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+    all_LT_metrics_NM = FileData("aluminum_6061_data/uniaxial_tension/"
                                  "LT_aluminum_AL_6061_tension_stress_metrics_NM.csv")
-    all_ST_metrics_NM = FileData("ductile_failure_aluminum_6061_data/uniaxial_tension/"
+    all_ST_metrics_NM = FileData("aluminum_6061_data/uniaxial_tension/"
                                  "ST_aluminum_AL_6061_tension_stress_metrics_NM.csv")
 
 
 
+.. rst-class:: sphx-glr-script-out
 
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_b_anisotropy_initial_point_estimation.py", line 50, in <module>
+        all_RD_metrics_CA = FileData("aluminum_6061_data/uniaxial_tension/"
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 63, in FileData
+        return _import_data(filename, state=state, file_type=file_type,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 70, in _import_data
+        importer = MatCalProbeDataImporterFactory.create(file_type, filename,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/object_factory.py", line 32, in create
+        return creator(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 709, in __call__
+        return CSVDataImporter(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 88, in __init__
+        self._check_file_exists(filename)
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 97, in _check_file_exists
+        raise FileNotFoundError(
+    FileNotFoundError: The file "aluminum_6061_data/uniaxial_tension/RD_aluminum_AL_6061_tension_stress_metrics_CA.csv" cannot be found to be imported. Check input.
 
 
 
@@ -140,12 +164,6 @@ Voce hardening parameters.
         return solution
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 94-104
 
 With the preceding function available, 
@@ -175,12 +193,6 @@ for later processing.
         return Ys,As,bs
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 116-119
 
 Next, we apply the ``get_voce_params_for_metric_list``` 
@@ -198,147 +210,6 @@ engineering stress-strain metrics.
     rd_Ys_NM, rd_As_NM, rd_bs_NM = get_voce_params_for_metric_list(all_RD_metrics_NM)
     lt_Ys_NM, lt_As_NM, lt_bs_NM = get_voce_params_for_metric_list(all_LT_metrics_NM)
     st_Ys_NM, st_As_NM, st_bs_NM= get_voce_params_for_metric_list(all_ST_metrics_NM)
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    {'ultimate_strength': 46.997175720811796, 'strain_at_ultimate': 0.0713338851928711, 'elongation': 0.170369371771812, 'yield_stress': 43.44917464752488, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 49.37526211032505, 'strain_at_ultimate': 0.0509887523949146, 'elongation': 0.119823843240738, 'yield_stress': 44.69145740757883, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 48.47946611450155, 'strain_at_ultimate': 0.0716086402535439, 'elongation': 0.143201798200607, 'yield_stress': 44.277026386514294, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 48.311719748683636, 'strain_at_ultimate': 0.072429932653904, 'elongation': 0.145530253648758, 'yield_stress': 44.65115305436215, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.209098275307326, 'strain_at_ultimate': 0.0767135322093964, 'elongation': 0.14600881934166, 'yield_stress': 41.667669646230564, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.457740527483054, 'strain_at_ultimate': 0.0778109282255173, 'elongation': 0.13965018093586, 'yield_stress': 42.094934180681186, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 47.10621111503172, 'strain_at_ultimate': 0.0779984444379807, 'elongation': 0.154496312141418, 'yield_stress': 43.17463297866633, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.02081245695077, 'strain_at_ultimate': 0.0735461786389351, 'elongation': 0.139684230089188, 'yield_stress': 41.14705652800012, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.04307336533125, 'strain_at_ultimate': 0.0626527070999146, 'elongation': 0.098018042743206, 'yield_stress': 38.57162620496351, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.05411, 'strain_at_ultimate': 0.059342, 'elongation': 0.097423, 'yield_stress': 40.72327542770096, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.08194235624182, 'strain_at_ultimate': 0.0592133030295372, 'elongation': 0.0951949283480644, 'yield_stress': 40.11398050283649, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 45.732855723714685, 'strain_at_ultimate': 0.0788637, 'elongation': 0.1800631, 'yield_stress': 43.29670440956851, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 47.5461132818496, 'strain_at_ultimate': 0.07917619999999999, 'elongation': 0.17515360000000002, 'yield_stress': 45.10037509883454, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 47.35925113477097, 'strain_at_ultimate': 0.080015, 'elongation': 0.1752029, 'yield_stress': 44.90779578107282, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 45.561298897734126, 'strain_at_ultimate': 0.0772436, 'elongation': 0.1799808, 'yield_stress': 43.17879524090457, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 47.27071056304659, 'strain_at_ultimate': 0.0783045, 'elongation': 0.1740269, 'yield_stress': 44.928991280197735, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.786939155952254, 'strain_at_ultimate': 0.0782798, 'elongation': 0.1444795, 'yield_stress': 42.384375967646754, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.79595031765312, 'strain_at_ultimate': 0.07589499999999999, 'elongation': 0.1370536, 'yield_stress': 42.14673323590163, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.5886603845764, 'strain_at_ultimate': 0.07613349999999999, 'elongation': 0.1393562, 'yield_stress': 42.063054046956296, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 47.258010896619695, 'strain_at_ultimate': 0.0757305, 'elongation': 0.1370043, 'yield_stress': 42.76614014183927, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 48.28088290793643, 'strain_at_ultimate': 0.0764131, 'elongation': 0.15922440000000002, 'yield_stress': 44.45411886592688, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.36303210040858, 'strain_at_ultimate': 0.0610268, 'elongation': 0.0973338, 'yield_stress': 40.291642259085485, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.59898124008523, 'strain_at_ultimate': 0.057507199999999994, 'elongation': 0.0963798, 'yield_stress': 40.35990936470094, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.65389985638726, 'strain_at_ultimate': 0.060911700000000006, 'elongation': 0.0977367, 'yield_stress': 40.57202667422305, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.657252268402175, 'strain_at_ultimate': 0.060813, 'elongation': 0.09644559999999999, 'yield_stress': 40.63132814121626, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-    {'ultimate_strength': 46.505611198274174, 'strain_at_ultimate': 0.0607308, 'elongation': 0.0954588, 'yield_stress': 40.596128444782586, 'youngs_modulus': 10000.0, 'poissons_ratio': 0.33, 'density': 0.00026, 'hardening_modulus': {'value': 1.0, 'lower': 0, 'upper': 3000.0, 'calibrate': True}, 'exponential_coefficient': {'value': 15.0, 'lower': 0.0, 'upper': 100, 'calibrate': True}}
-    Missing parameter: hardening_model
-    Using parameters default value: hardening_model | voce
-    Missing parameter: yield_strength_offset
-    Using parameters default value: yield_strength_offset | 0.002
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 128-133
@@ -364,12 +235,6 @@ data using list summation.
     rd_bs = rd_Ys_CA+rd_bs_NM
     lt_bs = lt_Ys_CA+lt_bs_NM
     st_bs = st_Ys_CA+st_bs_NM
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 146-156
@@ -398,12 +263,6 @@ on the chosen material coordinate system.
             R33s.append(st_Y/lt_Y)
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 165-173
 
 By looping over each yield stress for each direction, we get
@@ -425,23 +284,6 @@ estimate.
     print("R33 estimate:", np.average(R33s))
     print("A estimate:", np.average(rd_As+lt_As+st_As))
     print("b estimate:", np.average(rd_bs+lt_bs+st_bs))
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Y estimate: 42.433190621316555
-    R11 estimate: 1.0
-    R22 estimate: 1.0438848210311358
-    R33 estimate: 0.9485579441697009
-    A estimate: 10.118895350282498
-    b estimate: 32.37772357486822
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 181-185
@@ -477,49 +319,6 @@ or modes in the data.
     plt.hist(rd_bs+lt_bs+st_bs, density=True, alpha=0.8)
     plt.xlabel("b")
     plt.ylabel("PDF")
-
-
-
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_001.png
-         :alt: plot 6061T6 b anisotropy initial point estimation
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_001.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_002.png
-         :alt: plot 6061T6 b anisotropy initial point estimation
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_002.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_003.png
-         :alt: plot 6061T6 b anisotropy initial point estimation
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_003.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_004.png
-         :alt: plot 6061T6 b anisotropy initial point estimation
-         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_004.png
-         :class: sphx-glr-multi-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-
-    Text(18.926410511363642, 0.5, 'PDF')
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 209-244
@@ -564,18 +363,12 @@ Once again, we import that data using :func:`~matcal.core.data_importer.FileData
 
 .. code-block:: Python
 
-    all_top_hat_12_metrics = FileData("ductile_failure_aluminum_6061_data/top_hat_shear/"
+    all_top_hat_12_metrics = FileData("aluminum_6061_data/top_hat_shear/"
                                        "RTS_TRS_aluminum_AL_6061_top_hat_metrics.csv")
-    all_top_hat_23_metrics = FileData("ductile_failure_aluminum_6061_data/top_hat_shear/"
+    all_top_hat_23_metrics = FileData("aluminum_6061_data/top_hat_shear/"
                                        "RST_SRT_aluminum_AL_6061_top_hat_metrics.csv")
-    all_top_hat_31_metrics = FileData("ductile_failure_aluminum_6061_data/top_hat_shear/"
+    all_top_hat_31_metrics = FileData("aluminum_6061_data/top_hat_shear/"
                                        "STR_TSR_aluminum_AL_6061_top_hat_metrics.csv")
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 252-254
@@ -594,12 +387,6 @@ R22 and R33 were estimated.
             R23s.append(load_23/load_R12)
         for load_31 in all_top_hat_31_metrics["load_at_0.005_in"]:
             R31s.append(load_31/load_R12)
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 263-266
@@ -624,24 +411,6 @@ a single initial point.
     print("R31 estimate:", np.average(R31s))
 
 
-
-
-.. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_005.png
-   :alt: plot 6061T6 b anisotropy initial point estimation
-   :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_005.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    R23 estimate: 0.9651369931253784
-    R31 estimate: 0.9429150450881516
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 278-284
 
 We now have a complete initial point 
@@ -654,7 +423,7 @@ See :ref:`6061T6 aluminum calibration with anisotropic yield`
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.711 seconds)
+   **Total running time of the script:** (0 minutes 0.172 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_b_anisotropy_initial_point_estimation.py:

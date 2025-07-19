@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-#module load matcal/current
 pip install -U --user sphinx
 pip install -U --user sphinx_rtd_theme
 pip install -U --user sphinx-gallery

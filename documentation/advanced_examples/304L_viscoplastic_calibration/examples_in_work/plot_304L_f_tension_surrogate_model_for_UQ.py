@@ -22,7 +22,9 @@ We will be using MatPlotLib, NumPy and MatCal.
 import numpy as np
 import matplotlib.pyplot as plt
 from matcal import *
-from matcal.sandia.computing_platforms import is_sandia_cluster
+from site_matcal.sandia.computing_platforms import is_sandia_cluster
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
 
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
@@ -137,7 +139,7 @@ astme8_model.add_boundary_condition_data(tension_data)
 # it will run in the queue on 112.
 astme8_model.set_number_of_cores(36)
 if is_sandia_cluster():       
-    astme8_model.run_in_queue("fy220213", 0.5)
+    astme8_model.run_in_queue(MATCAL_WCID, 0.5)
     astme8_model.set_number_of_cores(112)
     astme8_model.continue_when_simulation_fails()
 astme8_model.set_allowable_load_drop_factor(0.8)

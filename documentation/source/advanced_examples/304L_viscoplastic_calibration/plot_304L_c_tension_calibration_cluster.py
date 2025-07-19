@@ -212,12 +212,12 @@ rate_model.add_constants(ref_strain_rate=1e-5)
 # We write the material file that will be used to create the 
 # MatCal :class:`~matcal.sierra.material.Material`.
 material_name = "304L_viscoplastic"
-with open("MMPDS_yield_temp_dependence_6.2.1.1.4a.inc", 'r') as f:
+with open("yield_temp_dependence.inc", 'r') as f:
     temp_dependence_func = f.read()
 
 material_string = f""" 
     begin definition for function 304L_yield_temp_dependence
-        # from MMPDS10 Figure 6.2.1.1.4a
+        #loose linear estimate of data from MMPDS10 Figure 6.2.1.1.4a
         type is piecewise linear
         begin values
         {temp_dependence_func}

@@ -34,7 +34,8 @@ To begin, we import the tools we need for this study.
 """
 
 from matcal import *
-from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -106,9 +107,8 @@ tension_model.add_boundary_condition_data(down_selected_tension_data)
 tension_model.set_allowable_load_drop_factor(0.70)
 tension_model.set_boundary_condition_scale_factor(1.5)
 
-my_wcid = "fy220213"
 if is_sandia_cluster():
-  tension_model.run_in_queue(my_wcid, 1)
+  tension_model.run_in_queue(MATCAL_WCID, 1)
   tension_model.continue_when_simulation_fails()
   platform = get_sandia_computing_platform()
   num_cores = platform.get_processors_per_node()
@@ -167,7 +167,7 @@ top_hat_model.add_boundary_condition_data(top_hat_data_collection)
 # for running the model. 
 top_hat_model.set_number_of_cores(num_cores*2)
 if is_sandia_cluster():
-  top_hat_model.run_in_queue(my_wcid, 1)
+  top_hat_model.run_in_queue(MATCAL_WCID, 1)
   top_hat_model.continue_when_simulation_fails()
 
 #%%

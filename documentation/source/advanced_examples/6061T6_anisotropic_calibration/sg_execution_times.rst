@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**28:05.603** total execution time for 9 files **from advanced_examples/6061T6_anisotropic_calibration**:
+**00:07.803** total execution time for 9 files **from advanced_examples/6061T6_anisotropic_calibration**:
 
 .. container::
 
@@ -32,28 +32,28 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_i_uq_validation_parameter_study.py` (``plot_6061T6_i_uq_validation_parameter_study.py``)
-     - 14:24.195
-     - 0.0
-   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_h_laplace_study.py` (``plot_6061T6_h_laplace_study.py``)
-     - 13:41.408
+   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_d_temperature_dependent_data_analysis.py` (``plot_6061T6_d_temperature_dependent_data_analysis.py``)
+     - 00:04.808
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_a_anisotropy_data_analysis.py` (``plot_6061T6_a_anisotropy_data_analysis.py``)
-     - 00:00.000
+     - 00:02.817
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_b_anisotropy_initial_point_estimation.py` (``plot_6061T6_b_anisotropy_initial_point_estimation.py``)
-     - 00:00.000
+     - 00:00.172
      - 0.0
-   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_c_anisotropy_calibration_cluster.py` (``plot_6061T6_c_anisotropy_calibration_cluster.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_d_temperature_dependent_data_analysis.py` (``plot_6061T6_d_temperature_dependent_data_analysis.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_e_temperature_dependent_initial_point_estimation.py` (``plot_6061T6_e_temperature_dependent_initial_point_estimation.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_i_uq_validation_parameter_study.py` (``plot_6061T6_i_uq_validation_parameter_study.py``)
+     - 00:00.002
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_f_temperature_dependent_calibration_cluster.py` (``plot_6061T6_f_temperature_dependent_calibration_cluster.py``)
+     - 00:00.001
+     - 0.0
+   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_c_anisotropy_calibration_cluster.py` (``plot_6061T6_c_anisotropy_calibration_cluster.py``)
+     - 00:00.001
+     - 0.0
+   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_h_laplace_study.py` (``plot_6061T6_h_laplace_study.py``)
+     - 00:00.001
+     - 0.0
+   * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_e_temperature_dependent_initial_point_estimation.py` (``plot_6061T6_e_temperature_dependent_initial_point_estimation.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_g_temperature_dependent_verification_cluster.py` (``plot_6061T6_g_temperature_dependent_verification_cluster.py``)
