@@ -21,10 +21,10 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath("../../"))
 from matcal.version import __version__
 
-external_docs_path = os.path.join("..", "..", "matcal", "sandia", "documentation")
+site_docs_path = os.path.join("..", "..", "..", "site_matcal", "documentation")
 rsts_to_include = []
-if os.path.exists(external_docs_path):
-    for filename in glob(os.path.join(external_docs_path, "*.rst")):
+if os.path.exists(site_docs_path):
+    for filename in glob(os.path.join(site_docs_path, "*.rst")):
         shutil.copyfile(filename, os.path.join(os.getcwd(), os.path.basename(filename)))
         rsts_to_include.append(os.path.basename(filename))
 with open("site_includes.rst", 'w') as f:
