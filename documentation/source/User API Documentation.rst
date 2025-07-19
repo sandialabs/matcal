@@ -36,7 +36,6 @@ User API Documentation
    matcal.full_field.data
    matcal.full_field.field_mappers
    matcal.full_field.objective
-   matcal.sandia.file_modifications
    matcal.sierra.input_file_writer
    matcal.sierra.material
    matcal.sierra.models
