@@ -1,0 +1,194 @@
+Dakota version 6.16 released May 16 2022.
+Repository revision d68d94ff5 (2022-05-09) built May 12 2022 09:48:51.
+Running MPI Dakota executable in serial mode.
+Start time: Thu Aug 11 17:08:07 2022
+
+-----------------------
+Begin DAKOTA input file
+dakota.in
+-----------------------
+  environment
+    tabular_graphics_data
+    method_pointer = 'sampling_id'
+  method
+    id_method = 'sampling_id'
+    sampling
+      sample_type = lhs
+      samples = 6
+      seed = 8555
+      output = quiet
+  model
+    id_model = 'single_id'
+    variables_pointer = 'uniform_uncertain_id'
+    responses_pointer = 'basic_nongradient_id'
+    single
+      interface_pointer = 'fork_id'
+  variables
+    id_variables = 'uniform_uncertain_id'
+    uniform_uncertain = 2
+      active uncertain
+      descriptor = "a" "b"
+      initial_point = 0.000000e+00 0.000000e+00
+      lower_bounds = -5.000000e+00 -5.000000e+00
+      upper_bounds = 5.000000e+00 5.000000e+00
+  interface
+    id_interface = 'fork_id'
+    analysis_driver = 'python /scratch/mwkury/matcal_v2/matcal/dakota_modules/dakota_interfaces.py /scratch/mwkury/matcal_v2/matcal/test/production/python_sensitivity/test_lhs_test_0/Sensitivity.serialized /usr/local/anaconda/3-2019.03/lib/python3.7/unittest'
+    asynchronous
+      evaluation_concurrency = 6
+    fork
+      file_save
+      parameters_file = 'params.in'
+      results_file = 'residuals.out'
+      work_directory
+        directory_tag
+        directory_save
+        named = 'matcal_workdir'
+        copy_files = 'matcal_template/*'
+  responses
+    id_responses = 'basic_nongradient_id'
+      objective_functions = 5
+      no_hessians
+      no_gradients
+---------------------
+End DAKOTA input file
+---------------------
+
+Using Dakota input file 'dakota.in'
+Writing new restart file 'dakota.rst'.
+
+>>>>> Executing environment.
+
+>>>>> Running random_sampling iterator.
+
+NonD lhs Samples = 6 Seed (user-specified) = 8555
+
+------------------------------
+Begin  fork_id Evaluation    1
+------------------------------
+(Asynchronous job 1 added to fork_id queue)
+
+------------------------------
+Begin  fork_id Evaluation    2
+------------------------------
+(Asynchronous job 2 added to fork_id queue)
+
+------------------------------
+Begin  fork_id Evaluation    3
+------------------------------
+(Asynchronous job 3 added to fork_id queue)
+
+------------------------------
+Begin  fork_id Evaluation    4
+------------------------------
+(Asynchronous job 4 added to fork_id queue)
+
+------------------------------
+Begin  fork_id Evaluation    5
+------------------------------
+(Asynchronous job 5 added to fork_id queue)
+
+------------------------------
+Begin  fork_id Evaluation    6
+------------------------------
+(Asynchronous job 6 added to fork_id queue)
+
+Blocking synchronize of 6 asynchronous fork_id evaluations
+First pass: initiating 6 local asynchronous jobs
+Initiating fork_id evaluation 1
+nonblocking fork: python /scratch/mwkury/matcal_v2/matcal/dakota_modules/dakota_interfaces.py /scratch/mwkury/matcal_v2/matcal/test/production/python_sensitivity/test_lhs_test_0/Sensitivity.serialized /usr/local/anaconda/3-2019.03/lib/python3.7/unittest params.in residuals.out
+Initiating fork_id evaluation 2
+nonblocking fork: python /scratch/mwkury/matcal_v2/matcal/dakota_modules/dakota_interfaces.py /scratch/mwkury/matcal_v2/matcal/test/production/python_sensitivity/test_lhs_test_0/Sensitivity.serialized /usr/local/anaconda/3-2019.03/lib/python3.7/unittest params.in residuals.out
+Initiating fork_id evaluation 3
+nonblocking fork: python /scratch/mwkury/matcal_v2/matcal/dakota_modules/dakota_interfaces.py /scratch/mwkury/matcal_v2/matcal/test/production/python_sensitivity/test_lhs_test_0/Sensitivity.serialized /usr/local/anaconda/3-2019.03/lib/python3.7/unittest params.in residuals.out
+Initiating fork_id evaluation 4
+nonblocking fork: python /scratch/mwkury/matcal_v2/matcal/dakota_modules/dakota_interfaces.py /scratch/mwkury/matcal_v2/matcal/test/production/python_sensitivity/test_lhs_test_0/Sensitivity.serialized /usr/local/anaconda/3-2019.03/lib/python3.7/unittest params.in residuals.out
+Initiating fork_id evaluation 5
+nonblocking fork: python /scratch/mwkury/matcal_v2/matcal/dakota_modules/dakota_interfaces.py /scratch/mwkury/matcal_v2/matcal/test/production/python_sensitivity/test_lhs_test_0/Sensitivity.serialized /usr/local/anaconda/3-2019.03/lib/python3.7/unittest params.in residuals.out
+Initiating fork_id evaluation 6
+nonblocking fork: python /scratch/mwkury/matcal_v2/matcal/dakota_modules/dakota_interfaces.py /scratch/mwkury/matcal_v2/matcal/test/production/python_sensitivity/test_lhs_test_0/Sensitivity.serialized /usr/local/anaconda/3-2019.03/lib/python3.7/unittest params.in residuals.out
+Waiting on completed jobs
+fork_id evaluation 1 has completed
+Waiting on completed jobs
+fork_id evaluation 2 has completed
+Waiting on completed jobs
+fork_id evaluation 6 has completed
+Waiting on completed jobs
+fork_id evaluation 4 has completed
+Waiting on completed jobs
+fork_id evaluation 5 has completed
+Waiting on completed jobs
+fork_id evaluation 3 has completed
+<<<<< Function evaluation summary (fork_id): 6 total (6 new, 0 duplicate)
+<<<<< Best parameters          =
+                     -3.3601791214e+00 a
+                      2.7621069031e+00 b
+<<<<< Best objective functions =
+                     -0.0000000000e+00
+                     -2.4489144098e-01
+                     -3.6733716147e-01
+                     -7.3467432293e-01
+                     -9.7956576391e-01
+<<<<< Best evaluation ID: 1
+-----------------------------------------------------------------------------
+Statistics based on 6 samples:
+
+Sample moment statistics for each response function:
+                            Mean           Std Dev          Skewness          Kurtosis
+      obj_fn_1  0.0000000000e+00  0.0000000000e+00  0.0000000000e+00 -3.0000000000e+00
+      obj_fn_2  1.7294519736e-03  1.8764201611e-01  2.6185620455e-01 -7.8217183491e-01
+      obj_fn_3  2.5941779604e-03  2.8146302417e-01  2.6185620455e-01 -7.8217183491e-01
+      obj_fn_4  5.1883559208e-03  5.6292604833e-01  2.6185620455e-01 -7.8217183491e-01
+      obj_fn_5  6.9178078944e-03  7.5056806445e-01  2.6185620455e-01 -7.8217183491e-01
+
+95% confidence intervals for each response function:
+                    LowerCI_Mean      UpperCI_Mean    LowerCI_StdDev    UpperCI_StdDev
+      obj_fn_1  0.0000000000e+00  0.0000000000e+00  0.0000000000e+00  0.0000000000e+00
+      obj_fn_2 -1.9518876728e-01  1.9864767122e-01  1.1712764802e-01  4.6021343355e-01
+      obj_fn_3 -2.9278315091e-01  2.9797150683e-01  1.7569147203e-01  6.9032015033e-01
+      obj_fn_4 -5.8556630183e-01  5.9594301367e-01  3.5138294405e-01  1.3806403007e+00
+      obj_fn_5 -7.8075506910e-01  7.9459068489e-01  4.6851059207e-01  1.8408537342e+00
+
+
+At least one correlation coefficient is nan or inf. This commonly occurs when
+discrete variables (including histogram variables) are present, a response is
+completely insensitive to variables (response variance equal to 0), there are
+fewer samples than variables, or some samples are approximately collinear.
+
+Simple Correlation Matrix among all inputs and outputs:
+                        a            b     obj_fn_1     obj_fn_2     obj_fn_3     obj_fn_4     obj_fn_5 
+           a  1.00000e+00 
+           b -1.24219e-01  1.00000e+00 
+    obj_fn_1         -nan         -nan         -nan 
+    obj_fn_2  7.70968e-01 -7.27710e-01         -nan  1.00000e+00 
+    obj_fn_3  7.70968e-01 -7.27710e-01         -nan  1.00000e+00  1.00000e+00 
+    obj_fn_4  7.70968e-01 -7.27710e-01         -nan  1.00000e+00  1.00000e+00  1.00000e+00 
+    obj_fn_5  7.70968e-01 -7.27710e-01         -nan  1.00000e+00  1.00000e+00  1.00000e+00  1.00000e+00 
+
+Partial Correlation Matrix between input and output:
+                 obj_fn_1     obj_fn_2     obj_fn_3     obj_fn_4     obj_fn_5 
+           a         -nan  1.00000e+00  1.00000e+00  1.00000e+00  1.00000e+00 
+           b         -nan -1.00000e+00 -1.00000e+00 -1.00000e+00 -1.00000e+00 
+
+Simple Rank Correlation Matrix among all inputs and outputs:
+                        a            b     obj_fn_1     obj_fn_2     obj_fn_3     obj_fn_4     obj_fn_5 
+           a  1.00000e+00 
+           b -2.00000e-01  1.00000e+00 
+    obj_fn_1         -nan         -nan         -nan 
+    obj_fn_2  7.71429e-01 -7.71429e-01         -nan  1.00000e+00 
+    obj_fn_3  7.71429e-01 -7.71429e-01         -nan  1.00000e+00  1.00000e+00 
+    obj_fn_4  7.71429e-01 -7.71429e-01         -nan  1.00000e+00  1.00000e+00  1.00000e+00 
+    obj_fn_5  7.71429e-01 -7.71429e-01         -nan  1.00000e+00  1.00000e+00  1.00000e+00  1.00000e+00 
+
+Partial Rank Correlation Matrix between input and output:
+                 obj_fn_1     obj_fn_2     obj_fn_3     obj_fn_4     obj_fn_5 
+           a         -nan  9.89868e-01  9.89868e-01  9.89868e-01  9.89868e-01 
+           b         -nan -9.89868e-01 -9.89868e-01 -9.89868e-01 -9.89868e-01 
+
+-----------------------------------------------------------------------------
+
+<<<<< Iterator random_sampling completed.
+<<<<< Environment execution completed.
+DAKOTA execution time in seconds:
+  Total CPU        =       0.15 [parent =   0.160279, child =  -0.010279]
+  Total wall clock =     2.4886

@@ -1,0 +1,233 @@
+Dakota version 6.11 released Nov 15 2019.
+Repository revision c3efb37 (2019-11-07) built Nov  7 2019 17:38:29.
+Running MPI Dakota executable in serial mode.
+Start time: Wed Jan 15 13:28:26 2020
+
+-----------------------
+Begin DAKOTA input file
+Sensitivity
+-----------------------
+  environment
+    tabular_graphics_data
+    method_pointer = 'sampling_id'
+  method
+    id_method = 'sampling_id'
+    sampling
+      sample_type = lhs
+      samples = 2
+      seed = 3013
+      variance_based_decomp
+  model
+    id_model = 'single_id'
+    variables_pointer = 'uniform_uncertain_id'
+    responses_pointer = 'basic_nongradient_id'
+    single
+      interface_pointer = 'system_id'
+  variables
+    id_variables = 'uniform_uncertain_id'
+    uniform_uncertain = 2
+      active uncertain
+      descriptor = "Y" "nu"
+      initial_point = 5.500000e+02 2.250000e-01
+      lower_bounds = 1.000000e+02 0.000000e+00
+      upper_bounds = 1.000000e+03 4.500000e-01
+  interface
+    id_interface = 'system_id'
+    analysis_driver = 'python /scratch/mwkury/matcal_v2/matcal/core/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl'
+    asynchronous
+      evaluation_concurrency = 4
+    system
+      file_save
+      parameters_file = 'params.in'
+      results_file = 'objective.out'
+      work_directory
+        directory_tag
+        directory_save
+        named = 'matcal_workdir'
+        copy_files = 'matcal_template/*'
+  responses
+    id_responses = 'basic_nongradient_id'
+      objective_functions = 1
+      no_hessians
+      no_gradients
+---------------------
+End DAKOTA input file
+---------------------
+
+Using Dakota input file 'Sensitivity'
+Writing new restart file 'dakota.rst'.
+
+>>>>> Executing environment.
+
+>>>>> Running random_sampling iterator.
+
+NonD lhs Samples = 2 Seed (user-specified) = 3013
+
+NonD lhs Samples = 2 Seed not reset from previous LHS execution
+
+------------------------------
+Begin system_id Evaluation    1
+------------------------------
+Parameters for evaluation 1:
+                      8.1628809266e+02 Y
+                      4.6528059547e-02 nu
+
+(Asynchronous job 1 added to system_id queue)
+
+------------------------------
+Begin system_id Evaluation    2
+------------------------------
+Parameters for evaluation 2:
+                      3.2612603985e+02 Y
+                      3.9225829050e-01 nu
+
+(Asynchronous job 2 added to system_id queue)
+
+------------------------------
+Begin system_id Evaluation    3
+------------------------------
+Parameters for evaluation 3:
+                      5.4726489426e+02 Y
+                      9.6766121738e-02 nu
+
+(Asynchronous job 3 added to system_id queue)
+
+------------------------------
+Begin system_id Evaluation    4
+------------------------------
+Parameters for evaluation 4:
+                      6.4951722313e+02 Y
+                      2.6184029877e-01 nu
+
+(Asynchronous job 4 added to system_id queue)
+
+------------------------------
+Begin system_id Evaluation    5
+------------------------------
+Parameters for evaluation 5:
+                      8.1628809266e+02 Y
+                      9.6766121738e-02 nu
+
+(Asynchronous job 5 added to system_id queue)
+
+------------------------------
+Begin system_id Evaluation    6
+------------------------------
+Parameters for evaluation 6:
+                      3.2612603985e+02 Y
+                      2.6184029877e-01 nu
+
+(Asynchronous job 6 added to system_id queue)
+
+------------------------------
+Begin system_id Evaluation    7
+------------------------------
+Parameters for evaluation 7:
+                      5.4726489426e+02 Y
+                      4.6528059547e-02 nu
+
+(Asynchronous job 7 added to system_id queue)
+
+------------------------------
+Begin system_id Evaluation    8
+------------------------------
+Parameters for evaluation 8:
+                      6.4951722313e+02 Y
+                      3.9225829050e-01 nu
+
+(Asynchronous job 8 added to system_id queue)
+
+Blocking synchronize of 8 asynchronous system_id evaluations
+First pass: initiating 4 local asynchronous jobs
+Initiating system_id evaluation 1
+python /scratch/mwkury/matcal_v2/matcal/core/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Initiating system_id evaluation 2
+python /scratch/mwkury/matcal_v2/matcal/core/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Initiating system_id evaluation 3
+python /scratch/mwkury/matcal_v2/matcal/core/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Initiating system_id evaluation 4
+python /scratch/mwkury/matcal_v2/matcal/core/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Second pass: scheduling 4 remaining local asynchronous jobs
+Waiting on completed jobs
+system_id evaluation 1 has completed
+Initiating system_id evaluation 5
+python /scratch/mwkury/matcal_v2/matcal/src/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Waiting on completed jobs
+system_id evaluation 3 has completed
+Initiating system_id evaluation 6
+python /scratch/mwkury/matcal_v2/matcal/src/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Waiting on completed jobs
+system_id evaluation 2 has completed
+Initiating system_id evaluation 7
+python /scratch/mwkury/matcal_v2/matcal/src/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Waiting on completed jobs
+system_id evaluation 4 has completed
+Initiating system_id evaluation 8
+python /scratch/mwkury/matcal_v2/matcal/src/dakota/AnalysisDriver.py /scratch/mwkury/matcal_v2/matcal/test/nightly/one_parameter_lhs/Sensitivity.pkl params.in objective.out &
+Waiting on completed jobs
+system_id evaluation 5 has completed
+Waiting on completed jobs
+system_id evaluation 8 has completed
+Waiting on completed jobs
+system_id evaluation 6 has completed
+Waiting on completed jobs
+system_id evaluation 7 has completed
+
+Active response data for system_id evaluation 1:
+Active set vector = { 1 }
+                      7.0715041653e-01 obj_fn
+
+
+Active response data for system_id evaluation 2:
+Active set vector = { 1 }
+                      3.8883045448e-01 obj_fn
+
+
+Active response data for system_id evaluation 3:
+Active set vector = { 1 }
+                      1.0562633359e-01 obj_fn
+
+
+Active response data for system_id evaluation 4:
+Active set vector = { 1 }
+                      3.3425806006e-01 obj_fn
+
+
+Active response data for system_id evaluation 5:
+Active set vector = { 1 }
+                      7.0715041653e-01 obj_fn
+
+
+Active response data for system_id evaluation 6:
+Active set vector = { 1 }
+                      3.8883045448e-01 obj_fn
+
+
+Active response data for system_id evaluation 7:
+Active set vector = { 1 }
+                      1.0562633359e-01 obj_fn
+
+
+Active response data for system_id evaluation 8:
+Active set vector = { 1 }
+                      3.3425806006e-01 obj_fn
+
+<<<<< Function evaluation summary (system_id): 8 total (8 new, 0 duplicate)
+<<<<< Best parameters          =
+                      5.4726489426e+02 Y
+                      9.6766121738e-02 nu
+<<<<< Best objective function  =
+                      1.0562633359e-01
+<<<<< Best data captured at function evaluation 3
+
+Global sensitivity indices for each response function:
+obj_fn Sobol' indices:
+                                  Main             Total
+                      2.1111921515e+00  1.9781906299e+00 Y
+                      0.0000000000e+00  0.0000000000e+00 nu
+
+<<<<< Iterator random_sampling completed.
+<<<<< Environment execution completed.
+DAKOTA execution time in seconds:
+  Total CPU        =       1.15 [parent =    1.14673, child =   0.003268]
+  Total wall clock =    25.7568
