@@ -41,7 +41,17 @@ def default_modules_command_exists():
 
 
 def default_modules_command_does_not_exist():
-    return not (lmod_command_exists() or modulecmd_command_exists())
+    try:
+        lmod_exists = lmod_command_exists()
+    except RuntimeError:
+        lmod_exists = False
+
+    try:
+        modulecmd_exists = modulecmd_command_exists()
+    except RuntimeError:
+        modulecmd_exists = False
+
+    return not (lmod_exists or modulecmd_exists)
 
 
 # MatCal will default to lmod command unless the modulecmd exists for the user on 
