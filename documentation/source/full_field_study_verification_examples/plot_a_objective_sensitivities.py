@@ -174,13 +174,19 @@ model = UserDefinedSierraModel("adagio", "synthetic_data_files/test_model_input_
 model.set_name("3D_model")
 model.add_constants(elastic_modulus=200, poissons=0.27, 
                     R22=1.0, R33=0.9, R23=1.0, R31=1.0)
-model.set_number_of_cores(112)
 model.read_full_field_data("surf_results.e")
 
-from matcal.sandia.computing_platforms import is_sandia_cluster
+from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
+num_cores=96
 if is_sandia_cluster():       
-    model.run_in_queue("fy220213", 0.5)
+    platform = get_sandia_computing_platform()
+    num_cores = platform.get_processors_per_node()
+    model.run_in_queue(MATCAL_WCID, 0.5)
     model.continue_when_simulation_fails()
+model.set_number_of_cores(num_cores)
+
+
 
 #%%
 # The VFM model requires a :class:`~matcal.sierra.material.Material`
@@ -201,7 +207,7 @@ vfm_model.set_number_of_time_steps(450)
 vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, 
                         R33=0.9, R23=1.0, R31=1.0)
 if is_sandia_cluster():       
-    vfm_model.run_in_queue("fy220213", 10.0/60.0)
+    vfm_model.run_in_queue(MATCAL_WCID, 10.0/60.0)
     vfm_model.continue_when_simulation_fails()
 # %%
 # The objectives that we wish to evaluate 

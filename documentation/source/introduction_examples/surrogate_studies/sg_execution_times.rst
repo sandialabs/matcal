@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**09:27.399** total execution time for 1 file **from introduction_examples/surrogate_studies**:
+**06:58.673** total execution time for 1 file **from introduction_examples/surrogate_studies**:
 
 .. container::
 
@@ -33,5 +33,5 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_introduction_examples_surrogate_studies_plot_generate_surrogate.py` (``plot_generate_surrogate.py``)
-     - 09:27.399
+     - 06:58.673
      - 0.0

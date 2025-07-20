@@ -45,7 +45,7 @@ All other inputs remain the same. As a result,
 the commentary is mostly removed for this example
 except for some discussion on the results at the end.
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-147
+.. GENERATED FROM PYTHON SOURCE LINES 30-153
 
 .. code-block:: Python
 
@@ -119,12 +119,18 @@ except for some discussion on the results at the end.
     model.set_name("test_model")
     model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, 
                         R33=0.9, R23=1.0, R31=1.0)
-    model.set_number_of_cores(224)
     model.read_full_field_data("surf_results.e")
-    from matcal.sandia.computing_platforms import is_sandia_cluster
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
+    num_cores=96
     if is_sandia_cluster():       
-        model.run_in_queue("fy220213", 0.5)
+        model.run_in_queue(MATCAL_WCID, 0.5)
         model.continue_when_simulation_fails()
+        platform = get_sandia_computing_platform()
+        num_cores = platform.get_processors_per_node()
+    model.set_number_of_cores(num_cores)
+
     interpolate_objective = InterpolatedFullFieldObjective("synthetic_data_files/test_mesh_surf.g", 
                                                            "displacement_x", 
                                                            "displacement_y")
@@ -168,48 +174,24 @@ except for some discussion on the results at the end.
         print(f"Parameter {param} error: {pe(calibrated_params[param], goal_results[param])}")
 
 
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_001.png
-         :alt: matcal_default_state
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_001.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_002.png
-         :alt: plot w gradient interp calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_002.png
-         :class: sphx-glr-multi-img
-
-
 .. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. code-block:: pytb
 
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-    OrderedDict([('yield_stress', 202.48338464), ('A', 1593.808395), ('n', 1.8643052585), ('R11', 0.9469612508), ('R12', 0.83355909055)])
-    Parameter yield_stress error: 1.2416923199999985
-    Parameter A error: 6.253893000000001
-    Parameter n error: -6.7847370750000024
-    Parameter R11 error: -0.31986833684209615
-    Parameter R12 error: -1.934224641176469
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_w_gradient_interp_calibration_verification.py", line 34, in <module>
+        synthetic_data.rename_field("U", "displacement_x")
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 228, in rename_field
+        self._check_field_in_data(old_name)
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 148, in _check_field_in_data
+        raise self.KeyError(f"The field \"{field}\" does not exist. "+
+    matcal.core.data.Data.KeyError: The field "U" does not exist. The following fields exist in the data:
+    ['displacement', 'external_energy', 'internal_energy', 'kinetic_energy', 'load', 'momentum_x', 'momentum_y', 'momentum_z', 'timestep', 'time', 'u', 'v', 'w']
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 148-180
+.. GENERATED FROM PYTHON SOURCE LINES 154-186
 
 The calibrated parameter percent errors
 are much improved over the load-displacement 
@@ -244,7 +226,7 @@ not accurate enough for verification purposes.
     This is done to avoid saving and moving the large 
     data sets which can exacerbated out-of-memory issues. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-186
+.. GENERATED FROM PYTHON SOURCE LINES 186-192
 
 .. code-block:: Python
 
@@ -256,46 +238,9 @@ not accurate enough for verification purposes.
     # sphinx_gallery_thumbnail_number = 5
 
 
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_003.png
-         :alt: plot w gradient interp calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_003.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_004.png
-         :alt: plot w gradient interp calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_004.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_005.png
-         :alt: plot w gradient interp calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_005.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_006.png
-         :alt: plot w gradient interp calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_w_gradient_interp_calibration_verification_006.png
-         :class: sphx-glr-multi-img
-
-
-
-
-
-
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (258 minutes 42.127 seconds)
+   **Total running time of the script:** (0 minutes 20.968 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_w_gradient_interp_calibration_verification.py:

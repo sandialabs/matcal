@@ -140,7 +140,7 @@ to facilitate plotting.
 Next, we plot the data on with a ``semilogx`` plot to verify it imported 
 as expected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 67-153
+.. GENERATED FROM PYTHON SOURCE LINES 67-155
 
 .. code-block:: Python
 
@@ -209,7 +209,9 @@ as expected.
     astme8_model = RoundUniaxialTensionModel(sierra_material, **geo_params)            
     astme8_model.add_boundary_condition_data(tension_data)       
 
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
     cores_per_node = 24
     if is_sandia_cluster():
         platform = get_sandia_computing_platform()
@@ -217,7 +219,7 @@ as expected.
 
     astme8_model.set_number_of_cores(cores_per_node)
     if is_sandia_cluster():       
-        astme8_model.run_in_queue("fy220213", 1)
+        astme8_model.run_in_queue(MATCAL_WCID, 1)
         astme8_model.continue_when_simulation_fails()
     astme8_model.set_allowable_load_drop_factor(0.45)
     astme8_model.set_name("ASTME8_tension_model")
@@ -242,7 +244,7 @@ as expected.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 154-159
+.. GENERATED FROM PYTHON SOURCE LINES 156-161
 
 We can now setup a :class:`~matcal.core.parameter_studies.LaplaceStudy` 
 and add the evaluation sets of interest. We use the default options for the 
@@ -250,7 +252,7 @@ study as these are the most robust.
 See :ref:`6061T6 aluminum calibration uncertainty quantification` to 
 see the effect of changing the ``noise_estimate``. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 159-168
+.. GENERATED FROM PYTHON SOURCE LINES 161-170
 
 .. code-block:: Python
 
@@ -270,12 +272,12 @@ see the effect of changing the ``noise_estimate``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 169-171
+.. GENERATED FROM PYTHON SOURCE LINES 171-173
 
 We set the parameter center to the calibrated parameter values 
 and launch the study. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-177
+.. GENERATED FROM PYTHON SOURCE LINES 173-179
 
 .. code-block:: Python
 
@@ -287,39 +289,50 @@ and launch the study.
 
 
 
-
-
 .. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. code-block:: pytb
 
-    Initial covariance estimate:
-     [[ 9.83229136e+00  3.62319663e+01 -7.68052759e-01 -8.03780707e-01]
-     [ 3.62319663e+01  2.43205090e+02 -4.86659264e+00 -3.49078186e+00]
-     [-7.68052759e-01 -4.86659264e+00  9.91658026e-02  7.16667759e-02]
-     [-8.03780707e-01 -3.49078186e+00  7.16667759e-02  6.90594236e-02]]
-    Calibrated covariance estimate:
-     [[ 9.76611223e+00  3.61930196e+01 -7.65414467e-01 -8.00137168e-01]
-     [ 3.61930196e+01  2.44117864e+02 -4.87910307e+00 -3.49452653e+00]
-     [-7.65414467e-01 -4.87910307e+00  9.90699866e-02  7.21521028e-02]
-     [-8.00137168e-01 -3.49452653e+00  7.21521028e-02  6.89058121e-02]]
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_f_tension_laplace_study_cluster.py", line 174, in <module>
+        laplace_results = laplace.launch()
+                          ^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/study_base.py", line 444, in launch
+        self._results = self._run_study()
+                        ^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/parameter_studies.py", line 84, in _run_study
+        self._batch_results = self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/study_base.py", line 726, in _matcal_evaluate_parameter_sets_batch
+        batch_results = evaluator_func(formatted_parameter_sets,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/parameter_batch_evaluator.py", line 261, in evaluate_parameter_batch
+        batch_restart = SelectedBatchRestartClass(save_only)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/parameter_batch_evaluator.py", line 177, in __init__
+        self._finished_jobs = self._get_finished_jobs_info(full_path_batch_restart_filename)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/parameter_batch_evaluator.py", line 182, in _get_finished_jobs_info
+        with open(full_path_batch_restart_filename, "r") as f:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    FileNotFoundError: [Errno 2] No such file or directory: '/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/laplace_study/matcal_batch_restart.csv'
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 178-181
+.. GENERATED FROM PYTHON SOURCE LINES 180-183
 
 We see that the initial and calibrated covariance estimates are nearly equal. 
 This is because the variance in the data is relatively low and the model 
 form error for the model when compared to the experiments is low.
 
-.. GENERATED FROM PYTHON SOURCE LINES 184-187
+.. GENERATED FROM PYTHON SOURCE LINES 186-189
 
 Next, we sample the multivariate normal provided by the study covariance 
 and previous result mean and visualize the results using seaborn's
 KDE pair plot
 
-.. GENERATED FROM PYTHON SOURCE LINES 187-199
+.. GENERATED FROM PYTHON SOURCE LINES 189-201
 
 .. code-block:: Python
 
@@ -337,27 +350,9 @@ KDE pair plot
     # sphinx_gallery_thumbnail_number = 3
 
 
-
-.. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_f_tension_laplace_study_cluster_003.png
-   :alt: plot 304L f tension laplace study cluster
-   :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_f_tension_laplace_study_cluster_003.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /projects/aue/hpc/builds/x86_64/rhel8/ba17d7f2/anaconda3/install/linux-rhel8-x86_64/gcc-10.3.0/anaconda3-2023.09-0-zmej2r2/lib/python3.11/site-packages/seaborn/axisgrid.py:118: UserWarning: The figure layout has changed to tight
-      self._figure.tight_layout(*args, **kwargs)
-
-
-
-
-
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 48.657 seconds)
+   **Total running time of the script:** (0 minutes 4.834 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py:

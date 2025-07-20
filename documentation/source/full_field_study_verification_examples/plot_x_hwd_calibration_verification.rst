@@ -32,7 +32,7 @@ as they are in the full-field interpolation objective example. As a result,
 the commentary is mostly removed for this example
 except for some discussion on the results at the end.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-133
+.. GENERATED FROM PYTHON SOURCE LINES 17-139
 
 .. code-block:: Python
 
@@ -106,12 +106,18 @@ except for some discussion on the results at the end.
     model.set_name("test_model")
     model.add_constants(elastic_modulus=200, poissons=0.27, 
                         R22=1.0, R33=0.9, R23=1.0, R31=1.0)
-    model.set_number_of_cores(224)
     model.read_full_field_data("surf_results.e")
-    from matcal.sandia.computing_platforms import is_sandia_cluster
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
+    num_cores=96
     if is_sandia_cluster():       
-        model.run_in_queue("fy220213", 0.5)
+        model.run_in_queue(MATCAL_WCID, 0.5)
         model.continue_when_simulation_fails()
+        platform = get_sandia_computing_platform()
+        num_cores = platform.get_processors_per_node()
+    model.set_number_of_cores(num_cores)
+
     hwd_objective = PolynomialHWDObjective("synthetic_data_files/test_mesh_surf.g", "displacement_x", 
                                            "displacement_y")
     hwd_objective.set_name("hwd_objective")
@@ -154,46 +160,24 @@ except for some discussion on the results at the end.
 
 
 
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_001.png
-         :alt: matcal_default_state
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_001.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_002.png
-         :alt: plot x hwd calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_002.png
-         :class: sphx-glr-multi-img
-
-
 .. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. code-block:: pytb
 
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-    OrderedDict([('yield_stress', 196.54046791), ('A', 1381.7651452), ('n', 2.0974913769), ('R11', 0.97589239743), ('R12', 0.94017220556)])
-    Parameter yield_stress error: -1.729766045000005
-    Parameter A error: -7.882323653333333
-    Parameter n error: 4.8745688449999935
-    Parameter R11 error: 2.7255155189473736
-    Parameter R12 error: 10.608494771764713
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_x_hwd_calibration_verification.py", line 21, in <module>
+        synthetic_data.rename_field("U", "displacement_x")
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 228, in rename_field
+        self._check_field_in_data(old_name)
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 148, in _check_field_in_data
+        raise self.KeyError(f"The field \"{field}\" does not exist. "+
+    matcal.core.data.Data.KeyError: The field "U" does not exist. The following fields exist in the data:
+    ['displacement', 'external_energy', 'internal_energy', 'kinetic_energy', 'load', 'momentum_x', 'momentum_y', 'momentum_z', 'timestep', 'time', 'u', 'v', 'w']
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 134-164
+.. GENERATED FROM PYTHON SOURCE LINES 140-170
 
 The calibrated parameter percent errors
 are similar to those produced in 
@@ -226,7 +210,7 @@ see if we can obtain verification results
     for all time steps are shown on a single plot.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 164-172
+.. GENERATED FROM PYTHON SOURCE LINES 170-178
 
 .. code-block:: Python
 
@@ -240,46 +224,9 @@ see if we can obtain verification results
     # sphinx_gallery_thumbnail_number = 5
 
 
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_003.png
-         :alt: plot x hwd calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_003.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_004.png
-         :alt: plot x hwd calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_004.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_005.png
-         :alt: plot x hwd calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_005.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_006.png
-         :alt: plot x hwd calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_x_hwd_calibration_verification_006.png
-         :class: sphx-glr-multi-img
-
-
-
-
-
-
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (193 minutes 28.829 seconds)
+   **Total running time of the script:** (0 minutes 22.414 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_x_hwd_calibration_verification.py:

@@ -23,7 +23,8 @@ preferred plotting options.
 """
 import numpy as np
 from matcal import *
-from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
 import matplotlib.pyplot as plt
 
@@ -243,14 +244,13 @@ ASTME8_tension_model.add_boundary_condition_data(tension_data_collection)
 # Since we will run this calibration on either an HPC cluster
 # or a local machine, we setup the model 
 # with the appropriate platform specific options. 
-my_wcid = "fy220213"
 if is_sandia_cluster():
-  ASTME8_tension_model.run_in_queue(my_wcid, 0.25)
-  ASTME8_tension_model.continue_when_simulation_fails()
-  platform = get_sandia_computing_platform()
-  num_cores = platform.get_processors_per_node()
+    ASTME8_tension_model.run_in_queue(MATCAL_WCID, 0.25)
+    ASTME8_tension_model.continue_when_simulation_fails()
+    platform = get_sandia_computing_platform()
+    num_cores = platform.get_processors_per_node()
 else:
-  num_cores = 8
+    num_cores = 8
 ASTME8_tension_model.set_number_of_cores(num_cores)
 
 #%%
@@ -291,7 +291,7 @@ top_hat_model.add_boundary_condition_data(top_hat_data_collection)
 # for running the model. 
 top_hat_model.set_number_of_cores(num_cores*2)
 if is_sandia_cluster():
-  top_hat_model.run_in_queue(my_wcid, 30.0/60)
+  top_hat_model.run_in_queue(MATCAL_WCID, 30.0/60)
   top_hat_model.continue_when_simulation_fails()
 
 #%%

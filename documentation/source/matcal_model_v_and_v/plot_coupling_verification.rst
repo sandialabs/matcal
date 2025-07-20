@@ -69,7 +69,7 @@ To begin, we once again perform the data import, model preparation
 and objective specification for the tension model from the examples linked above.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 51-108
+.. GENERATED FROM PYTHON SOURCE LINES 51-110
 
 .. code-block:: Python
 
@@ -109,12 +109,14 @@ and objective specification for the tension model from the examples linked above
 
     staggered_coupling = RoundUniaxialTensionModel(sierra_material, **geo_params)            
     staggered_coupling.add_boundary_condition_data(data_collection)
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
     num_cores = 24
     if is_sandia_cluster():
         platform = get_sandia_computing_platform()
         num_cores = platform.processors_per_node 
-        staggered_coupling.run_in_queue("fy220213", 4)
+        staggered_coupling.run_in_queue(MATCAL_WCID, 4)
         staggered_coupling.continue_when_simulation_fails()
     staggered_coupling.set_number_of_cores(num_cores)
     staggered_coupling.add_constants(ref_strain_rate=1e-5, coupling="coupled",
@@ -137,14 +139,14 @@ and objective specification for the tension model from the examples linked above
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 109-113
+.. GENERATED FROM PYTHON SOURCE LINES 111-115
 
 Now to setup the different coupling models, we will use Python's copy
 module to copy the ``astme8_model_staggered_coupling model``, and the set 
 the correct coupling options 
 for the new models.
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-130
+.. GENERATED FROM PYTHON SOURCE LINES 115-132
 
 .. code-block:: Python
 
@@ -157,7 +159,7 @@ for the new models.
     adiabatic.add_boundary_condition_data(data_collection)
     adiabatic.set_name("ASTME8_tension_model_adiabatic")
     if is_sandia_cluster():
-        adiabatic.run_in_queue("fy220213", 4)
+        adiabatic.run_in_queue(MATCAL_WCID, 4)
         adiabatic.continue_when_simulation_fails()
     adiabatic.set_number_of_cores(num_cores)
     adiabatic.add_constants(ref_strain_rate=1e-5, coupling="adiabatic", density=0.000741, 
@@ -172,7 +174,7 @@ for the new models.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 131-138
+.. GENERATED FROM PYTHON SOURCE LINES 133-140
 
 Similar to what was done in the convergence study, 
 we will perform a :class:`~matcal.core.parameter_studies.ParameterStudy`
@@ -182,7 +184,7 @@ We then add evaluation sets for each of the models with the different coupling
 methods.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-148
+.. GENERATED FROM PYTHON SOURCE LINES 140-150
 
 .. code-block:: Python
 
@@ -203,7 +205,7 @@ methods.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 149-168
+.. GENERATED FROM PYTHON SOURCE LINES 151-170
 
 We can now run the study, and  after it finishes, we can compare
 the results from the different models. For our purposes, we want to ensure that 
@@ -225,7 +227,7 @@ convergence plots for the objective once all the
 simulations are completed.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 168-224
+.. GENERATED FROM PYTHON SOURCE LINES 170-226
 
 .. code-block:: Python
 
@@ -309,7 +311,7 @@ simulations are completed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 225-230
+.. GENERATED FROM PYTHON SOURCE LINES 227-232
 
 We now update the time steps for each model, 
 and then we create a new study for the updated model.
@@ -317,7 +319,7 @@ The new study is launched and the results are once again
 plotted and stored for the objective time step 
 convergence plot.
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-253
+.. GENERATED FROM PYTHON SOURCE LINES 232-255
 
 .. code-block:: Python
 
@@ -368,13 +370,13 @@ convergence plot.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-257
+.. GENERATED FROM PYTHON SOURCE LINES 256-259
 
 This process is completed one last time
 for models with a target of 1200 time steps
 for their simulations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 257-279
+.. GENERATED FROM PYTHON SOURCE LINES 259-281
 
 .. code-block:: Python
 
@@ -424,13 +426,13 @@ for their simulations.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 280-283
+.. GENERATED FROM PYTHON SOURCE LINES 282-285
 
 With all objective results complete, we can 
 plot the objectives for each model as a function of time step and coupling method. 
 The goal is to see whether the objectives are converging to a common value.
 
-.. GENERATED FROM PYTHON SOURCE LINES 283-308
+.. GENERATED FROM PYTHON SOURCE LINES 285-310
 
 .. code-block:: Python
 
@@ -472,13 +474,13 @@ The goal is to see whether the objectives are converging to a common value.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_devel/documentation/matcal_model_v_and_v/plot_coupling_verification.py:292: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/matcal_model_v_and_v/plot_coupling_verification.py:294: RuntimeWarning: invalid value encountered in divide
       objectives/adiabatic_objective_fine, 'o-')
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 309-326
+.. GENERATED FROM PYTHON SOURCE LINES 311-328
 
 The results displayed in the plots are notable and 
 indicate that the coupling
@@ -501,7 +503,7 @@ correct any issues and will update the models if an issue is found and resolved.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (183 minutes 52.778 seconds)
+   **Total running time of the script:** (115 minutes 49.731 seconds)
 
 
 .. _sphx_glr_download_matcal_model_v_and_v_plot_coupling_verification.py:

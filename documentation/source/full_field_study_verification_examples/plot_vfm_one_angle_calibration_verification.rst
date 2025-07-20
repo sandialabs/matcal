@@ -141,12 +141,17 @@ configuration in grey.
 
 
 
+.. rst-class:: sphx-glr-script-out
 
-.. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_002.png
-   :alt: plot vfm one angle calibration verification
-   :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_002.png
-   :class: sphx-glr-single-img
+.. code-block:: pytb
 
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_vfm_one_angle_calibration_verification.py", line 76, in <module>
+        plot_field(synthetic_data, "U", axes[0])
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_vfm_one_angle_calibration_verification.py", line 67, in plot_field
+        c = ax.scatter(1e3*(data.spatial_coords[:,0]+data["U"][-1, :]),
+                                                    ~~~~^^^^^
+    ValueError: no field of name U
 
 
 
@@ -192,12 +197,6 @@ next using python string and file tools.
         fn.write(mat_file_string)
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 115-128
 
 The VFM model requires a :class:`~matcal.sierra.material.Material`
@@ -214,7 +213,7 @@ conditions. The model constants
 passed to the model are the uncalibrated parameters
 described in :ref:`Full-field Verification Problem Material Model`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 128-142
+.. GENERATED FROM PYTHON SOURCE LINES 128-144
 
 .. code-block:: Python
 
@@ -228,25 +227,14 @@ described in :ref:`Full-field Verification Problem Material Model`.
     vfm_model.set_number_of_time_steps(450)
     vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, R33=0.9, 
                             R23=1.0, R31=1.0)
-    from matcal.sandia.computing_platforms import is_sandia_cluster
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
     if is_sandia_cluster():       
-        vfm_model.run_in_queue("fy220213", 10.0/60.0)
+        vfm_model.run_in_queue(MATCAL_WCID, 10.0/60.0)
         vfm_model.continue_when_simulation_fails()
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 143-150
+.. GENERATED FROM PYTHON SOURCE LINES 145-152
 
 We now create the objective that will 
 be used for the calibration. 
@@ -256,7 +244,7 @@ in the :class:`~matcal.full_field.objective.MechanicalVFMObjective`,
 no additional input is needed. We do 
 name the objective for convenience.
 
-.. GENERATED FROM PYTHON SOURCE LINES 150-153
+.. GENERATED FROM PYTHON SOURCE LINES 152-155
 
 .. code-block:: Python
 
@@ -264,13 +252,7 @@ name the objective for convenience.
     vfm_objective.set_name("vfm_objective")
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 154-164
+.. GENERATED FROM PYTHON SOURCE LINES 156-166
 
 We then create the material model 
 input parameters for the study. As 
@@ -283,7 +265,7 @@ the true values used for the synthetic data generation
 and is a stressing test for a local 
 gradient based method.
 
-.. GENERATED FROM PYTHON SOURCE LINES 164-172
+.. GENERATED FROM PYTHON SOURCE LINES 166-174
 
 .. code-block:: Python
 
@@ -296,13 +278,7 @@ gradient based method.
     param_collection = ParameterCollection("hill voce", Y, A, n, R11, R12)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 173-180
+.. GENERATED FROM PYTHON SOURCE LINES 175-182
 
 Finally, we create the calibration 
 study and pass the parameters 
@@ -312,7 +288,7 @@ the total cores it can use locally and
 pass the data, model and objective to 
 it as an evaluation set.
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-187
+.. GENERATED FROM PYTHON SOURCE LINES 182-189
 
 .. code-block:: Python
 
@@ -324,13 +300,7 @@ it as an evaluation set.
     study.set_working_directory("vfm_one_angle", remove_existing=True)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 188-193
+.. GENERATED FROM PYTHON SOURCE LINES 190-195
 
 For this example, we limit the number of maximum evaluations.
 This is to save computation time. It will not converge to 
@@ -338,7 +308,7 @@ the correct solution with more iterations, it over fits
 the model to the available data and is likely
 traversing down a "valley" in the objective spave.
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-196
+.. GENERATED FROM PYTHON SOURCE LINES 195-198
 
 .. code-block:: Python
 
@@ -346,28 +316,7 @@ traversing down a "valley" in the objective spave.
     results = study.launch()
 
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Opening exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-    Closing exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-    Opening exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-    Closing exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-    Opening exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-    Closing exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-    Opening exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-    Opening exodus file: matcal_template/test_model/matcal_default_state/test_model_exploded.g
-    Closing exodus file: matcal_template/test_model/matcal_default_state/test_model_exploded.g
-    Closing exodus file: matcal_template/test_model/matcal_default_state/test_model.g
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 197-206
+.. GENERATED FROM PYTHON SOURCE LINES 199-208
 
 When the study completes, 
 we extract the calibrated parameters 
@@ -379,7 +328,7 @@ It completes with ``RELATIVE FUNCTION CONVERGENCE``
 indicating a quality local minima has been identified
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-220
+.. GENERATED FROM PYTHON SOURCE LINES 208-222
 
 .. code-block:: Python
 
@@ -398,24 +347,7 @@ indicating a quality local minima has been identified
     for param in goal_results.keys():
         print(f"Parameter {param} error: {pe(calibrated_params[param], goal_results[param])}")
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    OrderedDict([('yield_stress', 193.16859529), ('A', 1526.016046), ('n', 1.7069587107), ('R11', 0.80379899326), ('R12', 1.1)])
-    Parameter yield_stress error: -3.4157023549999934
-    Parameter A error: 1.734403066666664
-    Parameter n error: -14.652064465000002
-    Parameter R11 error: -15.389579656842098
-    Parameter R12 error: 29.411764705882366
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 221-240
+.. GENERATED FROM PYTHON SOURCE LINES 223-242
 
 Using MatCal's standard plot, 
 it is clear that the gradient method quickly heads toward a minimum that is
@@ -437,7 +369,7 @@ will alleviate this issue. We do so in the next
 example :ref:`Virtual Fields Calibration Verification - Three Data Sets` where 
 we see improved results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 240-247
+.. GENERATED FROM PYTHON SOURCE LINES 242-249
 
 .. code-block:: Python
 
@@ -450,39 +382,9 @@ we see improved results.
     # sphinx_gallery_thumbnail_number = 5
 
 
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_003.png
-         :alt: plot vfm one angle calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_003.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_004.png
-         :alt: plot vfm one angle calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_004.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_005.png
-         :alt: plot vfm one angle calibration verification
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_one_angle_calibration_verification_005.png
-         :class: sphx-glr-multi-img
-
-
-
-
-
-
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (222 minutes 42.819 seconds)
+   **Total running time of the script:** (0 minutes 22.371 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_vfm_one_angle_calibration_verification.py:

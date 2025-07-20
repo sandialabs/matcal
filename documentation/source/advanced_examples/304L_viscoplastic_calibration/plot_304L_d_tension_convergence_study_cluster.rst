@@ -52,7 +52,7 @@ and objective specification for the tension model from the original calibration
 are repeated.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-98
+.. GENERATED FROM PYTHON SOURCE LINES 35-100
 
 .. code-block:: Python
 
@@ -95,12 +95,14 @@ are repeated.
     astme8_model.add_constants(ref_strain_rate=1e-5)
     astme8_model.add_constants(element_size=0.01, mesh_method=4)
 
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
     cores_per_node = 24
     if is_sandia_cluster():
         platform = get_sandia_computing_platform()
         cores_per_node = platform.processors_per_node
-        astme8_model.run_in_queue("fy220213", 2)
+        astme8_model.run_in_queue(MATCAL_WCID, 2)
         astme8_model.continue_when_simulation_fails()
     astme8_model.set_number_of_cores(cores_per_node)
 
@@ -126,14 +128,14 @@ are repeated.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-103
+.. GENERATED FROM PYTHON SOURCE LINES 101-105
 
 Now to setup the mesh convergence study, we will use Python's copy
 module to copy the astme8_model and modify the element sizes 
 for the new models. If needed, we can also change the 
 number of cores to be used for each model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 103-127
+.. GENERATED FROM PYTHON SOURCE LINES 105-129
 
 .. code-block:: Python
 
@@ -142,7 +144,7 @@ number of cores to be used for each model.
     astme8_model_coarse = deepcopy(astme8_model)
     astme8_model_coarse.add_constants(element_size=0.02, mesh_method=3)
     if is_sandia_cluster():
-        astme8_model_coarse.run_in_queue("fy220213", 0.5)
+        astme8_model_coarse.run_in_queue(MATCAL_WCID, 0.5)
     astme8_model_coarse.set_name("ASTME8_tension_model_coarse")
 
 
@@ -150,14 +152,14 @@ number of cores to be used for each model.
     astme8_model_fine = deepcopy(astme8_model)
     astme8_model_fine.add_constants(element_size=0.005, mesh_method=4)
     if is_sandia_cluster():
-        astme8_model_fine.run_in_queue("fy220213", 4)
+        astme8_model_fine.run_in_queue(MATCAL_WCID, 4)
         astme8_model_fine.set_number_of_cores(cores_per_node*2)
     astme8_model_fine.set_name("ASTME8_tension_model_fine")
 
     astme8_model_finest = deepcopy(astme8_model)
     astme8_model_finest.add_constants(element_size=0.0025, mesh_method=4)
     if is_sandia_cluster():
-        astme8_model_finest.run_in_queue("fy220213", 4)
+        astme8_model_finest.run_in_queue(MATCAL_WCID, 4)
         astme8_model_finest.set_number_of_cores(cores_per_node*4)
     astme8_model_finest.set_name("ASTME8_tension_model_finest")
 
@@ -168,13 +170,13 @@ number of cores to be used for each model.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 128-131
+.. GENERATED FROM PYTHON SOURCE LINES 130-133
 
 We will then perform a :class:`~matcal.core.parameter_studies.ParameterStudy` 
 where the only parameters
 to be evaluated are the calibrated parameters from the initial study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 131-144
+.. GENERATED FROM PYTHON SOURCE LINES 133-146
 
 .. code-block:: Python
 
@@ -198,12 +200,12 @@ to be evaluated are the calibrated parameters from the initial study.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 145-147
+.. GENERATED FROM PYTHON SOURCE LINES 147-149
 
 The X parameter is not needed, so it is removed from the 
 calibration parameter dictionary.
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-153
+.. GENERATED FROM PYTHON SOURCE LINES 149-155
 
 .. code-block:: Python
 
@@ -220,13 +222,13 @@ calibration parameter dictionary.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 154-157
+.. GENERATED FROM PYTHON SOURCE LINES 156-159
 
 This mesh discretization study will need to evaluate all models we created,
 so each is added to the study
 as their own evaluation set.  
 
-.. GENERATED FROM PYTHON SOURCE LINES 157-166
+.. GENERATED FROM PYTHON SOURCE LINES 159-168
 
 .. code-block:: Python
 
@@ -246,12 +248,12 @@ as their own evaluation set.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 167-169
+.. GENERATED FROM PYTHON SOURCE LINES 169-171
 
 Lastly, the study core limit is set appropriately. 
 The core limit is set to 112 cores which is what our hardware can support.
 
-.. GENERATED FROM PYTHON SOURCE LINES 169-171
+.. GENERATED FROM PYTHON SOURCE LINES 171-173
 
 .. code-block:: Python
 
@@ -264,12 +266,12 @@ The core limit is set to 112 cores which is what our hardware can support.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 172-174
+.. GENERATED FROM PYTHON SOURCE LINES 174-176
 
 We can now run the study. After it finishes, we can make our 
 convergence plot. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 174-176
+.. GENERATED FROM PYTHON SOURCE LINES 176-178
 
 .. code-block:: Python
 
@@ -282,7 +284,7 @@ convergence plot.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-188
+.. GENERATED FROM PYTHON SOURCE LINES 179-190
 
 For our purposes, we want to ensure that 
 the objective value is converged or has an acceptable error. As 
@@ -296,7 +298,7 @@ the residuals for each model are calculated at the experimental data
 independent variables, their engineering strain values will be the same 
 for all data sets.
 
-.. GENERATED FROM PYTHON SOURCE LINES 188-193
+.. GENERATED FROM PYTHON SOURCE LINES 190-195
 
 .. code-block:: Python
 
@@ -312,14 +314,14 @@ for all data sets.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 194-198
+.. GENERATED FROM PYTHON SOURCE LINES 196-200
 
 For the residual values and simulation data we will have to extract the 
 data from the results object for each model. We write a function
 to perform this data extraction on a provided model and 
 retrun the results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 198-213
+.. GENERATED FROM PYTHON SOURCE LINES 200-215
 
 .. code-block:: Python
 
@@ -345,11 +347,11 @@ retrun the results.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 214-215
+.. GENERATED FROM PYTHON SOURCE LINES 216-217
 
 Next, we apply the function to each model and organize the data for plotting.
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-251
+.. GENERATED FROM PYTHON SOURCE LINES 217-253
 
 .. code-block:: Python
 
@@ -396,13 +398,13 @@ Next, we apply the function to each model and organize the data for plotting.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 252-255
+.. GENERATED FROM PYTHON SOURCE LINES 254-257
 
 We then 
 use Matplotlib :cite:p:`matplotlib` to plot the objective values versus the element size.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 255-263
+.. GENERATED FROM PYTHON SOURCE LINES 257-265
 
 .. code-block:: Python
 
@@ -427,14 +429,14 @@ use Matplotlib :cite:p:`matplotlib` to plot the objective values versus the elem
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_devel/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:259: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:261: RuntimeWarning: invalid value encountered in divide
       plt.semilogx(time_steps, objectives/finest_objective_results, 'o-')
 
     Text(18.92641051136365, 0.5, 'normalized objective value')
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 264-269
+.. GENERATED FROM PYTHON SOURCE LINES 266-271
 
 We also plot the raw simulation stress/strain curves. Note that this is different
 than the simulation QoIs used for the objective 
@@ -442,7 +444,7 @@ since the QoIs are the simulation curves interpolated
 to the experiment strain points. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 269-282
+.. GENERATED FROM PYTHON SOURCE LINES 271-284
 
 .. code-block:: Python
 
@@ -473,11 +475,11 @@ to the experiment strain points.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x15546db82010>
+    <matplotlib.legend.Legend object at 0x155498ab9b10>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 283-295
+.. GENERATED FROM PYTHON SOURCE LINES 285-297
 
 These plots show the objective is converging with reduced element 
 size and the objective values change ~1\% or less with element 
@@ -492,7 +494,7 @@ We also plot the weighted and conditioned residuals
 to observe the effect of the weighting applied.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 295-316
+.. GENERATED FROM PYTHON SOURCE LINES 297-318
 
 .. code-block:: Python
 
@@ -531,11 +533,11 @@ to observe the effect of the weighting applied.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x15546db97390>
+    <matplotlib.legend.Legend object at 0x15549871cb50>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 317-326
+.. GENERATED FROM PYTHON SOURCE LINES 319-328
 
 In this first plot, it is clear that the residuals 
 are highest near the regions that were removed 
@@ -547,7 +549,7 @@ while at the unloading portion of the curve the residuals
 are much more sensitive to data set and mesh size. In fact, 
 the raw residuals are clearly not converging in this region.
 
-.. GENERATED FROM PYTHON SOURCE LINES 326-348
+.. GENERATED FROM PYTHON SOURCE LINES 328-350
 
 .. code-block:: Python
 
@@ -587,11 +589,11 @@ the raw residuals are clearly not converging in this region.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x15546dc56890>
+    <matplotlib.legend.Legend object at 0x155498b33d10>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 349-364
+.. GENERATED FROM PYTHON SOURCE LINES 351-366
 
 In the second plot, the weighting has removed parts of 
 the problematic portions of the stress-strain curve as 
@@ -609,12 +611,12 @@ We start by first updating the model constants from each model
 to the mesh size selected above. We can then change 
 the number of time steps the models will target.
 
-.. GENERATED FROM PYTHON SOURCE LINES 364-390
+.. GENERATED FROM PYTHON SOURCE LINES 366-392
 
 .. code-block:: Python
 
     if is_sandia_cluster():
-        astme8_model_coarse.run_in_queue("fy220213", 2)
+        astme8_model_coarse.run_in_queue(MATCAL_WCID, 2)
         astme8_model_coarse.set_number_of_cores(cores_per_node*2)
     astme8_model_coarse.add_constants(element_size=0.005, mesh_method=4)
     astme8_model_coarse.set_number_of_time_steps(150)
@@ -622,19 +624,19 @@ the number of time steps the models will target.
     astme8_model.set_number_of_time_steps(300)
     astme8_model.add_constants(element_size=0.005, mesh_method=4)
     if is_sandia_cluster():
-        astme8_model.run_in_queue("fy220213", 4)
+        astme8_model.run_in_queue(MATCAL_WCID, 4)
         astme8_model.set_number_of_cores(cores_per_node*2)
 
     astme8_model_fine.set_number_of_time_steps(600)
     if is_sandia_cluster():
-        astme8_model_fine.run_in_queue("fy220213", 4)
+        astme8_model_fine.run_in_queue(MATCAL_WCID, 4)
         astme8_model_fine.set_number_of_cores(cores_per_node*3)
     astme8_model_fine.add_constants(element_size=0.005, mesh_method=4)
 
     astme8_model_finest = deepcopy(astme8_model_fine)
     astme8_model_finest.set_number_of_time_steps(1200)
     if is_sandia_cluster():
-        astme8_model_finest.run_in_queue("fy220213", 4)
+        astme8_model_finest.run_in_queue(MATCAL_WCID, 4)
         astme8_model_finest.set_number_of_cores(cores_per_node*4)
     astme8_model_finest.add_constants(element_size=0.005, mesh_method=4)
     astme8_model_finest.set_name("ASTME8_tension_model_finest")
@@ -646,11 +648,11 @@ the number of time steps the models will target.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 391-392
+.. GENERATED FROM PYTHON SOURCE LINES 393-394
 
 Next, we re-create a new study to be launched with the updated models.
 
-.. GENERATED FROM PYTHON SOURCE LINES 392-408
+.. GENERATED FROM PYTHON SOURCE LINES 394-410
 
 .. code-block:: Python
 
@@ -677,7 +679,7 @@ Next, we re-create a new study to be launched with the updated models.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 409-420
+.. GENERATED FROM PYTHON SOURCE LINES 411-422
 
 Once again, we can make our 
 convergence plot using Matplotlib after 
@@ -691,7 +693,7 @@ obtain two values from each completed model for the convergence plot: the number
 time steps that the simulation took and the objective for that result. Once again, we 
 also plot the simulation data curves for each case.
 
-.. GENERATED FROM PYTHON SOURCE LINES 420-467
+.. GENERATED FROM PYTHON SOURCE LINES 422-469
 
 .. code-block:: Python
 
@@ -767,13 +769,13 @@ also plot the simulation data curves for each case.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_devel/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:449: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:451: RuntimeWarning: invalid value encountered in divide
       plt.semilogx(time_steps, objectives/finest_objective_results, 'o-')
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 468-478
+.. GENERATED FROM PYTHON SOURCE LINES 470-480
 
 These plots show the objective is converging with 
 increased time steps and the objective value change becomes ~1\% or less with 300 
@@ -789,7 +791,7 @@ a recalibration using a model with element sizes of 0.005" and more than 300 tim
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (182 minutes 40.361 seconds)
+   **Total running time of the script:** (109 minutes 37.482 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_d_tension_convergence_study_cluster.py:

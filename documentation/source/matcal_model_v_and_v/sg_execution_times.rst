@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**434:29.490** total execution time for 2 files **from matcal_model_v_and_v**:
+**192:39.923** total execution time for 2 files **from matcal_model_v_and_v**:
 
 .. container::
 
@@ -32,9 +32,9 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_matcal_model_v_and_v_plot_round_tension_mesh_method_effects.py` (``plot_round_tension_mesh_method_effects.py``)
-     - 250:36.712
-     - 0.0
    * - :ref:`sphx_glr_matcal_model_v_and_v_plot_coupling_verification.py` (``plot_coupling_verification.py``)
-     - 183:52.778
+     - 115:49.731
+     - 0.0
+   * - :ref:`sphx_glr_matcal_model_v_and_v_plot_round_tension_mesh_method_effects.py` (``plot_round_tension_mesh_method_effects.py``)
+     - 76:50.191
      - 0.0

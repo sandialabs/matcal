@@ -40,13 +40,14 @@ First, we import the tools that will be used
 for this example and setup our 
 preferred plotting options.   
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-35
+.. GENERATED FROM PYTHON SOURCE LINES 24-36
 
 .. code-block:: Python
 
     import numpy as np
     from matcal import *
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
     import matplotlib.pyplot as plt
 
@@ -57,19 +58,12 @@ preferred plotting options.
 
 
 
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_c_anisotropy_calibration_cluster.py", line 26, in <module>
-        from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
-    ModuleNotFoundError: No module named 'matcal.sandia'
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-46
+
+.. GENERATED FROM PYTHON SOURCE LINES 37-47
 
 Next, we import the data
 we will calibrate to. This includes 
@@ -82,7 +76,7 @@ See :ref:`Data Importing and Manipulation` and
 about how these data files were setup to be imported 
 correctly by the data importer.
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-53
+.. GENERATED FROM PYTHON SOURCE LINES 47-54
 
 .. code-block:: Python
 
@@ -94,7 +88,13 @@ correctly by the data importer.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 54-59
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 55-60
 
 We now modify the data to fit our calibration 
 needs. For the tension data, 
@@ -102,7 +102,7 @@ we convert the engineering stress from
 ksi units to psi units using the 
 :func:`~matcal.core.data.scale_data_collection` function.
 
-.. GENERATED FROM PYTHON SOURCE LINES 59-62
+.. GENERATED FROM PYTHON SOURCE LINES 60-63
 
 .. code-block:: Python
 
@@ -110,7 +110,13 @@ ksi units to psi units using the
                                                       "engineering_stress", 1000)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-82
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 64-83
 
 The top hat data needs more specialized 
 modifications. Since some of these 
@@ -132,7 +138,7 @@ We use NumPy array slicing to perform
 the data modification for each data set 
 in each state.
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-93
+.. GENERATED FROM PYTHON SOURCE LINES 83-94
 
 .. code-block:: Python
 
@@ -148,12 +154,18 @@ in each state.
     top_hat_data_collection.remove_field("time")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 94-96
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 95-97
 
 We now plot the data to verify that 
 we have modified it as desired for the calibration.
 
-.. GENERATED FROM PYTHON SOURCE LINES 96-128
+.. GENERATED FROM PYTHON SOURCE LINES 97-129
 
 .. code-block:: Python
 
@@ -190,7 +202,36 @@ we have modified it as desired for the calibration.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-142
+
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_001.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_001.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_002.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_002.png
+         :class: sphx-glr-multi-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    Text(20.771400166044003, 0.5, 'displacement (lbs)')
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 130-143
 
 With the data prepared, we move on to 
 building the models. 
@@ -206,7 +247,7 @@ expects and the Aprepro variables
 that MatCal will populate with study and 
 state parameters when running a study. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 142-176
+.. GENERATED FROM PYTHON SOURCE LINES 143-177
 
 .. code-block:: Python
 
@@ -245,14 +286,20 @@ state parameters when running a study.
       end
     """
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-181
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 178-182
 
 We save that string to a file, so 
 MatCal can add it to the model files 
 that we generate for the tension and top hat 
 shear test models.
 
-.. GENERATED FROM PYTHON SOURCE LINES 181-185
+.. GENERATED FROM PYTHON SOURCE LINES 182-186
 
 .. code-block:: Python
 
@@ -261,21 +308,33 @@ shear test models.
         fn.write(material_string)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-190
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 187-191
 
 MatCal communicates all required material 
 model information to its MatCal generated
 finite element models through a :class:`~matcal.sierra.material.Material`
 object, so we create the required object.
 
-.. GENERATED FROM PYTHON SOURCE LINES 190-192
+.. GENERATED FROM PYTHON SOURCE LINES 191-193
 
 .. code-block:: Python
 
     material = Material(material_name, material_filename, "hill_plasticity")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-199
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 194-200
 
 Now we create our tension model 
 which requires the specimen geometry and model 
@@ -284,7 +343,7 @@ We create a dictionary with all the
 required key words for 
 creating the tension model mesh.
 
-.. GENERATED FROM PYTHON SOURCE LINES 199-211
+.. GENERATED FROM PYTHON SOURCE LINES 200-212
 
 .. code-block:: Python
 
@@ -301,19 +360,31 @@ creating the tension model mesh.
                 "grip_contact_length":1}
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 212-214
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 213-215
 
 Then we create a :class:`~matcal.sierra.models.RoundUniaxialTensionModel`
 that takes the material and geometry as input.
 
-.. GENERATED FROM PYTHON SOURCE LINES 214-216
+.. GENERATED FROM PYTHON SOURCE LINES 215-217
 
 .. code-block:: Python
 
     ASTME8_tension_model = RoundUniaxialTensionModel(material, **tension_geo_params) 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-222
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 218-223
 
 A name is specified so that 
 results information can be easily accessed 
@@ -321,14 +392,20 @@ and associated with this model. MatCal will
 generate a name for the model, but it may 
 be convenient to supply your own.
 
-.. GENERATED FROM PYTHON SOURCE LINES 222-224
+.. GENERATED FROM PYTHON SOURCE LINES 223-225
 
 .. code-block:: Python
 
     ASTME8_tension_model.set_name('tension_specimen')
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 225-231
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 226-232
 
 To ensure the model does not run longer than required for our 
 calibration, we use the
@@ -337,14 +414,20 @@ method.
 This will end the simulation when the load in the simulation 
 has decreased by 25% from peak load.
 
-.. GENERATED FROM PYTHON SOURCE LINES 231-233
+.. GENERATED FROM PYTHON SOURCE LINES 232-234
 
 .. code-block:: Python
 
     ASTME8_tension_model.set_allowable_load_drop_factor(0.25)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 234-239
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 235-240
 
 To complete the model, MatCal needs boundary condition 
 information so that the model is deformed appropriately 
@@ -352,33 +435,44 @@ for each data set that is of interest to the calibration.
 We pass the uniaxial tension data collection to the model,
 so that it can form the correct boundary conditions for each state.
 
-.. GENERATED FROM PYTHON SOURCE LINES 239-241
+.. GENERATED FROM PYTHON SOURCE LINES 240-242
 
 .. code-block:: Python
 
     ASTME8_tension_model.add_boundary_condition_data(tension_data_collection)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 242-246
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 243-247
 
 Next, we set optional platform options. 
 Since we will run this calibration on either an HPC cluster
 or a local machine, we setup the model 
 with the appropriate platform specific options. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 246-256
+.. GENERATED FROM PYTHON SOURCE LINES 247-256
 
 .. code-block:: Python
 
-    my_wcid = "fy220213"
     if is_sandia_cluster():
-      ASTME8_tension_model.run_in_queue(my_wcid, 0.25)
-      ASTME8_tension_model.continue_when_simulation_fails()
-      platform = get_sandia_computing_platform()
-      num_cores = platform.get_processors_per_node()
+        ASTME8_tension_model.run_in_queue(MATCAL_WCID, 0.25)
+        ASTME8_tension_model.continue_when_simulation_fails()
+        platform = get_sandia_computing_platform()
+        num_cores = platform.get_processors_per_node()
     else:
-      num_cores = 8
+        num_cores = 8
     ASTME8_tension_model.set_number_of_cores(num_cores)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 257-262
@@ -409,6 +503,12 @@ with all the needed geometry and discretization parameters.
             "numsplits":1}
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 278-280
 
 Next, we create the :class:`~matcal.sierra.models.TopHatShearModel`
@@ -420,6 +520,12 @@ and give it a name.
 
     top_hat_model = TopHatShearModel(material, **top_hat_geo_params)
     top_hat_model.set_name('top_hat_shear')
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 284-286
@@ -435,6 +541,12 @@ and provide boundary condition data.
     top_hat_model.add_boundary_condition_data(top_hat_data_collection)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 290-292
 
 Lastly, we setup the platform information 
@@ -446,8 +558,14 @@ for running the model.
 
     top_hat_model.set_number_of_cores(num_cores*2)
     if is_sandia_cluster():
-      top_hat_model.run_in_queue(my_wcid, 30.0/60)
+      top_hat_model.run_in_queue(MATCAL_WCID, 30.0/60)
       top_hat_model.continue_when_simulation_fails()
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 298-304
@@ -465,6 +583,12 @@ and the top hat specimen is calibrated to the load-displacement data.
 
     tension_objective = CurveBasedInterpolatedObjective("engineering_strain", "engineering_stress")
     top_hat_objective = CurveBasedInterpolatedObjective("displacement", "load")
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 308-316
@@ -493,6 +617,12 @@ that correspond to these features in the data to zero.
         return weights*residuals
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 327-331
 
 The preceding function is used to create 
@@ -508,6 +638,12 @@ objective as a weight.
                                                      "engineering_stress", 
                                                      remove_failure_points_from_residual)
     tension_objective.set_field_weights(tension_residual_weights)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 337-341
@@ -528,6 +664,12 @@ the elastic region with the following function.
         return weights*residuals
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 348-351
 
 Then we create our 
@@ -541,6 +683,12 @@ and apply it to the top hat objective.
     top_hat_residual_weights = UserFunctionWeighting("displacement", "load", 
                                                      remove_elastic_region_from_top_hat)
     top_hat_objective.set_field_weights(top_hat_residual_weights)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 356-362
@@ -566,6 +714,12 @@ calibration initial point estimation`.
     R31 = Parameter("R31", 0.8, 1.15, 0.94)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 372-375
 
 Finally, we can create our study. For
@@ -579,6 +733,12 @@ This calibration we use a
     study = GradientCalibrationStudy(yield_stress, hardening, b, R22, R33, R12, R23, R31)
     study.set_results_storage_options(results_save_frequency=9)
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 378-380
 
 We run the study in a subdirectory named ``6061T6_anisotropy``
@@ -589,6 +749,12 @@ to keep the current directory cleaner.
 .. code-block:: Python
 
     study.set_working_directory("6061T6_anisotropy", remove_existing=True)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 383-390
@@ -612,6 +778,12 @@ to use all processors that are available.
 
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 397-399
 
 We add evaluation sets for each model and data set and 
@@ -624,6 +796,12 @@ set the output verbosity to the desired level.
     study.add_evaluation_set(ASTME8_tension_model, tension_objective, tension_data_collection)
     study.add_evaluation_set(top_hat_model, top_hat_objective, top_hat_data_collection)
     study.set_output_verbosity("normal")
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 404-407
@@ -639,6 +817,18 @@ and written to a file after it finished.
     results = study.launch()
     print(results.best.to_dict())
     matcal_save("anisotropy_parameters.serialized", results.best.to_dict())
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    OrderedDict([('yield_stress', 43.466890299), ('hardening', 11.540764702), ('b', 12.397622148), ('R22', 1.0168755292), ('R33', 0.97813235629), ('R12', 0.96795111031), ('R23', 0.92103510217), ('R31', 0.91096387184)])
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 412-415
@@ -660,9 +850,74 @@ calibration has been achieved.
 
 
 
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_003.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_003.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_004.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_004.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_005.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_005.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_006.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_006.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_007.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_007.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_008.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_008.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_009.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_009.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_010.png
+         :alt: plot 6061T6 c anisotropy calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_c_anisotropy_calibration_cluster_010.png
+         :class: sphx-glr-multi-img
+
+
+
+
+
+
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.001 seconds)
+   **Total running time of the script:** (116 minutes 38.494 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_c_anisotropy_calibration_cluster.py:

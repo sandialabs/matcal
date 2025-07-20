@@ -100,8 +100,10 @@ my_objective = mc.SimulationResultsSynchronizer('time', indep_field_vals,
 my_hifi_model = mc.UserDefinedSierraModel('aria', "aria_model/metal_foam_layers.i", 
                                           "aria_model/test_block.g", "aria_model/include")
 my_hifi_model.set_results_filename("results/results.csv")
-my_hifi_model.set_number_of_cores(24)
-my_hifi_model.run_in_queue("fy220213", 0.25)
+my_hifi_model.set_number_of_cores(12)
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
+my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
 my_hifi_model.continue_when_simulation_fails()
 #%%
 # Now we have all of our necessary components for a LHS study. We pass our 

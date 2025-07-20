@@ -51,13 +51,14 @@ visually inspect the curves to verify the behavior is as desired.
 Once again, we begin by importing the tools needed for the calibration and 
 setting our default plotting options.
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-48
+.. GENERATED FROM PYTHON SOURCE LINES 35-49
 
 .. code-block:: Python
 
 
     from matcal import *
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
     import numpy as np
     import matplotlib.pyplot as plt
@@ -75,7 +76,7 @@ setting our default plotting options.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 49-62
+.. GENERATED FROM PYTHON SOURCE LINES 50-63
 
 Next, we create our fictitious data using NumPy and 
 the MatCal :func:`~matcal.core.data.convert_dictionary_to_data` function. 
@@ -91,7 +92,7 @@ for the evaluation set. We only create states for the :math:`R_{11}`
 direction since the other directions will have similar 
 responses.
 
-.. GENERATED FROM PYTHON SOURCE LINES 62-71
+.. GENERATED FROM PYTHON SOURCE LINES 63-72
 
 .. code-block:: Python
 
@@ -111,7 +112,7 @@ responses.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 72-77
+.. GENERATED FROM PYTHON SOURCE LINES 73-78
 
 With the fictitious boundary condition data created, 
 we create the :class:`~matcal.sierra.models.RoundUniaxialTensionModel`
@@ -119,7 +120,7 @@ as we did in :ref:`6061T6 aluminum temperature dependent calibration`
 and add the :class:`~matcal.core.data.DataCollection` that we created
 as the model model boundary condition data.   
 
-.. GENERATED FROM PYTHON SOURCE LINES 77-109
+.. GENERATED FROM PYTHON SOURCE LINES 78-110
 
 .. code-block:: Python
 
@@ -150,7 +151,7 @@ as the model model boundary condition data.
     if is_sandia_cluster():       
         platform = get_sandia_computing_platform()   
         model.set_number_of_cores(platform.get_processors_per_node())
-        model.run_in_queue("fy220213", 0.5)
+        model.run_in_queue(MATCAL_WCID, 0.5)
         model.continue_when_simulation_fails()
     else:
         model.set_number_of_cores(8)
@@ -162,7 +163,7 @@ as the model model boundary condition data.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 110-116
+.. GENERATED FROM PYTHON SOURCE LINES 111-117
 
 We now create our parameters for our parameter 
 study. The parameters are the parameters 
@@ -171,7 +172,7 @@ and
 :ref:`6061T6 aluminum calibration with anisotropic yield` with 
 their current value set to their calibration values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 116-173
+.. GENERATED FROM PYTHON SOURCE LINES 117-174
 
 .. code-block:: Python
 
@@ -239,12 +240,12 @@ their current value set to their calibration values.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 174-176
+.. GENERATED FROM PYTHON SOURCE LINES 175-177
 
 To simplify setting up the parameter study, 
 we put all the parameters in a :class:`~matcal.core.parameters.ParameterCollection`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 176-195
+.. GENERATED FROM PYTHON SOURCE LINES 177-196
 
 .. code-block:: Python
 
@@ -274,14 +275,14 @@ we put all the parameters in a :class:`~matcal.core.parameters.ParameterCollecti
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 196-200
+.. GENERATED FROM PYTHON SOURCE LINES 197-201
 
 Now we can create our parameter study
 and add an evaluation set. An objective 
 is required, but will not be used for this example except 
 for results access by name when the study is complete. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 200-206
+.. GENERATED FROM PYTHON SOURCE LINES 201-207
 
 .. code-block:: Python
 
@@ -298,7 +299,7 @@ for results access by name when the study is complete.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 207-213
+.. GENERATED FROM PYTHON SOURCE LINES 208-214
 
 Parameter studies require the user to set 
 parameter sets to be evaluated and will not 
@@ -307,7 +308,7 @@ As a result, we pass the current values
 from our parameter collection as a parameter set 
 to be evaluated and then run the study. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 213-216
+.. GENERATED FROM PYTHON SOURCE LINES 214-217
 
 .. code-block:: Python
 
@@ -321,13 +322,13 @@ to be evaluated and then run the study.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-220
+.. GENERATED FROM PYTHON SOURCE LINES 218-221
 
 When the study finishes, 
 we retrieve the simulation 
 results
 
-.. GENERATED FROM PYTHON SOURCE LINES 220-221
+.. GENERATED FROM PYTHON SOURCE LINES 221-222
 
 .. code-block:: Python
 
@@ -339,14 +340,14 @@ results
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 222-226
+.. GENERATED FROM PYTHON SOURCE LINES 223-227
 
 We then can plot the results 
 using :meth:`~matcal.core.data.DataCollection.plot` 
 and color the results according to temperature 
 as was done in :ref:`6061T6 aluminum temperature dependent calibration`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 226-247
+.. GENERATED FROM PYTHON SOURCE LINES 227-248
 
 .. code-block:: Python
 
@@ -384,7 +385,7 @@ as was done in :ref:`6061T6 aluminum temperature dependent calibration`.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_devel/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_g_temperature_dependent_verification_cluster.py:226: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
+    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_g_temperature_dependent_verification_cluster.py:227: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
       cmap = cm.get_cmap("RdYlBu")
     No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
     No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
@@ -441,7 +442,7 @@ as was done in :ref:`6061T6 aluminum temperature dependent calibration`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 248-257
+.. GENERATED FROM PYTHON SOURCE LINES 249-258
 
 As can be seen in the plot, the curves at the different
 temperatures do not cross which would result if  
@@ -456,7 +457,7 @@ for most circumstances.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (6 minutes 43.274 seconds)
+   **Total running time of the script:** (5 minutes 10.675 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_g_temperature_dependent_verification_cluster.py:

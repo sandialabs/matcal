@@ -168,15 +168,17 @@ physical evolutions, selecting too few points will generate poor surrogates.
 Next, we need to inform MatCal about our high fidelity model. Our model 
 is a SIERRA/aria model that we define in a local subdirectory 'aria_model'. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 100-106
+.. GENERATED FROM PYTHON SOURCE LINES 100-108
 
 .. code-block:: Python
 
     my_hifi_model = mc.UserDefinedSierraModel('aria', "aria_model/metal_foam_layers.i", 
                                               "aria_model/test_block.g", "aria_model/include")
     my_hifi_model.set_results_filename("results/results.csv")
-    my_hifi_model.set_number_of_cores(24)
-    my_hifi_model.run_in_queue("fy220213", 0.25)
+    my_hifi_model.set_number_of_cores(12)
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
+    my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
     my_hifi_model.continue_when_simulation_fails()
 
 
@@ -185,7 +187,7 @@ is a SIERRA/aria model that we define in a local subdirectory 'aria_model'.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 107-113
+.. GENERATED FROM PYTHON SOURCE LINES 109-115
 
 Now we have all of our necessary components for a LHS study. We pass our 
 model and objective into the study. We then tell our study 
@@ -194,7 +196,7 @@ We chose 500 samples for this example because it has a decent performance floor
 and runs in a reasonable amount of time. Depending on the complexity of your problem, 
 a larger sample set may be required (1000-10000). 
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-118
+.. GENERATED FROM PYTHON SOURCE LINES 115-120
 
 .. code-block:: Python
 
@@ -210,14 +212,14 @@ a larger sample set may be required (1000-10000).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-123
+.. GENERATED FROM PYTHON SOURCE LINES 121-125
 
 With our study defined, we run it and wait for it to complete. 
 While it will generate information with regards to the sensitivity of the 
 quantities of interest to the parameters, we are mostly interested in the model
 results the study produced. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 123-125
+.. GENERATED FROM PYTHON SOURCE LINES 125-127
 
 .. code-block:: Python
 
@@ -230,7 +232,7 @@ results the study produced.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 126-138
+.. GENERATED FROM PYTHON SOURCE LINES 128-140
 
 Now that the study is done running, we will generate a surrogate for the model
 using information stored in the study and its results. 
@@ -245,7 +247,7 @@ a filename we would like to save our surrogate to.
 The method then returns the surrogate, and saves a copy of it to 
 the filename we passed with a ".joblib" file extension. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-146
+.. GENERATED FROM PYTHON SOURCE LINES 140-148
 
 .. code-block:: Python
 
@@ -280,7 +282,7 @@ the filename we passed with a ".joblib" file extension.
     *
 
       .. image-sg:: /introduction_examples/surrogate_studies/images/sphx_glr_plot_generate_surrogate_003.png
-         :alt: TC_bottom eval index470, TC_bottom eval index47, TC_bottom eval index368, TC_bottom eval index183, TC_bottom eval index433, TC_bottom eval index344, TC_bottom eval index191, TC_bottom eval index260, TC_bottom eval index288, TC_bottom eval index42, TC_bottom eval index446, TC_top eval index109
+         :alt: TC_bottom eval index344, TC_bottom eval index47, TC_bottom eval index470, TC_bottom eval index433, TC_bottom eval index183, TC_bottom eval index368, TC_bottom eval index191, TC_bottom eval index260, TC_bottom eval index165, TC_bottom eval index288, TC_bottom eval index42, TC_bottom eval index446
          :srcset: /introduction_examples/surrogate_studies/images/sphx_glr_plot_generate_surrogate_003.png
          :class: sphx-glr-multi-img
 
@@ -288,7 +290,7 @@ the filename we passed with a ".joblib" file extension.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-203
+.. GENERATED FROM PYTHON SOURCE LINES 149-205
 
 To avoid rerunning a sampling study when debugging the surrogate generator, 
 it is recommended that one pass a :class:`~matcal.core.study_base.StudyResults`
@@ -347,7 +349,7 @@ also be accessed as properties under the surrogate after
 it has been produced. We print the scores below 
 for this surrogate.
 
-.. GENERATED FROM PYTHON SOURCE LINES 203-206
+.. GENERATED FROM PYTHON SOURCE LINES 205-208
 
 .. code-block:: Python
 
@@ -363,14 +365,14 @@ for this surrogate.
  .. code-block:: none
 
     Train scores:
-     OrderedDict([('TC_top', OrderedDict([('mean', array([0.99999985, 0.99999967, 0.99999644, 0.99998095])), ('max', array([0.99999985, 0.99999967, 0.99999644, 0.99998095])), ('min', array([0.99999985, 0.99999967, 0.99999644, 0.99998095]))])), ('TC_bottom', OrderedDict([('mean', array([0.9999994 , 0.99989506, 0.99859377, 0.94030055])), ('max', array([0.9999994 , 0.99989506, 0.99859377, 0.94030055])), ('min', array([0.9999994 , 0.99989506, 0.99859377, 0.94030055]))]))])
+     OrderedDict([('TC_top', OrderedDict([('mean', array([0.99999982, 0.99999952, 0.99999555, 0.99998197])), ('max', array([0.99999982, 0.99999952, 0.99999555, 0.99998197])), ('min', array([0.99999982, 0.99999952, 0.99999555, 0.99998197]))])), ('TC_bottom', OrderedDict([('mean', array([0.99999933, 0.99988842, 0.99865303, 0.94544916])), ('max', array([0.99999933, 0.99988842, 0.99865303, 0.94544916])), ('min', array([0.99999933, 0.99988842, 0.99865303, 0.94544916]))]))])
     Test scores:
-     OrderedDict([('TC_top', OrderedDict([('mean', array([0.99994938, 0.99996958, 0.99984456, 0.99942673])), ('max', array([0.99994938, 0.99996958, 0.99984456, 0.99942673])), ('min', array([0.99994938, 0.99996958, 0.99984456, 0.99942673]))])), ('TC_bottom', OrderedDict([('mean', array([ 0.99997379,  0.99508113,  0.93580405, -0.61003326])), ('max', array([ 0.99997379,  0.99508113,  0.93580405, -0.61003326])), ('min', array([ 0.99997379,  0.99508113,  0.93580405, -0.61003326]))]))])
+     OrderedDict([('TC_top', OrderedDict([('mean', array([0.999991  , 0.99998809, 0.9998988 , 0.99941326])), ('max', array([0.999991  , 0.99998809, 0.9998988 , 0.99941326])), ('min', array([0.999991  , 0.99998809, 0.9998988 , 0.99941326]))])), ('TC_bottom', OrderedDict([('mean', array([ 0.99998204,  0.9962538 ,  0.9413858 , -2.23402887])), ('max', array([ 0.99998204,  0.9962538 ,  0.9413858 , -2.23402887])), ('min', array([ 0.99998204,  0.9962538 ,  0.9413858 , -2.23402887]))]))])
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 207-217
+.. GENERATED FROM PYTHON SOURCE LINES 209-219
 
 Both the test scores and the training scores indicate the surrogates are well
 trained and can be used to predict our responses. 
@@ -383,7 +385,7 @@ The order of the parameters is the same order that they were
 passed into the the parameter collection or study, but this can be verified by 
 calling :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.parameter_order`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-234
+.. GENERATED FROM PYTHON SOURCE LINES 219-236
 
 .. code-block:: Python
 
@@ -416,13 +418,13 @@ calling :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.parameter_or
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 235-238
+.. GENERATED FROM PYTHON SOURCE LINES 237-240
 
 Multiple sets of parameters can be evaluated simultaneously. 
 Each field in the returned prediction will have a number of rows equal to 
 the number of passed parameter sets.
 
-.. GENERATED FROM PYTHON SOURCE LINES 238-248
+.. GENERATED FROM PYTHON SOURCE LINES 240-250
 
 .. code-block:: Python
 
@@ -443,7 +445,7 @@ the number of passed parameter sets.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 249-254
+.. GENERATED FROM PYTHON SOURCE LINES 251-256
 
 We can also run the actual model for these parameters for comparison 
 to the surrogate. Doing this step is recommended 
@@ -451,7 +453,7 @@ when determining if a surrogate is adequate for use in calibration or
 other studies. We do so using the 
 :class:`~matcal.core.parameter_studies.ParameterStudy`. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-262
+.. GENERATED FROM PYTHON SOURCE LINES 256-264
 
 .. code-block:: Python
 
@@ -470,13 +472,13 @@ other studies. We do so using the
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 263-266
+.. GENERATED FROM PYTHON SOURCE LINES 265-268
 
 With both the finite element model results 
 and the surrogate model results obtained, we can 
 plot them together for comparison.
 
-.. GENERATED FROM PYTHON SOURCE LINES 266-296
+.. GENERATED FROM PYTHON SOURCE LINES 268-298
 
 .. code-block:: Python
 
@@ -522,14 +524,14 @@ plot them together for comparison.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 297-301
+.. GENERATED FROM PYTHON SOURCE LINES 299-303
 
 Similarly, we can plot the surrogate model error. First, 
 we interpolate the surrogate results to the finite element model 
 times. Next, we calculate and plot the absolute error 
 for each prediction.
 
-.. GENERATED FROM PYTHON SOURCE LINES 301-333
+.. GENERATED FROM PYTHON SOURCE LINES 303-335
 
 .. code-block:: Python
 
@@ -577,7 +579,7 @@ for each prediction.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 334-343
+.. GENERATED FROM PYTHON SOURCE LINES 336-345
 
 These results show that the surrogates predict the response fairly well. 
 Most of the error is below 10 K throughout the entire history which is just a few 
@@ -589,7 +591,7 @@ If needed, we can load this surrogate again for future use by constructing a
 :class:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate`, with the saved filename
 created during the surrogate's generation. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 343-346
+.. GENERATED FROM PYTHON SOURCE LINES 345-348
 
 .. code-block:: Python
 
@@ -603,7 +605,7 @@ created during the surrogate's generation.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 347-354
+.. GENERATED FROM PYTHON SOURCE LINES 349-356
 
 Lastly, the surrogate can be investigated in an interactive manner using 
 MatCal's interactive tools. To do so, use the command line call:
@@ -616,7 +618,7 @@ This command will launch a browser window in which you can investigate your surr
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (9 minutes 27.399 seconds)
+   **Total running time of the script:** (6 minutes 58.673 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_surrogate_studies_plot_generate_surrogate.py:

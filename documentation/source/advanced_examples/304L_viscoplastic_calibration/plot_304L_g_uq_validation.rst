@@ -39,7 +39,7 @@ To begin, we reuse the data import, model preparation
 and objective specification for the tension model and rate 
 models from :ref:`304L stainless steel viscoplastic calibration uncertainty quantification`.    
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-109
+.. GENERATED FROM PYTHON SOURCE LINES 23-111
 
 .. code-block:: Python
 
@@ -108,7 +108,9 @@ models from :ref:`304L stainless steel viscoplastic calibration uncertainty quan
     astme8_model = RoundUniaxialTensionModel(sierra_material, **geo_params)            
     astme8_model.add_boundary_condition_data(tension_data)       
 
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
     cores_per_node = 24
     if is_sandia_cluster():
         platform = get_sandia_computing_platform()
@@ -116,7 +118,7 @@ models from :ref:`304L stainless steel viscoplastic calibration uncertainty quan
 
     astme8_model.set_number_of_cores(cores_per_node)
     if is_sandia_cluster():       
-        astme8_model.run_in_queue("fy220213", 1)
+        astme8_model.run_in_queue(MATCAL_WCID, 1)
         astme8_model.continue_when_simulation_fails()
     astme8_model.set_allowable_load_drop_factor(0.45)
     astme8_model.set_name("ASTME8_tension_model")
@@ -136,12 +138,12 @@ models from :ref:`304L stainless steel viscoplastic calibration uncertainty quan
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 110-112
+.. GENERATED FROM PYTHON SOURCE LINES 112-114
 
 With the models, data, and objectives created, 
 we import the :class:`~matcal.core.parameter_studies.LaplaceStudy` results from the previous step.
 
-.. GENERATED FROM PYTHON SOURCE LINES 112-114
+.. GENERATED FROM PYTHON SOURCE LINES 114-116
 
 .. code-block:: Python
 
@@ -149,19 +151,36 @@ we import the :class:`~matcal.core.parameter_studies.LaplaceStudy` results from 
 
 
 
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_g_uq_validation.py", line 114, in <module>
+        laplace_results = matcal_load("laplace_study_results.joblib")
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/serializer_wrapper.py", line 78, in matcal_load
+        return loader(filename)
+               ^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/serializer_wrapper.py", line 39, in _load_joblib
+        return joblib_serializer.load(filename)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/projects/aue/hpc/builds/x86_64/rhel8/ba17d7f2/anaconda3/install/linux-rhel8-x86_64/gcc-10.3.0/anaconda3-2023.09-0-zmej2r2/lib/python3.11/site-packages/joblib/numpy_pickle.py", line 650, in load
+        with open(filename, 'rb') as f:
+             ^^^^^^^^^^^^^^^^^^^^
+    FileNotFoundError: [Errno 2] No such file or directory: 'laplace_study_results.joblib'
 
 
 
 
-
-.. GENERATED FROM PYTHON SOURCE LINES 115-119
+.. GENERATED FROM PYTHON SOURCE LINES 117-121
 
 Next, we can sample
 the calculated parameter distribution using 
 :func:`~matcal.core.parameter_studies.sample_multivariate_normal` and evaluate 
 the parameter uncertainty as desired. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-126
+.. GENERATED FROM PYTHON SOURCE LINES 121-128
 
 .. code-block:: Python
 
@@ -173,36 +192,24 @@ the parameter uncertainty as desired.
                                                       params.get_item_names())
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 127-128
+.. GENERATED FROM PYTHON SOURCE LINES 129-130
 
 We save the parameter samples to be used or plotted later.
 
-.. GENERATED FROM PYTHON SOURCE LINES 128-130
+.. GENERATED FROM PYTHON SOURCE LINES 130-132
 
 .. code-block:: Python
 
     matcal_save("laplace_results.joblib", uncertain_param_sets)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 131-134
+.. GENERATED FROM PYTHON SOURCE LINES 133-136
 
 Now we set up a study so we can 
 visualize the results by pushing the samples back through the models.
 We do so using a MatCal :class:`~matcal.core.parameter_studies.ParameterStudy`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 134-141
+.. GENERATED FROM PYTHON SOURCE LINES 136-143
 
 .. code-block:: Python
 
@@ -214,13 +221,7 @@ We do so using a MatCal :class:`~matcal.core.parameter_studies.ParameterStudy`.
     param_study.set_working_directory(sampling_dir, remove_existing=True)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 142-155
+.. GENERATED FROM PYTHON SOURCE LINES 144-157
 
 Next, we add parameter evaluations for each of the samples. 
 We do so by organizing the data using Python's
@@ -236,7 +237,7 @@ to add each parameter set sample to the study.
    and can be of use.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 155-168
+.. GENERATED FROM PYTHON SOURCE LINES 157-170
 
 .. code-block:: Python
 
@@ -254,64 +255,13 @@ to add each parameter set sample to the study.
                 f"C={C_eval}. Parameters out of range.")
 
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Running evaluation with Y_0=38.99245106445027, A=181.48626492350158, b=1.5129995075229967, and C=-1.912817018921136.
-    Running evaluation with Y_0=31.676117410344325, A=161.09170123315863, b=1.986207061065711, and C=-1.3523723417632405.
-    Running evaluation with Y_0=28.154260224177783, A=154.66652490292165, b=2.0061079979555383, and C=-0.9927361969465327.
-    Running evaluation with Y_0=36.67729912302043, A=171.23993657490286, b=1.7121603545787247, and C=-1.7027153988289305.
-    Running evaluation with Y_0=28.573396218839562, A=147.77864930737624, b=2.1971312673430208, and C=-1.0308463678886772.
-    Running evaluation with Y_0=29.280304198199776, A=139.15954679152458, b=2.3200675710838343, and C=-1.0503900629968723.
-    Running evaluation with Y_0=34.3221316816426, A=162.008977276813, b=1.9382141135499418, and C=-1.5314399596132722.
-    Running evaluation with Y_0=34.336256787574904, A=131.96762000291454, b=2.4240043930513373, and C=-1.3226258091396499.
-    Running evaluation with Y_0=32.80162734412736, A=175.0167069581551, b=1.717735567303888, and C=-1.4935961471845633.
-    Running evaluation with Y_0=29.88837526032848, A=148.1668621508184, b=2.2360572224839927, and C=-1.175107021393459.
-    Running evaluation with Y_0=32.01687334509182, A=154.84482093698819, b=1.998203873354994, and C=-1.2786558819747946.
-    Running evaluation with Y_0=30.900675502493147, A=161.06316821491757, b=1.9436538605368372, and C=-1.2561490109461133.
-    Running evaluation with Y_0=33.02668766851555, A=158.70729002583042, b=1.9494439883016907, and C=-1.3815261808646548.
-    Running evaluation with Y_0=32.87563394976187, A=151.24627560417187, b=2.0761949093993226, and C=-1.3396687692244795.
-    Running evaluation with Y_0=29.01528278439188, A=155.50874017704447, b=2.0444745408544547, and C=-1.1265239839607666.
-    Running evaluation with Y_0=34.16849567305939, A=160.64555098130592, b=1.9322387390514582, and C=-1.4884003951734683.
-    Running evaluation with Y_0=35.1401930666198, A=185.52932671391747, b=1.4130118717987443, and C=-1.6508664953707282.
-    Running evaluation with Y_0=28.62615153661074, A=149.97828242371756, b=2.194747943553925, and C=-1.1054272063574657.
-    Running evaluation with Y_0=34.10611308169667, A=159.40424013677267, b=1.9779338311790475, and C=-1.4983503852091054.
-    Running evaluation with Y_0=28.533913478917682, A=134.49419485719815, b=2.4887630357227, and C=-1.0102884207549216.
-    Running evaluation with Y_0=32.10707258028536, A=163.39184108254912, b=1.9559550219432542, and C=-1.4012467406622005.
-    Running evaluation with Y_0=34.37613999894551, A=168.58713308321708, b=1.8137364839449115, and C=-1.5476964025198616.
-    Running evaluation with Y_0=33.274949282617406, A=147.71408687580586, b=2.1721301414604457, and C=-1.3576144378081012.
-    Running evaluation with Y_0=33.02434991926363, A=145.4750338057997, b=2.19750192419088, and C=-1.3236630790111041.
-    Running evaluation with Y_0=32.332595372217824, A=165.52409243748204, b=1.8811302151811413, and C=-1.4072057995982203.
-    Running evaluation with Y_0=29.49481465762686, A=164.1240261015294, b=1.909357329364988, and C=-1.1911461058124961.
-    Running evaluation with Y_0=29.860506345484836, A=164.5565577470568, b=1.894964594433746, and C=-1.2180762226260005.
-    Running evaluation with Y_0=31.669210800191948, A=156.66748899697222, b=1.9587260732971516, and C=-1.2332161927636864.
-    Running evaluation with Y_0=34.93289775746781, A=160.96187196043851, b=1.8936600903153662, and C=-1.5113681929780018.
-    Running evaluation with Y_0=31.275307926979814, A=136.76586073740967, b=2.3807603757212403, and C=-1.180690099049392.
-    Running evaluation with Y_0=34.89411575899733, A=172.34940635392493, b=1.6517803625699035, and C=-1.5469564683531412.
-    Running evaluation with Y_0=33.429053503723786, A=158.77504405204442, b=1.9604293995239972, and C=-1.4161774744065256.
-    Running evaluation with Y_0=31.61327872929515, A=177.81339137793398, b=1.6310919923315892, and C=-1.4181105299096808.
-    Running evaluation with Y_0=28.876825002324694, A=134.5498618024756, b=2.452212838102418, and C=-1.0329918944765741.
-    Running evaluation with Y_0=31.075640965913195, A=155.4805020645677, b=2.0065912740223806, and C=-1.2178601490700922.
-    Running evaluation with Y_0=35.701143931099885, A=171.65303304852557, b=1.7924841638692597, and C=-1.708374399518614.
-    Running evaluation with Y_0=31.703812275273535, A=140.00362946195878, b=2.317081269827396, and C=-1.2162346691330845.
-    Running evaluation with Y_0=33.58388781271513, A=182.24380581363775, b=1.5237249129266868, and C=-1.5241775928330958.
-    Running evaluation with Y_0=39.45451999003135, A=193.33353333772018, b=1.2422269306415237, and C=-1.949701278245226.
-    Running evaluation with Y_0=33.991065588363384, A=173.40247992828878, b=1.6735007791751497, and C=-1.5352576245454035.
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 169-172
+.. GENERATED FROM PYTHON SOURCE LINES 171-174
 
 Next, we launch the study and plot the results.
 Once again, we use plotting functions from 
 the previous examples to simplify the plotting processes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 172-221
+.. GENERATED FROM PYTHON SOURCE LINES 174-223
 
 .. code-block:: Python
 
@@ -365,36 +315,7 @@ the previous examples to simplify the plotting processes.
     plt.legend()
 
 
-
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_g_uq_validation_001.png
-         :alt: plot 304L g uq validation
-         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_g_uq_validation_001.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_g_uq_validation_002.png
-         :alt: plot 304L g uq validation
-         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_g_uq_validation_002.png
-         :class: sphx-glr-multi-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-
-    <matplotlib.legend.Legend object at 0x15552c9b1b50>
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 222-229
+.. GENERATED FROM PYTHON SOURCE LINES 224-231
 
 These figure show the model results from the 40 samples. 
 For the tension model, the results appear to be good estimate of parameter 
@@ -407,7 +328,7 @@ sphinx_gallery_thumbnail_number = 3
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 29.342 seconds)
+   **Total running time of the script:** (0 minutes 0.164 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_g_uq_validation.py:

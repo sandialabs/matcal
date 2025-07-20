@@ -54,7 +54,7 @@ To begin, we once again perform the data import, model preparation
 and objective specification for the tension model from the example linked above.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-100
+.. GENERATED FROM PYTHON SOURCE LINES 39-102
 
 .. code-block:: Python
 
@@ -93,13 +93,15 @@ and objective specification for the tension model from the example linked above.
 
     mesh_method_1 = RoundUniaxialTensionModel(sierra_material, **geo_params)            
     mesh_method_1.add_boundary_condition_data(data_collection)       
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
     num_cores = 24
     mesh_method_1.set_number_of_cores(num_cores)
     if is_sandia_cluster():
         platform = get_sandia_computing_platform()
         num_cores = platform.processors_per_node 
-        mesh_method_1.run_in_queue("fy220213", 4)
+        mesh_method_1.run_in_queue(MATCAL_WCID, 4)
         mesh_method_1.continue_when_simulation_fails()
         mesh_method_1.set_number_of_cores(num_cores*4)
     mesh_method_1.set_allowable_load_drop_factor(0.15)
@@ -126,7 +128,7 @@ and objective specification for the tension model from the example linked above.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 101-111
+.. GENERATED FROM PYTHON SOURCE LINES 103-113
 
 Now to setup the *mesh_method* study, we will use Python's copy
 module to copy the astme8_model_mesh_method_1 model and modify the *mesh_method* 
@@ -139,7 +141,7 @@ number of cores to be used for each model because the higher *mesh_method*
 schemes result in fewer elements being created for the meshed geometry.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 111-134
+.. GENERATED FROM PYTHON SOURCE LINES 113-136
 
 .. code-block:: Python
 
@@ -173,7 +175,7 @@ schemes result in fewer elements being created for the meshed geometry.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 135-141
+.. GENERATED FROM PYTHON SOURCE LINES 137-143
 
 Once again, we will perform a :class:`~matcal.core.parameter_studies.ParameterStudy` where the only parameters
 to be evaluated are the calibrated parameters from the initial study.
@@ -182,7 +184,7 @@ so each is added to the study
 as their own evaluation set. Lastly, the study core limit is set appropriately.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 141-157
+.. GENERATED FROM PYTHON SOURCE LINES 143-159
 
 .. code-block:: Python
 
@@ -209,7 +211,7 @@ as their own evaluation set. Lastly, the study core limit is set appropriately.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 158-165
+.. GENERATED FROM PYTHON SOURCE LINES 160-167
 
 We can now run the study. After it finishes, we can make our 
 results plots. We manipulate the results output from this study 
@@ -219,7 +221,7 @@ options numbers.
 We also plot the raw simulation stress-strain curves. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 165-207
+.. GENERATED FROM PYTHON SOURCE LINES 167-209
 
 .. code-block:: Python
 
@@ -290,14 +292,14 @@ We also plot the raw simulation stress-strain curves.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_devel/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:193: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:195: RuntimeWarning: invalid value encountered in divide
       plt.plot(methods, objectives/mesh_method_1_objective_results, 'o-')
 
-    <matplotlib.legend.Legend object at 0x1555118c2350>
+    <matplotlib.legend.Legend object at 0x15543c0cb050>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 208-230
+.. GENERATED FROM PYTHON SOURCE LINES 210-232
 
 The plots show that for this element size 
 the results show strong agreement; however, measurable error exists especially 
@@ -322,7 +324,7 @@ from the other methods is the mesh size reduction at the edge of the necking reg
 the size of the necking region to see if the results improve.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-234
+.. GENERATED FROM PYTHON SOURCE LINES 232-236
 
 .. code-block:: Python
 
@@ -337,12 +339,12 @@ the size of the necking region to see if the results improve.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 235-237
+.. GENERATED FROM PYTHON SOURCE LINES 237-239
 
 We then run just this final model and compare the engineering stress-strain curve
 to the previous *mesh_method* = 5 model results and the *mesh_method* = 1 model results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 237-251
+.. GENERATED FROM PYTHON SOURCE LINES 239-253
 
 .. code-block:: Python
 
@@ -372,7 +374,7 @@ to the previous *mesh_method* = 5 model results and the *mesh_method* = 1 model 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 252-258
+.. GENERATED FROM PYTHON SOURCE LINES 254-260
 
 The engineering stress-strain shows that the location of the *necking_region* border
 can delay the necking for this mesh method. 
@@ -385,7 +387,7 @@ for this study is not negligible.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (250 minutes 36.712 seconds)
+   **Total running time of the script:** (76 minutes 50.191 seconds)
 
 
 .. _sphx_glr_download_matcal_model_v_and_v_plot_round_tension_mesh_method_effects.py:

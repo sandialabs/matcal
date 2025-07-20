@@ -71,13 +71,15 @@ geo_params = {"extensometer_length": 0.75,
 
 mesh_method_1 = RoundUniaxialTensionModel(sierra_material, **geo_params)            
 mesh_method_1.add_boundary_condition_data(data_collection)       
-from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
 num_cores = 24
 mesh_method_1.set_number_of_cores(num_cores)
 if is_sandia_cluster():
     platform = get_sandia_computing_platform()
     num_cores = platform.processors_per_node 
-    mesh_method_1.run_in_queue("fy220213", 4)
+    mesh_method_1.run_in_queue(MATCAL_WCID, 4)
     mesh_method_1.continue_when_simulation_fails()
     mesh_method_1.set_number_of_cores(num_cores*4)
 mesh_method_1.set_allowable_load_drop_factor(0.15)

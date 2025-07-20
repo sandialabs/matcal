@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**319:00.990** total execution time for 8 files **from full_field_study_verification_examples**:
+**07:00.580** total execution time for 8 files **from full_field_study_verification_examples**:
 
 .. container::
 
@@ -32,27 +32,27 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_vfm_one_angle_calibration_verification.py` (``plot_vfm_one_angle_calibration_verification.py``)
-     - 222:42.819
+   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_b_standard_calibration_verification.py` (``plot_b_standard_calibration_verification.py``)
+     - 03:39.785
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_vfm_u_three_angles_calibration_verification.py` (``plot_vfm_u_three_angles_calibration_verification.py``)
-     - 63:48.507
+     - 01:06.950
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_a_objective_sensitivities.py` (``plot_a_objective_sensitivities.py``)
-     - 32:29.663
-     - 0.0
-   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_b_standard_calibration_verification.py` (``plot_b_standard_calibration_verification.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_w_gradient_interp_calibration_verification.py` (``plot_w_gradient_interp_calibration_verification.py``)
-     - 00:00.000
+     - 00:26.412
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_x_hwd_calibration_verification.py` (``plot_x_hwd_calibration_verification.py``)
-     - 00:00.000
+     - 00:22.414
+     - 0.0
+   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_vfm_one_angle_calibration_verification.py` (``plot_vfm_one_angle_calibration_verification.py``)
+     - 00:22.371
+     - 0.0
+   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_w_gradient_interp_calibration_verification.py` (``plot_w_gradient_interp_calibration_verification.py``)
+     - 00:20.968
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_y_gradient_interp_calibration_verification.py` (``plot_y_gradient_interp_calibration_verification.py``)
-     - 00:00.000
+     - 00:20.960
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_z_hwd_calibration_verification_success.py` (``plot_z_hwd_calibration_verification_success.py``)
-     - 00:00.000
+     - 00:20.720
      - 0.0

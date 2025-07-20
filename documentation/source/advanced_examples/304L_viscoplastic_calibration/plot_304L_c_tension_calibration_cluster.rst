@@ -37,14 +37,15 @@ get a best fit to the available data.
 To begin, we import all the tools we will use.
 We will be using MatPlotLib, NumPy and MatCal.
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-31
+.. GENERATED FROM PYTHON SOURCE LINES 21-32
 
 .. code-block:: Python
 
     import numpy as np
     import matplotlib.pyplot as plt
     from matcal import *
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -53,26 +54,19 @@ We will be using MatPlotLib, NumPy and MatCal.
 
 
 
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_c_tension_calibration_cluster.py", line 24, in <module>
-        from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
-    ModuleNotFoundError: No module named 'matcal.sandia'
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-36
+
+.. GENERATED FROM PYTHON SOURCE LINES 33-37
 
 Next, we import the data using a :class:`~matcal.core.data_importer.BatchDataImporter`.
 Since we are using a rate dependent material model, we assign a displacement rate 
 state variable to the data using the ``fixed_states`` keyword argument. We also
 assign an initial temperature through ``fixed_states``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-40
+.. GENERATED FROM PYTHON SOURCE LINES 37-41
 
 .. code-block:: Python
 
@@ -81,14 +75,20 @@ assign an initial temperature through ``fixed_states``.
                                         fixed_states={"displacement_rate":2e-4, 
                                                       "temperature":530}).batch
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-45
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 42-46
 
 We then manipulate the data to fit our needs and modeling choices. First, 
 we scale the data from ksi to psi units. Then we remove the time field 
 as this has consequences for the finite element model boundary conditions. 
 See :ref:`Uniaxial tension solid mechanics boundary conditions`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 45-48
+.. GENERATED FROM PYTHON SOURCE LINES 46-49
 
 .. code-block:: Python
 
@@ -96,7 +96,13 @@ See :ref:`Uniaxial tension solid mechanics boundary conditions`.
     tension_data.remove_field("time")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 49-71
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 50-72
 
 .. note::
     Above we remove the "time" field from the data. We do this to avoid any 
@@ -121,11 +127,11 @@ See :ref:`Uniaxial tension solid mechanics boundary conditions`.
     due to our specification of "displacement_rate" in the data fixed 
     states when the data is imported.
 
-.. GENERATED FROM PYTHON SOURCE LINES 74-75
+.. GENERATED FROM PYTHON SOURCE LINES 75-76
 
 Next, we plot the data to verify we imported the data as expected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 75-81
+.. GENERATED FROM PYTHON SOURCE LINES 76-82
 
 .. code-block:: Python
 
@@ -136,26 +142,49 @@ Next, we plot the data to verify we imported the data as expected.
     plt.ylabel("engineering stress (psi)")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-86
+
+
+.. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_001.png
+   :alt: plot 304L c tension calibration cluster
+   :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    Text(20.77140016604401, 0.5, 'engineering stress (psi)')
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 83-87
 
 We also import the rate data as we will need to recalibrate 
 the Johnson-Cook parameter :math:`C` since :math:`Y_0` will 
 likely be changing. We put it in a :class:`~matcal.core.data.DataCollection`
 to facilitate plotting.
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-88
+.. GENERATED FROM PYTHON SOURCE LINES 87-89
 
 .. code-block:: Python
 
     rate_data_collection = matcal_load("rate_data.joblib")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 89-91
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 90-92
 
 Next, we plot the data on with a ``semilogx`` plot to verify it imported 
 as expected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-116
+.. GENERATED FROM PYTHON SOURCE LINES 92-117
 
 .. code-block:: Python
 
@@ -185,7 +214,18 @@ as expected.
     plot_dc_by_state(rate_data_collection)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 117-161
+
+
+.. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_002.png
+   :alt: plot 304L c tension calibration cluster
+   :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_002.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 118-162
 
 Based on the previous examples, we choose a material model with the
 following flow rule:
@@ -232,7 +272,7 @@ and inspection of the data. The initial values come from
 First, we read in the results from those examples and then 
 create the parameters with the appropriate initial points.
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-175
+.. GENERATED FROM PYTHON SOURCE LINES 162-176
 
 .. code-block:: Python
 
@@ -251,13 +291,19 @@ create the parameters with the appropriate initial points.
     X = Parameter("X", 0.50, 1.75, 1.0)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 176-179
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 177-180
 
 Now we can define the models to be calibrated. 
 We will start with the Python function for the 
 rate-dependence Python model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 179-184
+.. GENERATED FROM PYTHON SOURCE LINES 180-185
 
 .. code-block:: Python
 
@@ -267,12 +313,18 @@ rate-dependence Python model.
         return {"yield":yield_stresses}
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 185-187
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 186-188
 
 We then create the model and add the reference
 strain rate constant to the model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 187-191
+.. GENERATED FROM PYTHON SOURCE LINES 188-192
 
 .. code-block:: Python
 
@@ -281,7 +333,13 @@ strain rate constant to the model.
     rate_model.add_constants(ref_strain_rate=1e-5)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 192-214
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 193-215
 
 In the ``JC_rate_dependence_model`` function, you can see that the correction factor :math:`X`
 is a simple multiplier on :math:`Y_0`. This allows the calibration algorithm to compensate
@@ -306,7 +364,7 @@ First, we create the :class:`~matcal.sierra.material.Material` object.
 We write the material file that will be used to create the 
 MatCal :class:`~matcal.sierra.material.Material`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 214-282
+.. GENERATED FROM PYTHON SOURCE LINES 215-283
 
 .. code-block:: Python
 
@@ -379,7 +437,13 @@ MatCal :class:`~matcal.sierra.material.Material`.
         end
     """
 
-.. GENERATED FROM PYTHON SOURCE LINES 283-314
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 284-315
 
 The study parameters and other parameters can be seen in the file 
 and are identified with the curly bracket identifiers for Aprepro :cite:p:`aprepro`
@@ -413,7 +477,7 @@ that we generate for the tension model. We then
 create the MatCal :class:`~matcal.sierra.material.Material`
 object.
 
-.. GENERATED FROM PYTHON SOURCE LINES 314-321
+.. GENERATED FROM PYTHON SOURCE LINES 315-322
 
 .. code-block:: Python
 
@@ -425,7 +489,13 @@ object.
                                 "j2_plasticity")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 322-334
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 323-335
 
 Next, we create the tension model using the
 :class:`~matcal.sierra.models.RoundUniaxialTensionModel`
@@ -440,7 +510,7 @@ the correct time to achieve the desired engineering strain rate.
 We study the effects of boundary condition choice in more detail in 
 :ref:`304L calibrated round tension model - effect of different model options`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 334-349
+.. GENERATED FROM PYTHON SOURCE LINES 335-350
 
 .. code-block:: Python
 
@@ -460,19 +530,25 @@ We study the effects of boundary condition choice in more detail in
     astme8_model.add_boundary_condition_data(tension_data)       
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 350-353
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 351-354
 
 We set the cores the model uses to be platform dependent.
 On a local machine it will run on 36 cores. If its on a cluster,
 it will run in the queue on 112.
 
-.. GENERATED FROM PYTHON SOURCE LINES 353-363
+.. GENERATED FROM PYTHON SOURCE LINES 354-364
 
 .. code-block:: Python
 
     astme8_model.set_number_of_cores(24)
     if is_sandia_cluster():       
-        astme8_model.run_in_queue("fy220213", 0.5)
+        astme8_model.run_in_queue(MATCAL_WCID, 0.5)
         astme8_model.continue_when_simulation_fails()
         platform = get_sandia_computing_platform()
         cores_per_node = platform.get_processors_per_node()
@@ -481,19 +557,31 @@ it will run in the queue on 112.
     astme8_model.set_name("ASTME8_tension_model")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 364-366
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 365-367
 
 We also add the reference strain rate constant to the
 SIERRA model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 366-368
+.. GENERATED FROM PYTHON SOURCE LINES 367-369
 
 .. code-block:: Python
 
     astme8_model.add_constants(ref_strain_rate=1e-5)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 369-380
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 370-381
 
 After preparing the models and data, we must define the objectives to be minimized. 
 For this calibration, we will need a separate objective for each model and 
@@ -507,7 +595,7 @@ at each rate. For the tension model, we will be calibrating to the
 measured engineering stress-strain curve. Therefore,
 we create the objectives shown below.
 
-.. GENERATED FROM PYTHON SOURCE LINES 380-383
+.. GENERATED FROM PYTHON SOURCE LINES 381-384
 
 .. code-block:: Python
 
@@ -515,7 +603,13 @@ we create the objectives shown below.
     astme8_objective = CurveBasedInterpolatedObjective("engineering_strain", "engineering_stress")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 384-391
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 385-392
 
 We then create a function and set of objects that will 
 set certain values in the residual vector to zero 
@@ -525,7 +619,7 @@ residuals corresponding to portions of the curve
 that we should not calibrate to or do not wish to 
 calibrate to.
 
-.. GENERATED FROM PYTHON SOURCE LINES 391-402
+.. GENERATED FROM PYTHON SOURCE LINES 392-403
 
 .. code-block:: Python
 
@@ -541,7 +635,13 @@ calibrate to.
     astme8_objective.set_field_weights(residual_weights)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 403-420
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 404-421
 
 .. note::
     Above we remove the elastic and steep unloading portions of the stress-strain
@@ -561,7 +661,7 @@ calibrate to.
     cost of the calibration and 
     most likely results in an improved calibration.
 
-.. GENERATED FROM PYTHON SOURCE LINES 422-466
+.. GENERATED FROM PYTHON SOURCE LINES 423-467
 
 To perform the calibration, we will use 
 the :class:`~matcal.dakota.local_calibration_studies.GradientCalibrationStudy`.
@@ -608,7 +708,7 @@ more than what is specified. If no core limit is set,
 MatCal will default to 1. For parallel jobs, you must specify the limit
 or MatCal will error out. These specifications are for running jobs on a local machine.
 
-.. GENERATED FROM PYTHON SOURCE LINES 466-473
+.. GENERATED FROM PYTHON SOURCE LINES 467-474
 
 .. code-block:: Python
 
@@ -620,7 +720,13 @@ or MatCal will error out. These specifications are for running jobs on a local m
     cal_dir = "finite_element_model_calibration"
     calibration.set_working_directory(cal_dir, remove_existing=True)
 
-.. GENERATED FROM PYTHON SOURCE LINES 474-481
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 475-482
 
 However, if we are on a cluster where the models are run in a queue (not
 the local machine), 
@@ -630,7 +736,7 @@ For our case, that is only six python models run on the parent node
 and then six finite element models run on children nodes with job monitoring
 and post processing on the parent node.
 
-.. GENERATED FROM PYTHON SOURCE LINES 481-484
+.. GENERATED FROM PYTHON SOURCE LINES 482-485
 
 .. code-block:: Python
 
@@ -638,14 +744,20 @@ and post processing on the parent node.
         calibration.set_core_limit(12)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 485-489
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 486-490
 
 We can now run the calibration. After it finishes, we will plot 
 MatCal's standard plots which include plotting the simulation QoIs versus the experimental data
 QoIs, the objectives versus evaluation and the objectives versus the parameter values. 
 We also print and save the final parameter values. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 489-499
+.. GENERATED FROM PYTHON SOURCE LINES 490-500
 
 .. code-block:: Python
 
@@ -660,7 +772,82 @@ We also print and save the final parameter values.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 500-527
+
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_003.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_003.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_004.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_004.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_005.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_005.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_006.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_006.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_007.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_007.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_008.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_008.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_009.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_009.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_010.png
+         :alt: plot 304L c tension calibration cluster
+         :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_c_tension_calibration_cluster_010.png
+         :class: sphx-glr-multi-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Y_0: 33.825310505
+    A: 159.67813277
+    b: 1.9455734901
+    C: -1.4001190142
+    X: 0.95992075755
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 501-528
 
 The calibration finishes successfully with the Dakota output::
 
@@ -693,7 +880,7 @@ parameters if used.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.246 seconds)
+   **Total running time of the script:** (13 minutes 29.157 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_c_tension_calibration_cluster.py:

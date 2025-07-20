@@ -44,9 +44,9 @@ setting our default plotting options.
 .. code-block:: Python
 
     from matcal import *
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
-    import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib import cm
 
@@ -57,14 +57,7 @@ setting our default plotting options.
 
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_f_temperature_dependent_calibration_cluster.py", line 24, in <module>
-        from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
-    ModuleNotFoundError: No module named 'matcal.sandia'
 
 
 
@@ -92,6 +85,12 @@ See :ref:`Uniaxial tension solid mechanics boundary conditions`.
     high_temp_data_collection.remove_field("time")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 52-55
 
 We save the states from the data 
@@ -103,6 +102,12 @@ the calibrations.
 .. code-block:: Python
 
     all_states = high_temp_data_collection.states
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 58-73
@@ -137,6 +142,19 @@ over the temperature range that we have data (533 - 1032 R).
     colors = get_colors(high_temp_data_collection)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_f_temperature_dependent_calibration_cluster.py:73: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
+      cmap = cm.get_cmap("RdYlBu")
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 83-87
 
 This next function plots each 
@@ -164,6 +182,12 @@ options as desired.
                                         linestyle=":")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 103-106
 
 With our plotting functions created, 
@@ -181,6 +205,17 @@ with the appropriate data passed to it.
     plt.xlabel("engineering strain ()")
     plt.ylabel("engineering stress (psi)")
     plt.show()
+
+
+
+
+.. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_001.png
+   :alt: plot 6061T6 f temperature dependent calibration cluster
+   :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_001.png
+   :class: sphx-glr-single-img
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 115-134
@@ -214,6 +249,12 @@ used in the string.
     density = 0.0975/(32.1741*12)
     youngs_modulus=10.3e6
     poissons_ratio=0.33
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 141-148
@@ -307,6 +348,12 @@ parameters.
     """
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 225-228
 
 Next, we write the string to a
@@ -322,6 +369,12 @@ add it to the models.
         fn.write(material_file_string)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 233-237
 
 Then, we create the :class:`~matcal.sierra.material.Material`
@@ -334,6 +387,12 @@ to correctly assign the material to the finite element model.
 .. code-block:: Python
 
     sierra_material = Material(material_name, material_filename, material_model)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 240-247
@@ -364,6 +423,12 @@ them as variable below.
     b_scale_factor_1032_ip = temp_param_ips["b_scale_factor_1032"]
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 261-265
 
 Since yield is relatively well characterized using MatFit, 
@@ -378,6 +443,12 @@ estimate from the previous example.
     Y_scale_factor_672  = Parameter("Y_scale_factor_672", 0.85, 1, y_scale_factor_672_ip)
     Y_scale_factor_852  = Parameter("Y_scale_factor_852", 0.45, 0.85, y_scale_factor_852_ip)
     Y_scale_factor_1032 = Parameter("Y_scale_factor_1032", 0.05, 0.45, y_scale_factor_1032_ip)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 270-274
@@ -404,6 +475,12 @@ example.
                                     2*b_scale_factor_852_ip, b_scale_factor_852_ip)
     b_scale_factor_1032 = Parameter("b_scale_factor_1032", 0.1, 
                                     2*b_scale_factor_1032_ip, b_scale_factor_1032_ip)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 289-295
@@ -434,6 +511,12 @@ be passed into the model initialization function.
                    "grip_contact_length":0.8}
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 310-312
 
 With the geometry defined, we can create the model 
@@ -447,6 +530,12 @@ and, if desired, assign a name.
     model.set_name("tension_model")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 316-318
 
 In order for the model to run for each state, 
@@ -457,6 +546,12 @@ we must pass boundary condition information to the model.
 .. code-block:: Python
 
     model.add_boundary_condition_data(high_temp_data_collection)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 321-326
@@ -474,6 +569,12 @@ kill the simulation after its load has dropped 70% from peak load.
     model.set_allowable_load_drop_factor(0.70)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 329-334
 
 We now set computer platform options 
@@ -489,10 +590,16 @@ platform options accordingly.
     if is_sandia_cluster():    
         platform = get_sandia_computing_platform()   
         model.set_number_of_cores(platform.get_processors_per_node())
-        model.run_in_queue("fy220213", 0.5)
+        model.run_in_queue(MATCAL_WCID, 0.5)
         model.continue_when_simulation_fails()
     else:
         model.set_number_of_cores(8)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 343-347
@@ -510,6 +617,12 @@ from :ref:`6061T6 aluminum calibration with anisotropic yield`
     model.add_constants(**RT_calibrated_params)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 351-355
 
 Next, we define the objective for the calibration. 
@@ -522,6 +635,12 @@ engineering stress/strain curves.
 .. code-block:: Python
 
     objective = CurveBasedInterpolatedObjective("engineering_strain", "engineering_stress")
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 358-370
@@ -555,6 +674,12 @@ where the residuals should be set to zero.
         return weights*residuals
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 382-385
 
 With the weighting function created, 
@@ -568,6 +693,12 @@ object and add it to the objective.
     residual_weights = UserFunctionWeighting("engineering_strain", "engineering_stress",
                                               remove_uncalibrated_data_from_residual)
     objective.set_field_weights(residual_weights)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 390-404
@@ -594,6 +725,12 @@ temperature of interest.
     calibration = GradientCalibrationStudy(Y_scale_factor_672, A_scale_factor_672, 
                                            b_scale_factor_672)
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 407-409
 
 Next, we create a :class:`~matcal.core.state.StateCollection`
@@ -608,6 +745,12 @@ including only the states desired for the current temperature.
                                       all_states["temperature_6.716700e+02_direction_R22"], 
                                       all_states["temperature_6.716700e+02_direction_R33"])
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 414-416
 
 We then add an evaluation set with our desired 
@@ -619,6 +762,12 @@ model, objective, data and the states of interest for this calibration.
 
     calibration.add_evaluation_set(model, objective, high_temp_data_collection,
                                    temp_672_states)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 420-423
@@ -638,6 +787,12 @@ assigning a work directory subfolder for the calibration.
     calibration.set_working_directory("672R_calibration", remove_existing=True)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 430-432
 
 The calibration is run and the results are 
@@ -650,6 +805,12 @@ saved to be plotted when all calibrations are complete.
     temp_672_results = calibration.launch()
     all_results = temp_672_results.best.to_dict()
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 435-437
 
 The model is then updated to include model constants 
@@ -660,6 +821,12 @@ from the calibration results.
 .. code-block:: Python
 
     model.add_constants(**all_results)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 440-442
@@ -708,6 +875,12 @@ the same way.
     matcal_save("temperature_dependent_parameters.serialized", all_results)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 479-486
 
 With all the calibrations completed, we can 
@@ -740,6 +913,20 @@ values from the calibration results.
     print(b_temp_dependence)
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    [1, 0.93321645989, 0.8078488056, 0.29267333282]
+    [1, 0.74212888133, 0.10733859627, 0.070436045887]
+    [1, 1.2341267531, 0.95011947686, 4.9946063722]
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 504-506
 
 We then organize the initial point estimates 
@@ -755,6 +942,12 @@ similarly for a comparison to the calibrated values.
                              A_scale_factor_1032_ip]
     b_temp_dependence_ip = [1, b_scale_factor_672_ip, b_scale_factor_852_ip,
                              b_scale_factor_1032_ip]
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 514-516
@@ -796,6 +989,29 @@ in :ref:`6061T6 aluminum temperature calibration initial point estimation`.
     plt.xlabel("temperature (R)")
     plt.legend()
     plt.show()
+
+
+
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_002.png
+         :alt: plot 6061T6 f temperature dependent calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_002.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_003.png
+         :alt: plot 6061T6 f temperature dependent calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_003.png
+         :class: sphx-glr-multi-img
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 548-565
@@ -870,6 +1086,36 @@ Next, we compare the calibrated model against the data.
     plot_comparison_by_temperature("1.031670e+03", sim_hist_1032, best_indx_1032)
 
 
+
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_004.png
+         :alt: plot 6061T6 f temperature dependent calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_004.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_005.png
+         :alt: plot 6061T6 f temperature dependent calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_005.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_006.png
+         :alt: plot 6061T6 f temperature dependent calibration cluster
+         :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_f_temperature_dependent_calibration_cluster_006.png
+         :class: sphx-glr-multi-img
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 613-617
 
 From these plots, we can see that the calbirated models
@@ -880,7 +1126,7 @@ is technically not calibrated.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.001 seconds)
+   **Total running time of the script:** (76 minutes 55.450 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_f_temperature_dependent_calibration_cluster.py:

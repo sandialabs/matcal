@@ -314,6 +314,22 @@
    "name": "ABC"
   }
  ],
+ "MATCAL_WCID": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "site_matcal.sandia.tests.utilities",
+   "module_short": "site_matcal.sandia.tests.utilities",
+   "name": "MATCAL_WCID"
+  }
+ ],
  "Material": [
   {
    "is_class": true,
@@ -3206,8 +3222,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matcal.sandia.computing_platforms",
-   "module_short": "matcal.sandia.computing_platforms",
+   "module": "site_matcal.sandia.computing_platforms",
+   "module_short": "site_matcal.sandia.computing_platforms",
    "name": "get_sandia_computing_platform"
   }
  ],
@@ -3231,8 +3247,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matcal.sandia.computing_platforms",
-   "module_short": "matcal.sandia.computing_platforms",
+   "module": "site_matcal.sandia.computing_platforms",
+   "module_short": "site_matcal.sandia.computing_platforms",
    "name": "is_sandia_cluster"
   }
  ],
@@ -3817,70 +3833,6 @@
    "name": "ABC.set_working_directory"
   }
  ],
- "laplace_results": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matcal.core.study_base",
-   "module_short": "matcal.core.study_base",
-   "name": "StudyResults"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matcal.core",
-   "module_short": "matcal.core",
-   "name": "StudyResults"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matcal",
-   "module_short": "matcal",
-   "name": "StudyResults"
-  }
- ],
- "laplace_results.estimated_parameter_covariance": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "laplace_results.fitted_parameter_covariance": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "laplace_results.mean.to_list": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matcal.core.study_base.StudyResults",
-   "module_short": "matcal.core.study_base.StudyResults",
-   "name": "ResultsAttribute.to_list"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matcal.core.StudyResults",
-   "module_short": "matcal.core.StudyResults",
-   "name": "ResultsAttribute.to_list"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matcal.StudyResults",
-   "module_short": "matcal.StudyResults",
-   "name": "ResultsAttribute.to_list"
-  }
- ],
  "make_single_plot": [
   {
    "is_class": false,
@@ -3999,15 +3951,6 @@
    "name": "log"
   }
  ],
- "num_samples": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "int"
-  }
- ],
  "params": [
   {
    "is_class": false,
@@ -4083,132 +4026,6 @@
   }
  ],
  "pd.DataFrame": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core.frame",
-   "module_short": "pandas.core.frame",
-   "name": "DataFrame"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core",
-   "module_short": "pandas.core",
-   "name": "DataFrame"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas",
-   "module_short": "pandas",
-   "name": "DataFrame"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core.generic",
-   "module_short": "pandas.core.generic",
-   "name": "NDFrame"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core",
-   "module_short": "pandas.core",
-   "name": "NDFrame"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas",
-   "module_short": "pandas",
-   "name": "NDFrame"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core.arraylike",
-   "module_short": "pandas.core.arraylike",
-   "name": "OpsMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core",
-   "module_short": "pandas.core",
-   "name": "OpsMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas",
-   "module_short": "pandas",
-   "name": "OpsMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core.base",
-   "module_short": "pandas.core.base",
-   "name": "PandasObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core",
-   "module_short": "pandas.core",
-   "name": "PandasObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas",
-   "module_short": "pandas",
-   "name": "PandasObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core.indexing",
-   "module_short": "pandas.core.indexing",
-   "name": "IndexingMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core",
-   "module_short": "pandas.core",
-   "name": "IndexingMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas",
-   "module_short": "pandas",
-   "name": "IndexingMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core.accessor",
-   "module_short": "pandas.core.accessor",
-   "name": "DirNamesMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas.core",
-   "module_short": "pandas.core",
-   "name": "DirNamesMixin"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pandas",
-   "module_short": "pandas",
-   "name": "DirNamesMixin"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -4717,13 +4534,6 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "seaborn",
    "module_short": "seaborn",
    "name": "pairplot"
@@ -4917,15 +4727,6 @@
    "module": "abc",
    "module_short": "abc",
    "name": "ABC.remove_field"
-  }
- ],
- "uncertain_param_sets": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections",
-   "module_short": "collections",
-   "name": "OrderedDict"
   }
  ]
 }

@@ -219,7 +219,7 @@ information. The model constants
 passed to the model are the uncalibrated parameters
 described in :ref:`Full-field Verification Problem Material Model`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 125-136
+.. GENERATED FROM PYTHON SOURCE LINES 125-140
 
 .. code-block:: Python
 
@@ -227,12 +227,16 @@ described in :ref:`Full-field Verification Problem Material Model`.
                                    "synthetic_data_files/test_mesh.g", "modular_plasticity.inc")
     model.set_name("test_model")
     model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, R33=0.9, R23=1.0, R31=1.0)
-    model.set_number_of_cores(224)
     model.read_full_field_data("surf_results.e")
-    from matcal.sandia.computing_platforms import is_sandia_cluster
-    if is_sandia_cluster():       
-        model.run_in_queue("fy220213", 0.5)
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+    num_cores=96
+    if is_sandia_cluster():
+        platform = get_sandia_computing_platform()
+        num_cores = platform.get_processors_per_node()
+        model.run_in_queue(MATCAL_WCID, 0.5)
         model.continue_when_simulation_fails()
+    model.set_number_of_cores(num_cores)
 
 
 
@@ -241,7 +245,7 @@ described in :ref:`Full-field Verification Problem Material Model`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 137-148
+.. GENERATED FROM PYTHON SOURCE LINES 141-152
 
 We now create the objective that will 
 be used for the calibration. 
@@ -255,7 +259,7 @@ before its displacement reaches the maximum displacement
 of the synthetic data. It contributes to the observed
 objective discontinuity.
 
-.. GENERATED FROM PYTHON SOURCE LINES 148-151
+.. GENERATED FROM PYTHON SOURCE LINES 152-155
 
 .. code-block:: Python
 
@@ -269,7 +273,7 @@ objective discontinuity.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 152-161
+.. GENERATED FROM PYTHON SOURCE LINES 156-165
 
 We then create the material model 
 input parameters for the study. We provide 
@@ -281,7 +285,7 @@ the true values used for the synthetic data generation
 and is a stressing test for a local 
 gradient based method.
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-169
+.. GENERATED FROM PYTHON SOURCE LINES 165-173
 
 .. code-block:: Python
 
@@ -300,7 +304,7 @@ gradient based method.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 170-177
+.. GENERATED FROM PYTHON SOURCE LINES 174-181
 
 Finally, we create the calibration 
 study and pass the parameters 
@@ -310,7 +314,7 @@ the total cores it can use locally and
 pass the data, model and objective to 
 it as an evaluation set.
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-185
+.. GENERATED FROM PYTHON SOURCE LINES 181-189
 
 .. code-block:: Python
 
@@ -329,11 +333,11 @@ it as an evaluation set.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-187
+.. GENERATED FROM PYTHON SOURCE LINES 190-191
 
 Next we launch the study save the results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 187-189
+.. GENERATED FROM PYTHON SOURCE LINES 191-193
 
 .. code-block:: Python
 
@@ -346,13 +350,13 @@ Next we launch the study save the results.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 190-193
+.. GENERATED FROM PYTHON SOURCE LINES 194-197
 
 When the study completes, 
 we extract the calibrated parameters 
 and evaluate the error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-207
+.. GENERATED FROM PYTHON SOURCE LINES 197-211
 
 .. code-block:: Python
 
@@ -378,17 +382,17 @@ and evaluate the error.
 
  .. code-block:: none
 
-    OrderedDict([('yield_stress', 101.52672891), ('A', 1414.8437829), ('n', 2.5694462545), ('R11', 0.94662301), ('R12', 1.081169905)])
-    Parameter yield_stress error: -49.236635545
-    Parameter A error: -5.677081140000003
-    Parameter n error: 28.472312724999995
-    Parameter R11 error: -0.3554726315789382
-    Parameter R12 error: 27.196459411764724
+    OrderedDict([('yield_stress', 300.0), ('A', 2050.0), ('n', 5.5), ('R11', 0.95), ('R12', 0.95)])
+    Parameter yield_stress error: 50.0
+    Parameter A error: 36.666666666666664
+    Parameter n error: 175.0
+    Parameter R11 error: 0.0
+    Parameter R12 error: 11.764705882352938
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 208-219
+.. GENERATED FROM PYTHON SOURCE LINES 212-223
 
 These error's are much higher 
 than desired for a successful calibration. 
@@ -402,7 +406,7 @@ examples we will show how adding full-field
 data improves results and how the different 
 full-field methods perform.
 
-.. GENERATED FROM PYTHON SOURCE LINES 219-227
+.. GENERATED FROM PYTHON SOURCE LINES 223-231
 
 .. code-block:: Python
 
@@ -448,7 +452,7 @@ full-field methods perform.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (290 minutes 13.729 seconds)
+   **Total running time of the script:** (3 minutes 39.785 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_b_standard_calibration_verification.py:

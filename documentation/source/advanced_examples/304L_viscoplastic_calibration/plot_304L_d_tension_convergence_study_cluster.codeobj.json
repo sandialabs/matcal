@@ -158,6 +158,22 @@
    "name": "ABC"
   }
  ],
+ "MATCAL_WCID": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "site_matcal.sandia.tests.utilities",
+   "module_short": "site_matcal.sandia.tests.utilities",
+   "name": "MATCAL_WCID"
+  }
+ ],
  "Material": [
   {
    "is_class": true,
@@ -7737,8 +7753,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matcal.sandia.computing_platforms",
-   "module_short": "matcal.sandia.computing_platforms",
+   "module": "site_matcal.sandia.computing_platforms",
+   "module_short": "site_matcal.sandia.computing_platforms",
    "name": "get_sandia_computing_platform"
   }
  ],
@@ -7753,8 +7769,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matcal.sandia.computing_platforms",
-   "module_short": "matcal.sandia.computing_platforms",
+   "module": "site_matcal.sandia.computing_platforms",
+   "module_short": "site_matcal.sandia.computing_platforms",
    "name": "is_sandia_cluster"
   }
  ],

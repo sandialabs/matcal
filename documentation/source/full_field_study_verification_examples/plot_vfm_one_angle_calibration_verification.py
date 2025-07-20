@@ -135,9 +135,11 @@ vfm_model.set_number_of_cores(36)
 vfm_model.set_number_of_time_steps(450)
 vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, R33=0.9, 
                         R23=1.0, R31=1.0)
-from matcal.sandia.computing_platforms import is_sandia_cluster
+from site_matcal.sandia.computing_platforms import is_sandia_cluster
+from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
 if is_sandia_cluster():       
-    vfm_model.run_in_queue("fy220213", 10.0/60.0)
+    vfm_model.run_in_queue(MATCAL_WCID, 10.0/60.0)
     vfm_model.continue_when_simulation_fails()
 # %%
 # We now create the objective that will 

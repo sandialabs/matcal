@@ -51,7 +51,7 @@ To begin, the data import, model preparation
 and objective specification for the tension model from the original calibration
 are repeated.
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-97
+.. GENERATED FROM PYTHON SOURCE LINES 33-99
 
 .. code-block:: Python
 
@@ -89,7 +89,9 @@ are repeated.
                    "mesh_method":4, 
                    "grip_contact_length":1}
 
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+
     cores_per_node = 24
     if is_sandia_cluster():
         platform = get_sandia_computing_platform()
@@ -99,7 +101,7 @@ are repeated.
     astme8_model_orig.add_boundary_condition_data(tension_data)       
     astme8_model_orig.set_number_of_cores(cores_per_node)
     if is_sandia_cluster():
-        astme8_model_orig.run_in_queue("fy220213", 4)
+        astme8_model_orig.run_in_queue(MATCAL_WCID, 4)
         astme8_model_orig.continue_when_simulation_fails()
     astme8_model_orig.set_allowable_load_drop_factor(0.5)
     astme8_model_orig.set_name("ASTME8_tension_model_orig")
@@ -126,7 +128,7 @@ are repeated.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 98-105
+.. GENERATED FROM PYTHON SOURCE LINES 100-107
 
 Now to setup the  simulation option effects study, we will use Python's copy
 module to copy the ``astme8_model_orig model`` and modify the 
@@ -136,7 +138,7 @@ coupling where the required material constants are provided by
 :cite:p:`MMPDS10`. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 105-113
+.. GENERATED FROM PYTHON SOURCE LINES 107-115
 
 .. code-block:: Python
 
@@ -155,7 +157,7 @@ coupling where the required material constants are provided by
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 114-120
+.. GENERATED FROM PYTHON SOURCE LINES 116-122
 
 Next, we create a new boundary condition
 data collection where we remove the "time" field from the 
@@ -164,7 +166,7 @@ be deformed to the maximum displacement in the data
 set over the appropriate strain rate. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 120-122
+.. GENERATED FROM PYTHON SOURCE LINES 122-124
 
 .. code-block:: Python
 
@@ -177,14 +179,14 @@ set over the appropriate strain rate.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 123-127
+.. GENERATED FROM PYTHON SOURCE LINES 125-129
 
 We then create another new model and use the new data collection
 as the data collection for boundary condition 
 determination.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-132
+.. GENERATED FROM PYTHON SOURCE LINES 129-134
 
 .. code-block:: Python
 
@@ -200,7 +202,7 @@ determination.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 133-141
+.. GENERATED FROM PYTHON SOURCE LINES 135-143
 
 We will now create a :class:`~matcal.core.parameter_studies.ParameterStudy` where the only parameters
 to be evaluated are the calibrated parameters from the initial study.
@@ -211,7 +213,7 @@ the sum of all cores requested for the models above
 allowing all three models to be run simultaneously. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 141-152
+.. GENERATED FROM PYTHON SOURCE LINES 143-154
 
 .. code-block:: Python
 
@@ -233,7 +235,7 @@ allowing all three models to be run simultaneously.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 153-161
+.. GENERATED FROM PYTHON SOURCE LINES 155-163
 
 We launch the study and, after it finishes, we can 
 compare the results. For our purposes, we want to assess 
@@ -244,7 +246,7 @@ a result, we manipulate the results output from this study
 to access the objective values and simulation data from the models. We then 
 use Matplotlib :cite:p:`matplotlib` to plot the desired data. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-188
+.. GENERATED FROM PYTHON SOURCE LINES 163-190
 
 .. code-block:: Python
 
@@ -289,16 +291,16 @@ use Matplotlib :cite:p:`matplotlib` to plot the desired data.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x15546daaf310>
+    <matplotlib.legend.Legend object at 0x1554989251d0>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-191
+.. GENERATED FROM PYTHON SOURCE LINES 191-193
 
 The engineering stress-strain curves appear almost identical and indicate 
 the model options have little effect on the results for this problem.
 
-.. GENERATED FROM PYTHON SOURCE LINES 191-203
+.. GENERATED FROM PYTHON SOURCE LINES 193-205
 
 .. code-block:: Python
 
@@ -328,11 +330,11 @@ the model options have little effect on the results for this problem.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x15546d8bcf10>
+    <matplotlib.legend.Legend object at 0x1554987d9c50>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 204-212
+.. GENERATED FROM PYTHON SOURCE LINES 206-214
 
 Although the engineering stress-strain curves are relatively unaffected, 
 the coupled model is predicting a noticeable temperature increase. 
@@ -343,7 +345,7 @@ expected. However, even at strain rate of only 1e-3,
 the temperature would be even higher than those predicted 
 here and be more detectable in the engineering stress-strain curves.
 
-.. GENERATED FROM PYTHON SOURCE LINES 212-229
+.. GENERATED FROM PYTHON SOURCE LINES 214-231
 
 .. code-block:: Python
 
@@ -382,7 +384,7 @@ here and be more detectable in the engineering stress-strain curves.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-238
+.. GENERATED FROM PYTHON SOURCE LINES 232-240
 
 From the objective plot it is clear that these model
 options have a small effect on the overall objective. 
@@ -396,7 +398,7 @@ displacement rate.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (211 minutes 27.412 seconds)
+   **Total running time of the script:** (154 minutes 25.469 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_e_tension_model_option_effects_cluster.py:

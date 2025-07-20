@@ -96,28 +96,19 @@ Tools.
 
 
 
-
-
 .. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. code-block:: pytb
 
-
-    You are using exodus.py v 1.21.5 (seacas-py3), a python wrapper of some of the exodus library.
-
-    Copyright (c) 2013-2023 National Technology &
-    Engineering Solutions of Sandia, LLC (NTESS).  Under the terms of
-    Contract DE-NA0003525 with NTESS, the U.S. Government retains certain
-    rights in this software.
-
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
+    Traceback (most recent call last):
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_a_objective_sensitivities.py", line 56, in <module>
+        synthetic_data.rename_field("U", "displacement_x")
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 228, in rename_field
+        self._check_field_in_data(old_name)
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 148, in _check_field_in_data
+        raise self.KeyError(f"The field \"{field}\" does not exist. "+
+    matcal.core.data.Data.KeyError: The field "U" does not exist. The following fields exist in the data:
+    ['displacement', 'external_energy', 'internal_energy', 'kinetic_energy', 'load', 'momentum_x', 'momentum_y', 'momentum_z', 'timestep', 'time', 'u', 'v', 'w']
 
 
 
@@ -156,12 +147,6 @@ peak load where VFM is valid.
     vfm_data = vfm_data[vfm_data["displacement"] < 0.036]
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 90-93
 
 With the data imported and selected, 
@@ -176,17 +161,6 @@ data manipulations.
     dc = DataCollection("synthetic", synthetic_data, selected_data)
     dc.plot("displacement", "load")
     import matplotlib.pyplot as plt
-
-
-
-
-.. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_001.png
-   :alt: matcal_default_state
-   :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_001.png
-   :class: sphx-glr-single-img
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 99-105
@@ -220,17 +194,6 @@ configuration in grey.
     plot_field(synthetic_data, "displacement_x", axes[0])
     plot_field(synthetic_data, "displacement_y", axes[1])
     plt.show()
-
-
-
-
-.. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_002.png
-   :alt: matcal default state, matcal default state
-   :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_002.png
-   :class: sphx-glr-single-img
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 125-133
@@ -275,12 +238,6 @@ next using Python string and file tools.
         fn.write(mat_file_string)
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 160-172
 
 With the material file created, 
@@ -296,7 +253,7 @@ model constants to it and tell the model
 to read the full field data results 
 from the output exodus file.
 
-.. GENERATED FROM PYTHON SOURCE LINES 172-185
+.. GENERATED FROM PYTHON SOURCE LINES 172-191
 
 .. code-block:: Python
 
@@ -305,22 +262,22 @@ from the output exodus file.
     model.set_name("3D_model")
     model.add_constants(elastic_modulus=200, poissons=0.27, 
                         R22=1.0, R33=0.9, R23=1.0, R31=1.0)
-    model.set_number_of_cores(112)
     model.read_full_field_data("surf_results.e")
 
-    from matcal.sandia.computing_platforms import is_sandia_cluster
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
+    num_cores=96
     if is_sandia_cluster():       
-        model.run_in_queue("fy220213", 0.5)
+        platform = get_sandia_computing_platform()
+        num_cores = platform.get_processors_per_node()
+        model.run_in_queue(MATCAL_WCID, 0.5)
         model.continue_when_simulation_fails()
+    model.set_number_of_cores(num_cores)
 
 
 
 
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 186-193
+.. GENERATED FROM PYTHON SOURCE LINES 192-199
 
 The VFM model requires a :class:`~matcal.sierra.material.Material`
 object. After creating the material object, we 
@@ -330,7 +287,7 @@ specimen thickness. Similar to the previous model,
 we use the correct methods to prepare the model 
 for the study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-206
+.. GENERATED FROM PYTHON SOURCE LINES 199-212
 
 .. code-block:: Python
 
@@ -345,23 +302,10 @@ for the study.
     vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, 
                             R33=0.9, R23=1.0, R31=1.0)
     if is_sandia_cluster():       
-        vfm_model.run_in_queue("fy220213", 10.0/60.0)
+        vfm_model.run_in_queue(MATCAL_WCID, 10.0/60.0)
         vfm_model.continue_when_simulation_fails()
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 207-213
+.. GENERATED FROM PYTHON SOURCE LINES 213-219
 
 The objectives that we wish to evaluate 
 are created next.
@@ -370,7 +314,7 @@ input parameters to function correctly for the planned study.
 Primarily, this the mesh that they will interpolate the experiment
 data onto and the fields that will be compared. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 213-224
+.. GENERATED FROM PYTHON SOURCE LINES 219-230
 
 .. code-block:: Python
 
@@ -386,20 +330,7 @@ data onto and the fields that will be compared.
     hwd_colocated_objective.set_name("hwd_colocated_objective")
 
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 225-233
+.. GENERATED FROM PYTHON SOURCE LINES 231-239
 
 A special case is the :class:`~matcal.full_field.objective.PolynomialHWDObjective`,
 where the first input argument is ``None``. The first 
@@ -410,7 +341,7 @@ be done for cases where the simulation mesh has its surface area
 completely within the experimental data. Otherwise, the objective
 will likely be invalid. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 233-243
+.. GENERATED FROM PYTHON SOURCE LINES 239-249
 
 .. code-block:: Python
 
@@ -425,20 +356,14 @@ will likely be invalid.
     vfm_objective.set_name("vfm_objective")
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 244-248
+.. GENERATED FROM PYTHON SOURCE LINES 250-254
 
 We then create the material model 
 input parameters for the study with the initial point being 
 the values used to generate the synthetic data, or 
 the "truth" values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 248-256
+.. GENERATED FROM PYTHON SOURCE LINES 254-262
 
 .. code-block:: Python
 
@@ -451,13 +376,7 @@ the "truth" values.
     param_collection = ParameterCollection("Hill48 in-plane", Y, A, n, R11, R12)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 257-264
+.. GENERATED FROM PYTHON SOURCE LINES 263-270
 
 The :class:`~matcal.core.parameter_studies.ParameterStudy` is created,
 and all evaluation sets are added. 
@@ -467,7 +386,7 @@ and all evaluation sets are added.
    multiple times. Only the extra objectives will be added 
    to the additional evaluation sets.
 
-.. GENERATED FROM PYTHON SOURCE LINES 264-273
+.. GENERATED FROM PYTHON SOURCE LINES 270-279
 
 .. code-block:: Python
 
@@ -481,22 +400,7 @@ and all evaluation sets are added.
     study.set_working_directory("objective_sensitivity_study", remove_existing=True)
 
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-    Opening exodus file: synthetic_data_files/test_mesh_surf.g
-    Closing exodus file: synthetic_data_files/test_mesh_surf.g
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 274-280
+.. GENERATED FROM PYTHON SOURCE LINES 280-286
 
 The final step is to add the parameter values to be evaluated. 
 First, we add the truth values, which should be
@@ -505,7 +409,7 @@ from -5% to +5% for each parameter.
 Only one parameter is varied at a time to simplify visualization. The function 
 below adds the parameter evaluations to the study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 280-290
+.. GENERATED FROM PYTHON SOURCE LINES 286-296
 
 .. code-block:: Python
 
@@ -520,45 +424,18 @@ below adds the parameter evaluations to the study.
             study.add_parameter_evaluation(**current_eval)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 291-292
+.. GENERATED FROM PYTHON SOURCE LINES 297-298
 
 Next, we launch the study and plot the results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 292-294
+.. GENERATED FROM PYTHON SOURCE LINES 298-300
 
 .. code-block:: Python
 
     results = study.launch()
 
 
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Opening exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-    Closing exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-    Opening exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-    Closing exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-    Opening exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-    Closing exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-    Opening exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-    Opening exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model_exploded.g
-    Closing exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model_exploded.g
-    Closing exodus file: matcal_template/vfm_model/matcal_default_state/vfm_model.g
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 295-392
+.. GENERATED FROM PYTHON SOURCE LINES 301-398
 
 Several plots are output below, and 
 we summarize the results here.
@@ -658,7 +535,7 @@ loads for simulations of the material characterization
 tests. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 392-400
+.. GENERATED FROM PYTHON SOURCE LINES 398-406
 
 .. code-block:: Python
 
@@ -672,116 +549,9 @@ tests.
     # sphinx_gallery_thumbnail_number = 4
 
 
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_003.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_003.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_004.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_004.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_005.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_005.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_006.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_006.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_007.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_007.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_008.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_008.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_009.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_009.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_010.png
-         :alt: vfm_model: vfm_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_010.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_011.png
-         :alt: 3D_model: load_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_011.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_012.png
-         :alt: 3D_model: interpolate_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_012.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_013.png
-         :alt: 3D_model: hwd_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_013.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_014.png
-         :alt: 3D_model: hwd_colocated_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_014.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_015.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_015.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_016.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_016.png
-         :class: sphx-glr-multi-img
-
-
-
-
-
-
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (32 minutes 29.663 seconds)
+   **Total running time of the script:** (0 minutes 26.412 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_a_objective_sensitivities.py:

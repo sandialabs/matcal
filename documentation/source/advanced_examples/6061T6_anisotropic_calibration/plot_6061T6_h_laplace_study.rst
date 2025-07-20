@@ -51,13 +51,14 @@ so we include these models in the uncertainty study.
             
 To begin, we import the tools we need for this study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-47
+.. GENERATED FROM PYTHON SOURCE LINES 35-48
 
 .. code-block:: Python
 
 
     from matcal import *
-    from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
+    from site_matcal.sandia.tests.utilities import MATCAL_WCID
 
     import numpy as np
     import matplotlib.pyplot as plt
@@ -69,19 +70,12 @@ To begin, we import the tools we need for this study.
 
 
 
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_h_laplace_study.py", line 37, in <module>
-        from matcal.sandia.computing_platforms import is_sandia_cluster, get_sandia_computing_platform
-    ModuleNotFoundError: No module named 'matcal.sandia'
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-54
+
+.. GENERATED FROM PYTHON SOURCE LINES 49-55
 
 Next, we import the data and remove
 any uncalibrated data from the 
@@ -90,7 +84,7 @@ We do this in place of weighting, because zeros in the residuals
 can cause scaling and conditioning issues in the linear algebra
 required for the study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 54-58
+.. GENERATED FROM PYTHON SOURCE LINES 55-59
 
 .. code-block:: Python
 
@@ -99,13 +93,19 @@ required for the study.
                                                   "cleaned_[CANM]*.csv",).batch
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 59-62
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 60-63
 
 For the room temperature tension data, 
 we remove data in the elastic region and in regions of unloading 
 to match what was included in the objective for the calibration.
 
-.. GENERATED FROM PYTHON SOURCE LINES 62-78
+.. GENERATED FROM PYTHON SOURCE LINES 63-79
 
 .. code-block:: Python
 
@@ -126,7 +126,13 @@ to match what was included in the objective for the calibration.
     down_selected_tension_data.remove_field("time")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 79-84
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 80-85
 
 With the down-selected tension data created, 
 we create the :class:`~matcal.sierra.models.RoundUniaxialTensionModel`
@@ -134,7 +140,7 @@ as we did in :ref:`6061T6 aluminum calibration with anisotropic yield`,
 and add the :class:`~matcal.core.data.DataCollection` that we created
 as the model boundary condition data.   
 
-.. GENERATED FROM PYTHON SOURCE LINES 84-119
+.. GENERATED FROM PYTHON SOURCE LINES 85-119
 
 .. code-block:: Python
 
@@ -163,15 +169,20 @@ as the model boundary condition data.
     tension_model.set_allowable_load_drop_factor(0.70)
     tension_model.set_boundary_condition_scale_factor(1.5)
 
-    my_wcid = "fy220213"
     if is_sandia_cluster():
-      tension_model.run_in_queue(my_wcid, 1)
+      tension_model.run_in_queue(MATCAL_WCID, 1)
       tension_model.continue_when_simulation_fails()
       platform = get_sandia_computing_platform()
       num_cores = platform.get_processors_per_node()
     else:
       num_cores = 8
     tension_model.set_number_of_cores(num_cores)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 120-122
@@ -197,6 +208,12 @@ down select the data of interest for the residuals.
             # DataCollection
             top_hat_data_collection[state][index] = data[data["displacement"] < 0.02]
     top_hat_data_collection.remove_field("time")
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 138-141
@@ -228,6 +245,12 @@ in the previous example :ref:`6061T6 aluminum calibration with anisotropic yield
     top_hat_model.set_name('top_hat_shear')
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 160-162
 
 Next, we set its allowable load drop factor 
@@ -241,6 +264,12 @@ and provide boundary condition data.
     top_hat_model.add_boundary_condition_data(top_hat_data_collection)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 166-168
 
 Lastly, we setup the platform information 
@@ -252,8 +281,14 @@ for running the model.
 
     top_hat_model.set_number_of_cores(num_cores*2)
     if is_sandia_cluster():
-      top_hat_model.run_in_queue(my_wcid, 1)
+      top_hat_model.run_in_queue(MATCAL_WCID, 1)
       top_hat_model.continue_when_simulation_fails()
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 174-180
@@ -273,6 +308,12 @@ and the top hat specimen is calibrated to the load-displacement data.
     tension_objective.set_name("engineering_stress_strain_obj")
     top_hat_objective = CurveBasedInterpolatedObjective("displacement", "load")
     top_hat_objective.set_name("load_displacement_obj")
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 186-191
@@ -295,6 +336,12 @@ their current value set to their calibration values.
     b = Parameter("b", 10, 40,
             RT_calibrated_params.pop("b"))
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 199-201
 
 To simplify setting up the laplace study, 
@@ -305,6 +352,12 @@ we put all the parameters in a :class:`~matcal.core.parameters.ParameterCollecti
 .. code-block:: Python
 
     pc = ParameterCollection("uncertain_params", yield_stress, hardening, b)
+
+
+
+
+
+
 
 
 
@@ -329,6 +382,12 @@ current value equal to the calibrated parameter values from the calibration step
             RT_calibrated_params["R31"])
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 219-224
 
 The anisotropy parameters and temperature dependence parameters from 
@@ -348,6 +407,12 @@ They are added for the two models for this study.
                                 **RT_calibrated_params)
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 231-233
 
 Now we can create our laplace study
@@ -363,6 +428,12 @@ and add our two evaluation sets.
     laplace_study.set_core_limit(250)
     laplace_study.add_evaluation_set(tension_model, tension_objective, down_selected_tension_data)
     laplace_study.add_evaluation_set(top_hat_model, top_hat_objective, top_hat_data_collection)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 241-250
@@ -382,6 +453,12 @@ with different values may be required.
 .. code-block:: Python
 
     laplace_study.set_step_size(1e-4)
+
+
+
+
+
+
 
 .. GENERATED FROM PYTHON SOURCE LINES 252-262
 
@@ -404,6 +481,12 @@ providing an inaccurate noise estimate can result in unreasonable solutions.
     results = laplace_study.launch()
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 266-276
 
 After the study completes, there are two results of concern:
@@ -424,6 +507,25 @@ step of this example.
     print("Initial covariance estimate:\n", results.estimated_parameter_covariance)
     print("Calibrated covariance estimate:\n", results.fitted_parameter_covariance)
     matcal_save("laplace_study_results.joblib", results)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Initial covariance estimate:
+     [[ 113.74200759  -21.13860096 -422.38005402]
+     [ -21.13860096    5.70236701   71.29740466]
+     [-422.38005402   71.29740466 1607.59664067]]
+    Calibrated covariance estimate:
+     [[ 113.74202157  -21.13860224 -463.21297201]
+     [ -21.13860224    5.70236696   79.2936355 ]
+     [-463.21297201   79.2936355  1933.44427648]]
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 281-286
@@ -451,6 +553,33 @@ object.
     print("Initial covariance estimate noise set to 1e-1:\n", results_high_noise.estimated_parameter_covariance)
     print("Calibrated covariance estimate noise set to 1e-1:\n", 
           results_high_noise.fitted_parameter_covariance)
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Initial covariance estimate noise set to 1e-2:
+     [[ 113.74200759  -21.13860096 -422.38005402]
+     [ -21.13860096    5.70236701   71.29740466]
+     [-422.38005402   71.29740466 1607.59664067]]
+    Calibrated covariance estimate noise set to 1e-2:
+     [[ 113.74202157  -21.13860224 -463.21297201]
+     [ -21.13860224    5.70236696   79.2936355 ]
+     [-463.21297201   79.2936355  1933.44427648]]
+    Initial covariance estimate noise set to 1e-1:
+     [[ 113.74200757  -21.13860096 -422.38005398]
+     [ -21.13860096    5.702367     71.29740465]
+     [-422.38005398   71.29740465 1607.59664053]]
+    Calibrated covariance estimate noise set to 1e-1:
+     [[ 120.74997769  -21.80160131 -476.01385542]
+     [ -21.80160131    5.68516383   78.37547928]
+     [-476.01385542   78.37547928 1926.73279848]]
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 301-308
@@ -482,9 +611,27 @@ KDE pair plot
     # work in progress for models with significant model form error.
 
 
+
+.. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_h_laplace_study_001.png
+   :alt: plot 6061T6 h laplace study
+   :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_h_laplace_study_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /projects/aue/hpc/builds/x86_64/rhel8/ba17d7f2/anaconda3/install/linux-rhel8-x86_64/gcc-10.3.0/anaconda3-2023.09-0-zmej2r2/lib/python3.11/site-packages/seaborn/axisgrid.py:118: UserWarning: The figure layout has changed to tight
+      self._figure.tight_layout(*args, **kwargs)
+
+
+
+
+
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.001 seconds)
+   **Total running time of the script:** (21 minutes 18.545 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_h_laplace_study.py:
