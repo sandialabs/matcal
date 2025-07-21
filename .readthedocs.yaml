@@ -1,0 +1,14 @@
+version: 2
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.11"
+
+# Build documentation in the documentation/ directory with Sphinx
+sphinx:
+   configuration: documentation/source/conf.py
+
+# Dependencies required to build your docs
+python:
+   install:
+   - requirements: documentation/requirements.txt
