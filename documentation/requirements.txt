@@ -3,3 +3,11 @@ sphinx_rtd_theme
 sphinx-gallery
 sphinxcontrib-bibtex
 sphinx-copybutton
+numpy
+scipy
+scikit-learn
+jinja2
+bokeh
+joblib
+chardet
+matplotlib
