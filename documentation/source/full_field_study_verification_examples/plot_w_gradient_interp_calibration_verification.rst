@@ -179,14 +179,27 @@ except for some discussion on the results at the end.
 .. code-block:: pytb
 
     Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_w_gradient_interp_calibration_verification.py", line 34, in <module>
-        synthetic_data.rename_field("U", "displacement_x")
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 228, in rename_field
-        self._check_field_in_data(old_name)
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data.py", line 148, in _check_field_in_data
-        raise self.KeyError(f"The field \"{field}\" does not exist. "+
-    matcal.core.data.Data.KeyError: The field "U" does not exist. The following fields exist in the data:
-    ['displacement', 'external_energy', 'internal_energy', 'kinetic_energy', 'load', 'momentum_x', 'momentum_y', 'momentum_z', 'timestep', 'time', 'u', 'v', 'w']
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_w_gradient_interp_calibration_verification.py", line 33, in <module>
+        synthetic_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 67, in FieldSeriesData
+        return _import_field_data(global_filename, series_directory,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 75, in _import_field_data
+        field_parser = MatCalFieldDataFactory.create(file_type, global_filename,
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/object_factory.py", line 32, in create
+        return creator(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 34, in __init__
+        self._setUp()
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 109, in _setUp
+        self._exodus_handle = create_exodus_class_instance(self._data_file, array_type='numpy')
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/library_importer.py", line 26, in create_exodus_class_instance
+        return exo.Exodus(*args, **kwargs)
+               ^^^^^^^^^^
+    AttributeError: 'NoneType' object has no attribute 'Exodus'
 
 
 
@@ -240,7 +253,7 @@ not accurate enough for verification purposes.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 20.968 seconds)
+   **Total running time of the script:** (0 minutes 0.043 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_w_gradient_interp_calibration_verification.py:

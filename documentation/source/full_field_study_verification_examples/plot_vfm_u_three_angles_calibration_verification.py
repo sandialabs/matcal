@@ -20,15 +20,15 @@ study results at the end.
 from matcal import *
 
 state_0_degree = State("0_degree", angle=0)
-synthetic_data_0 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e", 
+synthetic_data_0 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e", 
                                    state=state_0_degree)
 
 state_45_degree = State("45_degree", angle=45)
-synthetic_data_45 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_45_degree.e", 
+synthetic_data_45 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_45_degree.e", 
                                    state=state_45_degree)
 
 state_90_degree = State("90_degree", angle=90)
-synthetic_data_90 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_90_degree.e",
+synthetic_data_90 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_90_degree.e",
                                     state=state_90_degree)
 
 dc = DataCollection("synthetic", synthetic_data_0, synthetic_data_45, synthetic_data_90)
@@ -101,6 +101,7 @@ vfm_model.add_boundary_condition_data(dc)
 vfm_model.set_name("test_model")
 vfm_model.set_number_of_cores(36)
 vfm_model.set_number_of_time_steps(450)
+vfm_model.set_displacement_field_names(x_displacement="U", y_displacement="V")
 vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, 
                         R33=0.9, R23=1.0, R31=1.0)
 from site_matcal.sandia.computing_platforms import is_sandia_cluster

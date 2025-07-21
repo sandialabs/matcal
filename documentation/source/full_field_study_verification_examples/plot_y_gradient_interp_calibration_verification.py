@@ -34,7 +34,7 @@ except for some discussion on the results at the end.
 from matcal import *
 import numpy as np
 
-synthetic_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
+synthetic_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
 synthetic_data.rename_field("U", "displacement_x")
 synthetic_data.rename_field("V", "displacement_y")
 synthetic_data.rename_field("W", "displacement_z")

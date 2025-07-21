@@ -163,7 +163,6 @@ laplace = LaplaceStudy(Y_0, A, b, C)
 laplace.add_evaluation_set(astme8_model, astme8_objective, down_selected_data)
 laplace.add_evaluation_set(rate_model, rate_objective, rate_data_collection)
 laplace.set_core_limit(112)
-laplace.restart()
 cal_dir = "laplace_study"
 laplace.set_working_directory(cal_dir, remove_existing=True)
 

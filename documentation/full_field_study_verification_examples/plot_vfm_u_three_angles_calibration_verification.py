@@ -20,15 +20,15 @@ study results at the end.
 from matcal import *
 
 state_0_degree = State("0_degree", angle=0)
-synthetic_data_0 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e", 
+synthetic_data_0 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e", 
                                    state=state_0_degree)
 
 state_45_degree = State("45_degree", angle=45)
-synthetic_data_45 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_45_degree.e", 
+synthetic_data_45 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_45_degree.e", 
                                    state=state_45_degree)
 
 state_90_degree = State("90_degree", angle=90)
-synthetic_data_90 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_90_degree.e",
+synthetic_data_90 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_90_degree.e",
                                     state=state_90_degree)
 
 dc = DataCollection("synthetic", synthetic_data_0, synthetic_data_45, synthetic_data_90)
@@ -43,8 +43,8 @@ def plot_field(data, field, ax):
     c = ax.scatter(1e3*(data.spatial_coords[:,0]), 
                    1e3*(data.spatial_coords[:,1]), 
                    c="#bdbdbd", marker='.', s=1, alpha=0.5)
-    c = ax.scatter(1e3*(data.spatial_coords[:,0]+data["u"][-1, :]), 
-                   1e3*(data.spatial_coords[:,1]+data["v"][-1, :]), 
+    c = ax.scatter(1e3*(data.spatial_coords[:,0]+data["U"][-1, :]), 
+                   1e3*(data.spatial_coords[:,1]+data["V"][-1, :]), 
                    c=1e3*data[field][-1, :], marker='.', s=3)
     ax.set_xlabel("X (mm)")
     ax.set_ylabel("Y (mm)")
@@ -54,12 +54,12 @@ def plot_field(data, field, ax):
     fig.colorbar(c, ax=ax, label=f"{field} mm")
 
 fig, axes = plt.subplots(3,2, figsize=(10,15), constrained_layout=True)
-plot_field(synthetic_data_0, "u", axes[0,0])
-plot_field(synthetic_data_0, "v", axes[0,1])
-plot_field(synthetic_data_45, "u", axes[1,0])
-plot_field(synthetic_data_45, "v", axes[1,1])
-plot_field(synthetic_data_90, "u", axes[2,0])
-plot_field(synthetic_data_90, "v", axes[2,1])
+plot_field(synthetic_data_0, "U", axes[0,0])
+plot_field(synthetic_data_0, "V", axes[0,1])
+plot_field(synthetic_data_45, "U", axes[1,0])
+plot_field(synthetic_data_45, "V", axes[1,1])
+plot_field(synthetic_data_90, "U", axes[2,0])
+plot_field(synthetic_data_90, "V", axes[2,1])
 
 plt.show()
 
@@ -101,7 +101,7 @@ vfm_model.add_boundary_condition_data(dc)
 vfm_model.set_name("test_model")
 vfm_model.set_number_of_cores(36)
 vfm_model.set_number_of_time_steps(450)
-vfm_model.set_displacement_field_names(x_displacement="u", y_displacement="v")
+vfm_model.set_displacement_field_names(x_displacement="U", y_displacement="V")
 vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, 
                         R33=0.9, R23=1.0, R31=1.0)
 from site_matcal.sandia.computing_platforms import is_sandia_cluster

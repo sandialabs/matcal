@@ -52,12 +52,12 @@ import numpy as np
 # and importing the data twice is simple
 # with MatCal's :ref:`Data Importing and Manipulation`
 # Tools. 
-synthetic_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
-synthetic_data.rename_field("u", "displacement_x")
-synthetic_data.rename_field("v", "displacement_y")
-synthetic_data.rename_field("w", "displacement_z")
+synthetic_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
+synthetic_data.rename_field("U", "displacement_x")
+synthetic_data.rename_field("V", "displacement_y")
+synthetic_data.rename_field("W", "displacement_z")
 
-vfm_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
+vfm_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
 
 #%%
 # After importing the data, we
@@ -204,7 +204,7 @@ vfm_model.add_boundary_condition_data(vfm_data)
 vfm_model.set_name("vfm_model")
 vfm_model.set_number_of_cores(36)
 vfm_model.set_number_of_time_steps(450)
-vfm_model.set_displacement_field_names(x_displacement="u", y_displacement="v")
+vfm_model.set_displacement_field_names(x_displacement="U", y_displacement="V")
 vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, 
                         R33=0.9, R23=1.0, R31=1.0)
 if is_sandia_cluster():       

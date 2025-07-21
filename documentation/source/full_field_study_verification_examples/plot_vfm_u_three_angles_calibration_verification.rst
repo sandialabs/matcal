@@ -35,22 +35,22 @@ nearly identical to :ref:`Virtual Fields Calibration Verification`,
 we only add additional commentary and discussion on the 
 study results at the end.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-147
+.. GENERATED FROM PYTHON SOURCE LINES 20-148
 
 .. code-block:: Python
 
     from matcal import *
 
     state_0_degree = State("0_degree", angle=0)
-    synthetic_data_0 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e", 
+    synthetic_data_0 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e", 
                                        state=state_0_degree)
 
     state_45_degree = State("45_degree", angle=45)
-    synthetic_data_45 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_45_degree.e", 
+    synthetic_data_45 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_45_degree.e", 
                                        state=state_45_degree)
 
     state_90_degree = State("90_degree", angle=90)
-    synthetic_data_90 = FieldSeriesData("synthetic_data_files/synthetic_surf_results_90_degree.e",
+    synthetic_data_90 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_90_degree.e",
                                         state=state_90_degree)
 
     dc = DataCollection("synthetic", synthetic_data_0, synthetic_data_45, synthetic_data_90)
@@ -123,6 +123,7 @@ study results at the end.
     vfm_model.set_name("test_model")
     vfm_model.set_number_of_cores(36)
     vfm_model.set_number_of_time_steps(450)
+    vfm_model.set_displacement_field_names(x_displacement="U", y_displacement="V")
     vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, 
                             R33=0.9, R23=1.0, R31=1.0)
     from site_matcal.sandia.computing_platforms import is_sandia_cluster
@@ -173,17 +174,32 @@ study results at the end.
 .. code-block:: pytb
 
     Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_vfm_u_three_angles_calibration_verification.py", line 57, in <module>
-        plot_field(synthetic_data_0, "U", axes[0,0])
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_vfm_u_three_angles_calibration_verification.py", line 46, in plot_field
-        c = ax.scatter(1e3*(data.spatial_coords[:,0]+data["U"][-1, :]),
-                                                    ~~~~^^^^^
-    ValueError: no field of name U
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_vfm_u_three_angles_calibration_verification.py", line 23, in <module>
+        synthetic_data_0 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e",
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 67, in FieldSeriesData
+        return _import_field_data(global_filename, series_directory,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 75, in _import_field_data
+        field_parser = MatCalFieldDataFactory.create(file_type, global_filename,
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/object_factory.py", line 32, in create
+        return creator(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 34, in __init__
+        self._setUp()
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 109, in _setUp
+        self._exodus_handle = create_exodus_class_instance(self._data_file, array_type='numpy')
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/library_importer.py", line 26, in create_exodus_class_instance
+        return exo.Exodus(*args, **kwargs)
+               ^^^^^^^^^^
+    AttributeError: 'NoneType' object has no attribute 'Exodus'
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 148-178
+.. GENERATED FROM PYTHON SOURCE LINES 149-179
 
 This calibration also completes
 with ``RELATIVE FUNCTION CONVERGENCE``
@@ -216,7 +232,7 @@ of these parameters is occurring due to the model
 form error introduced due to VFM's plane 
 stress assumption constrain.
 
-.. GENERATED FROM PYTHON SOURCE LINES 178-185
+.. GENERATED FROM PYTHON SOURCE LINES 179-186
 
 .. code-block:: Python
 
@@ -231,7 +247,7 @@ stress assumption constrain.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 6.950 seconds)
+   **Total running time of the script:** (0 minutes 0.003 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_vfm_u_three_angles_calibration_verification.py:

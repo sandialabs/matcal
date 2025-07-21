@@ -27,7 +27,7 @@ plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
 plt.rcParams.update({'font.size': 12})
 
-synthetic_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
+synthetic_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
 
 # %% 
 # Since VFM requires a 
@@ -64,8 +64,8 @@ def plot_field(data, field, ax):
     c = ax.scatter(1e3*(data.spatial_coords[:,0]), 
                    1e3*(data.spatial_coords[:,1]), 
                    c="#bdbdbd", marker='.', s=1, alpha=0.5)
-    c = ax.scatter(1e3*(data.spatial_coords[:,0]+data["u"][-1, :]), 
-                   1e3*(data.spatial_coords[:,1]+data["v"][-1, :]), 
+    c = ax.scatter(1e3*(data.spatial_coords[:,0]+data["U"][-1, :]), 
+                   1e3*(data.spatial_coords[:,1]+data["V"][-1, :]), 
                    c=1e3*data[field][-1, :], marker='.', s=3)
     ax.set_xlabel("X (mm)")
     ax.set_ylabel("Y (mm)")
@@ -73,8 +73,8 @@ def plot_field(data, field, ax):
     fig.colorbar(c, ax=ax, label=f"{field} mm")
 
 fig, axes = plt.subplots(1,2, figsize=(10,4), constrained_layout=True)
-plot_field(synthetic_data, "u", axes[0])
-plot_field(synthetic_data, "v", axes[1])
+plot_field(synthetic_data, "U", axes[0])
+plot_field(synthetic_data, "V", axes[1])
 plt.show()
 
 # %%
@@ -133,7 +133,7 @@ vfm_model.add_boundary_condition_data(synthetic_data)
 vfm_model.set_name("test_model")
 vfm_model.set_number_of_cores(36)
 vfm_model.set_number_of_time_steps(450)
-vfm_model.set_displacement_field_names(x_displacement="u", y_displacement="v")
+vfm_model.set_displacement_field_names(x_displacement="U", y_displacement="V")
 vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, R33=0.9, 
                         R23=1.0, R31=1.0)
 from site_matcal.sandia.computing_platforms import is_sandia_cluster

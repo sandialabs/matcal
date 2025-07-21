@@ -71,7 +71,7 @@ the Exodus data from the
 
 .. code-block:: Python
 
-    synthetic_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
+    synthetic_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
 
 
 
@@ -81,10 +81,10 @@ the Exodus data from the
 
  .. code-block:: none
 
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Opening exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
-    Closing exodus file: synthetic_data_files/synthetic_surf_results_0_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
 
 
 
@@ -382,12 +382,12 @@ and evaluate the error.
 
  .. code-block:: none
 
-    OrderedDict([('yield_stress', 300.0), ('A', 2050.0), ('n', 5.5), ('R11', 0.95), ('R12', 0.95)])
-    Parameter yield_stress error: 50.0
-    Parameter A error: 36.666666666666664
-    Parameter n error: 175.0
-    Parameter R11 error: 0.0
-    Parameter R12 error: 11.764705882352938
+    OrderedDict([('yield_stress', 189.84187402), ('A', 1259.197891), ('n', 2.3015639429), ('R11', 0.80004887621), ('R12', 0.93855366394)])
+    Parameter yield_stress error: -5.079062989999997
+    Parameter A error: -16.053473933333333
+    Parameter n error: 15.078197145000004
+    Parameter R11 error: -15.784328819999999
+    Parameter R12 error: 10.418078110588231
 
 
 
@@ -452,7 +452,7 @@ full-field methods perform.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 39.785 seconds)
+   **Total running time of the script:** (441 minutes 8.749 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_b_standard_calibration_verification.py:

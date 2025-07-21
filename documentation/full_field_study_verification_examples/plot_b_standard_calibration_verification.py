@@ -36,7 +36,7 @@ plt.rcParams.update({'font.size': 12})
 # For this study, we import 
 # the Exodus data from the 
 # ``0_degree`` synthetic data set.
-synthetic_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
+synthetic_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
 
 #%%
 # After importing the data, we

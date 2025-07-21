@@ -27,7 +27,7 @@ plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
 plt.rcParams.update({'font.size': 12})
 
-synthetic_data = FieldSeriesData("synthetic_data_files/synthetic_surf_results_0_degree.e")
+synthetic_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
 
 # %% 
 # Since VFM requires a 
@@ -133,6 +133,7 @@ vfm_model.add_boundary_condition_data(synthetic_data)
 vfm_model.set_name("test_model")
 vfm_model.set_number_of_cores(36)
 vfm_model.set_number_of_time_steps(450)
+vfm_model.set_displacement_field_names(x_displacement="U", y_displacement="V")
 vfm_model.add_constants(elastic_modulus=200, poissons=0.27, R22=1.0, R33=0.9, 
                         R23=1.0, R31=1.0)
 from site_matcal.sandia.computing_platforms import is_sandia_cluster
