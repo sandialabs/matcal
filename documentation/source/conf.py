@@ -9,13 +9,18 @@
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
+
+copyright = ('Copyright © 2025 National Technology & Engineering Solutions of Sandia, '+
+    'LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government '+
+    'retains certain rights in this software')
+
+
 import sys
 import os
 import inspect
 import shutil
 from glob import glob
 from sphinx_gallery.sorting import FileNameSortKey
-from pathlib import Path
 
 
 sys.path.insert(0, os.path.abspath("../../"))
@@ -35,7 +40,6 @@ with open("site_includes.rst", 'w') as f:
 # -- Project information -----------------------------------------------------
 
 project = 'MatCal Users Guide'
-copyright = '2025 Sandia National Labs'
 author = 'Kyle Karlson, Matthew Kury, Reese Jones'
 
 # The full version, including alpha/beta/rc tags
@@ -267,6 +271,9 @@ todo_include_todos = True
 bibtex_bibfiles = ['refs.bib']
 bibtex_default_style = 'plain'
 
+extra_foot_txt = "<img src=\"images/snl.jpg\" alt=\"Sandia National Laboratories\" style=\"height:40px\">"
+
+
 
 html_theme_options = {
     'display_version': True,
@@ -275,5 +282,6 @@ html_theme_options = {
     'sticky_navigation': True,
     'navigation_depth': 4,
     'includehidden': True,
-    'titles_only': False
+    'titles_only': False,
+    "extra_footer": extra_foot_txt,
 }
