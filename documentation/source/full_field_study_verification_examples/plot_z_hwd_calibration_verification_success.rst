@@ -175,32 +175,41 @@ except for some discussion on the results at the end.
 
 
 
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_001.png
+         :alt: matcal_default_state
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_001.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_002.png
+         :alt: plot z hwd calibration verification success
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_002.png
+         :class: sphx-glr-multi-img
+
+
 .. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
+ .. code-block:: none
 
-    Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_z_hwd_calibration_verification_success.py", line 37, in <module>
-        synthetic_data = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e")
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 67, in FieldSeriesData
-        return _import_field_data(global_filename, series_directory,
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 75, in _import_field_data
-        field_parser = MatCalFieldDataFactory.create(file_type, global_filename,
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/object_factory.py", line 32, in create
-        return creator(*args, **kwargs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 34, in __init__
-        self._setUp()
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 109, in _setUp
-        self._exodus_handle = create_exodus_class_instance(self._data_file, array_type='numpy')
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/library_importer.py", line 26, in create_exodus_class_instance
-        return exo.Exodus(*args, **kwargs)
-               ^^^^^^^^^^
-    AttributeError: 'NoneType' object has no attribute 'Exodus'
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Opening exodus file: synthetic_data_files/test_mesh_surf.g
+    Closing exodus file: synthetic_data_files/test_mesh_surf.g
+    OrderedDict([('yield_stress', 199.33655787), ('A', 1477.1576459), ('n', 2.0354544261), ('R11', 0.95079662829), ('R12', 0.85466175794)])
+    Parameter yield_stress error: -0.33172106499999643
+    Parameter A error: -1.5228236066666643
+    Parameter n error: 1.7727213049999913
+    Parameter R11 error: 0.08385560947368899
+    Parameter R12 error: 0.5484421105882366
 
 
 
@@ -240,9 +249,46 @@ with satisfactory results.
     # sphinx_gallery_thumbnail_number = 5
 
 
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_003.png
+         :alt: plot z hwd calibration verification success
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_003.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_004.png
+         :alt: plot z hwd calibration verification success
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_004.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_005.png
+         :alt: plot z hwd calibration verification success
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_005.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_006.png
+         :alt: plot z hwd calibration verification success
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_z_hwd_calibration_verification_success_006.png
+         :class: sphx-glr-multi-img
+
+
+
+
+
+
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.005 seconds)
+   **Total running time of the script:** (195 minutes 20.438 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_z_hwd_calibration_verification_success.py:

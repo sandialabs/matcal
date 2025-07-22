@@ -573,31 +573,7 @@ Once again, we import that data using :func:`~matcal.core.data_importer.FileData
 
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_b_anisotropy_initial_point_estimation.py", line 244, in <module>
-        all_top_hat_12_metrics = FileData("aluminum_6061_data/top_hat_shear/"
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 63, in FileData
-        return _import_data(filename, state=state, file_type=file_type,
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 70, in _import_data
-        importer = MatCalProbeDataImporterFactory.create(file_type, filename,
-                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/object_factory.py", line 32, in create
-        return creator(*args, **kwargs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 709, in __call__
-        return CSVDataImporter(*args, **kwargs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 88, in __init__
-        self._check_file_exists(filename)
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/data_importer.py", line 97, in _check_file_exists
-        raise FileNotFoundError(
-    FileNotFoundError: The file "aluminum_6061_data/top_hat_shear/RTS_TRS_aluminum_AL_6061_top_hat_metrics.csv" cannot be found to be imported. Check input.
 
 
 
@@ -618,6 +594,12 @@ R22 and R33 were estimated.
             R23s.append(load_23/load_R12)
         for load_31 in all_top_hat_31_metrics["load_at_0.005_in"]:
             R31s.append(load_31/load_R12)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 263-266
@@ -642,6 +624,24 @@ a single initial point.
     print("R31 estimate:", np.average(R31s))
 
 
+
+
+.. image-sg:: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_005.png
+   :alt: plot 6061T6 b anisotropy initial point estimation
+   :srcset: /advanced_examples/6061T6_anisotropic_calibration/images/sphx_glr_plot_6061T6_b_anisotropy_initial_point_estimation_005.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    R23 estimate: 0.9651369931253784
+    R31 estimate: 0.9429150450881516
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 278-284
 
 We now have a complete initial point 
@@ -654,7 +654,7 @@ See :ref:`6061T6 aluminum calibration with anisotropic yield`
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.621 seconds)
+   **Total running time of the script:** (0 minutes 1.827 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_b_anisotropy_initial_point_estimation.py:

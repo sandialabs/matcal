@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.099** total execution time for 8 files **from full_field_study_verification_examples**:
+**712:36.831** total execution time for 8 files **from full_field_study_verification_examples**:
 
 .. container::
 
@@ -33,26 +33,26 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_w_gradient_interp_calibration_verification.py` (``plot_w_gradient_interp_calibration_verification.py``)
-     - 00:00.043
-     - 0.0
-   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_a_objective_sensitivities.py` (``plot_a_objective_sensitivities.py``)
-     - 00:00.037
+     - 284:18.077
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_x_hwd_calibration_verification.py` (``plot_x_hwd_calibration_verification.py``)
-     - 00:00.006
+     - 232:58.316
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_z_hwd_calibration_verification_success.py` (``plot_z_hwd_calibration_verification_success.py``)
-     - 00:00.005
+     - 195:20.438
      - 0.0
-   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_y_gradient_interp_calibration_verification.py` (``plot_y_gradient_interp_calibration_verification.py``)
-     - 00:00.003
-     - 0.0
-   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_vfm_u_three_angles_calibration_verification.py` (``plot_vfm_u_three_angles_calibration_verification.py``)
-     - 00:00.003
+   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_a_objective_sensitivities.py` (``plot_a_objective_sensitivities.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_b_standard_calibration_verification.py` (``plot_b_standard_calibration_verification.py``)
-     - 00:00.001
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_full_field_study_verification_examples_plot_vfm_one_angle_calibration_verification.py` (``plot_vfm_one_angle_calibration_verification.py``)
-     - 00:00.001
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_vfm_u_three_angles_calibration_verification.py` (``plot_vfm_u_three_angles_calibration_verification.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_full_field_study_verification_examples_plot_y_gradient_interp_calibration_verification.py` (``plot_y_gradient_interp_calibration_verification.py``)
+     - 00:00.000
      - 0.0

@@ -169,32 +169,79 @@ study results at the end.
         print(f"Parameter {param} error: {pe(calibrated_params[param], goal_results[param])}")
 
 
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_001.png
+         :alt: plot vfm u three angles calibration verification
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_001.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_002.png
+         :alt: 0 degree, 0 degree, 45 degree, 45 degree, 90 degree, 90 degree
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_002.png
+         :class: sphx-glr-multi-img
+
+
 .. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
+ .. code-block:: none
 
-    Traceback (most recent call last):
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/full_field_study_verification_examples/plot_vfm_u_three_angles_calibration_verification.py", line 23, in <module>
-        synthetic_data_0 = FieldSeriesData("../../../docs_support_files/synthetic_surf_results_0_degree.e",
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 67, in FieldSeriesData
-        return _import_field_data(global_filename, series_directory,
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/full_field/data_importer.py", line 75, in _import_field_data
-        field_parser = MatCalFieldDataFactory.create(file_type, global_filename,
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/core/object_factory.py", line 32, in create
-        return creator(*args, **kwargs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 34, in __init__
-        self._setUp()
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/data_importer.py", line 109, in _setUp
-        self._exodus_handle = create_exodus_class_instance(self._data_file, array_type='numpy')
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/gpfs/knkarls/projects/matcal_oss/external_matcal/matcal/exodus/library_importer.py", line 26, in create_exodus_class_instance
-        return exo.Exodus(*args, **kwargs)
-               ^^^^^^^^^^
-    AttributeError: 'NoneType' object has no attribute 'Exodus'
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_45_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_45_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_45_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_45_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_90_degree.e
+    Opening exodus file: ../../../docs_support_files/synthetic_surf_results_90_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_90_degree.e
+    Closing exodus file: ../../../docs_support_files/synthetic_surf_results_90_degree.e
+    Opening exodus file: synthetic_data_files/test_mesh_surf.g
+    Closing exodus file: synthetic_data_files/test_mesh_surf.g
+    Opening exodus file: matcal_template/test_model/0_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/0_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/0_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/0_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/0_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/0_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/0_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/0_degree/test_model_exploded.g
+    Closing exodus file: matcal_template/test_model/0_degree/test_model_exploded.g
+    Closing exodus file: matcal_template/test_model/0_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/45_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/45_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/45_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/45_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/45_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/45_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/45_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/45_degree/test_model_exploded.g
+    Closing exodus file: matcal_template/test_model/45_degree/test_model_exploded.g
+    Closing exodus file: matcal_template/test_model/45_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/90_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/90_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/90_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/90_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/90_degree/test_model.g
+    Closing exodus file: matcal_template/test_model/90_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/90_degree/test_model.g
+    Opening exodus file: matcal_template/test_model/90_degree/test_model_exploded.g
+    Closing exodus file: matcal_template/test_model/90_degree/test_model_exploded.g
+    Closing exodus file: matcal_template/test_model/90_degree/test_model.g
+    OrderedDict([('yield_stress', 198.09838152), ('A', 1449.0675242), ('n', 2.0907659417), ('R11', 0.95015067647), ('R12', 0.8513227374)])
+    Parameter yield_stress error: -0.950809239999998
+    Parameter A error: -3.3954983866666675
+    Parameter n error: 4.538297084999998
+    Parameter R11 error: 0.01586068105263154
+    Parameter R12 error: 0.15561616470588188
 
 
 
@@ -245,9 +292,53 @@ stress assumption constrain.
     # sphinx_gallery_thumbnail_number = 2
 
 
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_003.png
+         :alt: plot vfm u three angles calibration verification
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_003.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_004.png
+         :alt: plot vfm u three angles calibration verification
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_004.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_005.png
+         :alt: plot vfm u three angles calibration verification
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_005.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_006.png
+         :alt: plot vfm u three angles calibration verification
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_006.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_007.png
+         :alt: plot vfm u three angles calibration verification
+         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_vfm_u_three_angles_calibration_verification_007.png
+         :class: sphx-glr-multi-img
+
+
+
+
+
+
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.003 seconds)
+   **Total running time of the script:** (515 minutes 11.830 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_vfm_u_three_angles_calibration_verification.py:
