@@ -111,7 +111,7 @@ astme8_objective = CurveBasedInterpolatedObjective("engineering_strain", "engine
 #%%
 # With the models, data, and objectives created, 
 # we import the :class:`~matcal.core.parameter_studies.LaplaceStudy` results from the previous step.
-laplace_results = matcal_load("laplace_study_results.joblib")
+laplace_covariance = matcal_load("laplace_study_covariance.joblib")
 
 #%%
 # Next, we can sample
@@ -119,15 +119,17 @@ laplace_results = matcal_load("laplace_study_results.joblib")
 # :func:`~matcal.core.parameter_studies.sample_multivariate_normal` and evaluate 
 # the parameter uncertainty as desired. 
 num_samples=40
+mean = [calibrated_params["Y_0"], calibrated_params["A"],
+         calibrated_params["b"], calibrated_params["C"]]
 uncertain_param_sets = sample_multivariate_normal(num_samples, 
-                                                  laplace_results.mean.to_list(),
-                                                  laplace_results.estimated_parameter_covariance, 
+                                                  mean,
+                                                  laplace_covariance, 
                                                   12345, 
                                                   params.get_item_names())
 
 #%%
 # We save the parameter samples to be used or plotted later.
-matcal_save("laplace_results.joblib", uncertain_param_sets)
+matcal_save("laplace_uq_validation_results.joblib", uncertain_param_sets)
 
 #%%
 # Now we set up a study so we can 
