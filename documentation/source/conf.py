@@ -10,7 +10,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
-copyright = ('Copyright © 2025 National Technology & Engineering Solutions of Sandia, '+
+copyright = ('2025 National Technology & Engineering Solutions of Sandia, '+
     'LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government '+
     'retains certain rights in this software')
 

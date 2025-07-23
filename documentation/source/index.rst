@@ -24,9 +24,17 @@ If you have any problems or feedback, feel free to reach out to the MatCal devel
 by email. Also, email us to be added to the matcal-users-group metagroup for 
 emails about updates and new releases.
 
+
+Active developers
+-----------------
 | Kyle Karlson - knkarls@sandia.gov
 | Matt Kury - mwkury@sandia.gov
 | Reese Jones - rjones@sandia.gov
+
+Contributors
+------------
+ Denielle Ricciardi, Guy Bergel, Michael Antoun, Troy Hoffa
+
 
 Sandia National Laboratories is a multimission laboratory managed and operated by 
 National Technology & Engineering Solutions of Sandia, LLC, a wholly owned 
