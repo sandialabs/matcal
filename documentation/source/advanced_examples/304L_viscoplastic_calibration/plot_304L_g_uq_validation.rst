@@ -394,11 +394,11 @@ the previous examples to simplify the plotting processes.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x15531ce09f10>
+    <matplotlib.legend.Legend object at 0x15552c2047d0>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 226-233
+.. GENERATED FROM PYTHON SOURCE LINES 226-232
 
 These figure show the model results from the 40 samples. 
 For the tension model, the results appear to be good estimate of parameter 
@@ -406,12 +406,11 @@ uncertainty. The simulations encapsulate all data, without exhibiting
 too much variability. While the python rate dependence model results do not 
 completely encapsulates all 
 data, the results seem to be an adequate measure of overall uncertainty.
-sphinx_gallery_thumbnail_number = 3
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (28 minutes 14.879 seconds)
+   **Total running time of the script:** (24 minutes 17.355 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_g_uq_validation.py:

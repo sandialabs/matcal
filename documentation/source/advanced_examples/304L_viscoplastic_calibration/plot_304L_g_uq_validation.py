@@ -229,4 +229,3 @@ plt.legend()
 # too much variability. While the python rate dependence model results do not 
 # completely encapsulates all 
 # data, the results seem to be an adequate measure of overall uncertainty.
-# sphinx_gallery_thumbnail_number = 3
