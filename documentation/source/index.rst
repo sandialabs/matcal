@@ -33,7 +33,7 @@ Active developers
 
 Contributors
 ------------
- Denielle Ricciardi, Guy Bergel, Michael Antoun, Troy Hoffa
+Denielle Ricciardi, Guy Bergel, Michael Antoun, Troy Hoffa
 
 
 Sandia National Laboratories is a multimission laboratory managed and operated by 

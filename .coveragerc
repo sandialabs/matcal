@@ -1,5 +1,5 @@
 [run]
-    relative_files = False
+    relative_files = True
     omit = 
         test_*.py
         __init__.py
