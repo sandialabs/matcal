@@ -1,7 +1,7 @@
 [run]
     relative_files = True
     omit = 
-        test_*.py
+        test_*
         __init__.py
         */tests/*
         matcal_bokeh.py
