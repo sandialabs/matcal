@@ -36,7 +36,7 @@ This example has been broken into several steps:
 #. Uncertainty quantification of the parameters 
    using MatCal's laplace study. 
    :ref:`6061T6 aluminum calibration uncertainty quantification` 
-#  Validation of the calculated parameter 
+#. Validation of the calculated parameter 
    uncertainties by pushing samples from the
    uncertain parameter distributions back through 
    the models and comparing the results to the experimental data.

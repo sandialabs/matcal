@@ -12,7 +12,6 @@ import shutil
 
 from matcal.core.constants import (EVALUATION_EXTENSION, IN_PROGRESS_RESULTS_FILENAME, 
                                    MATCAL_WORKDIR_STR)
-from matcal.core.data import DataCollection
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.serializer_wrapper import matcal_load
 
@@ -513,13 +512,13 @@ class _PlotEvaluationIdJob(_PlotJobBase):
                         x_field = potential_field
                         break
         if x_field is None:
-            error_msg = get_independent_field_not_found_err_msg(self.x_fields, 
+            error_msg = _get_independent_field_not_found_err_msg(self.x_fields, 
                                                                 sim_keys)
             raise ValueError(error_msg)
         return [x_field]
 
 
-def get_independent_field_not_found_err_msg(indep_fields, exp_fields):
+def _get_independent_field_not_found_err_msg(indep_fields, exp_fields):
     message = "Independent field not found for plotting. Potential fields supplied:\n"
     message += f"{indep_fields}\n"
     message += "Fields in experimental data:\n"

@@ -31,12 +31,13 @@ rsts_to_include = []
 if os.path.exists(site_docs_path):
     for filename in glob(os.path.join(site_docs_path, "*.rst")):
         shutil.copyfile(filename, os.path.join(os.getcwd(), os.path.basename(filename)))
-        rsts_to_include.append(os.path.basename(filename))
+        rsts_to_include.append(os.path.splitext(os.path.basename(filename))[0])
 with open("site_includes.rst", 'w') as f:
-    for rst in rsts_to_include:
-        f.write(f'\t{rst}\n')
+    if rsts_to_include:
+        f.write('.. toctree::\n\t:maxdepth: 3\n\n')
+        for rst in rsts_to_include:
+            f.write(f'\t{rst}\n')
     
-
 # -- Project information -----------------------------------------------------
 
 project = 'MatCal Users Guide'

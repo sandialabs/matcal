@@ -1,5 +1,5 @@
 MatCal Generated Models V&V Activities
-======================================
+--------------------------------------
 
 In this gallery of examples, we use MatCal's
 tools to perform V&V on our MatCal generated SIERRA models.

@@ -12,7 +12,7 @@ from matcal.core.objective import (CurveBasedInterpolatedObjective,
 from matcal.core.qoi_extractor import MaxExtractor
 from matcal.core.residuals import (ConstantFactorWeighting, IdentityWeighting, 
                                    LogResidualCalculator, UserFunctionWeighting, 
-                                   NominalResidualCalculator, get_array)
+                                   NominalResidualCalculator, _get_array)
 from matcal.core.state import SolitaryState, State, StateCollection
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
@@ -35,33 +35,33 @@ class MetricFunctionTest(MatcalUnitTest):
 
     def test_l2norm_norm_and_calculate(self):
         metric = L2NormMetricFunction()
-        obj_function_result = metric(get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
+        obj_function_result = metric(_get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
         true_result =  np.linalg.norm((self.sim_data_frame["y"] - self.exp_data_frame["y"]) / np.sqrt(len(self.exp_data_frame['y'])))
 
         self.assertAlmostEqual(obj_function_result, true_result, delta=1e-6)
 
     def test_l2norm_normalize(self):
         metric = L2NormMetricFunction()
-        n_res =  metric.normalize_only(get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
+        n_res =  metric.normalize_only(_get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
         true_result =  (self.sim_data_frame["y"] - self.exp_data_frame["y"]) / np.sqrt(len(self.exp_data_frame['y']))
         self.assert_close_arrays(n_res, true_result)
     
     def test_l2norm_calculate(self):
         metric = L2NormMetricFunction()
-        n_res =  metric.calculate_only(get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
+        n_res =  metric.calculate_only(_get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
         true_result =  np.linalg.norm(self.sim_data_frame["y"] - self.exp_data_frame["y"])
         self.assertAlmostEqual(n_res, true_result)
 
     def test_l1norm_normalize(self):
         metric = L1NormMetricFunction()
-        n_res =  metric.normalize_only(get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
+        n_res =  metric.normalize_only(_get_array(self._res.calculate(self.exp_dataset, self.sim_dataset)))
         true_result =  (self.sim_data_frame["y"] - self.exp_data_frame["y"]) / len(self.exp_data_frame['y'])
         self.assert_close_arrays(n_res, true_result)
 
     def test_l1norm_normalize_and_calculate(self):
         func = L1NormMetricFunction()
         resids = self._res.calculate(self.exp_dataset, self.sim_dataset)
-        obj_function_result = func(get_array(resids))
+        obj_function_result = func(_get_array(resids))
         true_result =  np.linalg.norm((self.sim_data_frame["y"] - self.exp_data_frame["y"]) / len(self.exp_data_frame['y']), 1)
 
         self.assertAlmostEqual(obj_function_result, true_result, delta=1e-6)
@@ -69,7 +69,7 @@ class MetricFunctionTest(MatcalUnitTest):
     def test_l1norm_calculate(self):
         func = L1NormMetricFunction()
         resids = self._res.calculate(self.exp_dataset, self.sim_dataset)
-        obj_function_result = func.calculate_only(get_array(resids))
+        obj_function_result = func.calculate_only(_get_array(resids))
         true_result =  np.linalg.norm((self.sim_data_frame["y"] - self.exp_data_frame["y"]), 1)
 
         self.assertAlmostEqual(obj_function_result, true_result, delta=1e-6)
@@ -81,14 +81,14 @@ class MetricFunctionTest(MatcalUnitTest):
     def test_sum_of_squares_metric_function_calculate(self):
         metric = SumSquaresMetricFunction()
         resids = self._res.calculate(self.exp_dataset, self.sim_dataset)
-        obj_function_result = metric.calculate_only(get_array(resids))
+        obj_function_result = metric.calculate_only(_get_array(resids))
         true_result =  np.linalg.norm((self.sim_data_frame["y"] - self.exp_data_frame["y"]))**2
         self.assertAlmostEqual(obj_function_result, true_result, delta=1e-6)
 
     def test_sum_of_squares_metric_function_calculate_and_normalize(self):
         metric = SumSquaresMetricFunction()
         resids = self._res.calculate(self.exp_dataset, self.sim_dataset)
-        obj_function_result = metric.normalize_and_calculate(get_array(resids))
+        obj_function_result = metric.normalize_and_calculate(_get_array(resids))
         true_result =  np.linalg.norm((self.sim_data_frame["y"] - self.exp_data_frame["y"])
                                       /np.sqrt(len(self.exp_data_frame["y"])))**2
         self.assertAlmostEqual(obj_function_result, true_result, delta=1e-6)
@@ -96,8 +96,8 @@ class MetricFunctionTest(MatcalUnitTest):
     def test_sum_of_squares_metric_function_normalize(self):
         metric = SumSquaresMetricFunction()
         resids = self._res.calculate(self.exp_dataset, self.sim_dataset)
-        obj_function_result = metric.normalize_only(get_array(resids))
-        self.assert_close_arrays(obj_function_result, get_array(resids)/np.sqrt(len(resids)))
+        obj_function_result = metric.normalize_only(_get_array(resids))
+        self.assert_close_arrays(obj_function_result, _get_array(resids)/np.sqrt(len(resids)))
 
 
 def user_weight_func(indep_var, dep_avr, resids):

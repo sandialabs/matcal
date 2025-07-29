@@ -150,19 +150,19 @@ class _PhysicsNames:
     solid_mechanics = "solid_mechanics"
 
 
-def get_default_thermal_region_name():
+def _get_default_thermal_region_name():
     return f"{_PhysicsNames.thermal}_region"
 
 
-def get_default_solid_mechanics_region_name():
+def _get_default_solid_mechanics_region_name():
     return f"{_PhysicsNames.solid_mechanics}_region"
 
 
-def get_default_solid_mechanics_procedure_name():
+def _get_default_solid_mechanics_procedure_name():
     return f"{_PhysicsNames.solid_mechanics}_procedure"
 
 
-def get_default_coupled_procedure_name():
+def _get_default_coupled_procedure_name():
     return f"{_PhysicsNames.coupled}_procedure"
 
 
@@ -843,7 +843,7 @@ class Procedure(_BaseSierraInputFileBlock):
     default_values = {}
 
     def __init__(self, solution_control_block, *transfers, 
-                 name=get_default_coupled_procedure_name()):
+                 name=_get_default_coupled_procedure_name()):
         super().__init__(name)
         self._solution_control = solution_control_block
         self.add_subblock(solution_control_block)
@@ -888,7 +888,7 @@ class SolidMechanicsFiniteElementParameters(FiniteElementParameters):
     def get_blocks(self):
         return list(self.name.split(" "))
 
-class FiniteElementModelNames:
+class _FiniteElementModelNames:
     solid_mechanics = "matcal_solid_mechanics_model"
     thermal = "matcal_thermal_model"
 
@@ -899,7 +899,7 @@ class FiniteElementModel(_BaseSierraInputFileBlock):
     default_values = {required_keys[1]:"exodusII"}
 
     def __init__(self, *finite_element_model_parameters, 
-                 name=FiniteElementModelNames.solid_mechanics):
+                 name=_FiniteElementModelNames.solid_mechanics):
         super().__init__(name)
         for finite_element_model_parameter in finite_element_model_parameters:
             self.add_subblock(finite_element_model_parameter)
@@ -1754,7 +1754,8 @@ class SolidMechanicsConjugateGradient(SolidMechanicsNonlinearSolverBase):
         Set or remove the full tangent preconditioner block.
 
         :param full_tangent_preconditioner: The full tangent preconditioner block to add. 
-        If None and a preconditioner is pre-existing, the preconditioner is removed.
+            If None and a preconditioner is pre-existing, the preconditioner is removed.
+
         :type full_tangent_preconditioner: None or
             :class:`matcal.sierra.input_file_writer.SolidMechanicsFullTangentPreconditioner`
         """
@@ -1835,7 +1836,7 @@ class SierraFileBase(_BaseTypedInputFileBlock):
         self._solution_termination = None
 
         self._solid_mechanics_region = self._build_default_solid_mechanics_region()
-        sm_procedure_name = get_default_solid_mechanics_procedure_name()
+        sm_procedure_name = _get_default_solid_mechanics_procedure_name()
         self._solid_mechanics_procedure = SolidMechanicsProcedure(sm_procedure_name, 
             self._solid_mechanics_region, 0, 1, 300)
         self.add_subblock(self._solid_mechanics_procedure)
@@ -2004,7 +2005,7 @@ class SierraFileBase(_BaseTypedInputFileBlock):
         self.add_line(self._material_file_line)
 
     def _build_default_solid_mechanics_region(self):
-        region_name = get_default_solid_mechanics_region_name()
+        region_name = _get_default_solid_mechanics_region_name()
         
         region = SolidMechanicsRegion(region_name, self._sm_finite_element_model.name)
         self._adaptive_time_stepping = SolidMechanicsAdaptiveTimeStepping(1e-8, 1)
@@ -2462,10 +2463,10 @@ class SierraFileWithCoupling(SierraFileBase):
         self.add_subblock(self._thermal_material)
         thermal_solver = TpetraSolver()
         self.add_subblock(thermal_solver)
-        self._thermal_model = FiniteElementModel(name=FiniteElementModelNames.thermal)
+        self._thermal_model = FiniteElementModel(name=_FiniteElementModelNames.thermal)
         self._add_sm_model_mesh_name_line_to_thermal_model()
         self._add_thermal_finite_element_parameters(*self._sm_finite_element_model.get_blocks())
-        region_name = get_default_thermal_region_name()
+        region_name = _get_default_thermal_region_name()
         self._thermal_region = ThermalRegion(region_name, self._thermal_model.name, 
                                           thermal_solver)
         arpeggio_init=self._get_arpeggio_initialize()

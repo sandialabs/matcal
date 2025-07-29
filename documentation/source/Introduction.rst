@@ -126,7 +126,7 @@ MatCal also provides job management for the simulations
 to be used in the calibration. These tools allow for parallel execution of models, 
 with studies that support it, to speed calibration activities without 
 over-prescribing computational resources.
-See :ref:`Computer Resources and Job Management`.
+See :ref:`Options for Parallel Computing`.
 
 The chapter :ref:`MatCal Features and Objects` will go over the primary
 MatCal features and objects
@@ -138,7 +138,7 @@ that are necessary to perform calibration activities. This includes:
    how to use them and how they are passed to models.
 #. :ref:`MatCal Objective Calculations` covers how we calculate objective values 
    including normalization and scaling we automatically perform.
-#. :ref:`MatCal Objective Tools` covers the basic objective tools that are available and 
+#. :ref:`MatCal Objectives` covers the basic objective tools that are available and 
    how to use them to customize objective functions.
 #. :ref:`MatCal Models` covers the different model interfaces we support in MatCal 
    and how to use them to run your models.

@@ -1,17 +1,17 @@
-********************
+*********************************
 Sampling and Sensitivity Analysis
-********************
+*********************************
 In progress...
 
 
 Sensitivity Analysis Theory
 ===========================
 
-LHS
----
+LHS Sampling Theory
+-------------------
 
-Halton
-------
+Halton Sampling Theory
+----------------------
 
 The Halton sequence is a deterministic method for generating points in space. Because Halton sequences
 have low-discrepancy, meaning they approximate a uniform distribution well, points from the squence are
@@ -25,11 +25,11 @@ Sensitivity Analysis Implementation
 ===================================
 
 
-LHS
----
+LHS Sampling Implementation
+---------------------------
 
-Halton
-------
+Halton Sampling Implementation
+------------------------------
 The SciPy :cite:`scipy` implementation of the Halton sequence (scipy.stats.qmc.Halton) is used in MatCal. Scrambling of the
 Halton sequence is supported with the "scramble" (bool) keyword (default False) in order to improve the
 statistical properties of the sequence, introducing a controlled randomness while preserving the low-discrepancy

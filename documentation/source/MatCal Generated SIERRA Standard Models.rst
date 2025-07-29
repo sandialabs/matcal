@@ -57,7 +57,7 @@ Model object instantiation
 To begin, you instantiate the desired
 class for the characterization experiment you need to simulate for 
 calibration. The instantiation of all standard 
-model classes takes a :class:`~matcal.sandia.material.Material`
+model classes takes a :class:`~matcal.sierra.material.Material`
 object and a list of geometric parameters. All required geometric 
 parameters for a standard model must be provided upon
 instantiation. Any missing parameters will result in an error 
@@ -409,6 +409,7 @@ or model constants. The following parameters can be overridden:
    The latter of which is useful when changing simulations model options by state, such 
    as time stepping, coupling, or even specific options within your custom material 
    model file.
+
 
 .. include:: matcal_model_v_and_v/index.rst
    :start-after: :orphan:   

@@ -52,14 +52,12 @@ from matcal.sierra.input_file_writer import (SolidMechanicsProcedure,
                                              SolidMechanicsConjugateGradient, 
                                              SolidMechanicsSolutionTermination,
                                              SierraFileBase, 
-                                             FiniteElementModelNames, 
+                                             _FiniteElementModelNames, 
                                              SierraFileWithCoupling, 
                                              SierraFileThreeDimensional,
                                              SierraFileThreeDimensionalContact,
                                              ThermalDeath, 
-                                             get_default_solid_mechanics_procedure_name, 
-                                             get_default_solid_mechanics_region_name, 
-                                             get_default_coupled_procedure_name, 
+                                             _get_default_coupled_procedure_name, 
                                              get_default_thermal_region_name, 
                                              )
 from matcal.sierra.material import Material
@@ -159,7 +157,7 @@ class TestSierraInputFileWriter(MatcalUnitTest):
 
     def test_adagio_proc(self):
         region_block = SolidMechanicsRegion("adagio_region", 
-                                    FiniteElementModelNames.solid_mechanics)
+                                    _FiniteElementModelNames.solid_mechanics)
         input_subblock = SolidMechanicsProcedure("adagio_proc", region_block, 
                                            0, 1, 100)
         test_str = input_subblock.get_string()
@@ -184,7 +182,7 @@ class TestSierraInputFileWriter(MatcalUnitTest):
 
     def test_adagio_proc_set_number_of_time_steps(self):
         region_block = SolidMechanicsRegion("adagio_region", 
-                                    FiniteElementModelNames.solid_mechanics)
+                                    _FiniteElementModelNames.solid_mechanics)
         input_subblock = SolidMechanicsProcedure("adagio_proc", region_block, 
                                            0, 1, 100)
         self.assertEqual(input_subblock._time_steps, 100)
@@ -204,7 +202,7 @@ class TestSierraInputFileWriter(MatcalUnitTest):
 
     def test_adagio_proc_set_start_time(self):
         region_block = SolidMechanicsRegion("adagio_region", 
-                                    FiniteElementModelNames.solid_mechanics)
+                                    _FiniteElementModelNames.solid_mechanics)
         input_subblock = SolidMechanicsProcedure("adagio_proc", region_block, 
                                            0, 1, 100)
         self.assertEqual(input_subblock._start_time, 0)
@@ -225,7 +223,7 @@ class TestSierraInputFileWriter(MatcalUnitTest):
 
     def test_adagio_proc_set_end_time(self):
         region_block = SolidMechanicsRegion("adagio_region", 
-                                    FiniteElementModelNames.solid_mechanics)
+                                    _FiniteElementModelNames.solid_mechanics)
         input_subblock = SolidMechanicsProcedure("adagio_proc", region_block, 
                                            0, 1, 100)
         self.assertEqual(input_subblock._termination_time, 1)
@@ -927,17 +925,17 @@ class TestSierraInputFileWriter(MatcalUnitTest):
 
     def tests_olid_mechanics_region(self):
         region_block = SolidMechanicsRegion("adagio_region", 
-                                    FiniteElementModelNames.solid_mechanics)
+                                    _FiniteElementModelNames.solid_mechanics)
         self.assertEqual(len(region_block.lines), 1)
         finite_ele_model_name = region_block.get_line_value(SolidMechanicsRegion.required_keys[0])
-        self.assertEqual(finite_ele_model_name, FiniteElementModelNames.solid_mechanics)
+        self.assertEqual(finite_ele_model_name, _FiniteElementModelNames.solid_mechanics)
 
     def test_get_subblock_by_type(self):
         region_block = SolidMechanicsRegion("adagio_region", 
-                                    FiniteElementModelNames.solid_mechanics)
+                                    _FiniteElementModelNames.solid_mechanics)
         self.assertEqual(len(region_block.lines), 1)
         finite_ele_model_name = region_block.get_line_value(SolidMechanicsRegion.required_keys[0])
-        self.assertEqual(finite_ele_model_name, FiniteElementModelNames.solid_mechanics)
+        self.assertEqual(finite_ele_model_name, _FiniteElementModelNames.solid_mechanics)
         bc1 = SolidMechanicsPrescribedDisplacement("test", "test_ns", "X")
         bc2 = SolidMechanicsPrescribedDisplacement("test", "test_ns2", "X")
         bc3 = SolidMechanicsPrescribedDisplacement("test", "test_ns3", "X")
@@ -960,10 +958,10 @@ class TestSierraInputFileWriter(MatcalUnitTest):
 
     def test_remove_subblocks_by_type(self):
         region_block = SolidMechanicsRegion("adagio_region", 
-                                    FiniteElementModelNames.solid_mechanics)
+                                    _FiniteElementModelNames.solid_mechanics)
         self.assertEqual(len(region_block.lines), 1)
         finite_ele_model_name = region_block.get_line_value(SolidMechanicsRegion.required_keys[0])
-        self.assertEqual(finite_ele_model_name, FiniteElementModelNames.solid_mechanics)
+        self.assertEqual(finite_ele_model_name, _FiniteElementModelNames.solid_mechanics)
         bc1 = SolidMechanicsPrescribedDisplacement("test", "test_ns", "X")
         bc2 = SolidMechanicsPrescribedDisplacement("test", "test_ns2", "X")
         bc3 = SolidMechanicsPrescribedDisplacement("test", "test_ns3", "X")
@@ -1528,7 +1526,7 @@ class TestThermalRegion(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
         self._region_name = get_default_thermal_region_name()
-        self._fe_model = FiniteElementModelNames.thermal
+        self._fe_model = _FiniteElementModelNames.thermal
         self._solver = TpetraSolver()
 
     def _make_thermal_region(self):
@@ -1601,10 +1599,10 @@ class TestSierraFileWithCoupling(MatcalUnitTest):
         ifile._activate_thermal_coupling(1,1,1,"plastic_work")
         
         self.assertIn(TpetraSolver().name, ifile.subblocks)
-        self.assertIn(FiniteElementModelNames.thermal, ifile.subblocks)
+        self.assertIn(_FiniteElementModelNames.thermal, ifile.subblocks)
         self.assertIn(ThermalMaterial(1,1,1).name, ifile.subblocks)
 
-        self.assertIn(get_default_coupled_procedure_name(), ifile.subblocks)
+        self.assertIn(_get_default_coupled_procedure_name(), ifile.subblocks)
         self.assertEqual(len(ifile._coupling_transfers), 5)
         
     def test_activate_thermal_coupling_update_mesh(self):

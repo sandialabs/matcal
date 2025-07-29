@@ -26,8 +26,8 @@ from matcal.core.models import (
     ModelPreprocessorBase, _copy_file_or_directory_to_target_directory, 
     _get_mesh_template_folder)
 
-from matcal.core.parameters import (get_parameters_according_to_precedence, 
-    get_parameters_source_according_to_precedence)
+from matcal.core.parameters import (_get_parameters_according_to_precedence, 
+    _get_parameters_source_according_to_precedence)
 
 from matcal.core.utilities import (matcal_name_format, check_value_is_nonempty_str, 
     check_value_is_real_between_values, check_item_is_correct_type, check_value_is_positive_integer, 
@@ -431,8 +431,8 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
 
     def _get_parameters_by_precedence(self, state):
         model_constants = self.get_model_constants(state)
-        params_by_precedence = get_parameters_according_to_precedence(state, model_constants)
-        param_source_by_precedence = get_parameters_source_according_to_precedence(state, 
+        params_by_precedence = _get_parameters_according_to_precedence(state, model_constants)
+        param_source_by_precedence = _get_parameters_source_according_to_precedence(state, 
             model_constants)
         return params_by_precedence, param_source_by_precedence 
 

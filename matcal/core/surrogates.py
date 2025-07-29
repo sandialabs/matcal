@@ -65,8 +65,7 @@ class SurrogateGenerator:
             sampling study.
             In addition, previously run surrogates joblib files can be passed to rerun the surrogate
             generation process with new settings.            
-        :type evaluation_information: Union[:class:`~matcal.core.surrogates.StudyToSurrogateInfo`, 
-            :class:`~matcal.core.study_base.StudyBase`]
+        :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`
 
         :param training_fraction: What fraction of the source data to use as training data. 
             Value should be 0 < training_fraction < 1. 
@@ -518,7 +517,7 @@ def _scale_data_for_surrogate(data_array, make_log=False):
     from sklearn.preprocessing import StandardScaler
     from sklearn.pipeline import Pipeline
     if make_log:
-        scaler = Pipeline([('log', MatCalLogScaler()), ('standard', StandardScaler())])
+        scaler = Pipeline([('log', _MatCalLogScaler()), ('standard', StandardScaler())])
     else:
         scaler = StandardScaler()
         
@@ -642,6 +641,9 @@ class MatCalSurrogateBase(ABC):
         """"""
         
     def __init__(self, surrogate_information):
+        """Surrogate abstract base class from which all surrogates should be derived 
+        in MatCal.
+        """
         self._scores = None
         self._load(surrogate_information) 
 
@@ -801,7 +803,7 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         :return: A dictionary of the various field predictions.
         :rtype: dict
         """
-        params_dict = convert_array_to_dict(parameters, self.parameter_order)
+        params_dict = _convert_array_to_dict(parameters, self.parameter_order)
         scaled_params = self._parameter_scaler.transform_to_array(params_dict)
         results = OrderedDict()
         if self._interp_field is not None:
@@ -1004,7 +1006,7 @@ def _identify_fields_of_interest(sim_list,  indep_field):
     return field_of_interest
 
 
-class MatCalLogScaler:
+class _MatCalLogScaler:
     
     def __init__(self):
         self._offset = None
@@ -1040,7 +1042,7 @@ class MatCalLogScaler:
             raise IndexError(msg)
         
         
-class ParameterScalerSet:
+class _ParameterScalerSet:
     
     def __init__(self):
         self._scalers = OrderedDict()
@@ -1074,7 +1076,7 @@ class ParameterScalerSet:
             
 
 def _make_parameter_scaler_set(parameter_fields, fields_to_log_scale):
-    parameter_scaler_set = ParameterScalerSet()
+    parameter_scaler_set = _ParameterScalerSet()
     for parameter_name, parameter_values in parameter_fields.items():
         use_log_scale = parameter_name in fields_to_log_scale
         prepared_params = _ensure_2d_array(parameter_values, 1)
@@ -1083,7 +1085,7 @@ def _make_parameter_scaler_set(parameter_fields, fields_to_log_scale):
     return parameter_scaler_set  
 
 
-def convert_array_to_dict(passed_params, parameter_order):
+def _convert_array_to_dict(passed_params, parameter_order):
     if isinstance(passed_params, (dict, OrderedDict)):
         return passed_params
     else:

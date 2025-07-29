@@ -386,7 +386,7 @@ class NoiseWeightingConstant(ResidualWeightingBase):
         else:
             return self._noise_levels
     
-def get_array(residual):
+def _get_array(residual):
     data_list = []
     for field in residual.field_names:
             data_list.append(np.atleast_1d(residual[field]))

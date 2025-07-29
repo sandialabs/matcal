@@ -1,7 +1,9 @@
 How to cite MatCal
 ******************
 Please use the following bibtex entry to cite MatCal in latex documents:
+
 .. code-block::   
+
     @techreport{matcal,
     title={{MatCal Users Guide Release 1.3.0}},
     author={Karlson, Kyle and Kury, Matthew and Jones, Reese},

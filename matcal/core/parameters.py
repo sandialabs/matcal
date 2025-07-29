@@ -2,7 +2,6 @@
 This module contains all classes related to 
 study parameters. 
 """
-import abc
 from collections import OrderedDict
 import numbers
 from copy import deepcopy 
@@ -13,11 +12,11 @@ from matcal.core.utilities import matcal_name_format, CollectionBase
 
 logger = initialize_matcal_logger(__name__)
 
-class MatCalPreprocessorsStruct:
+class _MatCalPreprocessorsStruct:
   log = 'log'
   unit = 'unit'
 
-MATCAL_PREPROCESSORS = MatCalPreprocessorsStruct()
+MATCAL_PREPROCESSORS = _MatCalPreprocessorsStruct()
 
 class Parameter():
   """
@@ -420,7 +419,7 @@ def _convert_serialized_parameter_collection(ser_param_collection):
       params.append(_convert_serialized_parameter(ser_param))
     return ParameterCollection(name, *params)
   
-class UnitParameterScaler:
+class _UnitParameterScaler:
   
     def __init__(self, param_collection)->None:
       self._to_unit_functions = OrderedDict()
@@ -485,7 +484,7 @@ class UnitParameterScaler:
         return (values + self._trans) * self._scale
         
 
-def get_parameters_according_to_precedence(state,
+def _get_parameters_according_to_precedence(state,
                                            model_constants, 
                                            study_parameters={}):
     combined_params = {}
@@ -495,10 +494,10 @@ def get_parameters_according_to_precedence(state,
 
     return combined_params
 
-def get_parameters_source_according_to_precedence(state,
+def _get_parameters_source_according_to_precedence(state,
                                            model_constants, 
                                            study_parameters={}):
-    combined_params = get_parameters_according_to_precedence(state, model_constants, 
+    combined_params = _get_parameters_according_to_precedence(state, model_constants, 
                                                              study_parameters)
     param_source = {}
     for param in combined_params:

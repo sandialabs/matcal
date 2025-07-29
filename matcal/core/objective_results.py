@@ -217,7 +217,7 @@ class ObjectiveQOI(ObjectiveContainerBase):
     def weighted_conditioned_experiment_qois(self):
         """
         :return: Returns a DataCollection with the weighted and 
-        conditioned experiment QoIs stored for each 
+            conditioned experiment QoIs stored for each 
             state that was evaluated for the objective. 
             Conditioning is done automatically by MatCal 
             in an attempt to normalize all provided experimental 
