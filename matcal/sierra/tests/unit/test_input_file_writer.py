@@ -58,7 +58,7 @@ from matcal.sierra.input_file_writer import (SolidMechanicsProcedure,
                                              SierraFileThreeDimensionalContact,
                                              ThermalDeath, 
                                              _get_default_coupled_procedure_name, 
-                                             get_default_thermal_region_name, 
+                                             _get_default_thermal_region_name, 
                                              )
 from matcal.sierra.material import Material
 
@@ -1525,7 +1525,7 @@ class TestThermalRegion(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
-        self._region_name = get_default_thermal_region_name()
+        self._region_name = _get_default_thermal_region_name()
         self._fe_model = _FiniteElementModelNames.thermal
         self._solver = TpetraSolver()
 
