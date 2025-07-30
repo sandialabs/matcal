@@ -10,11 +10,12 @@ repository cloned to your local machine, installing the key MatCal dependencies,
 creating an appropriate MatCal Python environment, and confirming that the 
 setup is working correctly. 
 
-This setup will allow users to use MatCal in a limited capacity. MatCal wiil be
+This setup will allow users to use MatCal in a limited capacity. MatCal will be
 able to interface with models that have a Python interface and be limited to optimization 
 methods from scipy. To enable more complex models and optimization methods, following
-the Advanced Setup will be required. 
+the :ref:`Advanced Setup` will be required. 
 
+Instructions for compiling the documentation will be added in the near future. 
 
 Clone Repository
 -------------
@@ -34,7 +35,15 @@ The repo will be cloned in to a directory called 'matcal'.
 
 Set Python Environment
 -------------
-With the 
+It is recommended that you create a new python environment to run MatCal in. 
+Conda can be used to do this. Currently, MatCal has been developed with Python 
+version 3.11.5. To create this python environment you can do: 
+
+.. code-block:: bash
+
+    conda create --name matcal python=3.11.5
+
+
 
 
 Confirm Setup
@@ -47,5 +56,11 @@ Confirm Setup
 
 Advanced Setup 
 =======================
+To run the advanced setup, it is necessary to to have completed the :ref:`Simple Setup` instructions first.
 
+
+
+Building Documentation
+======================
+TBD
 
