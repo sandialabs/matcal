@@ -1024,3 +1024,1401 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
         combined_array[start_row:end_row, 0:end_col] = deepcopy(array)
         current_eval_set_row = end_row
     return combined_array
+
+
+class VoronoiBatchStudy(ParameterStudy):
+    def __init__(self, model, bounds,  X_test, y_test, surr_model_type='GPR', voronoi_type='full__', nsplits=8,
+                 nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
+                 group_kfold=False, thin=None, random_selection=None, nbatches=20,
+                 figpath=None, plot_figs=False, rng=None):
+        """Initialize the VoronoiBatchSamplingStudy
+
+        Args:
+            model: model to be evaluated
+            bounds (list)
+            X_test (nd_array): n x d array of test parameter samples
+            y_test (nd_array): n x d array of test model output
+            surr_model_type (str):  Type of surrogate to be used. .Default 'GPR'.
+            voronoi_type (str):
+            nsplits (int):
+            nmax_folds (int):
+            nmax_loo (int):
+            cv_scale ( ):
+            cv_metric (str):
+            group_kfolds (bool):
+            thin ():
+            random_selection ():
+            nbatches (int):
+            figpath (str):
+            plot_figs (bool):
+            rng (int, optional): Pseudorandom numer generator state. When rng is None, a new generator
+            is created using entropy from the operating system.
+        """
+
+        if random_selection is not None and thin is not None:
+            raise ValueError("Only one of 'thin' or 'random_selection' can be activated. Not both.")
+        if nmax_loo == 'all' and thin is None and random_selection is None:
+            print("Samples will be drawn for all regions in nmax_folds since none of LOOCV, thinning, or  random selection are activated")
+
+        self.surr_model = model
+        self.surr_model_type = surr_model_type
+        self.bounds = bounds
+        self.X_test = X_test
+        self.y_test = y_test
+        self.nsplits = nsplits
+        self.nmax_folds = nmax_folds
+        self.nmax_loo = nmax_loo
+        self.cv_metric = cv_metric
+        self.group_kfold = group_kfold
+        self.thin = thin
+        self.random_selection = random_selection
+        self.nbatches = nbatches
+        self.figpath = figpath
+        self.voronoi_type = voronoi_type
+
+        self.finite_only = False
+        self.iterative_updates = True
+        if voronoi_type.split('_')[1] == 'finite':
+            self.finite_only = True
+        if voronoi_type.split('_')[2] == 'noniterative':
+            self.iterative_updates = False
+
+        self.dim = len(bounds)
+        self.boundary_points = make_nd_grid(bounds, 2)
+
+        self.nbatch_samples = []
+        self.mse = []
+        self.mape = []
+        self.mae = []
+        self.smape = []
+        self.surrogate_loss = []
+        eps = 1e-5
+
+        self.perform_voronoi_batch_sampling()
+
+    def peform_voronoi_batch_sampling(self):
+        """ Perform Voronoi batch sampling """
+
+        # calculate initial surrogate error
+        self.calculate_errors()
+
+        print(f"Initial surrogate error--> MSE: {self.mse[0]}, SMAPE: {self.smape[0]}, MAE: {self.mae[0]}")
+        self.calculate_surrogate_loss()
+
+        nsamples_list.append(X.shape[0])
+    #    for batch_number in range(20):  # Specify the number of new samples to draw in a batch
+        batch_number = 0
+        while True:
+            print(f"Sampling batch {batch_number}. Currently {X.shape[0]} samples.")
+            print("................................................................")
+            X, v_time = voronoi_batch_sampling(X, y, model=model, bounds=bounds,
+                boundary_points=boundary_points, nmax_folds=nmax_folds, nmax_loo=nmax_loo, iter_=batch_number,
+                iterative_updates=iterative_updates,
+                figdir=figpath, plot_figs=plot_figs, finite_only=finite_only, voronoi_type=voronoi_type.split('_')[0],
+                n_splits=nsplits, cv_metric=cv_metric, group_kfold=group_kfold, thin=thin,
+                random_selection=random_selection, cv_scale=cv_scale)
+
+            print("Evaluating model at new training points.")
+            y = fun(X)
+            print("Fitting model with new training points.")
+            model_list = Parallel(n_jobs=-1)(delayed(fit_model)(model, X, y) for _ in range(1))
+            model = model_list[0]
+            #model.fit(X, y)
+            y_pred = model.predict(X_test)
+            pred_error = np.abs(y_pred - y_test)
+            voronoi_mse.append(1/(ntest) * sum(pred_error ** 2))
+            voronoi_mape.append(1/(ntest) * sum((pred_error/np.abs(y_test)) * 100))
+            voronoi_mae.append(pred_error.mean())
+            voronoi_smape.append(2/(ntest) * sum(pred_error / (np.abs(y_test) + np.abs(y_pred)) ) * 100)
+            print(f"surrogate error --> MSE: {voronoi_mse[-1]}, SMAPE: {voronoi_smape[-1]}, MAE: {voronoi_mae[-1]}")
+
+            nsamples_list.append(X.shape[0])
+            voronoi_time.append(v_time)
+            make_error_pairplot(model, fun, dim, bounds, 25, batch_number, figpath)
+            surrogate_loss = calculate_surrogate_loss(surr_model, surrogate_loss, model)
+            print(f"surrogate loss: {surrogate_loss}")
+            if dim == 2 and test_grid and plot_figs:
+                plot_2d_model(y_test, y_pred, pred_error, X, bounds, figpath, npts=ntestpts_per_dim, iter_=batch_number, show_true=True)
+
+            # convergence check
+            if np.abs(surrogate_loss[batch_number+1] - surrogate_loss[batch_number]) <= eps:
+                print(f"BREAKING: Convergence from surrogate loss.")
+                print(surrogate_loss)
+                break
+            elif np.abs(voronoi_mse[batch_number+1] - voronoi_mse[batch_number]) <= eps:
+                print(f"BREAKING: Convergence from surrogate loss.")
+                print(surrogate_loss)
+                break
+            elif np.abs(voronoi_mse[batch_number+1] - voronoi_mse[batch_number]) <= eps:
+                print(f"BREAKING: Convergence from MSE.")
+                print(voronoi_mse)
+                break
+            else:
+                print("Surrogate not converged yet.")
+            batch_number += 1
+
+            if False:
+                plt.close("all")
+                X_df = pd.DataFrame(X)
+                X_df['label'] = 'Training'
+                test_df = pd.DataFrame(X_test)
+                test_df['label'] = 'Test'
+                data = pd.concat([X_df, test_df])
+                palette = {'Training': 'blue', 'Test': 'red'}
+                sns.set_context("paper", rc={"xlabel.fontsize": 16, "ylabel.fontsize": 16,\
+                    "xlabel.fontweight": "bold", "ylabel.fontweight": "bold"})
+                pairplot = sns.pairplot(data, hue='label', palette=palette, corner=True,
+                    plot_kws=dict(marker='.', s=20))
+                pairplot.fig.set_size_inches(5, 5)
+                plt.savefig(f"{figpath}/training_points_iter_{batch_number}.png")
+                plt.close()
+
+            if dim == 2 and voronoi_type == 'full' and False:
+                fix, ax = plt.subplots()
+                voronoi_plot_2d(voronoi_tessellation.vor, ax=ax, show_vertices=False,
+                    line_width=2)
+                ax.plot(X[:, 0], X[:, 1], '.', markersize=10, color='m', label='Training Points')
+                plt.legend(fontsize=20)
+                plt.savefig(f"{figpath}/voronoi_tessellation_iter_{batch_number}.png")
+                plt.close()
+
+                fig, ax = plt.subplots(figsize=(12,8))
+                ax.plot(nsamples_list, voronoi_pred_error, linestyle='--', marker='o',  markersize=10, color='fuchsia', label='Voronio')
+                plt.legend(fontsize=20)
+                plt.xticks(np.arange(nsamples_list[0], nsamples_list[-1], 5), fontsize=16)
+                plt.xlabel('Number of Samples', fontsize=20)
+                plt.ylabel('MSE', fontsize=20)
+                plt.yscale('log')
+                plt.title('Surrogate Prediction Error', fontsize=20)
+                plt.savefig(f'{figpath}/prediction_error.png')
+
+                plt.close("all")
+
+    def calculate_errors(self):
+        y_pred = self.surr_model.predict(self.X_test)
+        pred_error = np.abs(y_pred - self.y_test)
+        self.mse.append(1/(ntest) * sum(pred_error ** 2))
+        self.mape.append(1/(ntest) * sum((pred_error/np.abs(self.y_test)) * 100))
+        self.mae.append(pred_error.mean())
+        self.smape.append(2/(ntest) * sum(pred_error / (np.abs(self.y_test) + np.abs(y_pred)) ) * 100)
+
+
+    def calculate_surrogate_loss(self):
+        # convergence based on marginal log likelihood for GPR
+        if self.surr_model_type == 'GPR':
+            self.surrogate_loss.append(self.surr_model.surrogate.log_marginal_likelihood(\
+                model.surrogate.kernel_.theta))
+        if self.surr_model_type == 'SVR':
+            epsilon = self.surr_model.surrogate.epsilon
+            self.surrogate_loss.append(np.maximum(0, pred_error - epsilon).mean())
+
+
+    def voronoi_batch_sampling(self, X, y, model, bounds, boundary_points, nmax_folds=1,
+         nmax_loo=1, iter_=None, iterative_updates=True, figdir=None,
+         plot_figs=False, finite_only=False, voronoi_type='full', n_splits=5,
+         cv_metric='sum_abs_error', group_kfold=False, thin=None,
+         random_selection=None, cv_scale=None):
+        """
+        Perform Voronoi batch sampling based on the specified algorithm.
+
+        Parameters:
+        X: np.ndarray
+            Feature matrix (training samples): nsamples x feature dimension
+        y: np.ndarray
+            Target values (ground truth): 
+        nmax_loo: int
+            Retain the nmax_loo samples with max error from LOOCV.
+        nmax_folds: int
+            Retain the nmax_folds folds with max error from KFold CV.
+        model: object
+            A machine learning model that has fit and predict methods.
+        bounds: list
+            Bounds of feature space
+        boundary_points: array
+            Boundary points defining bounds
+
+        Returns:
+        list: New samples selected.
+        """
+
+        # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
+        ndim = X.shape[1]
+        X_orig = X.copy()
+
+        if n_splits > 0:
+            print("Performing kfold cross-validation...")
+            kf_start = time.time()
+            kfcv = KFoldCrossValidation(model, n_splits=n_splits, group_kfold=group_kfold, scale=cv_scale)
+            groups = None
+
+            if group_kfold:
+                kmeans = KMeans(n_clusters=n_splits, random_state=42)
+                groups = kmeans.fit_predict(X)
+                if True:
+                    # Plot the results
+                    plt.figure(figsize=(10, 6))
+                    xdf = pd.DataFrame(X)
+                    xdf['label'] = groups
+                    plt.figure()
+                    sns.pairplot(xdf, hue='label', palette='husl', plot_kws={'s':10})
+                    plt.savefig(f"{figpath}/kmeans_groups_iter_{iter_}.png")
+                    plt.close()
+
+            kf = kfcv.perform_kfold_cv(X, y, metric=cv_metric, groups=groups)
+
+            # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
+            print("Finding max kfold error...")
+            max_folds = find_indices_of_n_largest_kf_errors(kf, nmax_folds)
+            max_fold_indices = np.concatenate(list(max_folds.values())) 
+            kf_end = time.time()
+            #print(f"kfold operations: {kf_end - kf_start} sec, {(kf_end - kf_start)/60} min.")
+            if plot_figs and ndim == 2:
+                fig, ax = plot_voronoi(voronoi_tessellation, iter_, highest_kf_error=max_fold_indices, figdir=figdir)
+                plt.close()
+
+            # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
+            print("Finding worst sample locations")
+            ws_start = time.time()
+            if nmax_loo == 'all':
+                worst_sample_locations = X[max_fold_indices]
+            else:
+                loocv = LeaveOneOutCrossValidation(model, scale=cv_scale)
+                errors = loocv.perform_loocv(X, y, max_fold_indices, metric=cv_metric)
+
+                # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
+                max_loo_indices = find_indices_of_n_largest_errors(errors, nmax_loo)
+                #worst_sample_indices = max_fold_indices[max_loo_indices]
+                #worst_sample_locations = X[worst_sample_indices]
+                worst_sample_locations = X[max_loo_indices]
+
+                if plot_figs and ndim == 2:
+                    fig, ax = plot_voronoi(voronoi_tessellation, iter_, highest_loo_error=worst_sample_indices, figdir=figdir)
+                    plt.close()
+
+            ws_end = time.time()
+            #print(f"Time to find worst sample: {ws_end - ws_start} sec, {(ws_end - ws_start)/60} min.")
+
+        else:
+            # do not perform kfold CV. New samples drawn for all X regions.
+            worst_sample_locations = X
+
+        if thin is not None:
+            worst_sample_locations = worst_sample_locations[::thin, ...]
+        elif random_selection is not None:
+            draw_n = np.min((int(0.5 * worst_sample_locations.shape[0]), random_selection))
+            random_rows = np.random.choice(worst_sample_locations.shape[0], size=draw_n, replace=False)
+            worst_sample_locations = worst_sample_locations[random_rows, ...]
+
+        print(f"Initializing voronoi/tree for batch {iter_}")
+        in_start = time.time()
+
+        if voronoi_type == 'full':
+            # Initialize Voronoi tessellation
+            voronoi_tessellation = VoronoiTessellation(X, bounds, boundary_points, finite_only=finite_only)
+
+        elif voronoi_type == 'local':
+            all_points = X.copy()
+            tree = KDTree(all_points)
+
+        elif voronoi_type == 'shadow':
+            projection_dim = 2
+            projections = list(combinations(range(ndim), projection_dim))
+            nproj = len(projections)
+            full_list = set(range(ndim))
+            inverted_projection = []
+            for tup in projections:
+                inverted_projections.append(tuple(full_list - set(tup)))
+            shadow_voronoi = [None] * nproj
+            shadow_points = [None] * nproj
+            shadow_bounds = [None] * nproj
+            shadow_boundary_points = [None] * nproj
+            for idx, proj in enumerate(projections):
+                shadow_points[idx] = np.unique(X[:, proj], axis=0)
+                shadow_bounds[idx] = bounds[list(proj)]
+                shadow_boundary_points[idx] = make_nd_grid(shadow_bounds[idx], 2)
+                shadow_voronoi[idx] = VoronoiTessellation(shadow_points[idx],
+                    shadow_bounds[idx], shadow_boundary_points[idx], finite_only=finite_only)
+
+        elif voronoi_type == 'sampling':
+            clip_method = 'np_clip'
+            if clip_method == "boundary_hull_clip":
+                boundary_hull = ConvexHull(boundary_points)
+            else:
+                boundary_hull = None
+            all_points = X.copy()
+            tree = KDTree(all_points)
+            lb = np.array(bounds)[:, 0]
+            ub = np.array(bounds)[:, 1]
+            factor = 500
+            while True:
+                num_initial = factor * ndim
+                initial_samples = np.random.uniform(lb, ub, size=(num_initial, ndim))
+                initial_samples = handle_points_outside_bounds(boundary_hull, bounds, ndim, initial_samples, method=clip_method, centroid=None)
+                initial_nn = tree.query(initial_samples, k=1)
+                nn_loc = all_points[initial_nn[1]]
+                intersect = np.intersect1d(nn_loc, worst_sample_locations) 
+                if len(np.unique(intersect)) < len(worst_sample_locations):
+                    factor += 100
+                    continue
+                else:
+                    break
+
+        in_end = time.time()
+        #print(f"Time to initiate voronoi/tree: {in_end - in_start} sec, {(in_end - in_start)/60} min.")
+
+        if plot_figs and ndim == 2 and voronoi_type == 'full':
+            fig, ax = plot_voronoi(voronoi_tessellation, iter_, figdir=figdir)
+            plt.close()
+
+        new_points = []
+        print("Finding new sample locations...")
+        v_start = time.time()
+        for loc_idx, location in enumerate(worst_sample_locations):
+            if np.mod(loc_idx, 100) == 0:
+                print(f"Drawing new sample from region index {loc_idx} of {len(worst_sample_locations)}.")
+
+            if voronoi_type == 'full':
+                # identify corresponding voronoi cell
+                region_index = voronoi_tessellation.get_voronoi_region(location)[0]
+
+                # Step 5: Select the point within this sample’s Voronoi cell that is furthest from existing samples
+                region_vertices, furthest_vertex_index = voronoi_tessellation.find_furthest_vertex(region_index)
+                if region_vertices is None:
+                    continue
+                furthest_vertex = region_vertices[furthest_vertex_index]
+
+                # Step 6: Add the new point and update Voronoi tessellation
+                if iterative_updates:
+                    voronoi_tessellation.add_points(furthest_vertex)
+                if plot_figs and ndim == 2 and voronoi_type == 'full':
+                    fig, ax = plot_voronoi(voronoi_tessellation, iter_, updated=True,
+                        added_point=furthest_vertex, location_idx=loc_idx, figdir=figdir)
+                # Step 7: Update X and y
+                new_points.append(furthest_vertex)
+
+            elif voronoi_type == 'local':
+                nearest_neighbors = tree.query(location, k=10*X.shape[1])
+                nn_points = all_points[nearest_neighbors[1].squeeze()]
+                nn_vor = VoronoiTessellation(nn_points, bounds, boundary_points, finite_only=finite_only)
+                nn_region = nn_vor.get_voronoi_region(location)[0]
+                try: # i think there is an issue where identical points are showing up
+                    nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
+                except:
+                    continue
+
+                if nn_vert is None:
+                    continue
+                furthest_vertex = nn_vert[nn_fvi]
+                new_points.append(furthest_vertex)
+                if iterative_updates:
+                    all_points = np.vstack((all_points, furthest_vertex))
+                    tree = KDTree(all_points)
+
+            elif voronoi_type == 'shadow':
+                shadow_vertices = [None] * nproj 
+                for proj_idx in range(nproj):
+                    vor = shadow_voronoi[proj_idx]
+                    proj = proj[proj_idx]
+                    proj_point = location.squeeze()[list(proj)]
+                    shadow_point_region = vor.get_voronoi_region(proj_point)[0]
+                    shadow_vertices[proj_idx] = vor.get_region_vertices(\
+                        shadow_poing_region, identify_outside_vertices=True)
+
+            elif voronoi_type == 'sampling':
+                try:
+                    furthest_vertex = farthest_point_adpative_sampling_var(\
+                        initial_samples, initial_nn, tree, boundary_hull, all_points, location, bounds,\
+                        num_initial=1000*ndim, num_refined=500*ndim, iterations=2,\
+                        sigma_0=0.75**ndim, alpha=1.0, k=10, nn_sigma=True, clip_method=clip_method)
+                    if furthest_vertex is None:
+                        continue
+                    new_points.append(furthest_vertex)
+                    if iterative_updates:
+                        all_points = np.vstack((all_points, furthest_vertex))
+                        tree = KDTree(all_points)
+                        #unique_X = set(tuple(row) for row in X)
+                except ZeroDivisionError:
+                    continue
+
+            if plot_figs and ndim == 2 and voronoi_type == "full":
+                fig, ax = plot_voronoi(voronoi_tessellation, iter_, sample_location=location,
+                    location_idx=loc_idx, figdir=figdir)
+                ax.plot(region_vertices[..., 0], region_vertices[..., 1], '.', markersize=20, color='m', label='region vertices')
+                plt.legend()
+                plt.savefig(f'{figdir}/new_sample_location_{loc_idx}_vertices_iter_{iter_}.png')
+                ax.plot(furthest_vertex[..., 0], furthest_vertex[..., 1], '.', markersize=20, color='lime', label='furthest vertex')
+                plt.legend()
+                plt.savefig(f'{figdir}/new_sample_location_{loc_idx}_furthest_vertex_iter_{iter_}.png')
+
+        v_end = time.time()
+        v_time = v_end - v_start
+        print(f"voronoi operations: {v_end - v_start} sec, {(v_end - v_start)/60} min.")
+
+        new_points = np.asarray(new_points)
+        nnew = new_points.shape[0]
+        unique_points = set(tuple(row) for row in new_points)
+        new_points = np.asarray([list(row) for row in unique_points])
+        nnew_unique = new_points.shape[0]
+        print(f"{nnew_unique} of the {nnew} new points are unique.")
+
+        distances = np.linalg.norm(X - new_points[:, np.newaxis, :], axis=2)
+        tree = KDTree(X)
+        new_points_nn = tree.query(new_points, k=1)
+        nn_loc = X[new_points_nn[1]]
+        nn_distances = np.linalg.norm(nn_loc - new_points, axis=1)
+        print(f"New points min distance to nn: {nn_distances.min()}")
+        if True:
+            xdf = pd.DataFrame(X)
+            xdf['label'] = 'Current'
+            ndf = pd.DataFrame(new_points)
+            ndf['label'] = 'New'
+            data = pd.concat([xdf, ndf])
+            palette = {'Current' : 'blue', 'New': 'red'}
+            plt.figure()
+            sns.pairplot(data, hue='label', palette=palette, markers=['o', 's'], plot_kws={'s':10})
+            plt.savefig(f"{figpath}/new_and_old_points_iter_{iter_}.png")
+
+            plt.figure()
+            plt.hist(nn_distances)
+            plt.savefig(f"{figpath}/new_point_distance_to_nn_iter_{iter_}.png")
+            plt.close("all")
+
+        X = np.concatenate((X_orig, new_points))
+        return X, v_time
+
+
+    def find_indices_of_n_largest_kf_errors(kf, n):
+
+        # Create a list of (key, error, sample_index) tuples
+        items = [(key, value[0], value[1]) for key, value in kf.items()]
+
+        # Sort the items based on the error in descending order
+        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
+
+        # Get the top n items
+        top_n_items = sorted_items[:n]
+
+        # Extract the arrays associated with the top n largest floats
+        result_arrays = {key: array for key, _, array in top_n_items}
+
+        return result_arrays
+
+
+    def find_indices_of_n_largest_errors(loo, n, sort=False):
+        """
+        Find the indices of the n largest values in an array of errors.
+
+        Parameters:
+        errors (np.ndarray or list): An array or list of error values.
+        n (int): The number of largest values to find.
+
+        Returns:
+        np.ndarray: An array of indices corresponding to the n largest values.
+        """
+
+        if n < 1:
+            # treat as ratio of indices to keep
+            nkeep = int(n * len(loo))
+        else:
+            nkeep = int(n)
+
+        # Create a list of (key, error, sample_index) tuples
+        items = [(key, value[0], value[1]) for key, value in loo.items()]
+
+        # Sort the items based on the error in descending order
+        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
+
+        # Get the top n items
+        top_n_items = sorted_items[:nkeep]
+
+        # Extract the indices associated with the top n largest floats
+        indices = [item[2] for item in top_n_items]
+
+        if False:
+            # Convert the input to a NumPy array if it's not already
+            errors_array = np.concatenate(errors)
+
+            # Get the indices of the n largest values
+            indices = np.argsort(errors_array)[-n:]  # Get the last n indices from the sorted array
+
+            if sort:
+                # Sort the indices to return them in ascending order
+                return np.sort(indices)
+            else:
+                # Return the indices in the order of descending error
+                return np.flip(indices)
+
+        return np.array(indices)
+
+
+    def make_nd_grid(bounds, npts_along_dim):
+
+        ndim = len(bounds)
+        grid_pts = []
+        for dim in np.arange(ndim):
+            grid_pts.append(np.linspace(bounds[dim][0], bounds[dim][1], npts_along_dim))
+        #grid_tuple = tuple(grid_pts)
+        #coords = np.meshgrid(*grid_tuple)
+        coords = np.meshgrid(*grid_pts)
+        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(ndim)]
+        return np.vstack(tuple(coords_ravel)).T
+
+
+    def generate_test_data(fun, bounds, ngrid_pts=25, grid=True, npts=None):
+
+        if grid:
+            pts = make_nd_grid(bounds, ngrid_pts)
+        else:
+            assert npts is not None
+            test_sampler = Halton(d=len(bounds), seed=42)
+            pts_unscaled = test_sampler.random(n=npts)
+            pts = qmc.scale(pts_unscaled, np.array(bounds)[:, 0], np.array(bounds)[:, 1])
+        y_true = fun(pts)
+
+        return pts, y_true
+
+    def fit_model(model, X, y):
+        model.fit(X, y)
+        return model
+
+    def find_boundary_hull_ray_crossings(boundary_hull, U, z):
+        """
+        Find where a ray crosses the convex hull of the boundary.
+
+        Parameters:
+        U (np.ndarray): Ray direction.
+        z (np.ndarray): Ray origin.
+
+        Returns:
+        list: List of intersection points with the convex hull.
+        """
+
+        eq = boundary_hull.equations # (nfacet, ndim + 1)
+        V, b = eq[:, :-1], eq[:, -1] # normal, offset
+        crossing = np.zeros(U.shape)
+        for ss in range(U.shape[0]):
+            denom = np.dot(V, U[ss])
+            num = -(b + np.dot(V, z.squeeze()))
+            alpha = num[denom!=0] / denom[denom!=0]
+            crossing[ss] = np.min(alpha[alpha >0]) * U[ss] + z
+        return crossing
+
+    def clip_points(boundary_hull, samples, centroid):
+        ray_direction = samples - centroid
+        norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
+        new_point = find_boundary_hull_ray_crossings(boundary_hull, norm_ray_direction, centroid)
+        return new_point
+
+    def handle_points_outside_bounds(boundary_hull, bounds, ndim, samples, method='np_clip', centroid=None):
+        lb = np.array(bounds)[:, 0]
+        ub = np.array(bounds)[:, 1]
+        outside_mask = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
+
+        # Get the indices of vertices that are outside the bounds
+        sample_outside = samples[outside_mask]
+        if sample_outside.any():
+            if method == 'boundary_hull_clip':
+                assert centroid is not None
+                clipped_samples = clip_points(boundary_hull, sample_outside, centroid)
+            if method == 'np_clip':
+                clipped_samples = np.clip(sample_outside, lb, ub)
+            samples[outside_mask] = clipped_samples
+        return samples
+
+    def find_farthest_sample_from_point(samples, point):
+        sample_distances_from_p_i = np.linalg.norm(samples - point, axis=1)
+        farthest_idx = np.argmax(sample_distances_from_p_i)
+        farthest_candidate = samples[farthest_idx]
+        farthest_distance = sample_distances_from_p_i[farthest_idx]
+        return farthest_candidate, farthest_distance, sample_distances_from_p_i
+
+    def farthest_point_adpative_sampling_var(initial_samples, initial_nn, tree, boundary_hull, P, p_i, bounds, num_initial=100, num_refined=500,
+        iterations=5, sigma_0=1.0, alpha=0.5, region_index=None, runID=None, k=15, nn_sigma=False, clip_method='np_clip'):
+
+        nsamples, ndim = P.shape
+        x_farthest = None
+        max_dist = 0
+        nearest_neighbors = tree.query(p_i, k=ndim*3)
+        nn_distances_from_p_i = nearest_neighbors[0][..., 1:]
+        nn_points = P[nearest_neighbors[1][..., 1:].squeeze()]
+        point_index = np.argwhere((P == p_i).all(axis=1)).squeeze()
+        if nn_sigma:
+            sigma_0 = nn_distances_from_p_i.var() ** 0.5
+        lb = np.array(bounds)[:, 0]
+        ub = np.array(bounds)[:, 1]
+
+        # initial random sampling
+        valid_samples = initial_samples[initial_nn[1] == point_index]
+        random_vector = multivariate_normal(np.zeros(ndim), np.ones(ndim)*sigma_0**2).rvs(size=num_initial//len(valid_samples))
+        unclipped_new_samples = np.vstack(valid_samples[:, np.newaxis, :] + random_vector)
+        samples = handle_points_outside_bounds(boundary_hull, bounds, ndim, unclipped_new_samples, method=clip_method, centroid=p_i)
+
+        for t in range(iterations):
+
+            sigma_t = sigma_0 * np.exp(-alpha * t) # dynamic variance reduction
+            sample_nn = tree.query(samples, k=1)
+            valid_samples = samples[sample_nn[1] == point_index]
+
+            if valid_samples.shape[0] > 0:
+                farthest_candidate, farthest_distance, sample_distances_from_p_i =\
+                    find_farthest_sample_from_point(valid_samples, p_i)
+                if farthest_distance > max_dist:
+                    max_dist = farthest_distance
+                    x_farthest = farthest_candidate
+
+                if t < iterations - 1:
+                    # focused re-sampling near best candidates
+                    if t == 0:
+                        top_k = valid_samples[np.argsort(-sample_distances_from_p_i)[:k]]
+                        curr_top_k = top_k.copy()
+                        curr_top_k_distances = sample_distances_from_p_i[np.argsort(-sample_distances_from_p_i)[:k]]
+                    elif t > 0:
+                        valid_samples = np.vstack((curr_top_k, valid_samples))
+                        sample_distances = np.concatenate((curr_top_k_distances, sample_distances_from_p_i))
+                        top_k = valid_samples[np.argsort(-sample_distances)[:k]]
+                        curr_top_k = top_k.copy()
+                        curr_top_k_distances = sample_distances[np.argsort(-sample_distances)[:k]]
+
+                    random_vector = multivariate_normal(np.zeros(ndim), np.ones(ndim)*sigma_t**2).rvs(size=num_refined//len(top_k))
+                    unclipped_new_samples = np.vstack(top_k[:, np.newaxis, :] + random_vector)
+                    samples = handle_points_outside_bounds(boundary_hull, bounds, ndim, unclipped_new_samples, method=clip_method, centroid= p_i)
+            else:
+                print(f"no valid samples at iter {t}")
+
+        return x_farthest
+    
+
+class VoronoiTessellation:
+    def __init__(self, points, bounds,
+                 incremental=False, finite_only=False):
+        """Initialize the VoronoiBatchSamplingStudy
+
+        Initialize the Voronoi tessellation with given points and bounds.
+
+        Parameters:
+        points: np.ndarray
+            Array of points for Voronoi tessellation.
+        boundary points: list of tuples
+            Bounds for the region, e.g., [(xmin, xmax), (ymin, ymax)] for 2D.
+        """
+        from scipy.spatial import Voronoi, Delaunay, voronoi_plot_2d, ConvexHull
+        import pandas as pd
+        import copy
+        from mpl_toolkits.mplot3d import Axes3D
+
+        self.points = np.array(points)
+        self.ndim = self.points.shape[1]
+        self.bounds = bounds
+        self.make_nd_grid(npts_along_dim=25)
+        if not finite_only:
+            self.boundary_hull = ConvexHull(self.boundary_points)
+        self.create_ghost_points()
+        self.vor = Voronoi(self._all_points, incremental=incremental)
+        self.ghost_busters()
+        self.finite_only = finite_only
+
+    def make_nd_grid(self, npts_along_dim):
+        grid_pts = []
+        for dim in np.arange(self.ndim):
+            grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
+        coords = np.meshgrid(*grid_pts)
+        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.ndim)]
+        self.boundary_points = np.vstack(tuple(coords_ravel)).T
+            
+        
+    def ghost_busters(self):
+        self._boo = []
+        for point in self._all_points:
+            if point in self._ghost_points:
+                self._boo.append(True)
+            else:
+                self._boo.append(False)
+
+    def create_ghost_points(self, method='combo', stretchCoef=1.75, centCoef=1.5):
+        """Reflect points nearest to the boundary hull across the nearest
+        face of the boundary hull """
+
+        if method == 'stretch_boundary_hull':
+            boundary_points_stretched = self.boundary_points * stretchCoef
+            self._ghost_points = boundary_points_stretched
+        elif method == 'boundary_centroid':
+            # centroid of boundary points
+            boundary_centroid = np.mean(self.boundary_points, axis=0)
+            max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
+
+            # introduce ghost points
+            self._ghost_points = boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])
+            self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
+        elif method == 'combo':
+            boundary_points_stretched = self.boundary_points * stretchCoef
+            self._ghost_points = boundary_points_stretched
+
+            boundary_centroid = np.mean(self.boundary_points, axis=0)
+            max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
+            self._ghost_points = np.vstack([self._ghost_points, boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
+            self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
+
+        self._all_points = np.vstack([self.points, self._ghost_points])
+
+    def get_region_vertices(self, region_index, identify_outside_vertices=True):
+        """Return the vertices of the Voronoi region."""
+        region = self.vor.regions[region_index].copy()
+        if -1 in region:
+            print(f"WARNING: infinite vertice in Region {region_index}")
+
+        if identify_outside_vertices:
+            updated_region = self.identify_vertices_outside_bounds(region)
+            if not -2 in updated_region and len(updated_region) > 0:
+                region_vertices = self.vor.vertices[region]
+            elif -2 in updated_region:
+                if self.finite_only:
+                    if max(updated_region) < 0:
+                        region_vertices = None
+                    else: 
+                        region_vertices = np.asarray([self.vor.vertices[i] for i in updated_region if i > 0])
+                else:
+                    region_tuple_list = list(zip(region, updated_region))
+                    region_vertices = self.replace_unbounded_vertices(updated_region, region_index, region_tuple_list)
+            if region_vertices is not None:
+                if not self.finite_only:
+                    boundary_regions = self.get_voronoi_region(self.boundary_points)
+                    boundary_in_region = np.argwhere(boundary_regions == region_index)[:, 0]
+                    boundary_vertices = self.boundary_points[boundary_in_region] 
+                    region_vertices = np.concatenate((region_vertices, boundary_vertices))
+                unique_vertices = set(tuple(row) for row in region_vertices)
+                return np.asarray([list(row) for row in unique_vertices])
+            else:
+                return region_vertices
+
+        elif not identify_outside_vertices:
+            return self.vor.vertices[region]
+
+
+    def get_voronoi_vertices(self, identify_outside_vertices=True):
+        """Return the vertices of the Voronoi tessellation."""
+        vertices = []
+        for i, region in enumerate(self.vor.regions):
+            region_point_index, = np.where(self.vor.point_region == i)[0]
+            if self._boo[region_point_index]:
+                continue
+            elif -1 in region:
+                print(f"WARNING: infinite vertice in Region {i}")
+
+            if identify_outside_vertices:
+                updated_region = self.identify_vertices_outside_bounds(region)
+                if not -2 in updated_region and len(updated_region) > 0:
+                    vertices.append(self.vor.vertices[region])
+                elif -2 in updated_region:
+                    if self.finite_only:
+                        verts = np.asarray([self.vor.vertices[i] for i in updated_region if i > 0])
+                        vertices.append(verts)
+                    else:
+                        region_tuple_list = list(zip(region, updated_region))
+                        vertices.append(self.replace_unbounded_vertices(updated_region, i, region_tuple_list))
+
+            elif not identify_outside_vertices:
+                vertices.append(self.vor.vertices[region])
+
+        if identify_outside_vertices:
+            if vertices is not None:
+                vertices = np.concatenate((vertices))
+                vertices = np.concatenate((vertices, self.boundary_points))
+                unique_vertices = set(tuple(row) for row in vertices)
+                return np.asarray([list(row) for row in unique_vertices])
+            else:
+                return vertices
+        else:
+            return vertices
+
+    def identify_vertices_outside_bounds(self, region):
+        """
+        Identify vertices that sit outside the bounding region
+
+        Parameters:
+        region (list): A list of the voronoi regions. Each list contains indices of the voronoi vertices forming each Voronoi region.
+
+        Returns:
+        list: A new list of voronoi regions. With vertices outside the boudnign region replaced with -1.
+        """
+
+        #outside = lambda lb, ub, x: (x < lb) + (x > ub)
+        # Create a boolean mask for vertices outside the bounds
+        region = np.array(region)
+        region_vertices = self.vor.vertices[region]
+        outside_mask = np.zeros(region_vertices.shape, dtype=bool)
+
+        for col_index in range(self.ndim):
+            lb, ub = self.bounds[col_index]
+            #vert_outside, = np.where(outside(lb, ub, region_vertices[:, col_index]))
+            outside_mask[:, col_index] |= (region_vertices[:, col_index] < lb) | (region_vertices[:, col_index] > ub)
+
+        # Get the indices of vertices that are outside the bounds
+        vert_outside = np.where(outside_mask.any(axis=1))[0]
+        if len(vert_outside) > 0:
+            outside_vert_index = [region[i] for i in vert_outside]
+            region[vert_outside] = -2
+            #for index in vert_outside:
+            #    region[index] = -2
+            #self.update_ridge_vertices(outside_vert_index) 
+        return region.tolist()
+
+    def update_ridge_vertices(self, outside_vert_index):
+        """
+        Update ridge vertices to identify vertices that are outside
+        the bounding convex hull with a -2. 
+        """
+        ### Try to speed up list comprehension at 142 and 146
+        ridge_vertices = [inner_list[:] for inner_list in self.vor.updated_ridge_vertices]
+        vert_loc = [] 
+        temp_set = set(outside_vert_index)
+        for i, j in enumerate(ridge_vertices):
+            index_in_j = [ii for ii, val in enumerate(j) if val in temp_set]
+            if len(index_in_j) > 0:
+                for jj in index_in_j:
+                    vert_loc.append([i, jj])
+        for item in vert_loc:
+            ridge_vertices[item[0]][item[1]] = -2
+        self.vor.updated_ridge_vertices = ridge_vertices[:]
+
+    def replace_unbounded_vertices(self, region, region_index, region_tuple):
+        """
+        Replace the infinite vertices in a Voronoi region with new vertices on the edge of the bounding box.
+        ** vertices that sit outside the bounding region are considered infinite here
+
+        Parameters:
+        region (list): A list of the voronoi regions. Each list contains indices of the Voronoi vertices forming each Voronoi region.
+        region_index (int): Region index
+
+        Returns:
+        list: A new list of voronoi regions with infinite vertices replaced.
+        """
+
+        region_point_index = np.argwhere(self.vor.point_region == region_index)
+        region_vertices = []
+
+        if -2 in region:
+            finite_indices = [v for v in region if v >= 0]
+            if len(finite_indices) == 0:
+                return None
+            self.raise_if_no_finite_vertices(finite_indices, region_index)
+            finite_vertices = self.vor.vertices[finite_indices]
+            new_vertices = self.snip_ridge_vertices(\
+                region, region_point_index, region_tuple)
+
+            # Replace the infinite vertex
+            region_vertices = np.concatenate((finite_vertices, new_vertices))
+
+        else:
+            region_vertices = self.vor.vertices[region]
+
+        return region_vertices
+
+    def snip_ridge_vertices(self, region, region_point_index, region_tuple):
+
+        # Find the ridge vertices for the specified region
+        region_dict = {x[0]: x[1] for x in region_tuple}
+        ridge_point_indices = np.argwhere(self.vor.ridge_points == region_point_index)[:, 0]
+        #region_ridge_points = self.vor.ridge_points[ridge_point_indices]
+        #region_updated_ridge_vertices = [self.vor.updated_ridge_vertices[i] for i in ridge_point_indices]
+        region_ridge_vertices = [self.vor.ridge_vertices[i] for i in ridge_point_indices]
+        #region_neighbors_index_bk = region_ridge_points[region_ridge_points != region_point_index]
+        #region_neighbors_index = self.vor.adjacency_list[int(region_point_index)]
+
+        new_vertices = []
+        #nregion_faces = len(region_ridge_points)
+
+        #for rv, urv in zip(region_ridge_vertices, region_updated_ridge_vertices):
+        for rv in region_ridge_vertices:
+            urv = [region_dict.get(num) for num in rv]
+            if len(urv) == 2: #2D Voronoi region
+                u, v = np.argsort(urv)
+                if urv[u] == -2 and urv[v] > 0:
+                    ray_end = self.vor.vertices[rv[u]]
+                    ray_origin = self.vor.vertices[rv[v]]
+                    ray_direction = ray_end - ray_origin
+                    norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
+                    new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
+                    new_vertices.append(new_vertice)
+
+            elif len(urv) > 2: #3D + Voronoi region
+                nunbounded_vert = urv.count(-1) + urv.count(-2)
+                if nunbounded_vert > 0 and nunbounded_vert < len(urv):
+
+                    edges = [[rv[i], rv[(i+1) % len(rv)]] for i in range(len(rv))]
+                    updated_edges = [[urv[i], urv[(i+1) % len(urv)]] for i in range(len(urv))]
+                    unbounded_edges = [[i, edge] for i, edge in enumerate(updated_edges) if -2 in edge]
+                    for i, ev in unbounded_edges:
+                        u, v = np.argsort(ev)
+                        if ev[u] == -2 and ev[v] > 0:
+                            ray_end = self.vor.vertices[edges[i][u]]
+                            ray_origin = self.vor.vertices[edges[i][v]]
+                            ray_direction = ray_end - ray_origin
+                            norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
+                            new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
+                            new_vertices.append(new_vertice)
+
+        return np.asarray(new_vertices)
+
+    def find_nd_edge_directions(self, bisector_normals, point_index):
+        """
+        Finds the directions of the edges of a Voronoi region by computing the cross
+        products of the normal vectors of adjacent faces.
+
+        Parameters:
+        bisector_normals (array): A matrix of normal vectors for the faces of the Voronoi region
+
+        Returns:
+        edge_directions (list): A list of direction vectors for the edges of the Voronoi region
+        """
+
+        edge_directions = []
+        num_faces = bisector_normals.shape[0]
+        point_adjacency = self.vor.adjacency_list
+        for idx, adj_point  in enumerate(point_adjacency[int(point_index)]):
+            for j in point_adjacency[int(point_index)][idx:]:
+                if adj_point in adj_list[j]:
+                    normal_i = bisector_normals[i]
+                    normal_j = bisector_normals[j]
+                    edge_direction = np.cross(normal_i, normal_j)
+
+
+            # if the edge is not degenerate (i.e., not parallel), store the direction
+            edge_norm = np.linalg.norm(edge_direction)
+            if edge_norm > 1e-6:
+                edge_directions.append(edge_direction / edge_norm)
+
+    def find_boundary_hull_ray_crossings(self, U, z):
+        """
+        Find where a ray crosses the convex hull of the boundary.
+
+        Parameters:
+        U (np.ndarray): Ray direction.
+        z (np.ndarray): Ray origin.
+
+        Returns:
+        list: List of intersection points with the convex hull.
+        """
+
+        ### Possible speed up: extract eq, V, b in __init__
+        eq = self.boundary_hull.equations # (nfacet, ndim + 1)
+        V, b = eq[:, :-1], eq[:, -1] # normal, offset
+        denom = np.dot(V, U)
+        num = -(b + np.dot(V, z))
+        alpha = num[denom!=0] / denom[denom!=0]
+        return np.min(alpha[alpha >0]) * U + z
+
+    def find_furthest_vertex(self, region_index, identify_outside_vertices=True):
+        """Find the vertex that has the greatest distance from the cell centroid."""
+
+        self.raise_if_invalid_region_index(region_index)
+        vertices = self.get_region_vertices(region_index, identify_outside_vertices=identify_outside_vertices)
+        if vertices is not None:
+            centroid = self.get_region_seed(region_index)
+            distances = np.linalg.norm(vertices - centroid, axis=1)
+            furthest_vertex_index = np.argmax(distances)
+        else:
+            furthest_vertex_index = None
+        return vertices, furthest_vertex_index
+
+    def recalculate_with_new_seed(self, new_seed):
+        """Recalculate the Voronoi tessellation with the addition of a new seed."""
+        self.points = np.vstack([self.points, new_seed])
+        self.vor = Voronoi(self.points)
+
+    def get_region_seed(self, region_index):
+        """
+        Given a region_index, return the seed of the Voronoi tesselation that
+        belongs to the region.
+
+        Parameters:
+        region_index (integer): Region index.
+
+        Returns:
+        array: The Voronoi seed that belongs to the indexed region.
+        """
+
+        # Find the index of the point
+        point_index, = np.where(self.vor.point_region == region_index)
+        return np.atleast_2d(self.vor.points[point_index[0]])
+
+    def get_voronoi_region(self, point_array):
+        """
+        Given a point, return the region of the Voronoi tesselation that the
+        point belongs to
+
+        Parameters:
+        point (array-like): an array of points to find the region of.
+
+        Returns:
+        list: The Voronoi region that contains the point.
+        """
+        point_array = np.atleast_2d(point_array)
+        region_index = []
+        npoints = point_array.shape[0]
+        for point in point_array:
+            if point in self.vor.points:
+                region_seed = point
+            else:
+                region_seed = self.get_closest_seed(point)
+
+            # Find the index of the seed point
+            seed_index = np.argmin(np.linalg.norm(self.vor.points - np.array(region_seed), axis=1))
+
+            # Get the region index for the point
+            region_index.append(self.vor.point_region[seed_index])
+        return region_index
+
+    def get_closest_seed(self, point):
+        """Return the index of the Voronoi cell that contains the given point."""
+        # Use Delaunay triangulation to find the cell
+        seed_distances = np.linalg.norm(self.vor.points - point, axis=1)
+        min_distance_index = np.argmin(seed_distances)
+        return self.vor.points[min_distance_index]
+
+    def add_points(self, points):
+        """ process a set of additional points""" 
+        points = np.atleast_2d(points)
+        try:
+            # Qhull error in dim>2 with incremental=True and restart=False
+            # Must set Incremental=True to use add_points(), but very slow
+            # May be faster to rebuild manually
+
+            #self.vor.add_points(points, restart=True)
+            self._all_points = np.vstack((self._all_points, points))
+            self.vor = Voronoi(self._all_points)
+            #self.vor.updated_ridge_vertices= [inner_list[:] for inner_list in self.vor.ridge_vertices]
+            #self.get_point_adjacency() # can improve by only updating adjacency of point neighbors
+        except:
+            if np.any(np.all(self.vor.points == points, axis=1)):
+                print(f'Point {point} already a seed')
+            if np.any(np.isnan(points)) or np.any(np.isinf(points)):
+                raise ValueError("Input points contain NaN or Inf.")
+            print("exception raised in add_points()")
+
+
+    def raise_if_invalid_region_index(self, region_index):
+        if region_index > len(self.vor.regions):
+            raise ValueError('Invalid region index. Index must be in (0, nregions]')
+
+    def raise_if_no_finite_vertices(self, finite_indices, region_index):
+        if len(finite_indices) == 0:
+            point = self.get_region_seed(region_index)
+            raise ValueError(f"0 finite indices for region {region_index}, with seed {point}")
+
+    def get_point_adjacency(self, point=None):
+
+        if point is None:
+            adjacency_list = {i: set() for i in range(len(self.vor.points))}
+
+            for ridge in self.vor.ridge_points:
+                p1, p2 = ridge
+                adjacency_list[p1].add(p2)
+                adjacency_list[p2].add(p1)
+
+            self.vor.adjacency_list = {k: list(v) for k, v in adjacency_list.items()}
+
+            #for point_index, neighbors in self.vor.adjacency_list.items():
+            #    print(f"Point {point_index} at {self.vor.points[point_index]} is adjacent to points: {neighbors}")
+        else:
+            # work here to update adjacency just pertaining to given point
+            point_region = get_point_region(point)
+            point_index = np.where(self.vor.points == point)
+
+
+    def plot_voronoi_3d(self):
+
+        fig, ax = plt.subplots(111, projection='3d')
+        # Plot the Voronoi vertices
+        ax.scatter(self.vor.vertices[:, 0], self.vor.vertices[:, 1], self.vor.vertices[:, 2], color='orange')
+
+        # Plot the Voronoi ridges
+        for ridge in vor.ridge_vertices:
+            if -1 in ridge:
+                continue  # Skip infinite ridges
+            ax.plot3D(*zip(vor.vertices[ridge[0]], vor.vertices[ridge[1]]), color='blue')
+        plt.savefig("voronoi_3d.png")
+
+
+class KFoldCrossValidation:
+    def __init__(self, model, n_splits=5, group_kfold=False, scale=None):
+        """
+        Initialize the K-Fold Cross-Validation with a given surrogate model.
+
+        Parameters:
+        model: A machine learning model that has fit and predict methods.
+        n_splits: int
+            The number of folds for K-Fold Cross-Validation.
+        """
+        self.model = model
+        self.n_splits = n_splits
+        self.group_kfold = group_kfold
+        self.scale = scale
+
+    def calculate_sum_abs_error(self, y_true, y_pred):
+        return  np.sum(np.abs(y_true - y_pred))
+
+    def calculate_abs_perc_error(self, y_true, y_pred):
+        return np.abs((y_true - y_pred) / y_true) * 100
+
+    def calculate_mean_abs_perc_error(self, y_true, y_pred):
+        return np.mean(self.calculate_abs_perc_error(y_true, y_pred))
+
+    def calculate_mse(self, y_true, y_pred):
+        sq_error =  (y_true - y_pred) ** 2
+        return np.mean(sq_error)
+
+    def calculate_rmse(self, y_true, y_pred):
+        return np.sqrt(self.calculate_mse(y_true, y_pred))
+
+    def calculate_sum_abs_perc_error(self, y_true, y_pred):
+        return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
+
+    def cross_val_fold(self, train_index, test_index, X, y, metric):
+        """Perform a single fold of cross-validation."""
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        # Fit the model on the training data
+        self.model.fit(X_train, y_train)
+
+        # Make predictions for the test set
+        y_pred = self.model.predict(X_test)
+        if self.scale == 'cbrt':
+            y_pred = cbrt(y_pred)
+            y_test = cbrt(y_test)
+        elif self.scale == 'log':
+            y_pred = np.log(y_pred)
+            y_test = np.log(y_test)
+
+        # Calculate the prediction errors for the test samples
+        if metric == 'sum_abs_error':
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+        elif metric == 'mape':
+            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
+        elif metric == 'mse':
+            error = self.calculate_mse(y_test, y_pred)
+        elif metric == 'rmse':
+            error = self.calculate_rmse(y_test, y_pred)
+        elif metric == 'sum_abs_perc_error':
+            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
+        else:
+            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+
+        return error, test_index
+
+    def perform_kfold_cv(self, X, y, metric='sum_abs_error', groups=None):
+        """
+        Perform K-Fold Cross-Validation.
+
+        Parameters:
+        X: np.ndarray
+            Feature matrix (training samples).
+        y: np.ndarray
+            Target values (ground truth).
+
+        Returns:
+        tuple: (index_of_max_error, max_error)
+            The index of the sample with the greatest prediction error and the corresponding error value.
+        """
+        from sklearn.metrics import mean_squared_error
+        from sklearn.model_selection import GroupKFold, KFold, cross_val_score
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Patch
+        import matplotlib
+        from joblib import Parallel, delayed
+
+        nsamples = X.shape[0]
+        if self.group_kfold:
+            assert groups is not None
+            cv = GroupKFold(n_splits=self.n_splits)
+            # Use joblib to parallelize the cross-validation folds
+            kf_results = Parallel(n_jobs=-1)(
+                delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
+                for train_index, test_index in cv.split(X, y, groups)
+            )
+        else:
+            cv = KFold(n_splits=self.n_splits, shuffle=True, random_state=1)
+            # Use joblib to parallelize the cross-validation folds
+            kf_results = Parallel(n_jobs=-1)(
+                delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
+                for train_index, test_index in cv.split(X)
+            )
+
+        # Convert the results to a dictionary
+        kf = {k_idx: result for k_idx, result in enumerate(kf_results)}
+        return kf
+
+        if False:
+            kf = {}
+            for k_idx, (train_index, test_index) in enumerate(cv.split(X)):
+                # Split the data into training and testing sets
+                X_train, X_test = X[train_index], X[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+
+                # Fit the model on the training data
+                self.model.fit(X_train, y_train)
+
+                # Make predictions for the test set
+                y_pred = self.model.predict(X_test)
+
+                # Calculate the prediction errors for the test samples
+                if metric == 'sum_abs_error':
+                    error = self.calculate_sum_abs_error(y_test, y_pred)
+                elif metric == 'mape':
+                    error = self.calculate_mean_abs_perc_error(y_test, y_pred)
+                elif metric == 'mse':
+                    error = self.calculate_mse(y_test, y_pred)
+                elif metric == 'rmse':
+                    error = self.calculate_rmse(y_test, y_pred)
+                elif metric == 'sum_abs_perc_error':
+                    error = self.calculate_sum_abs_perc_error(y_test, y_pred)
+                else:
+                    print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
+                    error = self.calculate_sum_abs_error(y_test, y_pred)
+
+                kf[k_idx] = (error, test_index)
+
+            #fig, ax = plt.subplots(figsize=(6,3))
+            #self.plot_kfold(cv, X, y, ax, xlim_max=nsamples)
+            #plt.tight_layout()
+            #plt.savefig("figures/voronoi_batch/2d_circle/kfold.png")
+
+        return kf
+
+    def cbrt(y):
+        return np.sign(y) * np.abs(y) ** (1/3)
+
+    def plot_kfold(self, cv, X, y, ax, xlim_max=100):
+        """
+        Plots the indices for a cross-validation object.
+
+        Parameters:
+        cv: Cross-validation object
+        X: Feature set
+        y: Target variable
+        ax: Matplotlib axis object
+        xlim_max: Maximum limit for the x-axis
+        """
+
+        # Set color map for the plot
+        cmap_cv = plt.cm.coolwarm
+        cv_split = cv.split(X=X, y=y)
+
+        for i_split, (train_idx, test_idx) in enumerate(cv_split):
+            # Create an array of NaNs and fill in training/testing indices
+            indices = np.full(len(X), np.nan)
+            indices[test_idx], indices[train_idx] = 1, 0
+
+            # Plot the training and testing indices
+            ax_x = range(len(indices))
+            ax_y = [i_split + 0.5] * len(indices)
+            ax.scatter(ax_x, ax_y, c=indices, marker="_", 
+                       lw=10, cmap=cmap_cv, vmin=-0.2, vmax=1.2)
+
+        # Set y-ticks and labels
+        y_ticks = np.arange(self.n_splits) + 0.5
+        ax.set(yticks=y_ticks, yticklabels=range(self.n_splits),
+               xlabel="X index", ylabel="Fold",
+               ylim=[self.n_splits, -0.2], xlim=[0, xlim_max])
+
+        # Set plot title and create legend
+        ax.set_title("KFold", fontsize=14)
+        legend_patches = [Patch(color=cmap_cv(0.8), label="Testing set"),
+                          Patch(color=cmap_cv(0.02), label="Training set")]
+        ax.legend(handles=legend_patches, loc=(1.03, 0.8))# Example usage
+
+
+class LeaveOneOutCrossValidation:
+    def __init__(self, model, scale=None):
+        """
+        Initialize the LOOCV with a given surrogate model.
+
+        Parameters:
+        model: A machine learning model that has fit and predict methods.
+        """
+        from sklearn.metrics import mean_squared_error
+        from joblib import Parallel, delayed
+
+        self.model = model
+        self.scale = scale
+
+    def calculate_sum_abs_error(self, y_true, y_pred):
+        return  np.sum(np.abs(y_true - y_pred))
+
+    def calculate_abs_perc_error(self, y_true, y_pred):
+        return np.abs((y_true - y_pred) / y_true) * 100
+
+    def calculate_mean_abs_perc_error(self, y_true, y_pred):
+        return np.mean(self.calculate_abs_perc_error(y_true, y_pred))
+
+    def calculate_mse(self, y_true, y_pred):
+        sq_error =  (y_true - y_pred) ** 2
+        return np.mean(sq_error)
+
+    def calculate_rmse(self, y_true, y_pred):
+        return np.sqrt(self.calculate_mse(y_true, y_pred))
+
+    def calculate_sum_abs_perc_error(self, y_true, y_pred):
+        return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
+
+    def loo_val(self, X, y, metric, i):
+        # Leave one out: create training and test sets
+        X_train = np.delete(X, i, axis=0)
+        y_train = np.delete(y, i, axis=0)
+        X_test = X[i].reshape(1, -1)  # Reshape for a single sample
+        y_test = y[i]
+
+        # Fit the model on the training data
+        self.model.fit(X_train, y_train)
+
+        # Make a prediction for the left-out sample
+        y_pred = self.model.predict(X_test)
+        if self.scale == 'cbrt':
+            y_pred = cbrt(y_pred)
+            y_test = cbrt(y_test)
+        elif self.scale == 'log':
+            y_pred = np.log(y_pred)
+            y_test = np.log(y_test)
+
+        if metric == 'sum_abs_error':
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+        elif metric == 'mape':
+            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
+        elif metric == 'mse':
+            error = self.calculate_mse(y_test, y_pred)
+        elif metric == 'rmse':
+            error = self.calculate_rmse(y_test, y_pred)
+        elif metric == 'sum_abs_perc_error':
+            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
+        else:
+            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+
+        return error, i
+
+
+    def perform_loocv(self, X, y, indices, metric='sum_abs_error'):
+
+        """
+        Perform Leave-One-Out Cross-Validation.
+
+        Parameters:
+        X: np.ndarray
+            Feature matrix (training samples).
+        y: np.ndarray
+            Target values (ground truth).
+
+        Returns:
+        tuple: (index_of_max_error, max_error)
+            The index of the sample with the greatest prediction error and the corresponding error value.
+        """
+
+        loo_results = Parallel(n_jobs=-1)(
+            delayed(self.loo_val)(X, y, metric, i)
+            for i in indices
+        )
+
+        loo = {loo_idx: result for loo_idx, result in enumerate(loo_results)}
+
+        return loo
