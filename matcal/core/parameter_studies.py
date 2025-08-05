@@ -1874,7 +1874,7 @@ class VoronoiTessellation:
         Update ridge vertices to identify vertices that are outside
         the bounding convex hull with a -2. 
         """
-        ### Try to speed up list comprehension at 142 and 146
+        ### Try to speed up list comprehension 
         ridge_vertices = [inner_list[:] for inner_list in self.vor.updated_ridge_vertices]
         vert_loc = [] 
         temp_set = set(outside_vert_index)
