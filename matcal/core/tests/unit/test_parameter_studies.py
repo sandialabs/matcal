@@ -939,25 +939,22 @@ class TestClassicLaplaceStudy(StudyBaseUnitTests.CommonTests):
 
 class TestVoronoiTessellation(MatcalUnitTest):
     
-    def setUp(self):
-        super().setUp(__file__)
-    
+    @staticmethod
     def fun2D(x):
         return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
 
-    def test_2d_initialization(self):
-        from scipy.qmc import Halton
-        from scipy import qmc
+    @staticmethod
+    def initialization_2d(nsamples, bounds):
+        from scipy.stats.qmc import Halton
+        from scipy.stats import qmc
 
-        model = fun2D
+        model = TestVoronoiTessellation.fun2D
         dim = 2
                 
-        bounds = [[-5, 5], [-5, 5]]
         l_bounds = [bounds[i][0] for i in np.arange(dim)]
         u_bounds = [bounds[i][1] for i in np.arange(dim)]
 
         # Generate initial points from Halton Sequence
-        nsamples = 20
         sampler = Halton(d=dim, seed=20)
         X_unscaled = sampler.random(n=nsamples)
         X_init = qmc.scale(X_unscaled, l_bounds, u_bounds)
@@ -965,11 +962,48 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
         ntest_samples = 40
         test_pts_sampler = Halton(d=dim, seed=20)
-        X_test_unscaled = test_pts_sampler.random(n=ntest_samples)
-        X_test = qmc.scale(X_test_unscaled, l_bounds, u_bounds)
+        X_test_unscaled = np.atleast_2d(test_pts_sampler.random(n=ntest_samples))
+        X_test = np.atleast_2d(qmc.scale(X_test_unscaled, l_bounds, u_bounds))
         y_test = model(X_test)
+        print(y_test.shape) 
         
-        vor = VoronoiTessellation(y_init, bounds)
-        # check that ConvexHull is created only when finite_only is False
+        return X_init, y_init, X_test, y_test, bounds
+    
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_2d_initialization(self):
+        nsamples = 20
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+        
         # Validate that ghost points are created correctly and that _all_points
         # includes both original and ghost points.
+        self.assertEqual(vor._ghost_points.shape, (8, 2))
+        min_x, max_x = bounds[0]
+        min_y, max_y = bounds[1]
+        for point in vor._ghost_points:
+            x, y = point
+            self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
+                            msg=f"Ghost point {point} is inside the bounding box.")
+            
+        nghost = vor._ghost_points.shape[0]
+        self.assertEqual(vor._all_points.shape[0], nsamples + nghost, msg="vor._all_points does not have correct dimensions.")
+        self.assertEqual(vor._all_points[:nsamples, :].tolist(), X_init.tolist(), msg="vor._all_points does not contain X_init")
+        self.assertEqual(vor._all_points[nsamples:, :].tolist(), vor._ghost_points.tolist(), msg="vor._all_points does not contain ghost points.")
+        
+        self.assertTrue(vor._boo[nsamples:], msg="Ghost points not correctly identified.")
+        
+        # Check that the dimension of the voronoi tessellation is correct
+        self.assertEqual(2, vor.ndim, msg="Dimension of voronoi tessellation not correct.")
+        
+        # Check that ConvexHull is created only when finite_only is False
+        vor = VoronoiTessellation(X_init, bounds, finite_only=True)
+        self.assertIsNone(vor.boundary_hull, msg="Boundary hull created for finite_only=False.")
+
+    def test_2d_get_region_vertices(self):
+        pass
+        #import pdb
+        #pdb.set_trace()
+        
