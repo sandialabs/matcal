@@ -973,9 +973,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_2d_initialization(self):
-        nsamples = 20
+        nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
-        X_init, y_init, X_test, y_test, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
         
         # Validate that ghost points are created correctly and that _all_points
@@ -995,6 +995,11 @@ class TestVoronoiTessellation(MatcalUnitTest):
         
         self.assertTrue(vor._boo[nsamples:], msg="Ghost points not correctly identified.")
         
+        # Check that all training points belong to regions that contain no infinite vertices
+        training_point_regions = vor.vor.point_region[:nsamples].tolist()
+        finite_training_regions = [i for i in training_point_regions if -1 not in vor.vor.regions[i]]
+        self.assertEqual(training_point_regions, finite_training_regions)
+        
         # Check that the dimension of the voronoi tessellation is correct
         self.assertEqual(2, vor.ndim, msg="Dimension of voronoi tessellation not correct.")
         
@@ -1003,7 +1008,26 @@ class TestVoronoiTessellation(MatcalUnitTest):
         self.assertIsNone(vor.boundary_hull, msg="Boundary hull created for finite_only=False.")
 
     def test_2d_get_region_vertices(self):
-        pass
-        #import pdb
-        #pdb.set_trace()
+        from scipy.spatial import voronoi_plot_2d
+        import matplotlib.pyplot as plt
+        
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+
+        fix, ax = plt.subplots()
+        voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
+                        line_width=2)
+        ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
+        plt.legend(fontsize=20)
+        plt.savefig("/ascldap/users/dericci/voronoi_tessellation.png")
+        plt.close()
+
+        import pdb
+        pdb.set_trace()
+        vor.get_region_vertices()
+        self.assertEqual(vor._all_points.shape[0], len(vor.vor.point_region))
+        
+        
         
