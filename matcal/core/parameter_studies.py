@@ -1734,9 +1734,11 @@ class VoronoiTessellation:
         self.points = np.array(points)
         self.ndim = self.points.shape[1]
         self.bounds = bounds
-        self.make_nd_grid(npts_along_dim=25)
+        self.boundary_points = self.make_nd_grid(npts_along_dim=2)
         if not finite_only:
             self.boundary_hull = ConvexHull(self.boundary_points)
+        else:
+            self.boundary_hull = None
         self.create_ghost_points()
         self.vor = Voronoi(self._all_points, incremental=incremental)
         self.ghost_busters()
@@ -1748,10 +1750,11 @@ class VoronoiTessellation:
             grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
         coords = np.meshgrid(*grid_pts)
         coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.ndim)]
-        self.boundary_points = np.vstack(tuple(coords_ravel)).T
+        return np.vstack(tuple(coords_ravel)).T
             
         
     def ghost_busters(self):
+        """ Identify which points in self._all_points are ghost points"""
         self._boo = []
         for point in self._all_points:
             if point in self._ghost_points:
@@ -1759,30 +1762,17 @@ class VoronoiTessellation:
             else:
                 self._boo.append(False)
 
-    def create_ghost_points(self, method='combo', stretchCoef=1.75, centCoef=1.5):
+    def create_ghost_points(self, stretchCoef=1.75, centCoef=1.5):
         """Reflect points nearest to the boundary hull across the nearest
         face of the boundary hull """
 
-        if method == 'stretch_boundary_hull':
-            boundary_points_stretched = self.boundary_points * stretchCoef
-            self._ghost_points = boundary_points_stretched
-        elif method == 'boundary_centroid':
-            # centroid of boundary points
-            boundary_centroid = np.mean(self.boundary_points, axis=0)
-            max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
+        boundary_points_stretched = self.boundary_points * stretchCoef
+        self._ghost_points = boundary_points_stretched
 
-            # introduce ghost points
-            self._ghost_points = boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])
-            self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
-        elif method == 'combo':
-            boundary_points_stretched = self.boundary_points * stretchCoef
-            self._ghost_points = boundary_points_stretched
-
-            boundary_centroid = np.mean(self.boundary_points, axis=0)
-            max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
-            self._ghost_points = np.vstack([self._ghost_points, boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
-            self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
-
+        boundary_centroid = np.mean(self.boundary_points, axis=0)
+        max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
+        self._ghost_points = np.vstack([self._ghost_points, boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
+        self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
         self._all_points = np.vstack([self.points, self._ghost_points])
 
     def get_region_vertices(self, region_index, identify_outside_vertices=True):
