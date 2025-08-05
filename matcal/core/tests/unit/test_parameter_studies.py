@@ -11,7 +11,7 @@ from matcal.core.objective import (CurveBasedInterpolatedObjective, Objective,
                                    DirectCurveBasedInterpolatedObjective)
                                    
 from matcal.core.parameters import Parameter, ParameterCollection
-from matcal.core.parameter_studies import (ClassicLaplaceStudy, _FiniteDifference, 
+from matcal.core.parameter_studies import (FiniteDifference, ClassicLaplaceStudy, 
                                            LaplaceStudy,
                                            ParameterStudy,
                                            HaltonStudy, 
@@ -19,8 +19,8 @@ from matcal.core.parameter_studies import (ClassicLaplaceStudy, _FiniteDifferenc
                                            _estimate_parameter_covariance, 
                                            _get_residual_covariance, 
                                            _combine_array_list_into_zero_padded_single_array, 
-                                           package_parameter_specific_results, 
-                                           fit_posterior,
+                                           _package_parameter_specific_results, 
+                                           _fit_posterior,
                                            VoronoiTessellation, )
 from matcal.core.state import State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
@@ -45,7 +45,7 @@ def oneD_model(**param_dict):
     return {"x": x, "y": y}
 
 
-class _FiniteDifferenceTest(MatcalUnitTest):
+class FiniteDifferenceTest(MatcalUnitTest):
 
   def f(self,x,y,a0,a1,a2,a11,a12,a22):
     return a11*x*x+a22*y*y+a12*x*y+a1*x+a2*y+a0
@@ -66,7 +66,7 @@ class _FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22 ]
     optimum = [ -(a12*a2 - 2*a1*a22)/(a12*a12 - 4*a11*a22), 
                -((a1*a12 - 2*a11*a2)/(a12*a12 - 4*a11*a22)) ]
-    finite_difference_operator = _FiniteDifference(optimum,relative_step_size=1.e-3)
+    finite_difference_operator = FiniteDifference(optimum,relative_step_size=1.e-3)
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
     for point in points:
@@ -89,7 +89,7 @@ class _FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22 ]
     x=1000
     y=1
-    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-3)
+    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-3)
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
     for point in points:
@@ -117,7 +117,7 @@ class _FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=1
     y=600
-    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-3)
+    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-3)
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
     for point in points:
@@ -147,7 +147,7 @@ class _FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=0.0035
     y=0.001
-    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-6, 
+    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-6, 
                                                   epsilon=np.finfo(float).eps**(1.0/3.0))
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
@@ -178,7 +178,7 @@ class _FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=0.0035
     y=0.001
-    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-6, 
+    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-6, 
                                                   epsilon=np.finfo(float).eps**(1.0/3.0))
     points = finite_difference_operator.compute_gradient_evaluation_points()
     function_values = []
@@ -205,7 +205,7 @@ class _FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=0.0035
     y=0.001
-    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-6, 
+    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-6, 
                                                   epsilon=np.finfo(float).eps**(1.0/3.0))
     points = finite_difference_operator.compute_gradient_evaluation_points(three_point_finite_diff=False)
     function_values = []
@@ -913,83 +913,11 @@ class TestClassicLaplaceStudy(StudyBaseUnitTests.CommonTests):
         self.assertAlmostEqual(res.hessian[0,0], goal)
 
 
-class TestVoronoiBatchStudy(StudyBaseUnitTests.CommonTests):
-
-    def fun2D(x):
-        return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
-
-    def test_2d_study(self):
-        # define a function / model that we wish to build a surrogate for
-        model = fun2D
-        surr_model_type = 'GPR'
-        voronoi_type = 'full__'
-        modelid = f"2d_cone_{surr_model_type}"
-
-        # define location for saving images
-        figpath = f"/home/dericci/matcal_testing_figures/{modelid}/{voronoi_type}"
-        figdir_exists = os.path.isdir(figpath)
-        if not figdir_exists:
-            os.makedirs(figpath)
-
-        bounds = [[-5, 5], [-5, 5]]
-        l_bounds = [bounds[i][0] for i in np.arange(dim)]
-        u_bounds = [bounds[i][1] for i in np.arange(dim)]
-
-        # Generate initial training data from Halton Sequence
-        nsamples = 20
-        sampler = Halton(d=dim, seed=20)
-        X_unscaled = sampler.random(n=nsamples)
-        X_init = qmc.scale(X_unscaled, l_bounds, u_bounds)
-        y_init = model(X_init)
-
-        # generate test data
-        ntestpts_per_dim = 25
-        test_grid = False
-        X_test, y_test = generate_test_data(model, bounds, ngrid_pts=ntestpts_per_dim, grid=test_grid, npts=50*dim)
-        non_zero = (y_test != 0).squeeze()
-        y_test = y_test[non_zero]
-        X_test = X_test[non_zero, ...]
-        ntest = len(X_test)
-
-        if plot_figs:
-            Xdf = pd.DataFrame(X_test)
-            sns.set_context("paper", rc={"xlabel.fontsize": 16, "ylabel.fontsize": 16,\
-                "xlabel.fontweight": "bold", "ylabel.fontweight": "bold"})
-            s = sns.pairplot(Xdf, corner=True, diag_kind="hist",
-                plot_kws=dict(marker='.', s=16, color='r'),
-                diag_kws=dict(bins=10, color='r')
-            )
-            plt.savefig(f"{figpath}/test_points.png")
-            plt.close()
-
-        # Initialize surrogate model with initial training data
-        surr_model = GaussianProcess(input_scaling=True, cbrt_scaling=False, kernel_type='SE')
-        X = X_init.copy()
-        y = y_init.copy()
-        surr_model.fit(X, y)
-        surr_model_list = Parallel(n_jobs=-1)(delayed(fit_model)(model, X, y) for _ in range(1))
-        surr_model = model_list[0]
-
-        # plot initial points
-        plt.close("all")
-        X_df = pd.DataFrame(X)
-        X_df['label'] = 'Initial samples'
-        test_df = pd.DataFrame(X_test)
-        test_df['label'] = 'Test points'
-        data = pd.concat([X_df, test_df])
-        palette = {'Initial samples': 'blue', 'Test points': 'red'}
-        sns.set_context("paper", rc={"xlabel.fontsize": 16, "ylabel.fontsize": 16,\
-            "xlabel.fontweight": "bold", "ylabel.fontweight": "bold"})
-        s = sns.pairplot(data, hue='label', palette=palette, corner=True,
-            plot_kws=dict(marker='.', s=20))
-        plt.savefig(f"{figpath}/initial_points.png")
-        plt.close()
-
-        plot_2d_model(y_test, y_pred, mse, X, bounds, figpath, npts=ntestpts_per_dim, iter_=-1, show_true=True)
-        make_error_pairplot(surr_model, fun, dim, bounds, 25, -1, figpath)
-        
-
-class TestVoronoiTessellation():
+class TestVoronoiTessellation(MatcalUnitTest):
+    
+    def setUp(self):
+        super().setUp(__file__)
+    
     def fun2D(x):
         return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
 
