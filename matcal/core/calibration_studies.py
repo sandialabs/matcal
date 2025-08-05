@@ -211,8 +211,8 @@ class _ScipyCalibrationStudyBase(StudyBase):
         return self._current_hessian_value
 
     def _prepare_finite_difference(self, center_point):
-        from matcal.core.parameter_studies import _FiniteDifference
-        finite_diff = _FiniteDifference(center_point, 
+        from matcal.core.parameter_studies import FiniteDifference
+        finite_diff = FiniteDifference(center_point, 
                                         relative_step_size=self._step_size)
         if self._needs_finite_difference_hessian:
             finite_diff_pts = finite_diff.compute_hessian_evaluation_points()

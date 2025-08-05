@@ -253,7 +253,7 @@ class HaltonStudy(ParameterStudy):
         """"""
         raise self.StudyInputError("Users cannot add parameter evaluations to a HaltonStudy.")
 
-class _FiniteDifference:
+class FiniteDifference:
 
     def __init__(self, center_point, relative_step_size=1.e-3, 
                  epsilon=np.sqrt(np.finfo(float).eps)):
@@ -611,7 +611,7 @@ class _LaplaceStudyBase(ParameterStudy):
 
     def _setup_finite_difference(self):
         self._parameter_sets_to_evaluate = []
-        self._finite_difference = _FiniteDifference(self.mean, relative_step_size=self._step_size)
+        self._finite_difference = FiniteDifference(self.mean, relative_step_size=self._step_size)
         finite_difference_points = self._get_finite_difference_evaluation_points()
         param_order = self._parameter_collection.get_item_names()
         for pt in finite_difference_points:
