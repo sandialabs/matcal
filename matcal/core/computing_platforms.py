@@ -144,17 +144,17 @@ class HPCComputingPlatform(RemoteComputingPlatform):
 
 def return_local_computing_default():
     return LocalComputingPlatform()
-MatCalComputingPlatformFunctionIdentifier = \
+matcal_computing_platform_function_identifier = \
     IdentifierByTestFunction(return_local_computing_default)
 
 
 def return_zero():
     return 0
-MatCalJobDispatchDelayFunctionIdentifier = IdentifierByTestFunction(return_zero)
+matcal_job_dispatch_delay_function_identifier = IdentifierByTestFunction(return_zero)
 
 
 def no_check_checker(queue_id, computer, name):
     return True
-MatCalPermissionsCheckerFunctionIdentifier = \
+matcal_permissions_checker_function_identifier = \
     IdentifierByTestFunction(no_check_checker)
 

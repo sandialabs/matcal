@@ -144,12 +144,12 @@ MatCalExecutableEnvironmentSetupFunctionIdentifier.register(default_modules_comm
 def raise_no_test_module_error():
     raise RuntimeError("No valid linux module for testing has been added. "+
                        f"In your site setup files, register a valid module " +
-                       f"to load for testing. Import \"MatCalTestModuleIdentifier\" "+ 
+                       f"to load for testing. Import \"matcal_test_module_identifier\" "+ 
                        "from matcal.core.linux_modules and set the default test module to "+
                        "load string with "+
-                       "\"MatCalTestModuleIdentifier.set_default('module_name')\"'." )
+                       "\"matcal_test_module_identifier.set_default('module_name')\"'." )
                 
 
 
 
-MatCalTestModuleIdentifier = BasicIdentifier(raise_no_test_module_error)
+matcal_test_module_identifier = BasicIdentifier(raise_no_test_module_error)

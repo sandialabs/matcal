@@ -7,7 +7,7 @@ from matcal.core.linux_modules import (get_all_loaded_modules,
                                          issue_module_commands, 
                                          default_modules_command_does_not_exist, 
                                          module_command_writer, module_command_executer)
-from matcal.core.linux_modules import (MatCalTestModuleIdentifier, 
+from matcal.core.linux_modules import (matcal_test_module_identifier, 
                                        MatCalExecutableEnvironmentSetupFunctionIdentifier)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
@@ -26,7 +26,7 @@ class TestLinuxModulesBase():
             self._init_loaded_modules = get_all_loaded_modules()
             super().setUp(__file__)
             matcal_const.MODULE_PAUSE_TIME = .1
-            self._test_module = MatCalTestModuleIdentifier.identify()
+            self._test_module = matcal_test_module_identifier.identify()
 
         def tearDown(self) -> None:
             issue_module_commands("purge")
@@ -70,7 +70,7 @@ class TestLinuxModulesSubprocess(TestLinuxModulesBase.CommonTests):
 class TestLocalExternalExecutableModulesSubprocess(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
-        self._test_module = MatCalTestModuleIdentifier.identify()
+        self._test_module = matcal_test_module_identifier.identify()
         self._orig_registry = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._registry)
         self._orig_default = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._default)
         MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = {}
@@ -116,7 +116,7 @@ class TestLocalExternalExecutableModulesShell(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
-        self._test_module = MatCalTestModuleIdentifier.identify()
+        self._test_module = matcal_test_module_identifier.identify()
         self._orig_registry = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._registry)
         self._orig_default = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._default)
         MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = {}

@@ -1,7 +1,7 @@
 import numbers
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
-from matcal.core.reporter import MatCalParameterReporterIdentifier
+from matcal.core.reporter import matcal_parameter_reporter_identifier
 
 from matcal.sierra.aprepro_format import (format_aprepro_value, 
                                           write_aprepro_file_from_dict, 
@@ -54,7 +54,7 @@ class TestApreproFormating(MatcalUnitTest):
         self.assertEqual("{ECHO(ON)}\n", lines[-1])
         
     def test_matcal_parameter_reporter_identifier(self):
-        param_reporter = MatCalParameterReporterIdentifier.identify()
+        param_reporter = matcal_parameter_reporter_identifier.identify()
         self.assertEqual(param_reporter, write_aprepro_file_from_dict)
 
 

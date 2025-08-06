@@ -14,11 +14,11 @@ def import_exodus_helper():
         throw_no_exo_error
         
 
-MatcalExodusImporterIdentifier = IdentifierByTestFunction(import_exodus_helper)
+matcal_exodus_importer_identifier = IdentifierByTestFunction(import_exodus_helper)
 
 
 def create_exodus_class_instance(*args, **kwargs):
-    exo_importer = MatcalExodusImporterIdentifier.identify()
+    exo_importer = matcal_exodus_importer_identifier.identify()
     exo = exo_importer()
     try:
         return exo.exodus(*args, **kwargs)

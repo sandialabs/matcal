@@ -2,12 +2,12 @@ from copy import deepcopy
 import os
 
 from matcal.core.computing_platforms import (local_computer, 
-    MatCalComputingPlatformFunctionIdentifier, 
+    matcal_computing_platform_function_identifier, 
     LocalComputingPlatform)
 from matcal.core.external_executable import (ListCommandError, 
     MatCalExternalExecutableFactory, MatCalExecutableEnvironmentSetupFunctionIdentifier, 
     default_environment_command_processor, ExecutableNoEnvironmentSetup, 
-    MatCalPlatformEnvironmentSetupIdentifier, SlurmHPCExecutableEnvironmentSetup, 
+    matcal_platform_environment_setup_identifier, SlurmHPCExecutableEnvironmentSetup, 
     attempt_to_execute, NonPositiveIntegerError)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
@@ -119,7 +119,7 @@ class TestDefaultEnvironmentCommand(MatcalUnitTest):
 
     def test_identify_computing_platform(self):
         computing_platform_indentifier_func = \
-            MatCalComputingPlatformFunctionIdentifier.identify()
+            matcal_computing_platform_function_identifier.identify()
         self.assertIsInstance(computing_platform_indentifier_func(), 
                               LocalComputingPlatform)
         
@@ -130,8 +130,8 @@ class TestExecutableEnvironmentIdentifier(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_default_returns_NoSetup(self):
-        MatCalPlatformEnvironmentSetupIdentifier._registry = {}
-        setup_class = MatCalPlatformEnvironmentSetupIdentifier.identify()
+        matcal_platform_environment_setup_identifier._registry = {}
+        setup_class = matcal_platform_environment_setup_identifier.identify()
         self.assertIsInstance(setup_class, ExecutableNoEnvironmentSetup)    
 
 

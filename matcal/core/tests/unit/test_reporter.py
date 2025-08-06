@@ -3,7 +3,7 @@ from matcal.core.parameters import Parameter
 import numpy as np
 
 from matcal.core.reporter import plain_text_dictionary_report, \
-    MatCalParameterReporterIdentifier
+    matcal_parameter_reporter_identifier
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -46,8 +46,8 @@ class TestPlainTextReporter(MatcalUnitTest):
 
     def test_matcal_parameter_reporter_identifier(self):
         from copy import deepcopy
-        registry = deepcopy(MatCalParameterReporterIdentifier._registry)
-        MatCalParameterReporterIdentifier._registry = {}
-        param_reporter = MatCalParameterReporterIdentifier.identify()
+        registry = deepcopy(matcal_parameter_reporter_identifier._registry)
+        matcal_parameter_reporter_identifier._registry = {}
+        param_reporter = matcal_parameter_reporter_identifier.identify()
         self.assertEqual(param_reporter, plain_text_dictionary_report)
-        MatCalParameterReporterIdentifier._registry = registry
+        matcal_parameter_reporter_identifier._registry = registry

@@ -128,6 +128,126 @@ Advanced Setup
 =======================
 To run the advanced setup, it is necessary to to have completed the :ref:`Simple Setup` instructions first.
 
+Creating Platform Specifics
+-------------
+Before establishing platform specifics it is recommended that all desired optional 
+installs are performed before establishing the side specific details.
+
+A key concept in customizing MatCal to meet new needs or work on specific platforms
+is the concept of a factory. MatCal has several factories that build objects during runtime,
+while not requiring any new code to alter existing code. This patten adheres to the 
+principal of "open to extension, close to modification". What this means is that 
+users can extend the capabilities of MatCal, while not needing to alter the way the core of MatCal works. 
+
+Factories have two distinct actions they perform. The first is registration, at initialization 
+of the program all the factories are populated with the information they need to make the 
+various objects they are in charge of. In MatCal this is done with a 'register' method. 
+Creating code that looks like
+
+.. code-block:: python
+
+    MatCalMeshDecomposerIdentifier.register('e', ExodusMeshDecomposer)
+
+Here MatCalMeshDecomposerIdentifier is the factory object, 'e' is the key the 
+factory used to identify what kind of decomposer to use, and ExodusMeshDecomposer
+is the decomposer that will be returned after initialization (if necessary). The 
+second action factories perform is returning the desired object for the key passed 
+to it. For MatCalMeshDecomposerIdentifier this method is identify
+
+.. code-block:: python
+
+    key = 'e'
+    decomposer = MatCalMeshDecomposerIdentifier.identify(key)
+
+For MatCalMeshDecomposerIdentifier, it behaves similar to a dictionary, but 
+other factories are more complicated and can identify what to return based on 
+function calls or other criteria. 
+
+
+Registration Location
+-------------
+To get MatCal to register custom and site specific tools, MatCal looks for an 
+"__init__.py" file inside of a "matcal/site_matcal". you will need to create this
+directory and file. It is also recommended that any custom code development occur 
+inside 'site_matcal' as much as possible. When MatCal is importing, it will 
+use the "__init__.py" file to know what to expose inside the "site_matcal" directory. 
+
+An simple example "__init__.py" file can look like:
+
+.. code-block:: python 
+
+    __all__ = []
+
+    from . import mysite
+    from .mysite import *
+    __all__ += mysite.__all__
+
+In this example the file 'mysite.py' is imported and all functions and classes within 
+'mysite' is exposed. Files can also be run in these the __init__.py files. This
+is how MatCal registers all of the various options for its factories. For example
+
+.. code-block:: python 
+
+    __all__ = []
+
+    from . import mysite
+    from .mysite import *
+    __all__ += mysite.__all__
+
+    import site_matcal.register_factories
+
+modifies the initial example to run the file 'register_factories.py'. It is in 
+this type of file that all of the factory registration is recommended to be done. 
+
+What to Register
+-------------
+If you have access to a SIERRA distribution. The following factories will need to be registered to
+link SIERRA to MatCal:
+
+#. matcal_exodus_importer_identifier : if using Cubit is used for mesh generation, this will setup the correct pathing and environment.
+#. matcal_mesh_decomposer_identifier : How to decompose a large mesh for parallel processing
+#. matcal_mesh_composer_identifier : How to compose a mesh from its parallel decomposition to a single file. 
+#. matcal_module_command_identifier
+#. matcal_parameter_reporter_identifier : (optional)
+
+If you wish to extend your SIERRA capabilities with MatCal standard models:
+
+#. matcal_cubit_executable_path_identifier
+
+If you have a queueing system for your computer systems:
+
+#. matcal_permissions_checker_function_identifier
+#. matcal_job_dispatch_delay_function_identifier
+#. matcal_job_dispatch_delay_function_identifier
+#. matcal_platform_environment_setup_identifier
+
+
+For development and testing, details will be covered in future documentation:
+#. matcal_test_platform_options_function_identifier
+#. matcal_test_module_identifier
+
+
+Installing Dakota
+-------------
+Dakota is an advanced optimization and uncertainty quantification(UQ) library
+developed by Sandia National Labs. It contains an array of useful methods for 
+the calibration and study of material models. 
+
+Dakota must be downloaded and installed from the `Dakota website <https://dakota.sandia.gov/>`.
+This process changes depending on what type of machine you are installing Dakota on. 
+for simple Linux, Mac, and Windows configurations there are binaries that you can 
+download. This reduces the install process to just adding the binary to an appropriate
+directory and adding it to your path. Some configurations, such as Intel Mac, computers
+do not have binary distributions of the most recent version of Dakota, and will require
+either compiling recent versions locally or using an older version of Dakota. 
+
+When you are done installing Dakota, you can check to make sure that your install works 
+correctly by running the dakota tests in matcal/dakota/tests/unit.
+
+
+Installing Cubit
+-------------
+TBD
 
 
 Building Documentation

@@ -19,7 +19,7 @@ from matcal.core.parameter_batch_evaluator import (BatchRestartHDF5, MissingKeyE
                                                     flatten_evaluation_batch_results, 
                                                     write_parameter_include_file,
                                                     EvaluationFailureDefaults)
-from matcal.core.reporter import MatCalParameterReporterIdentifier
+from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.state import SolitaryState, State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 import gc
@@ -313,7 +313,7 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
-        MatCalParameterReporterIdentifier._registry = {}
+        matcal_parameter_reporter_identifier._registry = {}
 
     def test_write_parameter_include_file(self):
         parameters = {"Y":1.0, "CAT":102.0, "cheese":-7.2}
