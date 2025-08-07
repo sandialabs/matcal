@@ -1723,7 +1723,7 @@ class VoronoiTessellation:
         Parameters:
         points: np.ndarray
             Array of points for Voronoi tessellation.
-        boundary points: list of tuples
+        bounds: list of tuples
             Bounds for the region, e.g., [(xmin, xmax), (ymin, ymax)] for 2D.
         """
         from scipy.spatial import Voronoi, Delaunay, voronoi_plot_2d, ConvexHull
@@ -1743,6 +1743,7 @@ class VoronoiTessellation:
         self.vor = Voronoi(self._all_points, incremental=incremental)
         self.ghost_busters()
         self.finite_only = finite_only
+        self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
 
     def make_nd_grid(self, npts_along_dim):
         grid_pts = []
@@ -1796,12 +1797,14 @@ class VoronoiTessellation:
                     region_vertices = self.replace_unbounded_vertices(updated_region, region_index, region_tuple_list)
             if region_vertices is not None:
                 if not self.finite_only:
-                    boundary_regions = self.get_voronoi_region(self.boundary_points)
-                    boundary_in_region = np.argwhere(boundary_regions == region_index)[:, 0]
-                    boundary_vertices = self.boundary_points[boundary_in_region] 
-                    region_vertices = np.concatenate((region_vertices, boundary_vertices))
-                unique_vertices = set(tuple(row) for row in region_vertices)
-                return np.asarray([list(row) for row in unique_vertices])
+                    boundary_in_region = [i for i in np.arange(len(self.boundary_regions)) if self.boundary_regions[i] == region_index]
+                    if boundary_in_region:
+                        boundary_vertices = self.boundary_points[boundary_in_region] 
+                        region_vertices = np.concatenate((region_vertices, boundary_vertices))
+                        unique_vertices = set(tuple(row) for row in region_vertices)
+                        return np.asarray([list(row) for row in unique_vertices])
+                    else:
+                        return region_vertices
             else:
                 return region_vertices
 
@@ -1907,8 +1910,7 @@ class VoronoiTessellation:
         Returns:
         list: A new list of voronoi regions with infinite vertices replaced.
         """
-
-        region_point_index = np.argwhere(self.vor.point_region == region_index)
+        region_point_index, = np.argwhere(self.vor.point_region == region_index)
         region_vertices = []
 
         if -2 in region:
@@ -1918,7 +1920,7 @@ class VoronoiTessellation:
             self.raise_if_no_finite_vertices(finite_indices, region_index)
             finite_vertices = self.vor.vertices[finite_indices]
             new_vertices = self.snip_ridge_vertices(\
-                region, region_point_index, region_tuple)
+                region_index, region_point_index, region_tuple)
 
             # Replace the infinite vertex
             region_vertices = np.concatenate((finite_vertices, new_vertices))
@@ -1928,32 +1930,39 @@ class VoronoiTessellation:
 
         return region_vertices
 
-    def snip_ridge_vertices(self, region, region_point_index, region_tuple):
+    def snip_ridge_vertices(self, region_index, region_point_index, region_tuple):
 
         # Find the ridge vertices for the specified region
         region_dict = {x[0]: x[1] for x in region_tuple}
+        
+        # the voronoi points that are equidistant from the ridge that lies between them
         ridge_point_indices = np.argwhere(self.vor.ridge_points == region_point_index)[:, 0]
-        #region_ridge_points = self.vor.ridge_points[ridge_point_indices]
-        #region_updated_ridge_vertices = [self.vor.updated_ridge_vertices[i] for i in ridge_point_indices]
+        
+        # the vertices at the end of each ridge
         region_ridge_vertices = [self.vor.ridge_vertices[i] for i in ridge_point_indices]
-        #region_neighbors_index_bk = region_ridge_points[region_ridge_points != region_point_index]
-        #region_neighbors_index = self.vor.adjacency_list[int(region_point_index)]
 
         new_vertices = []
-        #nregion_faces = len(region_ridge_points)
-
-        #for rv, urv in zip(region_ridge_vertices, region_updated_ridge_vertices):
         for rv in region_ridge_vertices:
             urv = [region_dict.get(num) for num in rv]
             if len(urv) == 2: #2D Voronoi region
                 u, v = np.argsort(urv)
-                if urv[u] == -2 and urv[v] > 0:
+                if urv[u] == -2: # and urv[v] > 0: # only one vertice is out of bounds - snip one end to the boundary hull
                     ray_end = self.vor.vertices[rv[u]]
                     ray_origin = self.vor.vertices[rv[v]]
                     ray_direction = ray_end - ray_origin
                     norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    new_vertices.append(new_vertice)
+                    if region_index in self.get_voronoi_region(new_vertice)[0]:
+                        new_vertices.append(new_vertice)
+                    #new_vertices.append(new_vertice)
+                if urv[v] == -2: # both vertices are out of bounds - snip both ends to the boundary hull
+                    ray_end = self.vor.vertices[rv[v]]
+                    ray_origin = self.vor.vertices[rv[u]]
+                    ray_direction = ray_end - ray_origin
+                    norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
+                    new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
+                    if region_index in self.get_voronoi_region(new_vertice)[0]:
+                        new_vertices.append(new_vertice)
 
             elif len(urv) > 2: #3D + Voronoi region
                 nunbounded_vert = urv.count(-1) + urv.count(-2)
@@ -2058,8 +2067,9 @@ class VoronoiTessellation:
 
     def get_voronoi_region(self, point_array):
         """
-        Given a point, return the region of the Voronoi tesselation that the
-        point belongs to
+        Given an array of points, return the region of the Voronoi tesselation that the
+        points belongs to. If a point lies on a ridge or vertice, multiple regions are 
+        returned for that point.
 
         Parameters:
         point (array-like): an array of points to find the region of.
@@ -2069,26 +2079,29 @@ class VoronoiTessellation:
         """
         point_array = np.atleast_2d(point_array)
         region_index = []
-        npoints = point_array.shape[0]
         for point in point_array:
             if point in self.vor.points:
-                region_seed = point
+                seed_index, = np.where(np.all(self.vor.points == point, axis=1))
             else:
-                region_seed = self.get_closest_seed(point)
-
-            # Find the index of the seed point
-            seed_index = np.argmin(np.linalg.norm(self.vor.points - np.array(region_seed), axis=1))
-
+                seed_index = self.get_closest_seed(point)
+            
             # Get the region index for the point
-            region_index.append(self.vor.point_region[seed_index])
+            region_index.append(self.vor.point_region[seed_index].tolist())
         return region_index
-
+    
     def get_closest_seed(self, point):
-        """Return the index of the Voronoi cell that contains the given point."""
-        # Use Delaunay triangulation to find the cell
-        seed_distances = np.linalg.norm(self.vor.points - point, axis=1)
-        min_distance_index = np.argmin(seed_distances)
-        return self.vor.points[min_distance_index]
+        """Return the index of the seed of the Voronoi cell that contains the given point.
+            If the point lies on a ridge or vertex, multiple seeds are returned."""
+        closest_seed_index = self.get_closest_point(self.vor.points, point)
+        return closest_seed_index[0]
+
+    def get_closest_point(self, candidates, target_point):
+        """Return the index of the candidate point that has the min distance
+           from the target point"""
+        distances = np.linalg.norm(candidates - target_point, axis=1)
+        min_dist = min(distances)
+        closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-15))
+        return closest_candidate_index        
 
     def add_points(self, points):
         """ process a set of additional points""" 
