@@ -146,20 +146,20 @@ Creating code that looks like
 
 .. code-block:: python
 
-    MatCalMeshDecomposerIdentifier.register('e', ExodusMeshDecomposer)
+    matcal_mesh_decomposer_identifier.register('e', ExodusMeshDecomposer)
 
-Here MatCalMeshDecomposerIdentifier is the factory object, 'e' is the key the 
+Here matcal_mesh_decomposer_identifier is the factory object, 'e' is the key the 
 factory used to identify what kind of decomposer to use, and ExodusMeshDecomposer
 is the decomposer that will be returned after initialization (if necessary). The 
 second action factories perform is returning the desired object for the key passed 
-to it. For MatCalMeshDecomposerIdentifier this method is identify
+to it. For matcal_mesh_decomposer_identifier this method is identify
 
 .. code-block:: python
 
     key = 'e'
-    decomposer = MatCalMeshDecomposerIdentifier.identify(key)
+    decomposer = matcal_mesh_decomposer_identifier.identify(key)
 
-For MatCalMeshDecomposerIdentifier, it behaves similar to a dictionary, but 
+For matcal_mesh_decomposer_identifier, it behaves similar to a dictionary, but 
 other factories are more complicated and can identify what to return based on 
 function calls or other criteria. 
 
@@ -204,27 +204,154 @@ What to Register
 If you have access to a SIERRA distribution. The following factories will need to be registered to
 link SIERRA to MatCal:
 
-#. matcal_exodus_importer_identifier : if using Cubit is used for mesh generation, this will setup the correct pathing and environment.
+#. matcal_exodus_importer_identifier : How to read in exodus mesh files.
 #. matcal_mesh_decomposer_identifier : How to decompose a large mesh for parallel processing
 #. matcal_mesh_composer_identifier : How to compose a mesh from its parallel decomposition to a single file. 
-#. matcal_module_command_identifier
-#. matcal_parameter_reporter_identifier : (optional)
+#. matcal_module_command_identifier : How to issue commands to environment configuration tool 'module'
+#. matcal_parameter_reporter_identifier : (Optional) how to process the results from a MatCal study
 
 If you wish to extend your SIERRA capabilities with MatCal standard models:
 
-#. matcal_cubit_executable_path_identifier
+#. matcal_cubit_executable_path_identifier : Path to Cubit, a mesh generation tool
 
 If you have a queueing system for your computer systems:
 
 #. matcal_permissions_checker_function_identifier
 #. matcal_job_dispatch_delay_function_identifier
-#. matcal_job_dispatch_delay_function_identifier
+#. matcal_computing_platform_function_identifier
 #. matcal_platform_environment_setup_identifier
 
 
 For development and testing, details will be covered in future documentation:
 #. matcal_test_platform_options_function_identifier
 #. matcal_test_module_identifier
+
+
+matcal_exodus_importer_identifier
+-------------
+This factory returns a function that correctly returns the exodus python module
+for MatCal to read in exodus meshes. 
+This factory is included because exodus installs may require specific environmental 
+setups to work correctly. 
+This factory expects two functions that do not
+take in any external arguments. The first function, the identifier, returns a 
+boolean, with True indicating that it is appropriate to return the second function, 
+the exodus specifier. 
+
+The exodus specifier function takes in no arguments and returns an exodus python 
+module. If there are no complications with exodus on your system the specifier function 
+can be as simple as:
+
+.. code-block:: python
+
+    def works_on_all_systems():
+        return True
+
+    def import_exodus():
+        import exodus3 as exo
+        return exo
+    
+    matcal_exodus_importer_identifier(works_on_all_systems, import_exodus)
+
+
+matcal_mesh_decomposer_identifier and matcal_mesh_composer_identifier
+-------------
+These factories return a handle to a class that can properly decompose or compose a given mesh. 
+The registration to these classes expects as string of the file extension for a given 
+mesh type, and the class of the decomposer/composer. Custom decomposers/composers can be created by 
+creating a derived class from `matcal.core.models.MeshDecomposer` or `matcal.core.models.MeshComposer`. 
+
+An fake example that would act on a file of extsion 'mock' is:
+
+.. code-block:: python 
+
+    from matal.core.models import MeshDecomposer, MeshComposer
+    from matcal.core.computing_platforms import local_computer
+    file_extension = 'mock'
+
+    MockDecomposer(MeshDecomposer):
+        def decompose_mesh(self, mesh_file, number_of_cores, output_directory='.',
+                       computer=local_computer)
+            print(f"I want decompose {mesh_file} into {number_of_cores} pieces")
+        def _build_commands(self):
+            pass
+
+    MockComposer(MeshComposer):
+        def compose_mesh(self, mesh_file, number_of_cores, output_directory='.', 
+                     computer=local_computer):
+            print(f"I want to compose {number_of_cores} pieces of a mesh into one.")
+        def _build_commands(self):
+            pass
+
+    matcal_mesh_decomposer_identifier.register(file_extension, MockDecomposer)
+    matcal_mesh_composer_identifier.register(file_extension, MockComposer)
+
+matcal_platform_environment_setup_identifier
+-------------
+This factory returns a class that can do specific environment setup if setup 
+changes between platforms (e.g. running on a local computer versus a compute cluster).
+Registration for this factory is a function to identify what computing platform 
+MatCal is currently running on and an instance of your environmental setup class.
+The environmental setup class should be derived from 
+`matcal.core.external_executable.ExecutableEnvironmentSetupBase`.
+
+A simple example of this is:
+
+.. code-block:: python
+
+    from matcal.core.external_executable import ExecutableEnvironmentSetupBase
+    import os
+
+    class MyEnvSetup(ExecutableEnvironmentSetupBase)
+
+        def __init__(self):
+            self._ref_value = None
+            self._var_name = "MY_IMPORTANT_VARIABLE"
+
+        def prepare(self):
+            self._ref_value = os.environ[self._var_name]
+            os.environ[self._var_name] = 1
+
+        def reset(self):
+            if self._ref_value is not None:
+                self.environ[self._var_name] = self._ref_value
+    
+    def is_compute_cluster():
+        return os.environ['IS_HPC_CLUSTER'] == 1
+
+    matcal_platform_environment_setup_identifier.register(is_compute_cluster, MyEnvSetup())
+
+
+matcal_parameter_reporter_identifier
+-------------
+This factory will change the way MatCal writes the results files for a calibration study. 
+Altering the default behavior may be useful if there are common from the parameters 
+are expected to be used or reported. To register with this factory it expects a 
+argument less identifier function, and a function that takes in a string filename and 
+a dictionary of parameters to record the results. 
+
+.. code-block:: python
+
+    def record_as_csv(filename:str, params:dict):
+        keys = list(params.keys())
+        key_line = ""
+            val_line = ""
+            for i_key, key in enumerate(keys):
+                if i_key != 0:
+                    key_line += ","
+                    val_line += ","
+                key_line += key
+                val_line += str(params[key])
+        with open(filename, 'w') as f:
+            f.write(key_line+"\n")
+            f.write(val_line+"\n")
+    
+    def make_csv_default():
+        return True
+
+    matcal_parameter_reporter_identifier.register(make_csv_default, record_as_csv)    
+
+            
 
 
 Installing Dakota
