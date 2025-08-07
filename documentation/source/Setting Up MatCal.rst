@@ -127,6 +127,9 @@ please see the :ref:`Advanced Setup` section.
 Advanced Setup 
 =======================
 To run the advanced setup, it is necessary to to have completed the :ref:`Simple Setup` instructions first.
+Please note that this section is under active development, with more sections sections and details 
+to come in the near future. For any unaddressed questions please file an issue at the github or 
+reach out to one of the main points of contact(listed at the github).  
 
 Creating Platform Specifics
 -------------
@@ -223,6 +226,7 @@ If you have a queueing system for your computer systems:
 
 
 For development and testing, details will be covered in future documentation:
+
 #. matcal_test_platform_options_function_identifier
 #. matcal_test_module_identifier
 
@@ -269,14 +273,14 @@ An fake example that would act on a file of extsion 'mock' is:
     from matcal.core.computing_platforms import local_computer
     file_extension = 'mock'
 
-    MockDecomposer(MeshDecomposer):
+    class MockDecomposer(MeshDecomposer):
         def decompose_mesh(self, mesh_file, number_of_cores, output_directory='.',
                        computer=local_computer)
             print(f"I want decompose {mesh_file} into {number_of_cores} pieces")
         def _build_commands(self):
             pass
 
-    MockComposer(MeshComposer):
+    class MockComposer(MeshComposer):
         def compose_mesh(self, mesh_file, number_of_cores, output_directory='.', 
                      computer=local_computer):
             print(f"I want to compose {number_of_cores} pieces of a mesh into one.")
@@ -377,7 +381,102 @@ Installing Cubit
 TBD
 
 
-Building Documentation
+Running Local Software with MatCal:
 ======================
-TBD
+If you have local physics/engineering codes that you want to use with MatCal, the
+easiest way to have matcal use these programs is by using the :class:`~matcal.core.models.UserExecutableModel`.
+This model allows one to specify an external program to use with MatCal's studies. 
+Currently, MatCal passes parameter information my modifying input decks for external
+applications. Thus the external program will need to be able to take in text files as 
+inputs. 
+
+What follows is an example of linking to an external python executable, and running 
+a python file. (This can be done more efficiently using a PythonModel, but this was 
+chosen to avoid requiring the reader to download and setup any additional libraries.)
+
+The problem chosen is a simple linear decay problem solved over a period of time. 
+the details of the problem are contained in the file solve_decay.py. We will have
+run this file previously having set the decay constant to 0.1. This will generate 
+a reference data set that we will try to calibrate a decay constant for. Notice 
+the value of the decay constant(k) is assigned using jinja in the file we will use for 
+this case. 
+
+.. code-block:: python
+    # Content of solve_decay.py
+    import numpy as np
+    from scipy.integrate import odeint
+
+    # Define the linear decay model
+    def model(y, t, k):
+        dydt = -k * y
+        return dydt
+
+    # Parameters
+    k = {{ k }} # Decay constant goal: k = 0.1
+    y0 = 10  # Initial quantity
+    t = np.linspace(0, 50, 100)  # Time points
+
+    # Solve ODE
+    solution = odeint(model, y0, t, args=(k,))
+
+    # Exporting the results to a CSV file
+    results = pd.DataFrame({'time': t, 'y': solution.flatten()})
+    results.to_csv('linear_decay_results.csv', index=False)
+
+
+In our larger calibration file we will use a :class:`~matcal.core.models.UserExecutableModel`
+ to run this file. 
+The full calibration script will be included at the end of this section. 
+To use our python script as our math model
+
+.. code-block:: python 
+
+    special_python_path = "my/path/to/python3"
+    path_to_file = "path/to/solve_decay.py"
+    model = UserExecutableModel(special_python_path, path_to_file, results_filename='linear_decay_results.csv')
+    model.set_results_filename('linear_decay_results.csv')
+
+
+More details about the user executable can be found in the API documentation. 
+With this model definition we can now use it like any other model in MatCal and 
+perform a parameter study. Note that depending on versioning, there may be an 
+error thrown about spawning subprocesses. This is a known complication and is 
+being addressed. 
+
+.. code-block:: python
+
+    import matcal as mc
+
+    # What parameter are we trying to calibrate (name, lower bound, upper bound)
+    decay = mc.Parameter("k", 0, .5) 
+
+    # What data are we calibrating against
+    ref_data = mc.FileData("linear_decay_results_reference.csv")
+
+    # How are we comparing the model results and the reference data
+    objective = mc.CurveBasedInterpolatedObjective('time', 'y')
+
+    from matcal.core.external_executable import MatCalExecutableEnvironmentSetupFunctionIdentifier
+    from matcal.core.file_modifications import use_jinja_preprocessor
+    MatCalExecutableEnvironmentSetupFunctionIdentifier._registry={}
+    use_jinja_preprocessor()
+
+    # What is our model and how do we expect to find its predictions
+    special_python_path = "my/path/to/python3"
+    path_to_file = "path/to/solve_decay.py"
+    model = mc.UserExecutableModel(special_python_path, path_to_file, results_filename='linear_decay_results.csv')
+    model.set_results_filename('linear_decay_results.csv')
+    
+    # What type of parameter study are we doing
+    convergence_tol = 1e-5
+    study = mc.ScipyMinimizeStudy(decay, tol=convergence_tol)
+    study.add_evaluation_set(model, objective, ref_data) # What will the study compare
+    study.set_core_limit(2) # That is the max limit of cores this study can use
+
+    # Run the calibration and print the results.
+    results = study.launch()
+    print(results.best)
+
+
+
 
