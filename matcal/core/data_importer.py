@@ -516,7 +516,7 @@ class BatchDataImporter:
         :type filename: list(str) or str
 
         :param file_type: the file type to be read in. Default is to read the extension. 
-             MatCal recognizes "csv", "npy" and "mat" file types 
+            MatCal recognizes "csv", "npy" and "mat" file types 
             and only accepts these strings as input for 
             this parameter.
         :type file_type: str

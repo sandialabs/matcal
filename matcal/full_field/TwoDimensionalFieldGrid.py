@@ -11,7 +11,8 @@ logger = initialize_matcal_logger(__name__)
 
 class MeshSkeleton:
     """
-    MeshSkeleton serves as a light container to store point cloud or mesh information in a form agnostic to its source. 
+    MeshSkeleton serves as a light container to store point cloud or mesh 
+    information in a form agnostic to its source. 
     """
     def __init__(self, points=None, connectivity=None):
         self.spatial_coords = points

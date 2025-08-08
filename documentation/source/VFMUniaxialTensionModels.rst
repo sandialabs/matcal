@@ -32,8 +32,8 @@ The following features are disabled for the
 These features are disabled for all VFM models:
 
 #. :meth:`~matcal.sierra.models.VFMUniaxialTensionHexModel.activate_element_death`
-#. :meth:`~matcal.sierra.models.VFMUniaxialTensionHexModel.set_allowable_load_drop_factor`
-#. :meth:`~matcal.sierra.models.VFMUniaxialTensionHexModel.activate_self_contact`
+#. `VFMUniaxialTensionHexModel.set_allowable_load_drop_factor`
+#. `VFMUniaxialTensionHexModel.activate_self_contact`
 #. :meth:`~matcal.sierra.models.VFMUniaxialTensionHexModel.set_boundary_condition_scale_factor`
 
 In this section, we will provide more information

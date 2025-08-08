@@ -18,7 +18,7 @@ from matcal.core.constants import (STATE_PARAMETER_FILE, MATCAL_TEMPLATE_DIRECTO
                                    MATCAL_MESH_TEMPLATE_DIRECTORY)
 from matcal.core.data_importer import FileData
 from matcal.core.parameters import (ParameterCollection, 
-                                    get_parameters_according_to_precedence)
+                                    _get_parameters_according_to_precedence)
 from matcal.core.python_function_importer import python_function_importer
 from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.serializer_wrapper import matcal_load
@@ -179,19 +179,20 @@ class _ComputerControllerComponentBase(ABC):
         with an error or exit code. By default, It will generate a line of values 
         from -1 to 1 for each required field. The objective will be calculated with 
         these values and the study will continue. If desired custom failure values
-        can be bassed in this method call to set the value for those given fields. 
+        can be based in this method call to set the value for those given fields. 
         Each of these fields must have the same length. 
 
         :param default_field_values: keyword arguments to set the default values
-        for failed model evaluations. All arguments passed must have the same 
-        number of values. 
-        :type default_field_values: list or numpy array
+            for failed model evaluations. All arguments passed must have the same 
+            number of values. 
+        :type default_field_values: list or ArrayLike
 
         .. note::
             If the simulation errors out before any data can be returned to 
             MatCal, 
             the entire study will still fail due to not being able to formulate 
             an objective.
+
         """
         self._simulation_information.fail_on_simulation_failure = False
         self._check_default_values(default_field_values)
@@ -579,7 +580,7 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
                                                   STATE_PARAMETER_FILE)
         dictionary_reporter = matcal_parameter_reporter_identifier.identify()
         model_state_consts = self.get_model_constants(state)
-        state_constants = get_parameters_according_to_precedence(state, 
+        state_constants = _get_parameters_according_to_precedence(state, 
                                                                  model_state_consts)
         dictionary_reporter(this_state_params_filename, 
                             state_constants)
@@ -784,7 +785,10 @@ class UserExecutableModel(ModelBase):
         
     def add_necessary_files(self, *needed_files):
         """
-        ":param needed_files: additional files or directories that need to be
+        Add files to the working directory of the model that are needed for the 
+        model to successfully run.
+        
+        :param needed_files: additional files or directories that need to be
             in the working directory of the model so that it can
             run. These are include files that the main input file may need or 
             mesh and other data files.

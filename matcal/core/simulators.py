@@ -12,7 +12,7 @@ from matcal.core.data import convert_dictionary_to_data
 from matcal.core.external_executable import MatCalExternalExecutableFactory
 from matcal.core.file_modifications import process_template_file
 from matcal.core.logger import initialize_matcal_logger
-from matcal.core.parameters import get_parameters_according_to_precedence
+from matcal.core.parameters import _get_parameters_according_to_precedence
 from matcal.core.object_factory import DefaultObjectFactory, ObjectCreator
 from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.serializer_wrapper import matcal_save
@@ -200,7 +200,7 @@ class ExecutableSimulator(Simulator):
         external_executable = MatCalExternalExecutableFactory.create(self._commands, 
             self._modules_to_load, self._compute_information.computer, 
             working_directory=workdir_full_path)
-        model_params = get_parameters_according_to_precedence(self.state, 
+        model_params = _get_parameters_according_to_precedence(self.state, 
                                                               self._model_constants, 
                                                               parameters)
         self._pass_parameters_to_simulators(workdir_full_path, model_params)

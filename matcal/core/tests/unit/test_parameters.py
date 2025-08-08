@@ -3,7 +3,7 @@ from copy import deepcopy
 import numpy as np
 
 from matcal.core.parameters import (MATCAL_PREPROCESSORS, Parameter, ParameterCollection, 
-                                    UnitParameterScaler, UserDefinedParameterPreprocessor,  
+                                    _UnitParameterScaler, UserDefinedParameterPreprocessor,  
                                     _convert_serialized_parameter, 
                                     _convert_serialized_parameter_collection, 
                                     serialize_parameter, serialize_parameter_collection)
@@ -129,7 +129,7 @@ class UnitParameterScalerTest(MatcalUnitTest):
       self._confirm_range_change(pc)
 
     def _confirm_range_change(self, pc):
-        ups = UnitParameterScaler(pc)
+        ups = _UnitParameterScaler(pc)
         unit_pc = ups.unit_parameter_collection
         self.assertEqual(len(pc), len(unit_pc))
         for param_name in unit_pc:
@@ -146,7 +146,7 @@ class UnitParameterScalerTest(MatcalUnitTest):
     def test_convert_single_to_unit(self):
       pc = ParameterCollection('new_params', Parameter('A', -10, 10), Parameter('B', 2, 6))
       pc.assign_all_to_unit_preprocessing()
-      ups = UnitParameterScaler(pc)
+      ups = _UnitParameterScaler(pc)
       current_config = {'A':5, 'B': 3}
       goal = {"A":.75, "B":.25}
       test = ups.to_unit_scale(current_config)
@@ -155,7 +155,7 @@ class UnitParameterScalerTest(MatcalUnitTest):
     def test_convert_single_from_unit(self):
       pc = ParameterCollection('new_params', Parameter('A', -10, 10), Parameter('B', 2, 6))
       pc.assign_all_to_unit_preprocessing()
-      ups = UnitParameterScaler(pc)
+      ups = _UnitParameterScaler(pc)
       goal = {'A':5, 'B': 3}
       unit_vals = {"A":.75, "B":.25}
       test = ups.from_unit_scale(unit_vals)
@@ -164,7 +164,7 @@ class UnitParameterScalerTest(MatcalUnitTest):
     def test_convert_array_to_unit(self):
       pc = ParameterCollection('new_params', Parameter('A', -10, 10), Parameter('B', 2, 6))
       pc.assign_all_to_unit_preprocessing()
-      ups = UnitParameterScaler(pc)
+      ups = _UnitParameterScaler(pc)
       current_config = {'A':np.array([-10, -5, 0, 5, 10]), 'B': np.array([2, 3, 4, 5, 6])}
       goal = {"A":np.array([0, .25, .5, .75, 1.]), "B":np.array([0, .25, .5, .75, 1.0])}
       test = ups.to_unit_scale(current_config)
@@ -173,14 +173,14 @@ class UnitParameterScalerTest(MatcalUnitTest):
     def test_convert_array_from_unit(self):
       pc = ParameterCollection('new_params', Parameter('A', -10, 10), Parameter('B', 2, 6))
       pc.assign_all_to_unit_preprocessing()
-      ups = UnitParameterScaler(pc)
+      ups = _UnitParameterScaler(pc)
       goal = {'A':np.array([-10, -5, 0, 5, 10]), 'B': np.array([2, 3, 4, 5, 6])}
       unit_vals = {"A":np.array([0, .25, .5, .75, 1.]), "B":np.array([0, .25, .5, .75, 1.0])}
       test = ups.from_unit_scale(unit_vals)
       self.assert_close_dicts_or_data(goal, test)
 
     def _confirm_initial_change(self, pc, goal_dict):
-      ups = UnitParameterScaler(pc)
+      ups = _UnitParameterScaler(pc)
       unit_pc = ups.unit_parameter_collection
       self.assertEqual(len(pc), len(unit_pc))
       for param_name in unit_pc:
@@ -193,7 +193,7 @@ class UnitParameterScalerTest(MatcalUnitTest):
       b = Parameter('b', 0, 100)
       b._add_unit_preprocessing()
       pc = ParameterCollection('ab', a, b)
-      ups = UnitParameterScaler(pc)
+      ups = _UnitParameterScaler(pc)
       unit_pc = ups.unit_parameter_collection
       goal_pc = ParameterCollection('ab_goal', Parameter('a', -3, 6, 0), Parameter('b', 0, 1, .5))
       for p_name, goal_param in goal_pc.items():

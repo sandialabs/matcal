@@ -11,7 +11,7 @@ generation tools available within MatCal and
 how to incorporate them in the calibration process.
 
 Gaussian Process Surrogates Theory 
-=================================
+==================================
 These surrogates are based on those developed in :cite:`pca_gp_surrogates`.
 
 Response Dimensionality Reduction 

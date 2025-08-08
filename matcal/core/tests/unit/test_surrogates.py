@@ -2,15 +2,14 @@
 import numpy as np
 from scipy.stats import qmc
 from sklearn.discriminant_analysis import StandardScaler
-import unittest
 
 from matcal.core.data import (convert_dictionary_to_data, _serialize_data)
-from matcal.core.parameters import ParameterCollection, Parameter
+from matcal.core.parameters import Parameter
 from matcal.core.parameter_studies import ParameterStudy
-from matcal.core.serializer_wrapper import _format_serial, matcal_save
+from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.study_base import StudyResults
 from matcal.core.surrogates import (_ReconstructionDecomposition, 
-                                    _VarianceDecomposition, MatCalLogScaler, 
+                                    _VarianceDecomposition, _MatCalLogScaler, 
                                     _assign_decomp, 
                                     _identify_fields_of_interest, 
                                     _import_and_interpolate, _import_parameter_hist, 
@@ -586,7 +585,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         self.assertAlmostEqual(test_score, goal_score)
         
     def test_log_scaler_make_log10(self):
-        scaler = MatCalLogScaler()
+        scaler = _MatCalLogScaler()
         n_eval = 100
         n_param = 2
         data = np.random.uniform(10, 1000, (n_eval, n_param))
@@ -597,7 +596,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         self.assert_close_arrays(t_data, np.log10(data - min_value + 1))
         
     def test_fit_transform_combo(self):
-        scaler = MatCalLogScaler()
+        scaler = _MatCalLogScaler()
         n_eval = 100
         n_param = 2
         data = np.random.uniform(10, 1000, (n_eval, n_param))
@@ -607,7 +606,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         self.assert_close_arrays(t_data, np.log10(data - min_value + 1))
         
     def test_inverse_transform_reproduces_original(self):
-        scaler = MatCalLogScaler()
+        scaler = _MatCalLogScaler()
         n_eval = 100
         n_param = 2
         data = np.random.uniform(10, 1000, (n_eval, n_param))
@@ -619,7 +618,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
                 
     
     def test_works_for_negative_numbers(self): 
-        scaler = MatCalLogScaler()
+        scaler = _MatCalLogScaler()
         n_eval = 100
         n_param = 1
         min_value = -1000
@@ -631,7 +630,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         self.assert_close_arrays(i_data, data)           
     
     def test_log_scaler_require_data_dim_greater_than_1(self):
-        scaler = MatCalLogScaler()
+        scaler = _MatCalLogScaler()
         n_eval = 100
         data_1d = np.linspace(10, 1000, n_eval)
         data_2d = np.linspace(10, 1000, n_eval).reshape(-1, 1)
@@ -643,7 +642,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
             scaler.transform(data_1d)
     
     def test_log_scaler_requires_numpy_array(self):
-        scaler = MatCalLogScaler()
+        scaler = _MatCalLogScaler()
         n_eval = 100
         data_list = [[1,2,3,4]]
         data_2d = np.linspace(10, 1000, n_eval).reshape(-1, 1)

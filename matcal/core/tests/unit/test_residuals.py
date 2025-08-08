@@ -4,7 +4,7 @@ import numpy as np
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.residuals import LogResidualCalculator, NoiseWeightingConstant,\
-    NominalResidualCalculator, get_array, IdentityWeighting, \
+    NominalResidualCalculator, _get_array, IdentityWeighting, \
     LinearDataSizeNormalizer, SqrtDataSizeNormalizer, UserFunctionWeighting, \
     NoiseWeightingFromFile, ResidualWeightingBase, ConstantFactorWeighting, \
     InvertedLinearDataSizeNormalizer, InvertedSqrtDataSizeNormalizer
@@ -134,7 +134,7 @@ class TestResidualWithVFMData(MatcalUnitTest):
         external_power = convert_dictionary_to_data({'virtual_power': np.zeros(3)})
         internal_power = convert_dictionary_to_data(({'virtual_power': np.zeros(3)}))
         residual = rc.calculate(external_power, internal_power)
-        self.assert_close_arrays(get_array(residual),  np.zeros(3))
+        self.assert_close_arrays(_get_array(residual),  np.zeros(3))
 
 
 class DataSizeNormalizer:

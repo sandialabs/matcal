@@ -44,10 +44,10 @@ def set_jinja_delimiters(variable="{{ }}", block="{% %}",
         of the form where the start and end delimiter strings are separated
         by a space.
     :type comment: str
-    :param line_statement_prefix: The prefix for line statements.
-    :type line_statement_prefix: str, optional
-    :param line_comment_prefix: The prefix for line comments.
-    :type line_comment_prefix: str, optional
+    :param line_statement_prefix: Optional prefix for line statements.
+    :type line_statement_prefix: str
+    :param line_comment_prefix: Optional prefix for line comments.
+    :type line_comment_prefix: str
     """
     _check_jinja_delimiters_input(variable, block, comment, line_statement_prefix, 
                                   line_comment_prefix)

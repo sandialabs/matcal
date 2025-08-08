@@ -6,21 +6,21 @@ from matcal.core.data import (convert_dictionary_to_data, DataCollection,
                               ReturnPassedDataConditioner)
 from matcal.core.models import PythonModel
 from matcal.core.objective import (CurveBasedInterpolatedObjective, Objective, 
-                                   L2NormMetricFunction, SumSquaresMetricFunction, 
-                                   L1NormMetricFunction, SimulationResultsSynchronizer,
+                                   SumSquaresMetricFunction, 
+                                   SimulationResultsSynchronizer,
                                    DirectCurveBasedInterpolatedObjective)
                                    
 from matcal.core.parameters import Parameter, ParameterCollection
-from matcal.core.parameter_studies import (ClassicLaplaceStudy, FiniteDifference, 
+from matcal.core.parameter_studies import (ClassicLaplaceStudy, _FiniteDifference, 
                                            LaplaceStudy,
                                            ParameterStudy,
                                            HaltonStudy, 
                                            sample_multivariate_normal,
-                                           estimate_parameter_covariance, 
+                                           _estimate_parameter_covariance, 
                                            _get_residual_covariance, 
                                            _combine_array_list_into_zero_padded_single_array, 
-                                           package_parameter_specific_results, 
-                                           fit_posterior, )
+                                           _package_parameter_specific_results, 
+                                           _fit_posterior, )
 from matcal.core.state import State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests, model_func
@@ -44,7 +44,7 @@ def oneD_model(**param_dict):
     return {"x": x, "y": y}
 
 
-class FiniteDifferenceTest(MatcalUnitTest):
+class _FiniteDifferenceTest(MatcalUnitTest):
 
   def f(self,x,y,a0,a1,a2,a11,a12,a22):
     return a11*x*x+a22*y*y+a12*x*y+a1*x+a2*y+a0
@@ -65,7 +65,7 @@ class FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22 ]
     optimum = [ -(a12*a2 - 2*a1*a22)/(a12*a12 - 4*a11*a22), 
                -((a1*a12 - 2*a11*a2)/(a12*a12 - 4*a11*a22)) ]
-    finite_difference_operator = FiniteDifference(optimum,relative_step_size=1.e-3)
+    finite_difference_operator = _FiniteDifference(optimum,relative_step_size=1.e-3)
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
     for point in points:
@@ -88,7 +88,7 @@ class FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22 ]
     x=1000
     y=1
-    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-3)
+    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-3)
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
     for point in points:
@@ -116,7 +116,7 @@ class FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=1
     y=600
-    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-3)
+    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-3)
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
     for point in points:
@@ -146,7 +146,7 @@ class FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=0.0035
     y=0.001
-    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-6, 
+    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-6, 
                                                   epsilon=np.finfo(float).eps**(1.0/3.0))
     points = finite_difference_operator.compute_hessian_evaluation_points()
     function_values = []
@@ -177,7 +177,7 @@ class FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=0.0035
     y=0.001
-    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-6, 
+    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-6, 
                                                   epsilon=np.finfo(float).eps**(1.0/3.0))
     points = finite_difference_operator.compute_gradient_evaluation_points()
     function_values = []
@@ -204,7 +204,7 @@ class FiniteDifferenceTest(MatcalUnitTest):
     parameters = [ a0,a1,a2,a11,a12,a22, a33, a34, a43, a44]
     x=0.0035
     y=0.001
-    finite_difference_operator = FiniteDifference([x,y] ,relative_step_size=1.e-6, 
+    finite_difference_operator = _FiniteDifference([x,y] ,relative_step_size=1.e-6, 
                                                   epsilon=np.finfo(float).eps**(1.0/3.0))
     points = finite_difference_operator.compute_gradient_evaluation_points(three_point_finite_diff=False)
     function_values = []
@@ -702,7 +702,7 @@ class TestLaplaceStudy(StudyBaseUnitTests.CommonTests):
     def test_package_parameter_specific_results(self):
         param_collect = {'a':None, 'b':None}
         sens_info = {"param_dep":[0,1], "param_independent":0}
-        packaged_data = package_parameter_specific_results(param_collect, sens_info)
+        packaged_data = _package_parameter_specific_results(param_collect, sens_info)
         self.assertTrue("param_dep:a" in packaged_data)
         self.assertTrue("param_dep:b" in packaged_data)
         self.assertFalse("param_independent:a" in packaged_data)
@@ -718,7 +718,7 @@ class TestEstimateParameterCovariance(MatcalUnitTest):
     def test_no_repeats(self):
         resids = np.zeros(10)
         with self.assertRaises(RuntimeError):
-            estimate_parameter_covariance(resids, resids, None)
+            _estimate_parameter_covariance(resids, resids, None)
         
     def test_get_residual_covariance_correlated(self):
         std = 0.5
@@ -746,7 +746,7 @@ class TestEstimateParameterCovariance(MatcalUnitTest):
         resids = model(mean_dict) - model(inputs)
         resids = resids.T
         sens = resid_sensitivity(mean_dict).T
-        cov_est = estimate_parameter_covariance(resids, sens, 0)
+        cov_est = _estimate_parameter_covariance(resids, sens, 0)
         self.assert_close_arrays(cov, cov_est, show_on_fail=True, 
                                  rtol=1e-3)
         
@@ -769,7 +769,7 @@ class TestEstimateParameterCovariance(MatcalUnitTest):
         resids = resids.T
         sens = resid_sensitivity(mean_dict).T
         with self.assertRaises(ValueError):
-            cov_est = estimate_parameter_covariance(resids, sens, 0)
+            cov_est = _estimate_parameter_covariance(resids, sens, 0)
         
 
 class TestFitPosteriors(MatcalUnitTest):
@@ -807,11 +807,11 @@ class TestFitPosteriors(MatcalUnitTest):
         print(noise_guess)
         sens = resid_sensitivity(mean_dict).T
         print("Avg. sens:", np.average(sens))
-        cov_est = estimate_parameter_covariance(resids, sens, noise_guess)
+        cov_est = _estimate_parameter_covariance(resids, sens, noise_guess)
         print("Est covar", cov_est)
         start = np.copy(cov_est)
         print("Initial covar:", start)
-        fitted_posterior = fit_posterior(resids, sens, start, noise_guess, method=None)
+        fitted_posterior = _fit_posterior(resids, sens, start, noise_guess, method=None)
         print("Fitted posterior:", fitted_posterior)
         self.assert_close_arrays(cov, fitted_posterior, show_on_fail=True, 
                                  rtol=1e-2)

@@ -245,7 +245,7 @@ class HaltonStudy(ParameterStudy):
         """"""
         raise self.StudyInputError("Users cannot add parameter evaluations to a HaltonStudy.")
 
-class FiniteDifference:
+class _FiniteDifference:
 
     def __init__(self, center_point, relative_step_size=1.e-3, 
                  epsilon=np.sqrt(np.finfo(float).eps)):
@@ -383,7 +383,7 @@ class FiniteDifference:
 _small = 1e-12
 
 
-def estimate_parameter_covariance(residuals, sensitivities, noise_variance):
+def _estimate_parameter_covariance(residuals, sensitivities, noise_variance):
     has_replicas = len(residuals.shape) > 1
     if has_replicas:
         Sigma_y = _get_residual_covariance(residuals)
@@ -435,7 +435,7 @@ def _check_covariance(Sigma):
     return min_eval, max_eval
 
 
-class MinimizeCallbackWithCounter:
+class _MinimizeCallbackWithCounter:
     def __init__(self, num_parameters):
         self._iteration = 0
         self._num_parameters = num_parameters
@@ -452,7 +452,7 @@ class MinimizeCallbackWithCounter:
             logger.info(f"\tCurrent iteration:\t{self._iteration}\n")
 
 
-def fit_posterior(residuals, residual_sensitivities, sigma_estimate, 
+def _fit_posterior(residuals, residual_sensitivities, sigma_estimate, 
                   noise_variance, method='nelder-mead'):
     nparameters = residual_sensitivities.shape[1]
     init_variances, init_correlation_coefficients = _decompose_covariance(sigma_estimate)
@@ -462,9 +462,9 @@ def fit_posterior(residuals, residual_sensitivities, sigma_estimate,
     args = (residuals, residual_sensitivities, noise_variance)
     logger.info("Improving posterior covariance estimate:")
 
-    callback = MinimizeCallbackWithCounter(nparameters)
+    callback = _MinimizeCallbackWithCounter(nparameters)
     try:
-        result = minimize(fitted_posterior_objective, init_theta, args=args, method=method, 
+        result = minimize(_fitted_posterior_objective, init_theta, args=args, method=method, 
                           tol=1e-3, callback=callback)
     except np.linalg.LinAlgError as e:
         logger.warning("Improving covariance failed. Try a different noise estimate. " +
@@ -477,7 +477,7 @@ def fit_posterior(residuals, residual_sensitivities, sigma_estimate,
     return optimized_sigma
 
 
-def fitted_posterior_objective(theta, residuals, 
+def _fitted_posterior_objective(theta, residuals, 
                                 residual_sensitivities, noise_estimate):
     obj = -_log_posterior_predictive(theta, residual_sensitivities, 
                                               residuals, noise_estimate)
@@ -566,7 +566,7 @@ def _assemble_covariance_matrix(variances, correlation_coefficients):
     return Sigma
 
 
-class LaplaceStudyBase(ParameterStudy):
+class _LaplaceStudyBase(ParameterStudy):
 
     def __init__(self, *parameters):
         super().__init__(*parameters)
@@ -603,7 +603,7 @@ class LaplaceStudyBase(ParameterStudy):
 
     def _setup_finite_difference(self):
         self._parameter_sets_to_evaluate = []
-        self._finite_difference = FiniteDifference(self.mean, relative_step_size=self._step_size)
+        self._finite_difference = _FiniteDifference(self.mean, relative_step_size=self._step_size)
         finite_difference_points = self._get_finite_difference_evaluation_points()
         param_order = self._parameter_collection.get_item_names()
         for pt in finite_difference_points:
@@ -668,7 +668,7 @@ class LaplaceStudyBase(ParameterStudy):
         results = OrderedDict()
         results[gradient_key]   = self._gradient()
         results["mean"] = self.mean
-        results = package_parameter_specific_results(self._parameter_collection, results)
+        results = _package_parameter_specific_results(self._parameter_collection, results)
         return results
 
     @abstractmethod
@@ -679,7 +679,7 @@ class LaplaceStudyBase(ParameterStudy):
     def _get_overall_results(self):
         """"""
 
-class LaplaceStudy(LaplaceStudyBase):
+class LaplaceStudy(_LaplaceStudyBase):
     """
     Use the MatCal :class:`~matcal.core.parameter_studies.LaplaceStudy` to evaluate the gradient of the 
     calibration residuals
@@ -782,12 +782,12 @@ class LaplaceStudy(LaplaceStudyBase):
         return residual_sensitivities
 
     def _calculate_covariance(self, center_resids, residual_sensitivities):
-        estimated_covariance = estimate_parameter_covariance(center_resids, 
+        estimated_covariance = _estimate_parameter_covariance(center_resids, 
                                                              residual_sensitivities, 
                                                              self._noise_variance) 
         covariance_results = OrderedDict()
         covariance_results["estimated_parameter_covariance"] = estimated_covariance
-        fitted_posterior = fit_posterior(center_resids, residual_sensitivities, estimated_covariance, 
+        fitted_posterior = _fit_posterior(center_resids, residual_sensitivities, estimated_covariance, 
                                          self._noise_variance)
         covariance_results["fitted_parameter_covariance"] = fitted_posterior
         return covariance_results
@@ -915,7 +915,7 @@ def _create_samples_dict_from_samples_array( samples, param_names=None):
     return samples_dict
 
 
-class ClassicLaplaceStudy(LaplaceStudyBase):
+class ClassicLaplaceStudy(_LaplaceStudyBase):
     """
     Use the MatCal :class:`~matcal.core.parameter_studies.ClassicLaplaceStudy` 
     to evaluate the Hessian (and gradient)
@@ -995,7 +995,7 @@ def _get_total_scaled_covariance(inverse_hessian, std_dev_estimate):
     return scale*cov
 
 
-def package_parameter_specific_results(param_collect, sens_info):
+def _package_parameter_specific_results(param_collect, sens_info):
     out = OrderedDict()
     for sens_key, sens_val in sens_info.items():
         for param_i, param_key in enumerate(param_collect.keys()):

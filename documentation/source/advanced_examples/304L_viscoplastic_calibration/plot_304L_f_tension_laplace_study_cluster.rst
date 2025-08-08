@@ -284,7 +284,7 @@ and launch the study.
     laplace_results = laplace.launch()
     print("Initial covariance estimate:\n", laplace_results.estimated_parameter_covariance)
     print("Calibrated covariance estimate:\n", laplace_results.fitted_parameter_covariance)
-    matcal_save("laplace_study_results.joblib", laplace_results)
+    matcal_save("laplace_study_covariance.joblib", laplace_results.fitted_parameter_covariance)
 
 
 
@@ -295,15 +295,15 @@ and launch the study.
  .. code-block:: none
 
     Initial covariance estimate:
-     [[ 1.32350005e+01  4.53083843e+01 -9.89569256e-01 -1.01807059e+00]
-     [ 4.53083843e+01  2.66251057e+02 -5.43869950e+00 -4.03572039e+00]
-     [-9.89569256e-01 -5.43869950e+00  1.13284185e-01  8.52583905e-02]
-     [-1.01807059e+00 -4.03572039e+00  8.52583905e-02  8.19196374e-02]]
+     [[ 1.32357677e+01  4.53139620e+01 -9.89798700e-01 -1.01783736e+00]
+     [ 4.53139620e+01  2.66267034e+02 -5.43965571e+00 -4.03476708e+00]
+     [-9.89798700e-01 -5.43965571e+00  1.13314900e-01  8.52505958e-02]
+     [-1.01783736e+00 -4.03476708e+00  8.52505958e-02  8.18732729e-02]]
     Calibrated covariance estimate:
-     [[ 1.50527100e+01  4.82520019e+01 -1.05537682e+00 -1.08578025e+00]
-     [ 4.82520019e+01  2.65529364e+02 -5.43145886e+00 -4.03054073e+00]
-     [-1.05537682e+00 -5.43145886e+00  1.13284199e-01  8.52642471e-02]
-     [-1.08578025e+00 -4.03054073e+00  8.52642471e-02  8.19272705e-02]]
+     [[ 1.28891310e+01  4.80051628e+01 -1.02330264e+00 -1.02768292e+00]
+     [ 4.80051628e+01  3.00747466e+02 -5.99599467e+00 -4.42177079e+00]
+     [-1.02330264e+00 -5.99599467e+00  1.21952562e-01  9.11270764e-02]
+     [-1.02768292e+00 -4.42177079e+00  9.11270764e-02  8.57130861e-02]]
 
 
 
@@ -327,7 +327,7 @@ KDE pair plot
     num_samples=5000
     uncertain_param_sets = sample_multivariate_normal(num_samples, 
                                                       laplace_results.mean.to_list(),
-                                                      laplace_results.estimated_parameter_covariance, 
+                                                      laplace_results.fitted_parameter_covariance, 
                                                       12345, 
                                                       params.get_item_names())
     import seaborn as sns
@@ -358,7 +358,7 @@ KDE pair plot
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (4 minutes 56.690 seconds)
+   **Total running time of the script:** (5 minutes 44.197 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py:

@@ -38,7 +38,7 @@ to the data.
 
 Data importing from external sources is supported 
 through valid MatCal data importers found 
-in :mod:`~matcal.core.data_importer`. There are three primary tools 
+in :mod:`~matcal.core.data_importer`. There are two primary tools 
 for data importing: 
 
 #. Importing data from single files 
@@ -46,17 +46,6 @@ for data importing:
 #. Import data from several similar files with a filename 
    regular expression using the 
    :class:`~matcal.core.data_importer.BatchDataImporter` class.
-#. Downloading data from Sandia's GRANTA database using 
-   the :mod:`~matcal.granta` module and
-   then importing that data using one of the methods 
-   above.
-
-.. warning:: 
-    The GRANTA database and tools at Sandia are 
-    maintained and developed outside of MatCal's control.
-    The database is currently not well supported or 
-    curated by a dedicated team
-    and is somewhat unreliable. 
 
 A useful class for storing several related 
 :class:`~matcal.core.data.Data` objects is 

@@ -173,7 +173,7 @@ laplace.set_parameter_center(**calibrated_params)
 laplace_results = laplace.launch()
 print("Initial covariance estimate:\n", laplace_results.estimated_parameter_covariance)
 print("Calibrated covariance estimate:\n", laplace_results.fitted_parameter_covariance)
-matcal_save("laplace_study_results.joblib", laplace_results)
+matcal_save("laplace_study_covariance.joblib", laplace_results.fitted_parameter_covariance)
 
 #%%
 # We see that the initial and calibrated covariance estimates are nearly equal. 
@@ -188,7 +188,7 @@ matcal_save("laplace_study_results.joblib", laplace_results)
 num_samples=5000
 uncertain_param_sets = sample_multivariate_normal(num_samples, 
                                                   laplace_results.mean.to_list(),
-                                                  laplace_results.estimated_parameter_covariance, 
+                                                  laplace_results.fitted_parameter_covariance, 
                                                   12345, 
                                                   params.get_item_names())
 import seaborn as sns
