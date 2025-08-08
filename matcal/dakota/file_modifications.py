@@ -7,19 +7,19 @@ from matcal.core.utilities import (check_value_is_nonempty_str)
 
 def raise_error_if_no_pyprepro_path_added():
         err_str = (f"The pyprepro path fetching function has not been registered in " +
-        f"the \"MatCalPypreproPathIdentifier\". "+
+        f"the \"matcal_pyprepro_path_identifier\". "+
         "Import the identifier from "+
         "\"matcal.dakota.file_modifications\" and set  " +
         f"the appropriate function that returns the pyprepro python path when called. "+
-        "Set the default using \"MatCalPypreproPathIdentifier.set_default(function_name)\".")
+        "Set the default using \"matcal_pyprepro_path_identifier.set_default(function_name)\".")
         raise RuntimeError(err_str)
 
 
-MatCalPypreproPathIdentifier = BasicIdentifier(raise_error_if_no_pyprepro_path_added)
+matcal_pyprepro_path_identifier = BasicIdentifier(raise_error_if_no_pyprepro_path_added)
 
 
 def add_pyprepro_to_path():
-    pyprepro_path = MatCalPypreproPathIdentifier.identify()
+    pyprepro_path = matcal_pyprepro_path_identifier.identify()
     if pyprepro_path not in sys.path:
         sys.path.append(pyprepro_path)
 
