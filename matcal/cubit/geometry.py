@@ -743,7 +743,7 @@ class SolidBarTorsionGeometry(RoundUniaxialTensionGeometry):
         cmds.append("volume all scale {1/total_length}")
         cmds.append("merge vol all")
         cmds.append("volume all scale {total_length}")
-        cmds.append("#{if(element_type == \"composite_tet\")}")
+        cmds.append("#{if(element_type == \"tet10\")}")
         cmds.append("del mesh vol all prop")
         cmds.append("mesh vol all")
         cmds.append("#{endif}")

@@ -50,7 +50,7 @@ class TestGeometry(ABC):
             self.assertEqual(error_code, 0)
 
         def test_mesh_build_composite_tet(self):
-            self._params["element_type"] = "composite_tet"
+            self._params["element_type"] = "tet10"
 
 
 class MaterialPointGeometryIntegrationTests(TestGeometry.CommonTests):

@@ -208,7 +208,7 @@ class UniaxialTensionModelForTestsBase(MatcalGeneratedModelForTestsBase):
             "mesh_method":1, 
             "grip_contact_length":1*0.0254, 
             "gauge_length": 1.25*0.0254, 
-            "element_type":"total_lagrange"}
+            "element_type":"hex8"}
 
     @property
     def boundary_condition_data_sets(self):
@@ -300,7 +300,7 @@ class RoundNotchedTensionModelForTests(MatcalGeneratedModelForTestsBase):
             "gauge_radius":0.25*0.0254,
             "notch_gauge_radius":0.125*0.0254,
             "notch_radius":0.078*0.0254, 
-            "element_type":"total_lagrange"}
+            "element_type":"hex8"}
 
     @property
     def boundary_condition_data_sets(self):
@@ -338,7 +338,7 @@ class TopHatShearModelForTests(MatcalGeneratedModelForTestsBase):
             "localization_region_scale":0.0,
             "element_size":0.013*0.0254, 
             "numsplits":1, 
-            "element_type":"total_lagrange"}
+            "element_type":"hex8"}
 
     @property
     def boundary_condition_data_sets(self):
@@ -372,7 +372,7 @@ class SolidBarTorsionModelForTests(MatcalGeneratedModelForTestsBase):
                   "element_size": 0.125*0.0254/3,
                   "mesh_method": 1,
                   "grip_contact_length":0.125*0.0254, 
-                  "element_type":"total_lagrange"}
+                  "element_type":"hex8"}
 
     @property
     def boundary_condition_data_sets(self):
