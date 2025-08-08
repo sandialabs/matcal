@@ -25,6 +25,6 @@ class FieldDataExporterSelector(BasicIdentifier):
     pass
 
 
-MatCalFieldDataExporterIdentifier = FieldDataExporterSelector()
-MatCalFieldDataExporterIdentifier.register('json', 
+matcal_field_data_exporter_identifier = FieldDataExporterSelector()
+matcal_field_data_exporter_identifier.register('json', 
                                           export_full_field_data_to_json)

@@ -2,7 +2,7 @@ from abc import abstractmethod
 from collections import OrderedDict
 import os
 
-from matcal.core.best_material_file_writer import MatcalFileWriterFactory
+from matcal.core.best_material_file_writer import matcal_file_writer_factory
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.serializer_wrapper import matcal_load
 from matcal.core.study_base import StudyBase
@@ -244,7 +244,7 @@ class DakotaCalibrationStudyBase(DakotaStudyBase):
             self._create_and_write_best_material_file(eval_set.model)
 
     def _create_and_write_best_material_file(self, model):
-        file_writer = MatcalFileWriterFactory.create(model.executable, self._results.outcome)
+        file_writer = matcal_file_writer_factory.create(model.executable, self._results.outcome)
         filename = self._make_best_filename(model)
         file_writer.write(filename)
 

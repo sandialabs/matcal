@@ -5,7 +5,7 @@ from matcal.core.computing_platforms import (local_computer,
     matcal_computing_platform_function_identifier, 
     LocalComputingPlatform)
 from matcal.core.external_executable import (ListCommandError, 
-    MatCalExternalExecutableFactory, MatCalExecutableEnvironmentSetupFunctionIdentifier, 
+    matcal_external_executable_factory, matcal_executable_environment_setup_function_identifier, 
     default_environment_command_processor, ExecutableNoEnvironmentSetup, 
     matcal_platform_environment_setup_identifier, SlurmHPCExecutableEnvironmentSetup, 
     attempt_to_execute, NonPositiveIntegerError)
@@ -19,20 +19,20 @@ class TestLocalExternalExecutable(MatcalUnitTest):
         self._purge_non_core_modules()
 
     def _purge_non_core_modules(self):
-        self._orig_registry = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._registry)
-        self._orig_default = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._default)
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = {}
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(
+        self._orig_registry = deepcopy(matcal_executable_environment_setup_function_identifier._registry)
+        self._orig_default = deepcopy(matcal_executable_environment_setup_function_identifier._default)
+        matcal_executable_environment_setup_function_identifier._registry = {}
+        matcal_executable_environment_setup_function_identifier.set_default(
             default_environment_command_processor)
 
     def tearDown(self) -> None:
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = self._orig_registry 
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(self._orig_default)
+        matcal_executable_environment_setup_function_identifier._registry = self._orig_registry 
+        matcal_executable_environment_setup_function_identifier.set_default(self._orig_default)
         super().tearDown()
 
     def test_get_module_commands_back_for_general_environment_valid(self):
         my_env_command = 'export MYFAKEPATH=FAKEPATH'
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'], 
+        valid_runner = matcal_external_executable_factory.create(['ls'], 
                                                               [my_env_command], 
                                                               local_computer)
         additional_commands, use_shell = valid_runner._setup_environment()
@@ -40,7 +40,7 @@ class TestLocalExternalExecutable(MatcalUnitTest):
 
     def test_test_default_executable_uses_shell(self):
         my_env_command = 'export MYFAKEPATH=FAKEPATH'
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'], 
+        valid_runner = matcal_external_executable_factory.create(['ls'], 
                                                               [my_env_command], 
                                                               local_computer)
         additional_commands, use_shell = valid_runner._setup_environment()
@@ -49,7 +49,7 @@ class TestLocalExternalExecutable(MatcalUnitTest):
     def test_get_multiple_module_commands_back_for_general_environment_valid(self):
         my_env_commands = ['export MYFAKEPATH=FAKEPATH', 'echo ISMATCALAWESOME']
         goal_command = 'export MYFAKEPATH=FAKEPATH;echo ISMATCALAWESOME'
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'],
+        valid_runner = matcal_external_executable_factory.create(['ls'],
                                                               my_env_commands, 
                                                               local_computer)
         additional_commands, use_shell = valid_runner._setup_environment()
@@ -59,14 +59,14 @@ class TestLocalExternalExecutable(MatcalUnitTest):
         var_name = "MYMatcalTestVar"
         var_val = 23
         my_env_command = [f'export {var_name}={var_val}', f'echo ${var_name}']
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'], 
+        valid_runner = matcal_external_executable_factory.create(['ls'], 
                                                               my_env_command, 
                                                               local_computer)
         stdout, stderr, process = valid_runner.run()
         self.assertEqual(len(stderr), 0)
 
     def test_run_invalid_commands(self):
-        invalid_command_runner = MatCalExternalExecutableFactory.create(['not_a_VALID_command'],
+        invalid_command_runner = matcal_external_executable_factory.create(['not_a_VALID_command'],
                                                                          None,
                                                                         local_computer)
 
@@ -78,14 +78,14 @@ class TestEnvSetupFactory(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = {}
+        matcal_executable_environment_setup_function_identifier._registry = {}
 
     def test_init(self):
-        cef = MatCalExecutableEnvironmentSetupFunctionIdentifier
+        cef = matcal_executable_environment_setup_function_identifier
         self.assertIsNotNone(cef)
 
     def test_get_default(self):
-        cef = MatCalExecutableEnvironmentSetupFunctionIdentifier
+        cef = matcal_executable_environment_setup_function_identifier
         proc = cef.identify()
         self.assertEqual(proc, default_environment_command_processor)
 

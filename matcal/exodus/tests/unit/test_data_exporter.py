@@ -4,7 +4,7 @@ import os
 from matcal.core.constants import TIME_KEY
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
-from matcal.full_field.data_exporter import MatCalFieldDataExporterIdentifier
+from matcal.full_field.data_exporter import matcal_field_data_exporter_identifier
 from matcal.full_field.data_importer import FieldSeriesData
 from matcal.full_field.tests.unit.test_mappers import FieldStatsExportTests
 
@@ -20,11 +20,11 @@ class TestMatCalFieldDataExporter(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_identify(self):
-        exporter = MatCalFieldDataExporterIdentifier.identify("e")
+        exporter = matcal_field_data_exporter_identifier.identify("e")
         self.assertEqual(exodus_field_data_exporter_function, exporter)
-        exporter = MatCalFieldDataExporterIdentifier.identify("g")
+        exporter = matcal_field_data_exporter_identifier.identify("g")
         self.assertEqual(exodus_field_data_exporter_function, exporter)
-        exporter = MatCalFieldDataExporterIdentifier.identify("exo")
+        exporter = matcal_field_data_exporter_identifier.identify("exo")
         self.assertEqual(exodus_field_data_exporter_function, exporter)
 
     def test_copy_mesh_and_store_node_and_global_data_user_specified_time_varname_with_time(self):

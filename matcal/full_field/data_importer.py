@@ -72,12 +72,12 @@ def _import_field_data(global_filename, series_directory="./",
                        file_type=None, n_cores=1):
 
     try:
-        field_parser = MatCalFieldDataFactory.create(file_type, global_filename, 
+        field_parser = matcal_field_data_factory.create(file_type, global_filename, 
                                                      series_directory, n_cores=n_cores)
     except KeyError:
         err_str = (f"Data file \"{global_filename}\" of type \"{file_type}\" " +
             "is not a supported file type. MatCal supports the following data types:"
-            +f"\n{list(MatCalFieldDataFactory.keys())}")
+            +f"\n{list(matcal_field_data_factory.keys())}")
         raise RuntimeError(err_str)
    
     _log_with_time(global_filename, "Start: Parsing Field Series Data")
@@ -620,9 +620,9 @@ class _JSONFiledDataImporterCreator(ObjectCreator):
         return _JSONFullFieldParser(*args, **kwargs)
 
 
-MatCalFieldDataFactory = _FieldDataImporterSelector()
-MatCalFieldDataFactory.register_creator('csv', _CSVFieldDataImporterCreator())
-MatCalFieldDataFactory.register_creator('json', _JSONFiledDataImporterCreator())
+matcal_field_data_factory = _FieldDataImporterSelector()
+matcal_field_data_factory.register_creator('csv', _CSVFieldDataImporterCreator())
+matcal_field_data_factory.register_creator('json', _JSONFiledDataImporterCreator())
 
 
 class MeshFileScraperSelector(BasicIdentifier):
@@ -668,8 +668,8 @@ def _full_json_import(mesh_dict):
     return mesh_skele
 
 
-MatCalMeshFileScraperSelector = MeshFileScraperSelector()
-MatCalMeshFileScraperSelector.register('json', _json_mesh_skeleton_scraper)
+matcal_mesh_file_scraper_selector = MeshFileScraperSelector()
+matcal_mesh_file_scraper_selector.register('json', _json_mesh_skeleton_scraper)
 
 
 def mesh_file_to_skeleton(mesh_filename:str, subset_name:str=None)->MeshSkeleton:
@@ -677,7 +677,7 @@ def mesh_file_to_skeleton(mesh_filename:str, subset_name:str=None)->MeshSkeleton
     This will load a mesh file and return a data structure containing the
     mesh cloud points, connectivity and side set information. 
     """
-    scraper = MatCalMeshFileScraperSelector.identify(mesh_filename)
+    scraper = matcal_mesh_file_scraper_selector.identify(mesh_filename)
     return scraper(mesh_filename, subset_name)
 
 

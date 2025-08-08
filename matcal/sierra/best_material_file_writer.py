@@ -1,5 +1,5 @@
 from matcal.core.object_factory import ObjectCreator
-from matcal.core.best_material_file_writer import DefaultResultsFileWriter, MatcalFileWriterFactory
+from matcal.core.best_material_file_writer import DefaultResultsFileWriter, matcal_file_writer_factory
 
 from matcal.sierra.aprepro_format import make_aprepro_string_from_name_val_pair
 
@@ -23,5 +23,5 @@ class AdagioResultsFileWriterCreator(ObjectCreator):
       return BestApreproMaterialFileWriter(results)
 
 
-MatcalFileWriterFactory.register_creator('aria', AriaResultsFileWriterCreator())
-MatcalFileWriterFactory.register_creator('adagio', AdagioResultsFileWriterCreator())
+matcal_file_writer_factory.register_creator('aria', AriaResultsFileWriterCreator())
+matcal_file_writer_factory.register_creator('adagio', AdagioResultsFileWriterCreator())

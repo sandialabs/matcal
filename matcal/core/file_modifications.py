@@ -83,7 +83,7 @@ def jinja2_processor(contents, replacements):
     return modified_content
 
 
-MatCalTemplateFileProcessorIdentifier = IdentifierByTestFunction(jinja2_processor)
+matcal_template_file_processor_identifier = IdentifierByTestFunction(jinja2_processor)
 
 
 def use_jinja_preprocessor():
@@ -91,7 +91,7 @@ def use_jinja_preprocessor():
     Forces the preprocessor for templated files to return to the 
     default processor, jinja2.
     """
-    MatCalTemplateFileProcessorIdentifier._registry = {}
+    matcal_template_file_processor_identifier._registry = {}
 
 
 def process_template_file(file_path, replacements):
@@ -99,7 +99,7 @@ def process_template_file(file_path, replacements):
         with open(file_path, 'r') as file:
             contents = file.read()
     
-        template_processor = MatCalTemplateFileProcessorIdentifier.identify()
+        template_processor = matcal_template_file_processor_identifier.identify()
         modified_contents = template_processor(contents, replacements)
         with open(file_path, 'w') as file:
             file.write(modified_contents)

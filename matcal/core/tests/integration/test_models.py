@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
-from matcal.core.external_executable import MatCalExecutableEnvironmentSetupFunctionIdentifier
+from matcal.core.external_executable import matcal_executable_environment_setup_function_identifier
 from matcal.core.file_modifications import use_jinja_preprocessor
 from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.models import UserExecutableModel
@@ -25,7 +25,7 @@ class TestUserExecutbleModels(MatcalUnitTest):
 
   def setUp(self) -> None:
     super().setUp(__file__)
-    MatCalExecutableEnvironmentSetupFunctionIdentifier._registry={}
+    matcal_executable_environment_setup_function_identifier._registry={}
     
   def test_user_exec_model_python(self):
     with open("python_model.py", "w") as f:

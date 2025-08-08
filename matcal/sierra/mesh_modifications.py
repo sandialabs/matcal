@@ -3,7 +3,7 @@ import shutil
 import glob
 
 from matcal.core.models import MeshComposer, MeshDecomposer
-from matcal.core.external_executable import MatCalExternalExecutableFactory
+from matcal.core.external_executable import matcal_external_executable_factory
 from matcal.core.computing_platforms import local_computer
 
 
@@ -21,7 +21,7 @@ class DecompMeshDecomposer(MeshDecomposer):
         self._build_commands(mesh_file, number_of_cores)
         orig_dir = os.getcwd()
         os.chdir(output_directory)
-        mesh_decompose_runner = MatCalExternalExecutableFactory.create(self._commands, 
+        mesh_decompose_runner = matcal_external_executable_factory.create(self._commands, 
                                                                        self._modules_to_load, 
                                                                        computer)
         stdout, stderr, return_code = mesh_decompose_runner.run()
@@ -61,12 +61,12 @@ class YadaMeshDecomposer(MeshDecomposer):
         self._build_fastspread_commands(mesh_file)
         orig_dir = os.getcwd()
         os.chdir(output_directory)
-        mesh_decompose_runner = MatCalExternalExecutableFactory.create(self._commands, 
+        mesh_decompose_runner = matcal_external_executable_factory.create(self._commands, 
                                                                        self._modules_to_load, 
                                                                        computer)
         stdout, stderr, return_code = mesh_decompose_runner.run()
 
-        fastspread_runner = MatCalExternalExecutableFactory.create(self._fastspread_commands, 
+        fastspread_runner = matcal_external_executable_factory.create(self._fastspread_commands, 
                                                                    self._modules_to_load, 
                                                                    computer)
 
@@ -94,7 +94,7 @@ class EpuMeshComposer(MeshComposer):
         orig_dir = os.getcwd()
         os.chdir(mesh_directory)
         commands = self._build_commands(mesh_file, number_of_cores)
-        runner = MatCalExternalExecutableFactory.create(commands, 
+        runner = matcal_external_executable_factory.create(commands, 
                                                         self._modules_to_load, 
                                                         computer)
         stdour, stderr, return_code = runner.run()

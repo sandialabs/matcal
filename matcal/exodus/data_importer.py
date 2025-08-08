@@ -8,14 +8,14 @@ from matcal.core.state import SolitaryState
 from matcal.exodus.library_importer import create_exodus_class_instance
 from matcal.exodus.mesh_modifications import extract_exodus_mesh, _extract_exodus_surfaces
 from matcal.full_field.data_importer import (FieldDataParserBase, 
-                                             MatCalMeshFileScraperSelector, 
-                                             MatCalFieldDataFactory, mesh_file_to_skeleton)
+                                             matcal_mesh_file_scraper_selector, 
+                                             matcal_field_data_factory, mesh_file_to_skeleton)
 from matcal.core.mesh_modifications import get_mesh_composer
 
 
-MatCalMeshFileScraperSelector.register("g", extract_exodus_mesh)
-MatCalMeshFileScraperSelector.register("e", extract_exodus_mesh)
-MatCalMeshFileScraperSelector.register("exo", extract_exodus_mesh)
+matcal_mesh_file_scraper_selector.register("g", extract_exodus_mesh)
+matcal_mesh_file_scraper_selector.register("e", extract_exodus_mesh)
+matcal_mesh_file_scraper_selector.register("exo", extract_exodus_mesh)
 
 
 class ExodusFieldDataSeriesImporter(FieldDataParserBase):
@@ -188,6 +188,6 @@ class ExodusFieldDataSeriesImporter(FieldDataParserBase):
         return mesh_skeleton.connectivity+1 #add 1 to account for exodus indexing at 1
     
 
-MatCalFieldDataFactory.register_creator("e", ExodusFieldDataSeriesImporter)
-MatCalFieldDataFactory.register_creator("g", ExodusFieldDataSeriesImporter)
-MatCalFieldDataFactory.register_creator("exo", ExodusFieldDataSeriesImporter)
+matcal_field_data_factory.register_creator("e", ExodusFieldDataSeriesImporter)
+matcal_field_data_factory.register_creator("g", ExodusFieldDataSeriesImporter)
+matcal_field_data_factory.register_creator("exo", ExodusFieldDataSeriesImporter)

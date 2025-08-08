@@ -4,7 +4,7 @@ import subprocess
 import matcal.core.constants as matcal_constants
 from matcal.core.external_executable import attempt_to_execute
 from matcal.core.object_factory import IdentifierByTestFunction, BasicIdentifier
-from matcal.core.external_executable import MatCalExecutableEnvironmentSetupFunctionIdentifier
+from matcal.core.external_executable import matcal_executable_environment_setup_function_identifier
 
 def raise_no_module_paths_added():
     err_str = ("Paths to the module commands must be specified. "+""
@@ -56,8 +56,8 @@ def default_modules_command_does_not_exist():
 
 # MatCal will default to lmod command unless the modulecmd exists for the user on 
 # the current machine
-MatCalLinuxModulesPathFunctionIdentifier = IdentifierByTestFunction(get_lmod_modules_command_path)
-MatCalLinuxModulesPathFunctionIdentifier.register(modulecmd_command_exists, 
+matcal_linux_modules_path_function_identifier = IdentifierByTestFunction(get_lmod_modules_command_path)
+matcal_linux_modules_path_function_identifier.register(modulecmd_command_exists, 
                                                   get_modulecmd_modules_command_path)
 
 
@@ -89,7 +89,7 @@ def issue_module_commands(*args):
     if type(args[0]) == type([]):
         args = args[0]
     args = list(args)
-    module_command_identifier = MatCalLinuxModulesPathFunctionIdentifier.identify()
+    module_command_identifier = matcal_linux_modules_path_function_identifier.identify()
     module_cmd = [module_command_identifier()]
     all_commands = module_cmd + ["python"] + args
     output, error = run_module_commands(*all_commands)
@@ -138,7 +138,7 @@ def module_command_writer(modules:list):
     return load_string, use_shell
 
 
-MatCalExecutableEnvironmentSetupFunctionIdentifier.register(default_modules_command_exists, 
+matcal_executable_environment_setup_function_identifier.register(default_modules_command_exists, 
                                                             module_command_executer)
 
 def raise_no_test_module_error():

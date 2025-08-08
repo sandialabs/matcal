@@ -67,12 +67,12 @@ def FileData(filename:str, state:State=None, file_type:str=None,
 
 def _import_data(filename, state=None, file_type=None, *args, **kwargs):
     try:
-        importer = MatCalProbeDataImporterFactory.create(file_type, filename, 
+        importer = matcal_probe_data_importer_factory.create(file_type, filename, 
                                                          *args, **kwargs)
     except KeyError:
         raise KeyError("Data file \"{}\" of type \"{}\" is not a supported file type." \
                        " MatCal supports the following data types:\n{}".format(filename, file_type,
-                                                                          list(MatCalProbeDataImporterFactory.keys())))
+                                                                          list(matcal_probe_data_importer_factory.keys())))
 
     data = importer.load()
     if state is not None:
@@ -724,8 +724,8 @@ class JSONProbeImporterCreator(ObjectCreator):
         return JSONProbeDataImporter(*args, **kwargs)
 
 
-MatCalProbeDataImporterFactory = ProbeDataImporterFactory()
-MatCalProbeDataImporterFactory.register_creator('csv', CSVProbeImporterCreator())
-MatCalProbeDataImporterFactory.register_creator('npy', NumpyProbeImporterCreator())
-MatCalProbeDataImporterFactory.register_creator('mat', MatlabProbeImporterCreator())
-MatCalProbeDataImporterFactory.register_creator('json', JSONProbeImporterCreator())
+matcal_probe_data_importer_factory = ProbeDataImporterFactory()
+matcal_probe_data_importer_factory.register_creator('csv', CSVProbeImporterCreator())
+matcal_probe_data_importer_factory.register_creator('npy', NumpyProbeImporterCreator())
+matcal_probe_data_importer_factory.register_creator('mat', MatlabProbeImporterCreator())
+matcal_probe_data_importer_factory.register_creator('json', JSONProbeImporterCreator())
