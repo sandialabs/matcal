@@ -5,9 +5,9 @@ VFMUniaxialTensionConnectedHexModel, VFMUniaxialTensionHexModel)
 
 
 def raise_error_if_no_platform_test_identifier_registered(*args, **kwargs):
-    err_str = ("No \'MatCalTestPlatformOptionsFunctionIdentifier\' has been set. "+
+    err_str = ("No \'matcal_test_platform_options_function_identifier\' has been set. "+
         "Some platform specific testing maybe missed. Add  "+
-        "\'MatCalTestPlatformOptionsFunctionIdentifier.set_default(set_platform_options)\' "+
+        "\'matcal_test_platform_options_function_identifier.set_default(set_platform_options)\' "+
         "to matcal.sierra.tests.platform_options or to an __init__.py in you site directory. "+
         "See the example function in matcal.sierra.tests.platform_options to see "
         "what 'set_platform_options' can/should do. "+
@@ -15,7 +15,7 @@ def raise_error_if_no_platform_test_identifier_registered(*args, **kwargs):
     raise RuntimeError(err_str)
 
 
-MatCalTestPlatformOptionsFunctionIdentifier = IdentifierByTestFunction(
+matcal_test_platform_options_function_identifier = IdentifierByTestFunction(
     raise_error_if_no_platform_test_identifier_registered)
 
 

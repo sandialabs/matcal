@@ -12,11 +12,11 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.sierra.material import Material
 from matcal.sierra.models import UniaxialLoadingMaterialPointModel
-from matcal.sierra.tests.platform_options import MatCalTestPlatformOptionsFunctionIdentifier
+from matcal.sierra.tests.platform_options import matcal_test_platform_options_function_identifier
 from matcal.sierra.tests.utilities import write_linear_elastic_material_file
 
 
-SET_PLATFORM_OPTIONS = MatCalTestPlatformOptionsFunctionIdentifier.identify()
+SET_PLATFORM_OPTIONS = matcal_test_platform_options_function_identifier.identify()
 
 
 class TestStudyEvaluationSet(MatcalUnitTest):

@@ -10,7 +10,7 @@ from matcal.core.constants import (BATCH_RESTART_FILENAME, DESIGN_PARAMETER_FILE
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.multi_core_job_pool import (convert_results_to_dict_of_data_collections, 
      dispatch_jobs, prepare_parameter_evaluation_jobs, run_jobs_serial)
-from matcal.core.reporter import MatCalParameterReporterIdentifier
+from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.utilities import remove_directory
 
@@ -330,7 +330,7 @@ def _setup_workdir(workdir_name, is_restart):
 
 def write_parameter_include_file(params, path):
     if os.path.exists(path):
-        dictionary_reporter = MatCalParameterReporterIdentifier.identify()
+        dictionary_reporter = matcal_parameter_reporter_identifier.identify()
         dictionary_reporter(os.path.join(path, DESIGN_PARAMETER_FILE), params)
 
 

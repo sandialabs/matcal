@@ -11,7 +11,7 @@ from matcal.core.utilities import matcal_name_format
 from matcal.core.computing_platforms import RemoteComputingPlatform
 from matcal.core.data_importer import FileData
 from matcal.core.data import DataCollection
-from matcal.core.reporter import MatCalParameterReporterIdentifier
+from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.tests.utilities_for_tests import MockExecutableModel
 
 class TestStudyEvaluationSet(MatcalUnitTest):
@@ -90,7 +90,7 @@ class TestStudyEvaluationSet(MatcalUnitTest):
         StudyEvaluationSet(self.model, self.objective_set)
 
     def test_make_directories_and_files(self):
-        MatCalParameterReporterIdentifier._registry = {}
+        matcal_parameter_reporter_identifier._registry = {}
 
         eval_set = StudyEvaluationSet(self.model, self.objective_set)
         eval_set.prepare_model_and_simulators()
@@ -107,7 +107,7 @@ class TestStudyEvaluationSet(MatcalUnitTest):
                 self.assertEqual(goldline, line)
 
     def test_make_directories_and_files_in_dir(self):
-        MatCalParameterReporterIdentifier._registry = {}
+        matcal_parameter_reporter_identifier._registry = {}
 
         eval_set = StudyEvaluationSet(self.model, self.objective_set)
         eval_set.prepare_model_and_simulators("test_dir")

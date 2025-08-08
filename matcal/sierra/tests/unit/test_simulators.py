@@ -1,19 +1,19 @@
 import numpy as np
 
 from matcal.core.computing_platforms import (HPCComputingPlatform, 
-    MatCalComputingPlatformFunctionIdentifier)
+    matcal_computing_platform_function_identifier)
 from matcal.core.data import DataCollection, convert_dictionary_to_data
 from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.sierra.material import Material
 from matcal.sierra.models import UniaxialLoadingMaterialPointModel, UserDefinedSierraModel
-from matcal.sierra.tests.platform_options import MatCalTestPlatformOptionsFunctionIdentifier
+from matcal.sierra.tests.platform_options import matcal_test_platform_options_function_identifier
 from matcal.sierra.tests.utilities import (write_linear_elastic_material_file, 
     write_empty_file, write_design_param_file)
 
 
-SET_PLATFORM_OPTIONS = MatCalTestPlatformOptionsFunctionIdentifier.identify()
+SET_PLATFORM_OPTIONS = matcal_test_platform_options_function_identifier.identify()
 
 
 class TestSierraSimulator(MatcalUnitTest):
@@ -115,7 +115,7 @@ class TestSierraSimulator(MatcalUnitTest):
         model = UserDefinedSierraModel('aria', self.empty_input_file, self.empty_mesh_file)
         SET_PLATFORM_OPTIONS(model)
         sim = model.build_simulator(self.state)
-        platform_identifier = MatCalComputingPlatformFunctionIdentifier.identify()
+        platform_identifier = matcal_computing_platform_function_identifier.identify()
         platform = platform_identifier()
         if isinstance(platform, HPCComputingPlatform):
             queue_id = model.queue_id

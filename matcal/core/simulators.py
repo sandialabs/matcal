@@ -14,7 +14,7 @@ from matcal.core.file_modifications import process_template_file
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.parameters import _get_parameters_according_to_precedence
 from matcal.core.object_factory import DefaultObjectFactory, ObjectCreator
-from matcal.core.reporter import MatCalParameterReporterIdentifier
+from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.utilities import matcal_name_format
 
@@ -254,7 +254,7 @@ class ExecutableSimulator(Simulator):
 
     def _write_parameters_file(self, workdir_full_path, parameters):
         params_file = os.path.join(workdir_full_path, DESIGN_PARAMETER_FILE)
-        dictionary_reporter = MatCalParameterReporterIdentifier.identify()
+        dictionary_reporter = matcal_parameter_reporter_identifier.identify()
         dictionary_reporter(params_file, parameters)
 
     def _execute_external(self, external_executable):

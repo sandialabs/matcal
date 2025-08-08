@@ -186,7 +186,7 @@ class RemoteExternalExecutable(ExternalExecutableBase):
         super().__init__(commands, modules_to_load, computer, working_directory=working_directory)
 
     def run(self):
-        env_setup = MatCalPlatformEnvironmentSetupIdentifier.identify()
+        env_setup = matcal_platform_environment_setup_identifier.identify()
         env_setup.prepare()
         results = super().run()
         env_setup.reset()
@@ -251,7 +251,7 @@ class ExecutableNoEnvironmentSetup(ExecutableEnvironmentSetupBase):
         """"""
 
 
-MatCalPlatformEnvironmentSetupIdentifier = \
+matcal_platform_environment_setup_identifier = \
     IdentifierByTestFunction(ExecutableNoEnvironmentSetup())
 
 MatCalExternalExecutableFactory = ExternalExecutableFactory()

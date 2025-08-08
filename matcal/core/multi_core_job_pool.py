@@ -3,7 +3,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import os
 import time
 
-from matcal.core.computing_platforms import MatCalJobDispatchDelayFunctionIdentifier
+from matcal.core.computing_platforms import matcal_job_dispatch_delay_function_identifier
 from matcal.core.data import DataCollection
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.simulators import SimulatorFailureResults, SimulatorResults
@@ -56,7 +56,7 @@ def prepare_parameter_evaluation_jobs(evaluation_sets, parameters, evaluation_na
     return bill_of_jobs
 
 def _get_delay_time():
-    delay_time_func =  MatCalJobDispatchDelayFunctionIdentifier.identify()
+    delay_time_func =  matcal_job_dispatch_delay_function_identifier.identify()
     delay_time = delay_time_func()
     return delay_time
 

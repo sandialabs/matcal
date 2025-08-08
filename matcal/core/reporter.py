@@ -9,5 +9,5 @@ def plain_text_dictionary_report(filename:str, report_dict:dict)->None:
         f.write(lines)            
 
 
-MatCalParameterReporterIdentifier = \
+matcal_parameter_reporter_identifier = \
     IdentifierByTestFunction(plain_text_dictionary_report)

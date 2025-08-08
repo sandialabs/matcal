@@ -2,8 +2,8 @@ from multiprocessing import cpu_count
 from socket import gethostname
 
 from matcal.core.computing_platforms import (LocalComputingPlatform, 
-    MatCalComputingPlatformFunctionIdentifier, MatCalJobDispatchDelayFunctionIdentifier,
-    MatCalPermissionsCheckerFunctionIdentifier, no_check_checker, 
+    matcal_computing_platform_function_identifier, matcal_job_dispatch_delay_function_identifier,
+    matcal_permissions_checker_function_identifier, no_check_checker, 
     JobSubmitCommandCreatorInterface, Queue, _convert_wall_time_string_to_seconds, 
     ImproperTimeFormatError)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
@@ -42,9 +42,9 @@ class TestComputingPlatformFunctionIdentifier(MatcalUnitTest):
 
 
     def test_default_returns_LocalComputerPlatform(self):
-        MatCalComputingPlatformFunctionIdentifier._registry = {}
+        matcal_computing_platform_function_identifier._registry = {}
         platform_computing_identification_func = \
-            MatCalComputingPlatformFunctionIdentifier.identify()
+            matcal_computing_platform_function_identifier.identify()
         comp = platform_computing_identification_func()
         self.assertIsInstance(comp, LocalComputingPlatform)
 
@@ -55,8 +55,8 @@ class TestDispatchDelayFunctionIdentifier(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_return_defualt_zero(self):
-        MatCalJobDispatchDelayFunctionIdentifier._registry = {}
-        delay_value_func = MatCalJobDispatchDelayFunctionIdentifier.identify()
+        matcal_job_dispatch_delay_function_identifier._registry = {}
+        delay_value_func = matcal_job_dispatch_delay_function_identifier.identify()
         delay_value = delay_value_func()
         self.assertEqual(delay_value, 0)
 
@@ -67,8 +67,8 @@ class TestPermissionsChecker(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_core_returns_no_check_checker(self):
-        MatCalPermissionsCheckerFunctionIdentifier._registry = {}
-        check_func = MatCalPermissionsCheckerFunctionIdentifier.identify()
+        matcal_permissions_checker_function_identifier._registry = {}
+        check_func = matcal_permissions_checker_function_identifier.identify()
         self.assertEqual(check_func, no_check_checker)
 
 class TestJobSubmitCommandCreatorInterface(MatcalUnitTest):

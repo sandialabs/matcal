@@ -11,8 +11,8 @@ from pathlib import Path
 import shutil
 
 from matcal.core.computing_platforms import (LocalComputingPlatform, local_computer, 
-                                             MatCalPermissionsCheckerFunctionIdentifier,
-                                             MatCalComputingPlatformFunctionIdentifier, 
+                                             matcal_permissions_checker_function_identifier,
+                                             matcal_computing_platform_function_identifier, 
                                              RemoteComputingPlatform)
 from matcal.core.constants import (STATE_PARAMETER_FILE, MATCAL_TEMPLATE_DIRECTORY, 
                                    MATCAL_MESH_TEMPLATE_DIRECTORY)
@@ -20,7 +20,7 @@ from matcal.core.data_importer import FileData
 from matcal.core.parameters import (ParameterCollection, 
                                     _get_parameters_according_to_precedence)
 from matcal.core.python_function_importer import python_function_importer
-from matcal.core.reporter import MatCalParameterReporterIdentifier
+from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.serializer_wrapper import matcal_load
 from matcal.core.simulators import PythonSimulator, ExecutableSimulator
 from matcal.core.state import  State
@@ -242,7 +242,7 @@ class _ComputerControllerComponentBase(ABC):
         self._set_queue_id(queue_id)
         self.set_time_limit(time_limit_hours)
         if not is_test:
-            computer_identifier_func = MatCalComputingPlatformFunctionIdentifier.identify()
+            computer_identifier_func = matcal_computing_platform_function_identifier.identify()
             computer = computer_identifier_func()
             self._set_computing_platform(computer)
 
@@ -578,7 +578,7 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
     def _write_state_file(self, state, directory):
         this_state_params_filename = os.path.join(directory, 
                                                   STATE_PARAMETER_FILE)
-        dictionary_reporter = MatCalParameterReporterIdentifier.identify()
+        dictionary_reporter = matcal_parameter_reporter_identifier.identify()
         model_state_consts = self.get_model_constants(state)
         state_constants = _get_parameters_according_to_precedence(state, 
                                                                  model_state_consts)
@@ -617,7 +617,7 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
 
     def confirm_permissions(self):
         if isinstance(self.computer, RemoteComputingPlatform):
-            permissions_check = MatCalPermissionsCheckerFunctionIdentifier.identify()
+            permissions_check = matcal_permissions_checker_function_identifier.identify()
             permissions_check(self.queue_id, self.computer, self.name)
 
     def preprocess(self, state, target_directory=None):

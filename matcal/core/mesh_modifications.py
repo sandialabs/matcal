@@ -19,17 +19,17 @@ def get_mesh_operator(mesh_file_basename, identifier, identifier_name, operator_
     return mesh_operator
 
 
-MatCalMeshComposerIdentifier = BasicIdentifier()
+matcal_mesh_composer_identifier = BasicIdentifier()
 
 
 def get_mesh_composer(mesh_file_basename):
-    return get_mesh_operator(mesh_file_basename, MatCalMeshComposerIdentifier, 
-                             "MatCalMeshComposerIdentifier", "composer")
+    return get_mesh_operator(mesh_file_basename, matcal_mesh_composer_identifier, 
+                             "matcal_mesh_composer_identifier", "composer")
 
 
-MatCalMeshDecomposerIdentifier = BasicIdentifier()
+matcal_mesh_decomposer_identifier = BasicIdentifier()
 
 
 def get_mesh_decomposer(mesh_file_basename):
-    return get_mesh_operator(mesh_file_basename, MatCalMeshDecomposerIdentifier, 
-                             "MatCalMeshDecomposerIdentifier", "decomposer")
+    return get_mesh_operator(mesh_file_basename, matcal_mesh_decomposer_identifier, 
+                             "matcal_mesh_decomposer_identifier", "decomposer")
