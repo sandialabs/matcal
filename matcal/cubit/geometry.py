@@ -494,16 +494,24 @@ class TopHatShearGeometry(GeometryBase):
             self._verify_parameter_less_than_parameter("bottom_radius_transition_y", "middle_radius_transition_y", hole_height_too_small_err_message)
 
         def _check_mesh_size_parameters_are_valid(self):
-            numsplit_err_message = "The 'numsplits' value must be an integer between 0 and 2."
-            self._verify_parameter_less_than_equal_to_value("numsplits", 2, numsplit_err_message, numbers.Integral)
+            numsplit_err_message = "The 'numsplits' value must be an integer between 0 and 3."
+            self._verify_parameter_less_than_equal_to_value("numsplits", 3, numsplit_err_message, numbers.Integral)
             self._verify_parameter_greater_than_equal_to_value("numsplits", 0, numsplit_err_message, numbers.Integral)
             
-            element_size_err_message = "The geometry parameters for 'numsplits' and 'element_size' must be provided such that " \
-                                    "(element_size)*3^(numsplits+1) <= (base_height-(hole_height+base_bottom_height)))"
+            if self._parameters["element_type"] == "hex8":
+                element_size_err_message = ("The geometry parameters for 'numsplits' "+
+                                            "and 'element_size' must be provided such that " +
+                                            "(element_size)*3^(numsplits+1) <= (base_height-"+
+                                            "(hole_height+base_bottom_height)))")
             
-            max_ele_size_thru_localization_region = self._parameters["base_height"] - (self._parameters["hole_height"]+self._parameters["base_bottom_height"])
-            ele_size_thru_localization_region = self._parameters["element_size"]*3**(self._parameters["numsplits"]+1)
-            self._verify_value_less_than_equal_to_value(ele_size_thru_localization_region, max_ele_size_thru_localization_region, element_size_err_message)
+                max_ele_size_thru_localization_region = (self._parameters["base_height"] - 
+                                                         (self._parameters["hole_height"]+
+                                                          self._parameters["base_bottom_height"]))
+                ele_size_thru_localization_region = (self._parameters["element_size"]*
+                                                     3**(self._parameters["numsplits"]+1))
+                self._verify_value_less_than_equal_to_value(ele_size_thru_localization_region, 
+                                                            max_ele_size_thru_localization_region, 
+                                                            element_size_err_message)
 
     def __init__(self, mesh_filename, geometry_parameters, **kwargs):
         if not isinstance(geometry_parameters, self.Parameters):
@@ -670,33 +678,42 @@ class RectangularUniaxialTensionGeometry(UniaxialStressTensionGeometry):
             super()._check_parameters()
             gauge_width_err_message = "The gauge width cannot be greater than the gauge "\
                                       f"width for the {self._model_type_name}."
-            self._verify_parameter_less_than_parameter("gauge_width", "grip_width", gauge_width_err_message)
+            self._verify_parameter_less_than_parameter("gauge_width", "grip_width", 
+                                                       gauge_width_err_message)
 
             thickness_err_message = "The thickness cannot be greater than the gauge width "\
                                     f"for the {self._model_type_name}."
-            self._verify_parameter_less_than_parameter("thickness", "gauge_width", thickness_err_message)
+            self._verify_parameter_less_than_parameter("thickness", "gauge_width", 
+                                                       thickness_err_message)
 
             element_max_size = self._parameters["gauge_width"]/4
             element_size_err_message = "The element size cannot be greater than 1/4 "\
                                        f"the gauge width for the {self._model_type_name}."
-            self._verify_parameter_less_than_equal_to_value("element_size", element_max_size, element_size_err_message)
+            self._verify_parameter_less_than_equal_to_value("element_size", element_max_size, 
+                                                            element_size_err_message)
 
             taper_max_limit = self._parameters["grip_width"]-self._parameters["gauge_width"]
             taper_err_message = "The taper cannot be greater than (grip_width - gauge_width) " \
                                 "for the uniaxial tension models."
             self._verify_parameter_less_than_value("taper", taper_max_limit, taper_err_message)
 
+            if self._parameters["element_type"] == "hex8":
+                self._check_hex_mesh_parameters()
+
+        def _check_hex_mesh_parameters(self):
             mesh_method = self._parameters["mesh_method"]
             if mesh_method == 5:
                 ele_size_limit = self._parameters["thickness"]/9
                 mesh_method_message = "If the element size is greater than 1/9 of the thickness, "\
                                       "you cannot use \"mesh_method\"=5."
-                self._verify_parameter_less_than_equal_to_value("element_size", ele_size_limit, mesh_method_message)
+                self._verify_parameter_less_than_equal_to_value("element_size", ele_size_limit, 
+                                                                mesh_method_message)
             elif mesh_method > 1 :
                 ele_size_limit = self._parameters["thickness"]/3
                 mesh_method_message = "If the element size is greater than 1/3 of the thickness, "\
                                       "you must use \"mesh_method\"=1."
-                self._verify_parameter_less_than_equal_to_value("element_size", ele_size_limit, mesh_method_message)
+                self._verify_parameter_less_than_equal_to_value("element_size", ele_size_limit, 
+                                                                mesh_method_message)
 
         def _set_derived_parameters(self):
             super()._set_derived_parameters()
@@ -778,7 +795,11 @@ class RoundNotchedTensionGeometry(UniaxialLoadingGeometry):
                 "\"extensometer_length\". Check the specimen dimensions.")
             self._verify_parameter_less_than_parameter("notch_height", "extensometer_length", 
                                                        notch_height_err_message)
-   
+
+            if self._parameters["element_type"] == "hex8":
+                self._check_hex_mesh_parameters()
+            
+        def _check_hex_mesh_parameters(self):
             mesh_method = self._parameters["mesh_method"]
             if mesh_method == 5:
                 ele_size_max_limit = self._parameters["notch_gauge_radius"]/24
