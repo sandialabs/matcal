@@ -149,7 +149,7 @@ class ExternalExecutableBase(ABC):
        working_file.close()
 
     def _setup_environment(self):
-        setup_environment = MatCalExecutableEnvironmentSetupFunctionIdentifier.identify()
+        setup_environment = matcal_executable_environment_setup_function_identifier.identify()
         additional_commands, use_shell = setup_environment(self._environment_commands)
         return additional_commands, use_shell
 
@@ -254,12 +254,12 @@ class ExecutableNoEnvironmentSetup(ExecutableEnvironmentSetupBase):
 matcal_platform_environment_setup_identifier = \
     IdentifierByTestFunction(ExecutableNoEnvironmentSetup())
 
-MatCalExternalExecutableFactory = ExternalExecutableFactory()
-MatCalExternalExecutableFactory.register_creator(LocalComputingPlatform, 
+matcal_external_executable_factory = ExternalExecutableFactory()
+matcal_external_executable_factory.register_creator(LocalComputingPlatform, 
                                                  LocalExternalExecutableCreator())
-MatCalExternalExecutableFactory.register_creator(RemoteComputingPlatform, 
+matcal_external_executable_factory.register_creator(RemoteComputingPlatform, 
                                                  RemoteExternalExecutableCreator())
-MatCalExternalExecutableFactory.register_creator(HPCComputingPlatform, 
+matcal_external_executable_factory.register_creator(HPCComputingPlatform, 
                                                  RemoteExternalExecutableCreator())
 
 def default_environment_command_processor(commands:list):
@@ -268,7 +268,7 @@ def default_environment_command_processor(commands:list):
     command_string = ";".join(commands)
     return command_string, True
 
-MatCalExecutableEnvironmentSetupFunctionIdentifier = \
+matcal_executable_environment_setup_function_identifier = \
     IdentifierByTestFunction(default_environment_command_processor)
 
 

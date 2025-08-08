@@ -260,9 +260,9 @@ class MuqDramBayesianCalibrationStudy(_DakotaMuqFileDram, DakotaStudyBase):
         return self._dakota_reader(output_filename).parse_bayes()
     
 
-MatCalDramSelector = BasicIdentifier()
-MatCalDramSelector.register('queso', QuesoDramBayesianCalibrationStudy)
-MatCalDramSelector.register('muq', MuqDramBayesianCalibrationStudy)
+matcal_dram_selector = BasicIdentifier()
+matcal_dram_selector.register('queso', QuesoDramBayesianCalibrationStudy)
+matcal_dram_selector.register('muq', MuqDramBayesianCalibrationStudy)
     
     
 def DramBayesianCalibrationStudy(*parameters, library='queso'):
@@ -299,4 +299,4 @@ def DramBayesianCalibrationStudy(*parameters, library='queso'):
         to get the results of their study, and MatCal will raise an error when 
         the study completes because it can not parse the results correctly. 
     """
-    return MatCalDramSelector.identify(library)(*parameters)
+    return matcal_dram_selector.identify(library)(*parameters)

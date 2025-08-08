@@ -2,7 +2,7 @@ from datetime import date
 
 
 from matcal.core.best_material_file_writer import  BestFileWriterFactory, \
-    DefaultResultsFileWriter, MatcalFileWriterFactory
+    DefaultResultsFileWriter, matcal_file_writer_factory
 from matcal.core.utilities import get_username_from_environment
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
@@ -42,4 +42,4 @@ class TestBestFileWriterFactory(MatcalUnitTest):
 
     def test_matcals_default(self):
         fake_results = {}
-        self.assertIsInstance(MatcalFileWriterFactory.create('not_a_key', fake_results), DefaultResultsFileWriter)
+        self.assertIsInstance(matcal_file_writer_factory.create('not_a_key', fake_results), DefaultResultsFileWriter)

@@ -2,7 +2,7 @@ from datetime import date
 
 from matcal.core.utilities import get_username_from_environment
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
-from matcal.core.best_material_file_writer import DefaultResultsFileWriter, MatcalFileWriterFactory
+from matcal.core.best_material_file_writer import DefaultResultsFileWriter, matcal_file_writer_factory
 
 from matcal.sierra.best_material_file_writer import BestApreproMaterialFileWriter
 
@@ -115,12 +115,12 @@ class TestSierraBestFileWriterFactory(MatcalUnitTest):
 
     def test_matcals_default(self):
         fake_results = {}
-        self.assertIsInstance(MatcalFileWriterFactory.create('not_a_key', fake_results), DefaultResultsFileWriter)
+        self.assertIsInstance(matcal_file_writer_factory.create('not_a_key', fake_results), DefaultResultsFileWriter)
 
     def test_get_aria(self):
         fake_results = {}
-        self.assertIsInstance(MatcalFileWriterFactory.create('aria', fake_results), BestApreproMaterialFileWriter)
+        self.assertIsInstance(matcal_file_writer_factory.create('aria', fake_results), BestApreproMaterialFileWriter)
 
     def test_get_adagio(self):
         fake_results = {}
-        self.assertIsInstance(MatcalFileWriterFactory.create('adagio', fake_results), BestApreproMaterialFileWriter)
+        self.assertIsInstance(matcal_file_writer_factory.create('adagio', fake_results), BestApreproMaterialFileWriter)

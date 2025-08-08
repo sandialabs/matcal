@@ -1,5 +1,5 @@
 from matcal.core.constants import TIME_KEY
-from matcal.full_field.data_exporter import MatCalFieldDataExporterIdentifier
+from matcal.full_field.data_exporter import matcal_field_data_exporter_identifier
 
 from matcal.exodus.mesh_modifications import copy_mesh_and_store_data
 
@@ -17,6 +17,6 @@ def exodus_field_data_exporter_function(target_filename, data_to_export,
                                     data_to_export, fields)
 
 
-MatCalFieldDataExporterIdentifier.register("e", exodus_field_data_exporter_function)
-MatCalFieldDataExporterIdentifier.register("exo", exodus_field_data_exporter_function)
-MatCalFieldDataExporterIdentifier.register("g", exodus_field_data_exporter_function)
+matcal_field_data_exporter_identifier.register("e", exodus_field_data_exporter_function)
+matcal_field_data_exporter_identifier.register("exo", exodus_field_data_exporter_function)
+matcal_field_data_exporter_identifier.register("g", exodus_field_data_exporter_function)

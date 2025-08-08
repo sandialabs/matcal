@@ -1,7 +1,7 @@
 from matcal.core.file_modifications import (process_template_file, 
                                               use_jinja_preprocessor, 
                                               jinja2_processor, 
-                                              MatCalTemplateFileProcessorIdentifier)
+                                              matcal_template_file_processor_identifier)
 from matcal.dakota.file_modifications import (pyprepro_processor, 
                                               set_pyprepro_delimiters,
                                               pyprepro_delimiters)
@@ -75,10 +75,10 @@ class TestMatCalTemplateFileProcessor(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_template_file_processor_identifier_default(self):
-        template_processor = MatCalTemplateFileProcessorIdentifier.identify()
+        template_processor = matcal_template_file_processor_identifier.identify()
         self.assertEqual(template_processor, pyprepro_processor)
         use_jinja_preprocessor()
-        template_processor = MatCalTemplateFileProcessorIdentifier.identify()
+        template_processor = matcal_template_file_processor_identifier.identify()
         self.assertEqual(template_processor, jinja2_processor)
         
     def test_process_template_file(self):

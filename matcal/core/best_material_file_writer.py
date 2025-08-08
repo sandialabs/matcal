@@ -47,4 +47,4 @@ class BestFileWriterFactory(DefaultObjectFactory):
       super().__init__(DefaultResultsFileWriterCreator())
 
 
-MatcalFileWriterFactory = BestFileWriterFactory()
+matcal_file_writer_factory = BestFileWriterFactory()

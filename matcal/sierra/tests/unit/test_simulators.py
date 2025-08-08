@@ -192,19 +192,19 @@ class TestSierraSimulator(MatcalUnitTest):
 
 
 from copy import deepcopy
-from matcal.core.linux_modules import (MatCalExecutableEnvironmentSetupFunctionIdentifier, 
+from matcal.core.linux_modules import (matcal_executable_environment_setup_function_identifier, 
                                        module_command_writer)
 
 class TestSierraSimulatorShell(TestSierraSimulator):
 
     def setUp(self):
         super().setUp()
-        self._orig_registry = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._registry)
-        self._orig_default = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._default)
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = {}
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(module_command_writer)
+        self._orig_registry = deepcopy(matcal_executable_environment_setup_function_identifier._registry)
+        self._orig_default = deepcopy(matcal_executable_environment_setup_function_identifier._default)
+        matcal_executable_environment_setup_function_identifier._registry = {}
+        matcal_executable_environment_setup_function_identifier.set_default(module_command_writer)
 
     def tearDown(self):
         super().tearDown()
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = self._orig_registry
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(self._orig_default)
+        matcal_executable_environment_setup_function_identifier._registry = self._orig_registry
+        matcal_executable_environment_setup_function_identifier.set_default(self._orig_default)

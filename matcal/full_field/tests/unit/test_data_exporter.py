@@ -8,7 +8,7 @@ from matcal.full_field.data import convert_dictionary_to_field_data
 from matcal.full_field.data_exporter import (
                                              export_full_field_data_to_json, 
                                              serialize_full_field_data, 
-                                             MatCalFieldDataExporterIdentifier)
+                                             matcal_field_data_exporter_identifier)
 
 
 class TestJSONFieldDataExporter(MatcalUnitTest):
@@ -70,5 +70,5 @@ class TestMatCalFieldDataExporter(MatcalUnitTest):
         super().setUp(__file__)
  
     def test_identify(self):
-        exporter = MatCalFieldDataExporterIdentifier.identify("json")
+        exporter = matcal_field_data_exporter_identifier.identify("json")
         self.assertEqual(export_full_field_data_to_json, exporter)

@@ -5,7 +5,7 @@ data into the structure that MatCal requires for studies.
 from collections import OrderedDict
 
 from matcal.core.object_factory import ObjectCreator
-from matcal.core.simulators import MatCalDataReaderFactory
+from matcal.core.simulators import matcal_data_reader_factory
 import numpy as np
 from matcal.core.data import Data, _check_dictionary_data, _create_array_from_dict
 from matcal.core.state import SolitaryState
@@ -193,4 +193,4 @@ class _FieldDataReaderCreator(ObjectCreator):
         return converter
 
 
-MatCalDataReaderFactory.register_creator(True, _FieldDataReaderCreator())
+matcal_data_reader_factory.register_creator(True, _FieldDataReaderCreator())

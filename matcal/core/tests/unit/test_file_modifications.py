@@ -1,5 +1,5 @@
 from matcal.core.file_modifications import (jinja2_processor, 
-                                            MatCalTemplateFileProcessorIdentifier, 
+                                            matcal_template_file_processor_identifier, 
                                             process_template_file, jinja2_delimiters, 
                                             set_jinja_delimiters, use_jinja_preprocessor)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
@@ -53,7 +53,7 @@ class TestMatCalTemplateFileProcessor(MatcalUnitTest):
         use_jinja_preprocessor()
 
     def test_template_file_processor_identifier_default(self):
-        template_processor = MatCalTemplateFileProcessorIdentifier.identify()
+        template_processor = matcal_template_file_processor_identifier.identify()
         self.assertEqual(template_processor, jinja2_processor)
     
     def test_process_template_file(self):

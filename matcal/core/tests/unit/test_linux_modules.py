@@ -2,13 +2,13 @@ from copy import deepcopy
 
 from matcal.core.computing_platforms import local_computer
 import matcal.core.constants as matcal_const
-from matcal.core.external_executable import MatCalExternalExecutableFactory
+from matcal.core.external_executable import matcal_external_executable_factory
 from matcal.core.linux_modules import (get_all_loaded_modules, 
                                          issue_module_commands, 
                                          default_modules_command_does_not_exist, 
                                          module_command_writer, module_command_executer)
 from matcal.core.linux_modules import (matcal_test_module_identifier, 
-                                       MatCalExecutableEnvironmentSetupFunctionIdentifier)
+                                       matcal_executable_environment_setup_function_identifier)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 import unittest
@@ -71,19 +71,19 @@ class TestLocalExternalExecutableModulesSubprocess(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
         self._test_module = matcal_test_module_identifier.identify()
-        self._orig_registry = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._registry)
-        self._orig_default = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._default)
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = {}
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(module_command_executer)
+        self._orig_registry = deepcopy(matcal_executable_environment_setup_function_identifier._registry)
+        self._orig_default = deepcopy(matcal_executable_environment_setup_function_identifier._default)
+        matcal_executable_environment_setup_function_identifier._registry = {}
+        matcal_executable_environment_setup_function_identifier.set_default(module_command_executer)
 
     def tearDown(self):
         super().tearDown()
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = self._orig_registry
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(self._orig_default)
+        matcal_executable_environment_setup_function_identifier._registry = self._orig_registry
+        matcal_executable_environment_setup_function_identifier.set_default(self._orig_default)
     
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_setup_environment_valid(self):
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'], 
+        valid_runner = matcal_external_executable_factory.create(['ls'], 
             [self._test_module], local_computer)
         additional_commands, use_shell = valid_runner._setup_environment()
         self.assertFalse(use_shell)
@@ -91,14 +91,14 @@ class TestLocalExternalExecutableModulesSubprocess(MatcalUnitTest):
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_setup_environment_invalid(self):
-        invalid_runner = MatCalExternalExecutableFactory.create(['not_a_VALID_command'], 
+        invalid_runner = matcal_external_executable_factory.create(['not_a_VALID_command'], 
             ['not_A_valid_Module'], local_computer)
         with self.assertRaises(RuntimeError):
             stdout, stderr, process = invalid_runner.run()
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_run_valid_commands(self):
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'], [self._test_module], 
+        valid_runner = matcal_external_executable_factory.create(['ls'], [self._test_module], 
             local_computer)
         stdout, stderr, process = valid_runner.run()
         self.assertEqual(len(stderr), 0)
@@ -106,7 +106,7 @@ class TestLocalExternalExecutableModulesSubprocess(MatcalUnitTest):
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_run_invalid_commands(self):
-        invalid_command_runner = MatCalExternalExecutableFactory.create(['not_a_VALID_command'],
+        invalid_command_runner = matcal_external_executable_factory.create(['not_a_VALID_command'],
             None, local_computer)
         with self.assertRaises((FileNotFoundError,PermissionError)):
             stdout, stderr, process = invalid_command_runner.run()
@@ -117,19 +117,19 @@ class TestLocalExternalExecutableModulesShell(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
         self._test_module = matcal_test_module_identifier.identify()
-        self._orig_registry = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._registry)
-        self._orig_default = deepcopy(MatCalExecutableEnvironmentSetupFunctionIdentifier._default)
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = {}
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(module_command_writer)
+        self._orig_registry = deepcopy(matcal_executable_environment_setup_function_identifier._registry)
+        self._orig_default = deepcopy(matcal_executable_environment_setup_function_identifier._default)
+        matcal_executable_environment_setup_function_identifier._registry = {}
+        matcal_executable_environment_setup_function_identifier.set_default(module_command_writer)
 
     def tearDown(self):
         super().tearDown()
-        MatCalExecutableEnvironmentSetupFunctionIdentifier._registry = self._orig_registry
-        MatCalExecutableEnvironmentSetupFunctionIdentifier.set_default(self._orig_default)
+        matcal_executable_environment_setup_function_identifier._registry = self._orig_registry
+        matcal_executable_environment_setup_function_identifier.set_default(self._orig_default)
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_setup_environment_valid(self):
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'], 
+        valid_runner = matcal_external_executable_factory.create(['ls'], 
             [ self._test_module], local_computer)
         additional_commands, use_shell = valid_runner._setup_environment()
         goal_commands = "module purge;module load sierra;"
@@ -138,20 +138,20 @@ class TestLocalExternalExecutableModulesShell(MatcalUnitTest):
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_setup_environment_invalid(self):
-        invalid_runner = MatCalExternalExecutableFactory.create(['not_a_VALID_command'], 
+        invalid_runner = matcal_external_executable_factory.create(['not_a_VALID_command'], 
             ['not_A_valid_Module'], local_computer)
         stdout, stderr, process = invalid_runner.run()
         self.assertNotEqual(process,  0)
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_run_valid_commands(self):
-        valid_runner = MatCalExternalExecutableFactory.create(['ls'], [ self._test_module], local_computer)
+        valid_runner = matcal_external_executable_factory.create(['ls'], [ self._test_module], local_computer)
         stdout, stderr, process = valid_runner.run()
         self.assertEqual(process, 0)
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_run_invalid_commands(self):
-        invalid_command_runner = MatCalExternalExecutableFactory.create(['not_a_VALID_command'],
+        invalid_command_runner = matcal_external_executable_factory.create(['not_a_VALID_command'],
             None, local_computer)
         stdout, stderr, process = invalid_command_runner.run()
         self.assertNotEqual(process,  0)

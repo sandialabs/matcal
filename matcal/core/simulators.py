@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 
 from matcal.core.constants import DESIGN_PARAMETER_FILE, STATE_PARAMETER_FILE
 from matcal.core.data import convert_dictionary_to_data
-from matcal.core.external_executable import MatCalExternalExecutableFactory
+from matcal.core.external_executable import matcal_external_executable_factory
 from matcal.core.file_modifications import process_template_file
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.parameters import _get_parameters_according_to_precedence
@@ -197,7 +197,7 @@ class ExecutableSimulator(Simulator):
 
     def run(self, parameters, working_dir=None, get_results=True):
         workdir_full_path = self._select_working_dir(working_dir)
-        external_executable = MatCalExternalExecutableFactory.create(self._commands, 
+        external_executable = matcal_external_executable_factory.create(self._commands, 
             self._modules_to_load, self._compute_information.computer, 
             working_directory=workdir_full_path)
         model_params = _get_parameters_according_to_precedence(self.state, 
@@ -362,7 +362,7 @@ class PythonSimulator(Simulator):
         return results
 
     def _convert_to_data(self, results):
-        converter = MatCalDataReaderFactory.create(self._is_field_simulation(),
+        converter = matcal_data_reader_factory.create(self._is_field_simulation(),
             self._field_coordinates)
         results = converter(results)
         return results
@@ -392,4 +392,4 @@ class DataReaderFactory(DefaultObjectFactory):
     pass
 
 
-MatCalDataReaderFactory = DataReaderFactory(ProbeDataReaderCreator())
+matcal_data_reader_factory = DataReaderFactory(ProbeDataReaderCreator())

@@ -9,7 +9,7 @@ from matcal.core.utilities import _time_interpolate
 from matcal.core.utilities import check_item_is_correct_type
 from matcal.full_field.data import FieldData, convert_dictionary_to_field_data
 from matcal.full_field.data_importer import FieldSeriesData
-from matcal.full_field.data_exporter import MatCalFieldDataExporterIdentifier 
+from matcal.full_field.data_exporter import matcal_field_data_exporter_identifier 
 from matcal.full_field.NodeData import NodeData
 from matcal.full_field.shapefunctions import TwoDim4NodeBilinearShapeFunction
 
@@ -713,7 +713,7 @@ class FullFieldCalculator:
     def _get_exporter(self, export_filename, file_type):
         if file_type is None:
             file_type = export_filename.split(".")[-1]
-        return MatCalFieldDataExporterIdentifier.identify(file_type)
+        return matcal_field_data_exporter_identifier.identify(file_type)
 
     def add_spatial_calculation(self, calculation_name:str, 
                                 calculation_function:Callable, *field_names)->None:
