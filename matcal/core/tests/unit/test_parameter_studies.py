@@ -914,13 +914,17 @@ class TestClassicLaplaceStudy(StudyBaseUnitTests.CommonTests):
 
 
 class TestVoronoiTessellation(MatcalUnitTest):
+    from scipy.spatial import voronoi_plot_2d, ConvexHull
+    import matplotlib.pyplot as plt
+    from matplotlib.path import Path
+    from matplotlib.patches import Polygon as MplPolygon
     
     @staticmethod
     def fun2D(x):
         return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
 
     @staticmethod
-    def initialization_2d(nsamples, bounds):
+    def initialization_2d(nsamples, bounds, seed=20):
         from scipy.stats.qmc import Halton
         from scipy.stats import qmc
 
@@ -931,13 +935,13 @@ class TestVoronoiTessellation(MatcalUnitTest):
         u_bounds = [bounds[i][1] for i in np.arange(dim)]
 
         # Generate initial points from Halton Sequence
-        sampler = Halton(d=dim, seed=20)
+        sampler = Halton(d=dim, seed=seed)
         X_unscaled = sampler.random(n=nsamples)
         X_init = qmc.scale(X_unscaled, l_bounds, u_bounds)
         y_init = model(X_init)
 
         ntest_samples = 40
-        test_pts_sampler = Halton(d=dim, seed=20)
+        test_pts_sampler = Halton(d=dim, seed=seed+2)
         X_test_unscaled = np.atleast_2d(test_pts_sampler.random(n=ntest_samples))
         X_test = np.atleast_2d(qmc.scale(X_test_unscaled, l_bounds, u_bounds))
         y_test = model(X_test)
@@ -1007,72 +1011,117 @@ class TestVoronoiTessellation(MatcalUnitTest):
         bounds = [[-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
-        region_vertices = vor.get_region_vertices(1, identify_outside_vertices=False)
-        bounded_region_vertices = vor.get_region_vertices(1, identify_outside_vertices=True)
-
-        _, ax = plt.subplots(figsize=(12,8))
-        voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
-                        line_width=2)
-        ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
-        plt.legend(fontsize=20)
-        #plt.savefig("/ascldap/users/dericci/voronoi_tessellation.png")
-
-        ax.plot(region_vertices[:, 0], region_vertices[:, 1], '.', markersize=10, color='g', label='R1 Vertices')
-        plt.legend(fontsize=20)
-        #plt.savefig("/ascldap/users/dericci/voronoi_tessellation_r1_vertices.png")
-        plt.close()
         
-        _, ax = plt.subplots(figsize=(12,8))
-        voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
-                        line_width=2)
-        ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
-        ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], '.', color='r', markersize=10, label='R1 Bounded Vertices')
-        for simplex in vor.boundary_hull.simplices:
-            plt.plot(vor.boundary_points[simplex, 0], vor.boundary_points[simplex, 1], 'k-', lw=2)
-        plt.legend(fontsize=20)
-        #plt.savefig("/ascldap/users/dericci/voronoi_tessellation_r1_bounded_vertices.png")
-        plt.close()
+        for pt_idx in np.arange(nsamples):
+            region_idx = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
+            region_vertices = vor.get_region_vertices(region_idx, identify_outside_vertices=False)
+            bounded_region_vertices = vor.get_region_vertices(region_idx, identify_outside_vertices=True)
 
-        self.assertEqual(vor._all_points.shape[0], len(vor.vor.point_region))
+            _, ax = plt.subplots(figsize=(12,8))
+            voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
+                            line_width=2)
+            ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
+            plt.legend(fontsize=20)
+            #plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation.png")
 
-        region_hull = ConvexHull(region_vertices)
-        region_hull_pts = region_vertices[region_hull.vertices]
-        region_path = Path(region_hull_pts)
+            ax.plot(region_vertices[:, 0], region_vertices[:, 1], '.', markersize=15, color='g', label='R1 Vertices')
+            plt.legend(fontsize=20)
+            plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_r{region_idx}_vertices.png")
+            plt.close()
         
-        bounded_region_hull = ConvexHull(bounded_region_vertices)
-        bounded_hull_pts = bounded_region_vertices[bounded_region_hull.vertices]
-        is_inside = region_path.contains_points(bounded_hull_pts, radius=1e-10)
-        self.assertGreaterEqual(region_hull.area, bounded_region_hull.area)
-        self.assertTrue(np.all(is_inside))
+            _, ax = plt.subplots(figsize=(12,8))
+            voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
+                            line_width=2)
+            ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
+            ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], '.', color='r', markersize=15, label=f'R{region_idx} Bounded Vertices')
+            for simplex in vor.boundary_hull.simplices:
+                plt.plot(vor.boundary_points[simplex, 0], vor.boundary_points[simplex, 1], 'k-', lw=2)
+            plt.legend(fontsize=20)
+            plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_r{region_idx}_bounded_vertices.png")
+            plt.close()
+
+            self.assertEqual(vor._all_points.shape[0], len(vor.vor.point_region))
+
+            # compare convex hulls of original and bounded region vertices
+            # the area of the original hull should be >= the area of the bounded hull
+            # the bounded hull should reside completely within the original hull
+            region_hull = ConvexHull(region_vertices)
+            region_hull_pts = region_vertices[region_hull.vertices]
+            region_path = Path(region_hull_pts)
+
+            bounded_region_hull = ConvexHull(bounded_region_vertices)
+            bounded_hull_pts = bounded_region_vertices[bounded_region_hull.vertices]
+            is_inside = region_path.contains_points(bounded_hull_pts, radius=1e-10)
+            self.assertGreaterEqual(region_hull.area, bounded_region_hull.area)
+            self.assertTrue(np.all(is_inside))
                 
-        # Plotting
-        _, ax = plt.subplots(figsize=(12, 12))
+            # Plotting
+            _, ax = plt.subplots(figsize=(12, 12))
 
-        # Plot original points
-        ax.plot(region_vertices[:, 0], region_vertices[:, 1], 'bo', label='Outer Points')
-        ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], 'ro', label='Inner Points')
+            # Plot original points
+            ax.plot(region_vertices[:, 0], region_vertices[:, 1], 'bo', label='Outer Points')
+            ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], 'ro', label='Inner Points')
 
-        # Draw convex hulls as filled polygons
-        outer_patch = MplPolygon(region_hull_pts, closed=True, fill=False, edgecolor='blue', linewidth=2, label='Outer Hull')
-        inner_patch = MplPolygon(bounded_hull_pts, closed=True, fill=False, edgecolor='red', linewidth=2, label='Inner Hull')
-        ax.add_patch(outer_patch)
-        ax.add_patch(inner_patch)
+            # Draw convex hulls as filled polygons
+            outer_patch = MplPolygon(region_hull_pts, closed=True, fill=False, edgecolor='blue', linewidth=2, label='Outer Hull')
+            inner_patch = MplPolygon(bounded_hull_pts, closed=True, fill=False, edgecolor='red', linewidth=2, label='Inner Hull')
+            ax.add_patch(outer_patch)
+            ax.add_patch(inner_patch)
 
-        # Optional: mark inner hull vertices that are not contained
-        for pt, inside in zip(bounded_hull_pts, is_inside):
-            if not inside:
-                ax.plot(pt[0], pt[1], 'kx', markersize=10, label='Outside Hull Vertex')
+            # Optional: mark inner hull vertices that are not contained
+            for pt, inside in zip(bounded_hull_pts, is_inside):
+                if not inside:
+                    ax.plot(pt[0], pt[1], 'kx', markersize=10, label='Outside Hull Vertex')
 
-        ax.legend()
-        ax.set_title('Convex Hull Containment Test')
-        ax.set_aspect('equal')
-        plt.grid(True)
-        #plt.savefig("/ascldap/users/dericci/inner_outer_hull.png")
-        plt.close()       
+            ax.legend()
+            ax.set_title('Convex Hull Containment Test')
+            ax.set_aspect('equal')
+            plt.grid(True)
+            plt.savefig(f"/ascldap/users/dericci/inner_outer_hull_r{region_idx}.png")
+            plt.close("all")       
          
-        #import pdb
-        #pdb.set_trace()
 
+    def test_2d_get_voronoi_vertices(self):
+        from matplotlib.path import Path
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+        boundary_hull = vor.boundary_hull
+        boundary_hull_points = boundary_hull.vertices
+        boundary_path = Path(vor.boundary_points[boundary_hull_points])
+        region_vertices = np.empty((0, 2))
+                
+        # voronoi vertices of all training points
+        vor_vertices = vor.get_voronoi_vertices(identify_outside_vertices=False)
+
+        # check that the vertices returned by vor.get_voronoi_vertices are the same as
+        # the region vertices returned by vor.get_region_vertices for all regions
+        for pt_idx in np.arange(nsamples):
+            region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
+            region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=False)])
+        unique_vertices = set(tuple(row) for row in region_vertices)
+        vertices = np.asarray([list(row) for row in unique_vertices])
+        self.assertEqual(set(map(tuple, vor_vertices)), set(map(tuple, vertices)))
+        
+        # voronoi vertices snipped to boundary - check that all bounded vertices are within Convex
+        # hull defined by boundary points
+        bounded_vor_vertices = vor.get_voronoi_vertices(identify_outside_vertices=True)
+        is_inside = boundary_path.contains_points(bounded_vor_vertices, radius=1e-10)
+        self.assertTrue(np.all(is_inside))
+
+        # check that the bounded vertices returned by vor.get_voronoi_vertices are the same as
+        # the bounded region vertices returned by vor.get_region_vertices for all regions
+        region_vertices = np.empty((0, 2))
+        for pt_idx in np.arange(nsamples):
+            region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
+            region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=True)])
+        import pdb
+        pdb.set_trace()
+        unique_vertices = set(tuple(row) for row in region_vertices)
+        vertices = np.asarray([list(row) for row in unique_vertices])
+        self.assertEqual(set(map(tuple, bounded_vor_vertices)), set(map(tuple, vertices)))
+        # i don't think boundary vertices should be automatically added. fix this
         
         
         
