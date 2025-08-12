@@ -1729,9 +1729,12 @@ class VoronoiTessellation:
         self.boundary_points = self.make_nd_grid(npts_along_dim=2)
         if not finite_only:
             self.boundary_hull = ConvexHull(self.boundary_points)
+            self.bhull = Delaunay(self.boundary_points)
         else:
             self.boundary_hull = None
+            self.bhull = None
         self.create_ghost_points()
+        self._all_points = np.vstack([self.points, self._ghost_points])
         self.vor = Voronoi(self._all_points, incremental=incremental)
         self.ghost_busters()
         self.finite_only = finite_only
@@ -1766,14 +1769,13 @@ class VoronoiTessellation:
         max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
         self._ghost_points = np.vstack([self._ghost_points, boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
         self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
-        self._all_points = np.vstack([self.points, self._ghost_points])
 
     def get_region_vertices(self, region_index, identify_outside_vertices=True):
         """Return the vertices of the Voronoi region."""
         region = self.vor.regions[region_index].copy()
         if -1 in region:
             print(f"WARNING: infinite vertice in Region {region_index}")
-
+        
         if identify_outside_vertices:
             updated_region = self.identify_vertices_outside_bounds(region)
             if not -2 in updated_region and len(updated_region) > 0:
@@ -1789,7 +1791,7 @@ class VoronoiTessellation:
                     region_vertices = self.replace_unbounded_vertices(updated_region, region_index, region_tuple_list)
             if region_vertices is not None:
                 if not self.finite_only:
-                    boundary_in_region = [i for i in np.arange(len(self.boundary_regions)) if self.boundary_regions[i] == region_index]
+                    boundary_in_region = [i for i in np.arange(len(self.boundary_regions)) if self.boundary_regions[i][0] == region_index]
                     if boundary_in_region:
                         boundary_vertices = self.boundary_points[boundary_in_region] 
                         region_vertices = np.concatenate((region_vertices, boundary_vertices))
@@ -1807,9 +1809,16 @@ class VoronoiTessellation:
     def get_voronoi_vertices(self, identify_outside_vertices=True):
         """Return the vertices of the Voronoi tessellation."""
         vertices = []
+        #import pdb
+        #pdb.set_trace()
         for i, region in enumerate(self.vor.regions):
-            region_point_index, = np.where(self.vor.point_region == i)[0]
+            try:
+                region_point_index, = np.where(self.vor.point_region == i)[0]
+            except:
+                # empty region: Voronoi region for a point at infinity that was added internally
+                continue
             if self._boo[region_point_index]:
+                # region belongs to a ghost point
                 continue
             elif -1 in region:
                 print(f"WARNING: infinite vertice in Region {i}")
@@ -1828,7 +1837,7 @@ class VoronoiTessellation:
 
             elif not identify_outside_vertices:
                 vertices.append(self.vor.vertices[region])
-
+        
         if identify_outside_vertices:
             if vertices is not None:
                 vertices = np.concatenate((vertices))
@@ -1838,7 +1847,9 @@ class VoronoiTessellation:
             else:
                 return vertices
         else:
-            return vertices
+            vertices = np.concatenate(vertices)
+            unique_vertices = set(tuple(row) for row in vertices)
+            return np.asarray([list(row) for row in unique_vertices])
 
     def identify_vertices_outside_bounds(self, region):
         """
@@ -1907,9 +1918,9 @@ class VoronoiTessellation:
 
         if -2 in region:
             finite_indices = [v for v in region if v >= 0]
-            if len(finite_indices) == 0:
-                return None
-            self.raise_if_no_finite_vertices(finite_indices, region_index)
+            #if len(finite_indices) == 0:
+            #    return None
+            #self.raise_if_no_finite_vertices(finite_indices, region_index)
             finite_vertices = self.vor.vertices[finite_indices]
             new_vertices = self.snip_ridge_vertices(\
                 region_index, region_point_index, region_tuple)
@@ -1945,7 +1956,8 @@ class VoronoiTessellation:
                     norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
                     if region_index in self.get_voronoi_region(new_vertice)[0]:
-                        new_vertices.append(new_vertice)
+                        if self.bhull.find_simplex(new_vertice) >= 0:
+                            new_vertices.append(new_vertice)
                     #new_vertices.append(new_vertice)
                 if urv[v] == -2: # both vertices are out of bounds - snip both ends to the boundary hull
                     ray_end = self.vor.vertices[rv[v]]
@@ -1954,7 +1966,8 @@ class VoronoiTessellation:
                     norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
                     if region_index in self.get_voronoi_region(new_vertice)[0]:
-                        new_vertices.append(new_vertice)
+                        if self.bhull.find_simplex(new_vertice) >= 0:
+                            new_vertices.append(new_vertice)
 
             elif len(urv) > 2: #3D + Voronoi region
                 nunbounded_vert = urv.count(-1) + urv.count(-2)
@@ -2092,7 +2105,7 @@ class VoronoiTessellation:
            from the target point"""
         distances = np.linalg.norm(candidates - target_point, axis=1)
         min_dist = min(distances)
-        closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-15))
+        closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-10))
         return closest_candidate_index        
 
     def add_points(self, points):
