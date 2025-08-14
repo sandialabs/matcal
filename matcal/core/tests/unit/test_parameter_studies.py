@@ -1129,5 +1129,45 @@ class TestVoronoiTessellation(MatcalUnitTest):
         vertices = np.asarray([list(row) for row in unique_vertices])
         self.assertEqual(set(map(tuple, bounded_vor_vertices)), set(map(tuple, vertices)))
         
-        
-        
+    def test_2d_get_closest_seed(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+        pass
+    
+    def test_2d_get_closest_point(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+        pass
+    
+    def test_2d_get_voronoi_region(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+        pass 
+    
+    def test_2d_get_region_seed(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+        for pt_idx in np.arange(nsamples):
+            region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
+            seed = vor.get_region_seed(region_index)
+            region_point_idx, = np.where(vor.vor.point_region == region_index)
+            region_seed = vor.points[region_point_idx]
+            self.assertTrue(np.all(seed == region_seed))
+    
+    def test_2d_find_furthest_vertex(self):
+        pass
+    
+    def test_2d_snip_ridge_vertices(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+        pass 
