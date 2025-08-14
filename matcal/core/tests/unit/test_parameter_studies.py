@@ -999,7 +999,8 @@ class TestVoronoiTessellation(MatcalUnitTest):
             self.assertEqual(vor._all_points[:nsamples, :].tolist(), X_init.tolist(), msg="vor._all_points does not contain X_init")
             self.assertEqual(vor._all_points[nsamples:, :].tolist(), vor._ghost_points.tolist(), msg="vor._all_points does not contain ghost points.")
             
-            self.assertTrue(vor._boo[nsamples:], msg="Ghost points not correctly identified.")
+            self.assertTrue(all(vor._boo[nsamples:]), msg="Ghost points not correctly identified.")
+            self.assertFalse(any(vor._boo[:nsamples]), msg="Ghost points not correctly identified") 
             
             # Check that all training points belong to regions that contain no infinite vertices
             training_point_regions = vor.vor.point_region[:nsamples].tolist()
