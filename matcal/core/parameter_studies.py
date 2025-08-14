@@ -1737,10 +1737,12 @@ class VoronoiTessellation:
         self.boundary_points = self.make_nd_grid(npts_along_dim=2)
         if not finite_only:
             self.boundary_hull = ConvexHull(self.boundary_points)
-            self.bhull = Delaunay(self.boundary_points)
+            self.boundary_hull_eq = self.boundary_hull.equations # (nfacet, ndim + 1)
+            self.boundary_hull_V, self.boundary_hull_b = self.boundary_hull_eq[:, :-1], self.boundary_hull_eq[:, -1] # normal, offset
+            self.bhullD = Delaunay(self.boundary_points)
         else:
             self.boundary_hull = None
-            self.bhull = None
+            self.bhullD = None
         self.create_ghost_points()
         self._all_points = np.vstack([self.points, self._ghost_points])
         self.vor = Voronoi(self._all_points, incremental=incremental)
@@ -1882,28 +1884,7 @@ class VoronoiTessellation:
         if len(vert_outside) > 0:
             outside_vert_index = [region[i] for i in vert_outside]
             region[vert_outside] = -2
-            #for index in vert_outside:
-            #    region[index] = -2
-            #self.update_ridge_vertices(outside_vert_index) 
         return region.tolist()
-
-    def update_ridge_vertices(self, outside_vert_index):
-        """
-        Update ridge vertices to identify vertices that are outside
-        the bounding convex hull with a -2. 
-        """
-        ### Try to speed up list comprehension 
-        ridge_vertices = [inner_list[:] for inner_list in self.vor.updated_ridge_vertices]
-        vert_loc = [] 
-        temp_set = set(outside_vert_index)
-        for i, j in enumerate(ridge_vertices):
-            index_in_j = [ii for ii, val in enumerate(j) if val in temp_set]
-            if len(index_in_j) > 0:
-                for jj in index_in_j:
-                    vert_loc.append([i, jj])
-        for item in vert_loc:
-            ridge_vertices[item[0]][item[1]] = -2
-        self.vor.updated_ridge_vertices = ridge_vertices[:]
 
     def replace_unbounded_vertices(self, region, region_index, region_tuple):
         """
@@ -1960,7 +1941,7 @@ class VoronoiTessellation:
                     norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
                     if region_index in self.get_voronoi_region(new_vertice)[0]:
-                        if self.bhull.find_simplex(new_vertice) >= 0:
+                        if self.bhullD.find_simplex(new_vertice) >= 0:
                             new_vertices.append(new_vertice)
                     #new_vertices.append(new_vertice)
                 if urv[v] == -2: # both vertices are out of bounds - snip both ends to the boundary hull
@@ -1970,7 +1951,7 @@ class VoronoiTessellation:
                     norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
                     if region_index in self.get_voronoi_region(new_vertice)[0]:
-                        if self.bhull.find_simplex(new_vertice) >= 0:
+                        if self.bhullD.find_simplex(new_vertice) >= 0:
                             new_vertices.append(new_vertice)
 
             elif len(urv) > 2: #3D + Voronoi region
@@ -2031,10 +2012,8 @@ class VoronoiTessellation:
         Returns:
         list: List of intersection points with the convex hull.
         """
-
-        ### Possible speed up: extract eq, V, b in __init__
-        eq = self.boundary_hull.equations # (nfacet, ndim + 1)
-        V, b = eq[:, :-1], eq[:, -1] # normal, offset
+        V = self.boundary_hull_V
+        b = self.boundary_hull_b
         denom = np.dot(V, U)
         num = -(b + np.dot(V, z))
         alpha = num[denom!=0] / denom[denom!=0]
@@ -2284,43 +2263,6 @@ class KFoldCrossValidation:
 
         # Convert the results to a dictionary
         kf = {k_idx: result for k_idx, result in enumerate(kf_results)}
-        return kf
-
-        if False:
-            kf = {}
-            for k_idx, (train_index, test_index) in enumerate(cv.split(X)):
-                # Split the data into training and testing sets
-                X_train, X_test = X[train_index], X[test_index]
-                y_train, y_test = y[train_index], y[test_index]
-
-                # Fit the model on the training data
-                self.model.fit(X_train, y_train)
-
-                # Make predictions for the test set
-                y_pred = self.model.predict(X_test)
-
-                # Calculate the prediction errors for the test samples
-                if metric == 'sum_abs_error':
-                    error = self.calculate_sum_abs_error(y_test, y_pred)
-                elif metric == 'mape':
-                    error = self.calculate_mean_abs_perc_error(y_test, y_pred)
-                elif metric == 'mse':
-                    error = self.calculate_mse(y_test, y_pred)
-                elif metric == 'rmse':
-                    error = self.calculate_rmse(y_test, y_pred)
-                elif metric == 'sum_abs_perc_error':
-                    error = self.calculate_sum_abs_perc_error(y_test, y_pred)
-                else:
-                    print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
-                    error = self.calculate_sum_abs_error(y_test, y_pred)
-
-                kf[k_idx] = (error, test_index)
-
-            #fig, ax = plt.subplots(figsize=(6,3))
-            #self.plot_kfold(cv, X, y, ax, xlim_max=nsamples)
-            #plt.tight_layout()
-            #plt.savefig("figures/voronoi_batch/2d_circle/kfold.png")
-
         return kf
 
     def cbrt(y):
