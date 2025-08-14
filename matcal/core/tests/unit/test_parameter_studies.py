@@ -1116,12 +1116,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         for pt_idx in np.arange(nsamples):
             region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
             region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=True)])
-        import pdb
-        pdb.set_trace()
         unique_vertices = set(tuple(row) for row in region_vertices)
         vertices = np.asarray([list(row) for row in unique_vertices])
         self.assertEqual(set(map(tuple, bounded_vor_vertices)), set(map(tuple, vertices)))
-        # i don't think boundary vertices should be automatically added. fix this
         
         
         
