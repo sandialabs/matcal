@@ -1019,14 +1019,22 @@ class TestVoronoiTessellation(MatcalUnitTest):
         bounds = [[-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
-        
-        # Validate that the extracted region is the same as vor.regions[idx] for identify_outside_vertices=False
-        region_index = 1
-        region = vor.vor.regions[region_index]
-        #extracted_region = vor.get_region_vertices(region_index, identify_outside_vertices=False)
-        #self.assertEqual(region, extracted_region)
-          
-    
+        min_x, max_x = bounds[0]
+        min_y, max_y = bounds[1]
+       
+        for point_idx in np.arange(nsamples):
+            region_idx = vor.get_voronoi_region(vor.vor.points[point_idx])[0][0]
+            region = vor.vor.regions[region_idx]
+            updated_region = vor.identify_vertices_outside_bounds(region)
+            outside_vertices = [region[i] for i in np.arange(len(updated_region)) if updated_region[i] < 0]
+            for vertex_idx in outside_vertices:
+                vertex = vor.vor.vertices[vertex_idx]
+                x, y = vertex
+                self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
+                                msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
+                vor_region = vor.get_voronoi_region(vertex)[0]
+                self.assertIn(region_idx, vor_region, msg="identified vertex not in region")
+                 
     def test_2d_get_region_vertices(self):
         from scipy.spatial import voronoi_plot_2d, ConvexHull
         import matplotlib.pyplot as plt
