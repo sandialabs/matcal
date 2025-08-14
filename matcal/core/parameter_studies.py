@@ -1749,15 +1749,6 @@ class VoronoiTessellation:
         return np.vstack(tuple(coords_ravel)).T
             
         
-    def ghost_busters(self):
-        """ Identify which points in self._all_points are ghost points"""
-        self._boo = []
-        for point in self._all_points:
-            if point in self._ghost_points:
-                self._boo.append(True)
-            else:
-                self._boo.append(False)
-
     def create_ghost_points(self, stretchCoef=1.75, centCoef=1.5):
         """Reflect points nearest to the boundary hull across the nearest
         face of the boundary hull """
@@ -1769,6 +1760,15 @@ class VoronoiTessellation:
         max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
         self._ghost_points = np.vstack([self._ghost_points, boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
         self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
+
+    def ghost_busters(self):
+        """ Identify which points in self._all_points are ghost points"""
+        self._boo = []
+        for point in self._all_points:
+            if point in self._ghost_points:
+                self._boo.append(True)
+            else:
+                self._boo.append(False)
 
     def get_region_vertices(self, region_index, identify_outside_vertices=True):
         """Return the vertices of the Voronoi region."""
@@ -1809,8 +1809,6 @@ class VoronoiTessellation:
     def get_voronoi_vertices(self, identify_outside_vertices=True):
         """Return the vertices of the Voronoi tessellation."""
         vertices = []
-        #import pdb
-        #pdb.set_trace()
         for i, region in enumerate(self.vor.regions):
             try:
                 region_point_index, = np.where(self.vor.point_region == i)[0]
@@ -1834,23 +1832,21 @@ class VoronoiTessellation:
                     else:
                         region_tuple_list = list(zip(region, updated_region))
                         vertices.append(self.replace_unbounded_vertices(updated_region, i, region_tuple_list))
+                        boundary_in_region = [ii for ii in np.arange(len(self.boundary_regions)) if self.boundary_regions[ii][0] == i]
+                        if boundary_in_region:
+                            boundary_vertices = self.boundary_points[boundary_in_region] 
+                            vertices.append(boundary_vertices)
 
             elif not identify_outside_vertices:
                 vertices.append(self.vor.vertices[region])
         
-        if identify_outside_vertices:
-            if vertices is not None:
-                vertices = np.concatenate((vertices))
-                vertices = np.concatenate((vertices, self.boundary_points))
-                unique_vertices = set(tuple(row) for row in vertices)
-                return np.asarray([list(row) for row in unique_vertices])
-            else:
-                return vertices
-        else:
-            vertices = np.concatenate(vertices)
+        if vertices is not None:
+            vertices = np.concatenate((vertices))
             unique_vertices = set(tuple(row) for row in vertices)
             return np.asarray([list(row) for row in unique_vertices])
-
+        else: 
+            return vertices
+        
     def identify_vertices_outside_bounds(self, region):
         """
         Identify vertices that sit outside the bounding region
