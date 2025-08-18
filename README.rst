@@ -1,5 +1,5 @@
-MatCal Model Calibration Package
-================================
+MatCal: A Model Calibration Python Package
+==========================================
 
 |docs| 
 
