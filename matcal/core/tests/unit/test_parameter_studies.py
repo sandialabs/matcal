@@ -1140,12 +1140,28 @@ class TestVoronoiTessellation(MatcalUnitTest):
         vor = VoronoiTessellation(X_init, bounds)
         pass
     
-    def test_2d_get_closest_point(self):
+    def test_2d_get_closest_seed(self):
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
-        pass
+        
+        # point close to seed: should return seed
+        for i in np.arange(nsamples):
+            test_point = vor.points[i] * 1.01
+            closest_point = vor.vor.points[vor.get_closest_seed(test_point)]
+            self.assertTrue(np.all(closest_point == vor.points[i]))
+            
+        # vertices of seed region: should return multiple seeds, including given seed
+        for pt_idx in np.arange(nsamples):
+            seed = vor.points[pt_idx]
+            region_index = vor.get_voronoi_region(seed)[0][0]
+            region_vertices = vor.vor.vertices[vor.vor.regions[region_index]]
+            for vertice in region_vertices:
+                closest_point_indices = vor.get_closest_seed(vertice)
+                self.assertGreater(len(closest_point_indices), 1)
+                closest_points = vor.vor.points[closest_point_indices]
+                self.assertTrue(seed in closest_points)
     
     def test_2d_get_voronoi_region(self):
         nsamples = 4
