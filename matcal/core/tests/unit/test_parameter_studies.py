@@ -948,6 +948,10 @@ class TestVoronoiTessellation(MatcalUnitTest):
         return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
 
     @staticmethod
+    def fun3D(x):
+        pass
+    
+    @staticmethod
     def initialization_2d(nsamples, bounds, seed=20):
         from scipy.stats.qmc import Halton
         from scipy.stats import qmc
