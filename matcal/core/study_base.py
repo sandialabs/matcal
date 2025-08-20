@@ -511,14 +511,15 @@ class StudyBase(ABC):
     class RepeatLaunchError(RuntimeError):
 
         def __init__(self):
-            message = "Study instance is not clean, likely due to being rerun in same python session."
-            message += "\nTo solve this start a new python session or "
-            message += "create a new study instance for each call of 'launch'."
+            message = ("Study instance is not clean, likely due to being rerun "+
+                "in same python session. " +
+                "To solve this start a new python session or " +
+                "create a new study instance for each call of 'launch'.")
             super().__init__(message)
 
     def _check_restart(self):
         if self._use_threads and self._restart:
-            raise RuntimeError("Use of Threads and Restart functionality currently does not work." \
+            raise RuntimeError("Use of Threads and Restart functionality currently does not work."+
             "Please do not invoke 'set_use_threads' with restarts.")
 
     def _initialize_results(self):
@@ -720,7 +721,9 @@ class StudyBase(ABC):
         self._initial_directory = os.getcwd()
         self._remove_existing_working_directory = remove_existing
 
-    def _matcal_evaluate_parameter_sets_batch(self, parameter_sets, is_finite_difference_eval=False, is_restart=False):
+    def _matcal_evaluate_parameter_sets_batch(self, parameter_sets, 
+                                              is_finite_difference_eval=False,
+                                              is_restart=False):
         formatted_parameter_sets = self._prepare_parameter_sets_to_evaluate(parameter_sets)
         evaluator_func = self._parameter_batch_evaluator.evaluate_parameter_batch
         batch_results = evaluator_func(formatted_parameter_sets, 

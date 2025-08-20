@@ -1,6 +1,7 @@
 import numpy as np
 import glob
 
+from matcal.core.calibration_studies import ScipyMinimizeStudy
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.plotting import make_standard_plots
 from matcal.core.models import PythonModel
@@ -73,6 +74,34 @@ class TestMakeStandardPlots(MatcalUnitTest):
         study.set_core_limit(6)
         study.add_parameter_evaluation(a=2,b=-1)
         study.add_parameter_evaluation(a=3,b=-2)
+        study.launch()
+        make_standard_plots("x", show=False)
+        glob_search = "user_plots/*.pdf"
+        plot_files = glob.glob(glob_search)
+        self.assertEqual(len(plot_files), 3)
+
+    def test_different_sim_exp_qois_one_obj_scipy(self):
+        x = np.linspace(0,1,10)
+        data_dict = {"x":x, "y":x**2+1, "z":2.1**x + .9}
+        data = convert_dictionary_to_data(data_dict)
+        def model(a,b):
+            import numpy as np
+            x = np.linspace(0,1,10)
+
+            y = x**a+b
+            z = a**x+b
+            return {"x":x, "y":y, "z":z}
+
+        pymodel = PythonModel(model)
+
+        param_a = Parameter("a",0, 4, 1)
+        param_b = Parameter("b", -4, 4, 0)
+
+        obj = CurveBasedInterpolatedObjective("x", "y")
+
+        study = ScipyMinimizeStudy(param_a, param_b)
+        study.add_evaluation_set(pymodel, obj, data)
+        study.set_core_limit(6)
         study.launch()
         make_standard_plots("x", show=False)
         glob_search = "user_plots/*.pdf"
