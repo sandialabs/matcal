@@ -1038,7 +1038,26 @@ class TestVoronoiTessellation(MatcalUnitTest):
                                 msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
                 vor_region = vor.get_voronoi_region(vertex)[0]
                 self.assertIn(region_idx, vor_region, msg="identified vertex not in region")
-                 
+
+    def test_2d_find_boundary_hull_ray_crossing(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+
+        # test crossing        
+        U = np.array([1, 1])  # Example ray direction
+        z = np.array([0, 0])  # Example ray origin
+        expected_result = np.array([5, 5])  # Replace with the expected intersection point
+        result = vor.find_boundary_hull_ray_crossings(U, z)
+        self.assertTrue(np.all(result == expected_result))
+
+        # test no crossing
+        z = np.array([6, 6])  # Origin above the convex hull
+        U = np.array([1, 1])  # Direction that does not intersect
+        result = vor.find_boundary_hull_ray_crossings(U, z)
+        self.assertIsNone(result) 
+    
     def test_2d_get_region_vertices(self):
         from scipy.spatial import voronoi_plot_2d, ConvexHull
         import matplotlib.pyplot as plt

@@ -1965,34 +1965,6 @@ class VoronoiTessellation:
 
         return np.asarray(new_vertices)
 
-    def find_nd_edge_directions(self, bisector_normals, point_index):
-        """
-        Finds the directions of the edges of a Voronoi region by computing the cross
-        products of the normal vectors of adjacent faces.
-
-        Parameters:
-        bisector_normals (array): A matrix of normal vectors for the faces of the Voronoi region
-
-        Returns:
-        edge_directions (list): A list of direction vectors for the edges of the Voronoi region
-        """
-
-        edge_directions = []
-        num_faces = bisector_normals.shape[0]
-        point_adjacency = self.vor.adjacency_list
-        for idx, adj_point  in enumerate(point_adjacency[int(point_index)]):
-            for j in point_adjacency[int(point_index)][idx:]:
-                if adj_point in adj_list[j]:
-                    normal_i = bisector_normals[i]
-                    normal_j = bisector_normals[j]
-                    edge_direction = np.cross(normal_i, normal_j)
-
-
-            # if the edge is not degenerate (i.e., not parallel), store the direction
-            edge_norm = np.linalg.norm(edge_direction)
-            if edge_norm > 1e-6:
-                edge_directions.append(edge_direction / edge_norm)
-
     def find_boundary_hull_ray_crossings(self, U, z):
         """
         Find where a ray crosses the convex hull of the boundary.
@@ -2004,11 +1976,15 @@ class VoronoiTessellation:
         Returns:
         list: List of intersection points with the convex hull.
         """
+        
         V = self.boundary_hull_V
         b = self.boundary_hull_b
         denom = np.dot(V, U)
         num = -(b + np.dot(V, z))
         alpha = num[denom!=0] / denom[denom!=0]
+        if not np.any(alpha > 0):
+           return None 
+            
         return np.min(alpha[alpha >0]) * U + z
 
     def find_furthest_vertex(self, region_index, identify_outside_vertices=True):
