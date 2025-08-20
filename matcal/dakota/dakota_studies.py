@@ -98,34 +98,46 @@ class DakotaStudyBase(StudyBase):
 
     def _select_matcal_interface(self):
         if self.__testing_fail:
-            matcal_callback_dict = {'matcal_interface_batch':self._fail_matcal_evaluate_parameter_sets_batch}
+            matcal_callback_dict = {'matcal_interface_batch':
+                                    self._fail_matcal_evaluate_parameter_sets_batch}
         elif self._restart:
-            matcal_callback_dict = {'matcal_interface_batch':self._restart_matcal_evaluate_parameter_sets_batch}
+            matcal_callback_dict = {'matcal_interface_batch':
+                                    self._restart_matcal_evaluate_parameter_sets_batch}
         else:
-            matcal_callback_dict = {'matcal_interface_batch':self._fresh_matcal_evaluate_parameter_sets_batch}
+            matcal_callback_dict = {'matcal_interface_batch':
+                                    self._fresh_matcal_evaluate_parameter_sets_batch}
         return matcal_callback_dict
 
     def _build_dakota_environment(self, input_file_string, matcal_callback_dict, dakenv):
         try:
             daklib = dakenv.study(callbacks=matcal_callback_dict, input_string=input_file_string)
         except Exception as e:
-            logger.error("Failed to establish Dakota Environment. This is likely due to bad initialization parameters.")
+            logger.error("Failed to establish Dakota Environment. "+
+                         "This is likely due to bad initialization parameters.")
             raise e
         return daklib
 
     def _fresh_matcal_evaluate_parameter_sets_batch(self, parameter_sets):
-        return self._matcal_evaluate_parameter_sets_batch(parameter_sets, is_finite_difference_eval=False, is_restart=False)
+        return self._matcal_evaluate_parameter_sets_batch(parameter_sets, 
+                                                          is_finite_difference_eval=False, 
+                                                          is_restart=False)
 
     def _fail_matcal_evaluate_parameter_sets_batch(self, parameter_sets):
-        batch_results = self._matcal_evaluate_parameter_sets_batch(parameter_sets, is_finite_difference_eval=False, is_restart=False)
-        raise RuntimeError("Intentional Testing Faulure-- Envoked:_for_testing_fail_after_first_batch")
+        batch_results = self._matcal_evaluate_parameter_sets_batch(parameter_sets, 
+                                                                   is_finite_difference_eval=False, 
+                                                                   is_restart=False)
+        raise RuntimeError("Intentional Testing Faulure-- "+
+                           "Envoked:_for_testing_fail_after_first_batch")
 
     def _restart_matcal_evaluate_parameter_sets_batch(self, parameter_sets):
-        return self._matcal_evaluate_parameter_sets_batch(parameter_sets, is_finite_difference_eval=False, is_restart=True)
+        return self._matcal_evaluate_parameter_sets_batch(parameter_sets, 
+                                                          is_finite_difference_eval=False, 
+                                                          is_restart=True)
 
     def _initialize_parameters_if_skipped_by_dakota(self):
         if len(self._results.parameter_history) < 1: 
-            logger.warning("Dakota skipped evaluations, May be reusing old results. Please consult Dakota Files")
+            logger.warning("Dakota skipped evaluations, May be reusing old results. "+
+                           "Please consult Dakota Files")
             eval_params = {}
             for param_name in self._parameter_collection:
                 eval_params[param_name] = "N/A"

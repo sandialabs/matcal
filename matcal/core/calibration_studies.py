@@ -195,7 +195,7 @@ class _ScipyCalibrationStudyBase(StudyBase):
 
     def _evaluate_finite_difference(self, parameter_set):
         finite_difference, finite_diff_points =  self._prepare_finite_difference(parameter_set) 
-        results = super()._matcal_evaluate_parameter_sets_batch(finite_diff_points, True)
+        results = super()._matcal_evaluate_parameter_sets_batch(finite_diff_points)
         finite_difference.set_function_values(results)
         return finite_difference,results
 
