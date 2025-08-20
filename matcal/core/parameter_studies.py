@@ -2063,7 +2063,7 @@ class VoronoiTessellation:
         point (array-like): an array of points to find the region of.
 
         Returns:
-        list: The Voronoi region that contains the point.
+        list: The Voronoi region(s) that contains the point.
         """
         point_array = np.atleast_2d(point_array)
         region_index = []

@@ -1188,12 +1188,57 @@ class TestVoronoiTessellation(MatcalUnitTest):
                 self.assertTrue(seed in closest_points)
     
     def test_2d_get_voronoi_region(self):
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Polygon
+        from matplotlib.path import Path
+        import random
+        
+        # create polygon from region vertices
+        # sample point from within polygon, and assert that point is in the region
+        
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
-        pass 
-    
+
+        # loop through all regions
+        for region_idx, region in enumerate(vor.vor.regions):
+           
+            if -1 in region: # skip over regions with infinite vertices (all seeds have finite vertices)
+                continue
+            if not region: # skip over empty regions
+                continue
+             
+            # get region vertices
+            vertices = vor.vor.vertices[region]
+            
+            # create polygon
+            polygon = Polygon(vertices, closed=True)
+            path = polygon.get_path()
+            
+            # sample a point
+            max_attempts = 1000000
+            minx, miny = polygon.get_extents().min
+            maxx, maxy = polygon.get_extents().max
+            point_found = False
+            for iter in range(max_attempts):
+                # random point within bounding box of polygon
+                point = (random.uniform(minx, maxx), random.uniform(miny, maxy))
+                 # check if point is inside polygon
+                if path.contains_point(point):
+                    point_found = True
+                    break
+                else:
+                    continue
+            
+            if not point_found:
+                raise RuntimeError(f"failed to sample point inside polygon {region_idx} after many attempts.")
+                continue
+        
+            # check that get_voronoi_region returns given region
+            voronoi_region = vor.get_voronoi_region(point)
+            self.assertTrue(region_idx == voronoi_region[0][0])
+               
     def test_2d_get_region_seed(self):
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
