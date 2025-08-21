@@ -2054,7 +2054,6 @@ class VoronoiTessellation:
             self._all_points = np.vstack((self._all_points, points))
             self.vor = Voronoi(self._all_points)
             #self.vor.updated_ridge_vertices= [inner_list[:] for inner_list in self.vor.ridge_vertices]
-            #self.get_point_adjacency() # can improve by only updating adjacency of point neighbors
         except:
             if np.any(np.all(self.vor.points == points, axis=1)):
                 print(f'Point {point} already a seed')
@@ -2071,26 +2070,6 @@ class VoronoiTessellation:
         if len(finite_indices) == 0:
             point = self.get_region_seed(region_index)
             raise ValueError(f"0 finite indices for region {region_index}, with seed {point}")
-
-    def get_point_adjacency(self, point=None):
-
-        if point is None:
-            adjacency_list = {i: set() for i in range(len(self.vor.points))}
-
-            for ridge in self.vor.ridge_points:
-                p1, p2 = ridge
-                adjacency_list[p1].add(p2)
-                adjacency_list[p2].add(p1)
-
-            self.vor.adjacency_list = {k: list(v) for k, v in adjacency_list.items()}
-
-            #for point_index, neighbors in self.vor.adjacency_list.items():
-            #    print(f"Point {point_index} at {self.vor.points[point_index]} is adjacent to points: {neighbors}")
-        else:
-            # work here to update adjacency just pertaining to given point
-            point_region = get_point_region(point)
-            point_index = np.where(self.vor.points == point)
-
 
     def plot_voronoi_3d(self):
 
