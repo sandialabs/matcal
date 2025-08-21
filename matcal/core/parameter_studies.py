@@ -2136,40 +2136,6 @@ class KFoldCrossValidation:
     def calculate_sum_abs_perc_error(self, y_true, y_pred):
         return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
 
-    def cross_val_fold(self, train_index, test_index, X, y, metric):
-        """Perform a single fold of cross-validation."""
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-
-        # Fit the model on the training data
-        self.model.fit(X_train, y_train)
-
-        # Make predictions for the test set
-        y_pred = self.model.predict(X_test)
-        if self.scale == 'cbrt':
-            y_pred = cbrt(y_pred)
-            y_test = cbrt(y_test)
-        elif self.scale == 'log':
-            y_pred = np.log(y_pred)
-            y_test = np.log(y_test)
-
-        # Calculate the prediction errors for the test samples
-        if metric == 'sum_abs_error':
-            error = self.calculate_sum_abs_error(y_test, y_pred)
-        elif metric == 'mape':
-            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
-        elif metric == 'mse':
-            error = self.calculate_mse(y_test, y_pred)
-        elif metric == 'rmse':
-            error = self.calculate_rmse(y_test, y_pred)
-        elif metric == 'sum_abs_perc_error':
-            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
-        else:
-            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
-            error = self.calculate_sum_abs_error(y_test, y_pred)
-
-        return error, test_index
-
     def perform_kfold_cv(self, X, y, metric='sum_abs_error', groups=None):
         """
         Perform K-Fold Cross-Validation.
@@ -2211,6 +2177,40 @@ class KFoldCrossValidation:
         # Convert the results to a dictionary
         kf = {k_idx: result for k_idx, result in enumerate(kf_results)}
         return kf
+
+    def cross_val_fold(self, train_index, test_index, X, y, metric):
+        """Perform a single fold of cross-validation."""
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        # Fit the model on the training data
+        self.model.fit(X_train, y_train)
+
+        # Make predictions for the test set
+        y_pred = self.model.predict(X_test)
+        if self.scale == 'cbrt':
+            y_pred = cbrt(y_pred)
+            y_test = cbrt(y_test)
+        elif self.scale == 'log':
+            y_pred = np.log(y_pred)
+            y_test = np.log(y_test)
+
+        # Calculate the prediction errors for the test samples
+        if metric == 'sum_abs_error':
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+        elif metric == 'mape':
+            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
+        elif metric == 'mse':
+            error = self.calculate_mse(y_test, y_pred)
+        elif metric == 'rmse':
+            error = self.calculate_rmse(y_test, y_pred)
+        elif metric == 'sum_abs_perc_error':
+            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
+        else:
+            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+
+        return error, test_index
 
     def cbrt(y):
         return np.sign(y) * np.abs(y) ** (1/3)
