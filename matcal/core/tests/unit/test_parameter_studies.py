@@ -1181,13 +1181,6 @@ class TestVoronoiTessellation(MatcalUnitTest):
         bounds = [[-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
-        pass
-    
-    def test_2d_get_closest_seed(self):
-        nsamples = 4
-        bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
         
         # point close to seed: should return seed
         for i in np.arange(nsamples):
@@ -1270,11 +1263,29 @@ class TestVoronoiTessellation(MatcalUnitTest):
             self.assertTrue(np.all(seed == region_seed))
     
     def test_2d_find_furthest_vertex(self):
-        pass
-    
-    def test_2d_snip_ridge_vertices(self):
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
-        pass 
+        
+        for pt_idx in np.arange(nsamples):
+            seed = vor.points[pt_idx]
+            region_index = vor.get_voronoi_region(seed)[0][0]
+            region = vor.vor.regions[region_index]
+
+            # without snipping vertices: assert the identified furthest vertex has the greatest distance
+            vertices = vor.get_region_vertices(region_index, identify_outside_vertices=False)
+            all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=False)
+            distances = np.linalg.norm(seed - all_vertices, axis=1)
+            max_dist = np.argmax(distances)
+            self.assertEqual(max_dist, furthest_vertex)
+            self.assertTrue(np.all(all_vertices == vertices))
+            
+            # with snipping vertices: assert the identified furthest vertex has the greatest distance
+            vertices = vor.get_region_vertices(region_index, identify_outside_vertices=True)
+            all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=True)
+            distances = np.linalg.norm(seed - all_vertices, axis=1)
+            max_dist = np.argmax(distances)
+            self.assertEqual(max_dist, furthest_vertex)
+            self.assertTrue(np.all(all_vertices == vertices))
+            
