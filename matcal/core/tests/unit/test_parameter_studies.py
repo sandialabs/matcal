@@ -21,7 +21,8 @@ from matcal.core.parameter_studies import (FiniteDifference, ClassicLaplaceStudy
                                            _combine_array_list_into_zero_padded_single_array, 
                                            _package_parameter_specific_results, 
                                            _fit_posterior,
-                                           VoronoiTessellation, )
+                                           VoronoiTessellation,
+                                           KFoldCrossValidation, )
 from matcal.core.state import State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests, model_func
@@ -955,6 +956,10 @@ class TestVoronoiTessellation(MatcalUnitTest):
     
     def setUp(self):
         super().setUp(__file__)
+        self.nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        self.X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(self.nsamples, bounds)
+        self.vor = VoronoiTessellation(self.X_init, self.bounds)
 
     def test_2d_initialization(self):
         nsamples = 4
@@ -1264,4 +1269,73 @@ class TestVoronoiTessellation(MatcalUnitTest):
             max_dist = np.argmax(distances)
             self.assertEqual(max_dist, furthest_vertex)
             self.assertTrue(np.all(all_vertices == vertices))
-            
+
+class TestKFoldCrossValidation(MatcalUnitTest):
+    from sklearn.linear_model import LinearRegression
+    
+    def setUp(self):
+        super().setUp(__file__)
+
+        # Sample data for testing
+        self.X = np.array([[1], [2], [3], [4], [5]])
+        self.y = np.array([1, 2, 3, 4, 5])
+        self.model = LinearRegression()
+        self.kfold = KFoldCrossValidation(model=self.model, n_splits=5)
+
+    def test_initialization(self):
+        self.assertEqual(self.kfold.n_splits, 5)
+        self.assertIsInstance(self.kfold.model, LinearRegression)
+        self.assertFalse(self.kfold.group_kfold)
+        self.assertIsNone(self.kfold.scale)
+
+    def test_calculate_sum_abs_error(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        error = self.kfold.calculate_sum_abs_error(y_true, y_pred)
+        self.assertEqual(error, 1)
+
+    def test_calculate_mean_abs_perc_error(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        error = self.kfold.calculate_mean_abs_perc_error(y_true, y_pred)
+        self.assertAlmostEqual(error, 33.33, places=2)
+
+    def test_calculate_sum_abs_perc_error(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        error = self.kfold.calculate_sum_abs_perc_error(y_true, y_pred)
+        self.assertAlmostEqual(error, 33.33, places=2)
+
+    def test_calculate_mse(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        error = self.kfold.calculate_mse(y_true, y_pred)
+        self.assertAlmostEqual(error, 0.33333, places=5)
+
+    def test_calculate_rmse(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        error = self.kfold.calculate_rmse(y_true, y_pred)
+        self.assertAlmostEqual(error, 0.57735, places=5)
+
+    def test_cross_val_fold(self):
+        train_index = [0, 1, 2]
+        test_index = [3, 4]
+        error, test_idx = self.kfold.cross_val_fold(train_index, test_index, self.X, self.y, 'mse')
+        self.assertEqual(test_idx.tolist(), test_index)
+        self.assertIsInstance(error, float)          
+        
+    def test_perform_kfold_cv(self):
+        metric = 'mse'
+        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, metric)
+        
+        # Check that the results are in the expected format
+        self.assertIsInstance(kf_results, dict)
+        self.assertEqual(len(kf_results), self.kfold.n_splits)
+
+        # Check that each result is a tuple (index_of_max_error, max_error)
+        for result in kf_results.values():
+            self.assertIsInstance(result, tuple)
+            self.assertEqual(len(result), 2)
+            self.assertIsInstance(result[0], int)  # index_of_max_error
+            self.assertIsInstance(result[1], float)  # max_error
