@@ -2157,6 +2157,7 @@ class KFoldCrossValidation:
         import matplotlib
         from joblib import Parallel, delayed
 
+        X = np.atleast_2d(X)
         nsamples = X.shape[0]
         if self.group_kfold:
             assert groups is not None
