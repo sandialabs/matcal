@@ -2264,9 +2264,6 @@ class LeaveOneOutCrossValidation:
         Parameters:
         model: A machine learning model that has fit and predict methods.
         """
-        from sklearn.metrics import mean_squared_error
-        from joblib import Parallel, delayed
-
         self.model = model
         self.scale = scale
 
@@ -2341,6 +2338,7 @@ class LeaveOneOutCrossValidation:
             The index of the sample with the greatest prediction error and the corresponding error value.
         """
 
+        from joblib import Parallel, delayed
         loo_results = Parallel(n_jobs=-1)(
             delayed(self.loo_val)(X, y, metric, i)
             for i in indices
