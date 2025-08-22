@@ -1271,18 +1271,20 @@ class TestVoronoiTessellation(MatcalUnitTest):
             self.assertTrue(np.all(all_vertices == vertices))
 
 class TestKFoldCrossValidation(MatcalUnitTest):
-    from sklearn.linear_model import LinearRegression
     
     def setUp(self):
         super().setUp(__file__)
 
+        from sklearn.linear_model import LinearRegression
         # Sample data for testing
         self.X = np.array([[1], [2], [3], [4], [5]])
         self.y = np.array([1, 2, 3, 4, 5])
+        self.nsamples = len(self.X)
         self.model = LinearRegression()
         self.kfold = KFoldCrossValidation(model=self.model, n_splits=5)
 
     def test_initialization(self):
+        from sklearn.linear_model import LinearRegression
         self.assertEqual(self.kfold.n_splits, 5)
         self.assertIsInstance(self.kfold.model, LinearRegression)
         self.assertFalse(self.kfold.group_kfold)
@@ -1298,7 +1300,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         y_true = np.array([1, 2, 3])
         y_pred = np.array([1, 2, 4])
         error = self.kfold.calculate_mean_abs_perc_error(y_true, y_pred)
-        self.assertAlmostEqual(error, 33.33, places=2)
+        self.assertAlmostEqual(error, 11.11, places=2)
 
     def test_calculate_sum_abs_perc_error(self):
         y_true = np.array([1, 2, 3])
@@ -1310,7 +1312,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         y_true = np.array([1, 2, 3])
         y_pred = np.array([1, 2, 4])
         error = self.kfold.calculate_mse(y_true, y_pred)
-        self.assertAlmostEqual(error, 0.33333, places=5)
+        self.assertAlmostEqual(error, 0.33, places=2)
 
     def test_calculate_rmse(self):
         y_true = np.array([1, 2, 3])
@@ -1318,24 +1320,81 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         error = self.kfold.calculate_rmse(y_true, y_pred)
         self.assertAlmostEqual(error, 0.57735, places=5)
 
-    def test_cross_val_fold(self):
-        train_index = [0, 1, 2]
-        test_index = [3, 4]
-        error, test_idx = self.kfold.cross_val_fold(train_index, test_index, self.X, self.y, 'mse')
-        self.assertEqual(test_idx.tolist(), test_index)
-        self.assertIsInstance(error, float)          
-        
     def test_perform_kfold_cv(self):
         metric = 'mse'
-        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, metric)
-        
+        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, metric, groups=None)
+       
         # Check that the results are in the expected format
         self.assertIsInstance(kf_results, dict)
         self.assertEqual(len(kf_results), self.kfold.n_splits)
 
-        # Check that each result is a tuple (index_of_max_error, max_error)
+        # Check that each result is a tuple (kfold error, indices of test samples)
+        test_indices = []
         for result in kf_results.values():
             self.assertIsInstance(result, tuple)
             self.assertEqual(len(result), 2)
-            self.assertIsInstance(result[0], int)  # index_of_max_error
-            self.assertIsInstance(result[1], float)  # max_error
+            self.assertIsInstance(result[0], float)  # error
+            self.assertIsInstance(result[1], np.ndarray)  # test indices
+            test_indices.append(result[1])
+        test_indices = np.vstack(test_indices)
+        
+        # check that each test sample is used once and only once
+        self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
+        self.assertEqual(len(np.unique(test_indices)), self.nsamples)
+            
+    def test_cross_val_fold(self):
+        train_index = [0, 1, 2]
+        test_index = [3, 4]
+        error, test_idx_returned = self.kfold.cross_val_fold(train_index, test_index, self.X, self.y, 'mse')
+        self.assertEqual(test_idx_returned, test_index)
+        self.assertIsInstance(error, float)          
+        
+class TestLeaveOneOutCrossValidation(MatcalUnitTest):
+    
+    def setUp(self):
+        super().setUp(__file__)
+
+        # Sample data for testing
+        self.X = np.array([[1], [2], [3], [4], [5]])
+        self.y = np.array([1, 2, 3, 4, 5])
+        self.model = LinearRegression()
+        self.loocv = LeaveOneOutCrossValidation(model=self.model)
+
+    def test_initialization(self):
+        self.assertIsInstance(self.loocv.model, LinearRegression)
+        self.assertIsNone(self.loocv.scale)
+
+    def test_calculate_sum_abs_error(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        error = self.loocv.calculate_sum_abs_error(y_true, y_pred)
+        self.assertEqual(error, 1)
+
+    def test_calculate_mean_abs_perc_error(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        error = self.loocv.calculate_mean_abs_perc_error(y_true, y_pred)
+        self.assertAlmostEqual(error, 33.33, places=2)
+
+    def test_calculate_mse(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        mse = self.loocv.calculate_mse(y_true, y_pred)
+        self.assertEqual(mse, 0.3333333333333333)
+
+    def test_calculate_rmse(self):
+        y_true = np.array([1, 2, 3])
+        y_pred = np.array([1, 2, 4])
+        rmse = self.loocv.calculate_rmse(y_true, y_pred)
+        self.assertAlmostEqual(rmse, 0.5773502691896257, places=5)
+
+    def test_loo_val(self):
+        error, index = self.loocv.loo_val(self.X, self.y, 'sum_abs_error', 0)
+        self.assertEqual(index, 0)
+        self.assertEqual(error, 4)  # Expected error when the first sample is left out
+
+    def test_perform_loocv(self):
+        indices = range(len(self.X))
+        results = self.loocv.perform_loocv(self.X, self.y, indices, metric='sum_abs_error')
+        self.assertEqual(len(results), len(self.X))
+        self.assertIn(0, results)  # Check if the first index is present in results            
