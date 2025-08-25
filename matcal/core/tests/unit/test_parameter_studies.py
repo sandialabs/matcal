@@ -981,10 +981,6 @@ class TestVoronoiTessellation(MatcalUnitTest):
     
     def setUp(self):
         super().setUp(__file__)
-        self.nsamples = 4
-        bounds = [[-5, 5], [-5, 5]]
-        self.X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(self.nsamples, bounds)
-        self.vor = VoronoiTessellation(self.X_init, self.bounds)
 
     def test_2d_initialization(self):
         nsamples = 4
