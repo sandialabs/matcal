@@ -1413,11 +1413,34 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         self.assertAlmostEqual(rmse, 0.57735, places=5)
 
     def test_loo_val(self):
-        error, index = self.loocv.loo_val(self.X, self.y, 'sum_abs_error', 0)
-        self.assertEqual(index, 0)
-
+        metrics = ['sum_abs_error', 'mape', 'mse', 'rmse', 'sum_abs_perc_error']
+        for metric in metrics:
+            for i in np.arange(self.nsamples):
+                error, index = self.loocv.loo_val(self.X, self.y, metric, i)
+                self.assertEqual(index, i)
+                self.assertIsInstance(error, float)
+        
     def test_perform_loocv(self):
         indices = range(self.nsamples)
-        results = self.loocv.perform_loocv(self.X, self.y, indices, metric='sum_abs_error')
-        self.assertEqual(len(results), self.nsamples)
-        self.assertIn(0, results)  # Check if the first index is present in results            
+        metrics = ['sum_abs_error', 'mape', 'mse', 'rmse', 'sum_abs_perc_error']
+        for metric in metrics:
+            loo_results = self.loocv.perform_loocv(self.X, self.y, indices, metric=metric)
+            
+            self.assertIsInstance(loo_results, dict)
+            self.assertEqual(len(loo_results), self.nsamples)
+            self.assertIn(0, loo_results)  # Check if the first index is present in results
+            
+            # Check that each result is a tuple (r, indices of test samples)
+            test_indices = []
+            for result in loo_results.values():
+                self.assertIsInstance(result, tuple)
+                self.assertEqual(len(result), 2)
+                self.assertIsInstance(result[0], float)  # error
+                self.assertIsInstance(result[1], int)  # test indices
+                test_indices.append(result[1])
+            test_indices = np.vstack(test_indices)
+            
+            # check that each test sample is used once and only once
+            self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
+            self.assertEqual(len(np.unique(test_indices)), self.nsamples)
+                 
