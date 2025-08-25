@@ -23,7 +23,8 @@ from matcal.core.parameter_studies import (FiniteDifference, ClassicLaplaceStudy
                                            _fit_posterior,
                                            VoronoiTessellation,
                                            KFoldCrossValidation,
-                                           LeaveOneOutCrossValidation, )
+                                           LeaveOneOutCrossValidation,
+                                           VoronoiBatchStudy, )
 from matcal.core.state import State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests, model_func
@@ -1114,7 +1115,6 @@ class TestVoronoiTessellation(MatcalUnitTest):
             plt.savefig(f"/ascldap/users/dericci/inner_outer_hull_r{region_idx}.png")
             plt.close("all")       
          
-
     def test_2d_get_voronoi_vertices(self):
         from matplotlib.path import Path
         nsamples = 4
@@ -1267,6 +1267,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             self.assertEqual(max_dist, furthest_vertex)
             self.assertTrue(np.all(all_vertices == vertices))
 
+
 class TestKFoldCrossValidation(MatcalUnitTest):
     
     def setUp(self):
@@ -1345,6 +1346,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         error, test_idx_returned = self.kfold.cross_val_fold(train_index, test_index, self.X, self.y, 'mse')
         self.assertEqual(test_idx_returned, test_index)
         self.assertIsInstance(error, float)          
+       
         
 class TestLeaveOneOutCrossValidation(MatcalUnitTest):
     
@@ -1419,4 +1421,12 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             # check that each test sample is used once and only once
             self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
             self.assertEqual(len(np.unique(test_indices)), self.nsamples)
-                 
+
+
+class TestVoronoiBatchStudy(MatcalUnitTest):
+    
+    def setUp(self):
+        super().setUp(__file__)
+        
+    def test_initialization(self):
+        
