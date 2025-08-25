@@ -1052,32 +1052,99 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
 
 
 class VoronoiBatchStudy(ParameterStudy):
-    def __init__(self, model, bounds,  X_test, y_test, surr_model_type='GPR', voronoi_type='full__', nsplits=8,
-                 nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
+    def __init__(self, model, bounds,  X_test, y_test, surr_model_type='GPR', voronoi_type='full', finite=False,
+                 nsplits=8, nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
                  group_kfold=False, thin=None, random_selection=None, nbatches=20,
-                 figpath=None, plot_figs=False, rng=None):
+                 rng=None):
         """Initialize the VoronoiBatchSamplingStudy
 
-        Args:
-            model: model to be evaluated
-            bounds (list)
-            X_test (nd_array): n x d array of test parameter samples
-            y_test (nd_array): n x d array of test model output
-            surr_model_type (str):  Type of surrogate to be used. .Default 'GPR'.
-            voronoi_type (str):
-            nsplits (int):
-            nmax_folds (int):
-            nmax_loo (int):
-            cv_scale ( ):
-            cv_metric (str):
-            group_kfolds (bool):
-            thin ():
-            random_selection ():
-            nbatches (int):
-            figpath (str):
-            plot_figs (bool):
-            rng (int, optional): Pseudorandom numer generator state. When rng is None, a new generator
-            is created using entropy from the operating system.
+        :param model: Model to be evaluated, which has a 'fit' and 'predict' method 
+        :type model:
+        
+        :param bounds: upper and lower bound of each parameter. Defines bounds of sampling region.
+        :type bounds: list
+
+        :param X_test: Parameter samples reserved for testing.
+        :type X_test: nd_array
+        
+        :param y_test: Model output corresponding to X_test reserved for testing.
+        :type y_test: nd_array
+        
+        :param surr_model_type: Type of surrogate to be used. Options are 'GPR' (default) and 'SVR'.
+        :type surr_model_type: str
+        
+        :param voronoi_type: Defines shich variation of voronoi sampling to use. Options are 'full' (default), 'local' and
+                             'sampling'. If voronoi_type = 'full', then the full voronoi tesselation is made. If
+                             voronoi_type = 'local', then a voronoi tesselelation is only made for nearby points as
+                             determined through k-nearest neighbors. This option, may reduce computational demand in
+                             high dimensions. If voronoi_type = 'sampling', then new sample locations are determined
+                             through a sampling algorithm instead of choosing the furthest point in the voronoi region.
+                             This approach may also reduce computational demand in high dimensions.
+        :type voronoi_type: str
+        
+        :param finite: With finite=True, only vertices which reside inside convex hull defined by boundary points
+                       are considered as candidate locations for new samples. With finite=False (default), all vertices are
+                       consider as candidate locations for new samples. In this case, vertices which fall outisde 
+                       the parameter bounds are snipped to the convex hull defined by boundary points, which requires
+                       more computational resources, especially in high dimensions.
+        :type finite: bool
+        
+        :param iterative: If iterative=True (default), the voronoi tessellation is remade after each new sample is added. This promotes
+                          a design that is more space filling. If iterative=False, the voronoi tesselation is updated once
+                          per batch after all the samples are chosen. Setting iterative=False can be faster, especially in
+                          high dimensions but can result in some samples being clustered together.
+        :type iterative: bool
+
+        :param nsplits: The number of splits to use in k-fold cross validation. Default is 8.
+        :type nsplits: int
+    
+        :param nmax_folds: The number of points with the greatest k-fold CV error to keep as candidates for new
+                           sample locations. Default is 3.
+        :type nmax_folds: int
+
+        :param nmax_loo: The number of points with the greatest Leave One Out CV error to keep as candidates for new
+                         sample locations. Default is 25.
+        :type nmax_loo: int
+        
+        :param cv_scale:
+        :tpye cv_scale:
+        
+        :param cv_metric: Determines which metric to use when calculating errors during cross validation. Options are
+                          'sum_abs_error' (default), 'mse', 'mape', 'rmse', 'sum_abs_perc_error'. 
+        :type cv_metric: str
+        
+        :param group_kfolds: If set to True, then groups in KFold CV are pre-determined through k-means clustering
+                             so that samples close together are always in the same fold during cross validation. If
+                             set to False (default), then groups are randomly assinged by the KFold algorithm.
+        :type group_kfolds: bool
+
+        :param thin: If defined, then every nth candidate sample location is chosen as a new sample location. This helps
+                    to reduce computational demand in high dimensions. Default is None.
+        :type thin: int or None
+        
+        :param random_selection: If defined, then this defines the number of new samples that are randomly chosen
+                                 from candidate sample locations. This helps to reduce computational demand in
+                                 high dimensions. Default is None.
+        :type random_selection: int or None
+        
+        :param nbatches:
+        :type nbatches: int
+        
+        :param figpath:
+        :type figpath:
+        
+        :param plot_figs:
+        :type plot_figs: bool
+
+        :param plot_figs:
+        :type plot_figs: bool
+        
+        :param rng: Pseudorandom number generator state. When rng is None, a new generator is created using entropy
+                    from the operating system.
+
+        :return:
+        :type rtn:
+        
         """
 
         if random_selection is not None and thin is not None:
@@ -1345,25 +1412,6 @@ class VoronoiBatchStudy(ParameterStudy):
             all_points = X.copy()
             tree = KDTree(all_points)
 
-        elif voronoi_type == 'shadow':
-            projection_dim = 2
-            projections = list(combinations(range(ndim), projection_dim))
-            nproj = len(projections)
-            full_list = set(range(ndim))
-            inverted_projection = []
-            for tup in projections:
-                inverted_projections.append(tuple(full_list - set(tup)))
-            shadow_voronoi = [None] * nproj
-            shadow_points = [None] * nproj
-            shadow_bounds = [None] * nproj
-            shadow_boundary_points = [None] * nproj
-            for idx, proj in enumerate(projections):
-                shadow_points[idx] = np.unique(X[:, proj], axis=0)
-                shadow_bounds[idx] = bounds[list(proj)]
-                shadow_boundary_points[idx] = make_nd_grid(shadow_bounds[idx], 2)
-                shadow_voronoi[idx] = VoronoiTessellation(shadow_points[idx],
-                    shadow_bounds[idx], shadow_boundary_points[idx], finite_only=finite_only)
-
         elif voronoi_type == 'sampling':
             clip_method = 'np_clip'
             if clip_method == "boundary_hull_clip":
@@ -1438,16 +1486,6 @@ class VoronoiBatchStudy(ParameterStudy):
                 if iterative_updates:
                     all_points = np.vstack((all_points, furthest_vertex))
                     tree = KDTree(all_points)
-
-            elif voronoi_type == 'shadow':
-                shadow_vertices = [None] * nproj 
-                for proj_idx in range(nproj):
-                    vor = shadow_voronoi[proj_idx]
-                    proj = proj[proj_idx]
-                    proj_point = location.squeeze()[list(proj)]
-                    shadow_point_region = vor.get_voronoi_region(proj_point)[0]
-                    shadow_vertices[proj_idx] = vor.get_region_vertices(\
-                        shadow_poing_region, identify_outside_vertices=True)
 
             elif voronoi_type == 'sampling':
                 try:
