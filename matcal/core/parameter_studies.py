@@ -147,10 +147,12 @@ class HaltonStudy(ParameterStudy):
     def __init__(self, *parameters, scramble=True, rng=None):
         """Initialize the HaltonStudy
 
-        Args:
-            scramble (bool, optional): If True, Owen scrambling is used. Defaults to False.
-            rng (int, optional): Pseudorandom numer generator state. When rng is None, a new generator
+        :param scramble: If True, Owen scrambling is used. Defaults to False.
+        :type scrambel: bool
+        
+        :param rng: Pseudorandom numer generator state. When rng is None, a new generator
             is created using entropy from the operating system.
+        :type rng: int
         """
         # optional: check that all parameters are continuous design or
         # uniform uncertain
@@ -172,10 +174,14 @@ class HaltonStudy(ParameterStudy):
     def _check_variable_type(self, var, var_name, *var_types):
         """Assert variables are of the given type.
 
-        Args:
-            var_name (str): name of parameter being checked
-            var (any): variable to be checked
-            var_types (__type__): type(s) that 'var_name' is to be. If not, a TypeError is raised
+        :param var_name: name of parameter being checked
+        :type var_name: str
+        
+        :param var: variable to be checked
+        :type var: any
+        
+        :param var_types: type(s) that 'var_name' should be. If not, a TypeError is raised
+        :type var_types: (__type__)
         """
 
         if not isinstance(var, var_types):
@@ -189,8 +195,12 @@ class HaltonStudy(ParameterStudy):
         """ Launch study, generates samples from Halton Sequence and
         scales to bounds if bounds are defined.
 
-        Args:
-            nsamples (int): number of parameter samples to generate from Halton sequence
+        :param nsamples: Number of parameter samples to generate from Halton sequence.
+        :type nsamples: int
+        
+        :param skip: When continuing an existing design, the user may optionally skip ahead in the
+                     Halton sequence by an amount determined by 'skip'.
+        :type skip: int
         """
         self._set_number_of_samples(nsamples, skip)
         
@@ -200,8 +210,8 @@ class HaltonStudy(ParameterStudy):
         """ generates samples from Halton Sequence and
         scales to bounds if bounds are defined.
 
-        Args:
-            nsamples (int): number of parameter samples to generate from Halton sequence
+        :param nsamples: number of parameter samples to generate from Halton sequence
+        :type nsamples: int
         """
 
         self._check_variable_type(nsamples, 'nsamples', int)
@@ -212,9 +222,6 @@ class HaltonStudy(ParameterStudy):
 
     def _generate_samples(self, nsamples):
         """ Generate sample from a Halton seqence
-
-        Args:
-            nsamples (int): number of parameter samples to generate from Halton sequence
         """
         unscaled_samples = self.HaltonSampler.random(n=nsamples)
         scaled_samples = self._scale_samples_to_bounds(unscaled_samples)
@@ -237,11 +244,11 @@ class HaltonStudy(ParameterStudy):
         """
         Scale samples to be within defined bounds.
 
-        Parameters:
-        samples (nsamples x dim) array : samples to be scaled
+        :param samples: samples to be scaled
+        :type samples: np.ndarray of size (nsamples x nfeatures)
 
-        Returns:
-        Scaled samples (nsamples x dim) array.
+        :return: scaled samples
+        :type return: np.ndarray of size (nsamples x nfeatures)
         """
 
         return qmc.scale(samples, self.l_bounds, self.u_bounds)
@@ -1175,8 +1182,6 @@ class VoronoiBatchStudy(ParameterStudy):
         if nmax_loo == 'all' and thin is None and random_selection is None:
             print("Samples will be drawn for all regions in nmax_folds since none of LOOCV, thinning, or  random selection are activated")
 
-        #return super().launch()
-
         # calculate initial surrogate error
         self._calculate_errors()
         self.calculate_surrogate_loss()
@@ -1192,28 +1197,13 @@ class VoronoiBatchStudy(ParameterStudy):
                 n_splits=nsplits, cv_metric=cv_metric, group_kfold=group_kfold, thin=thin,
                 random_selection=random_selection, cv_scale=cv_scale)
 
-            print("Evaluating model at new training points.")
             y = fun(X)
-            print("Fitting model with new training points.")
             model_list = Parallel(n_jobs=-1)(delayed(fit_model)(model, X, y) for _ in range(1))
             model = model_list[0]
-            #model.fit(X, y)
-            y_pred = model.predict(X_test)
-            pred_error = np.abs(y_pred - y_test)
-            voronoi_mse.append(1/(ntest) * sum(pred_error ** 2))
-            voronoi_mape.append(1/(ntest) * sum((pred_error/np.abs(y_test)) * 100))
-            voronoi_mae.append(pred_error.mean())
-            voronoi_smape.append(2/(ntest) * sum(pred_error / (np.abs(y_test) + np.abs(y_pred)) ) * 100)
-            print(f"surrogate error --> MSE: {voronoi_mse[-1]}, SMAPE: {voronoi_smape[-1]}, MAE: {voronoi_mae[-1]}")
-
-            nsamples_list.append(X.shape[0])
-            voronoi_time.append(v_time)
-            make_error_pairplot(model, fun, dim, bounds, 25, batch_number, figpath)
-            surrogate_loss = calculate_surrogate_loss(surr_model, surrogate_loss, model)
-            print(f"surrogate loss: {surrogate_loss}")
-            if dim == 2 and test_grid and plot_figs:
-                plot_2d_model(y_test, y_pred, pred_error, X, bounds, figpath, npts=ntestpts_per_dim, iter_=batch_number, show_true=True)
-
+            self._calculate_errors()
+            self._calculate_surrogate_loss()
+            
+            self._nbatch_samples.append(X.shape[0])
             # convergence check
             if np.abs(surrogate_loss[batch_number+1] - surrogate_loss[batch_number]) <= eps:
                 print(f"BREAKING: Convergence from surrogate loss.")
@@ -1230,6 +1220,8 @@ class VoronoiBatchStudy(ParameterStudy):
             else:
                 print("Surrogate not converged yet.")
             batch_number += 1
+
+        #return super().launch()
 
     def _calculate_errors(self):
         y_pred = self.surr_model.predict(self.X_test)
