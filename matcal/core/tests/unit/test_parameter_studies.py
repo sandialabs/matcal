@@ -1447,14 +1447,118 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             self.assertEqual(len(np.unique(test_indices)), self.nsamples)
 
 
+class SurrogateModel:
+    def __init__(self, input_scaling=False, output_scaling=True, **kwargs):
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+        
+        self.input_scaling = input_scaling
+        self.surrogate_type = 'gaussian_process'
+
+        self.nrestarts = 50
+        self.alpha = 1.0e-8
+        self.normalize_y = output_scaling
+        self.random_state = None
+        self.output_scaler_with_std = True
+        for kwarg in kwargs:
+            if kwarg == 'n_restarts_optimizer':
+                self.nrestarts = kwargs[kwarg]
+            if kwarg == 'alpha':
+                self.alpha = kwargs[kwarg]
+            if kwarg == 'normalize_y':
+                self.normalize_y = kwargs[kwarg]
+            if kwarg == 'random_state':
+                self.random_state = kwargs[kwarg]
+            if kwarg == 'output_scaler_with_std':
+                self.output_scaler_with_std = kwargs[kwarg]
+
+    def fit(self, X, y):
+
+            X = np.atleast_2d(X)
+            self.nsamples = X.shape[0]
+            self.nfeatures = X.shape[1]
+
+            gp_train_features = X
+            if self.input_scaling:
+                self.input_scaler = StandardScaler()
+                scaled_features = self.input_scaler.fit_transform(X)
+                gp_train_features = scaled_features
+            gp_train_targets = y
+
+            # squared exponential kernel
+            self.kernel = C(1.0, constant_value_bounds=(1e-3, 1e3))\
+                * RBF(np.ones(self.nfeatures), length_scale_bounds=(1e-3, 1e3))
+
+            self.surrogate = \
+                GaussianProcessRegressor(
+                    kernel=self.kernel,
+                    n_restarts_optimizer=self.nrestarts,
+                    alpha=self.alpha,
+                    random_state=self.random_state,
+                    normalize_y=self.normalize_y)
+            self.surrogate.fit(
+                gp_train_features,
+                gp_train_targets)
+
+
+    def predict(self, X):
+
+        X = np.atleast_2d(X)
+        assert X.ndim == 2
+        assert X.shape[1] == self.nfeatures
+
+        if self.input_scaling:
+            X = self.input_scaler.transform(X)
+
+        return self.surrogate.predict(X)
+   
 class TestVoronoiBatchStudy(MatcalUnitTest):
+    @staticmethod
+    def fun2D(x):
+        return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
+
+    @staticmethod
+    def fun3D(x):
+        pass
+    
+    @staticmethod
+    def initialization_2d(nsamples, bounds, seed=20):
+        from scipy.stats.qmc import Halton
+        from scipy.stats import qmc
+
+        model = TestVoronoiBatchStudy.fun2D
+        dim = 2
+                
+        l_bounds = [bounds[i][0] for i in np.arange(dim)]
+        u_bounds = [bounds[i][1] for i in np.arange(dim)]
+        dim = len(bounds)
+        
+        # Generate initial points from Halton Sequence
+        sampler = Halton(d=dim, seed=seed)
+        X_unscaled = sampler.random(n=nsamples)
+        X_init = qmc.scale(X_unscaled, l_bounds, u_bounds)
+        y_init = model(X_init)
+
+        ntest_samples = 40
+        test_pts_sampler = Halton(d=dim, seed=seed+2)
+        X_test_unscaled = np.atleast_2d(test_pts_sampler.random(n=ntest_samples))
+        X_test = np.atleast_2d(qmc.scale(X_test_unscaled, l_bounds, u_bounds))
+        y_test = model(X_test)
+        
+        # Initialize surrogate model with initial training data
+        surr_model = SurrogateModel(input_scaling=True)
+        surr_model.fit(X_init, y_init)
+        return X_init, y_init, X_test, y_test, surr_model
     
     def setUp(self):
         super().setUp(__file__)
         
     def test_initialization(self):
-        pass
-
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(surr_model, bounds, X_test, y_test, rng=42)
 
     def test_placeholder(self):
         if True:
