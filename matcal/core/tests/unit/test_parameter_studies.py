@@ -1453,4 +1453,45 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         super().setUp(__file__)
         
     def test_initialization(self):
-        
+        pass
+
+
+    def test_placeholder(self):
+        if True:
+            plt.close("all")
+            X_df = pd.DataFrame(X)
+            X_df['label'] = 'Training'
+            test_df = pd.DataFrame(X_test)
+            test_df['label'] = 'Test'
+            data = pd.concat([X_df, test_df])
+            palette = {'Training': 'blue', 'Test': 'red'}
+            sns.set_context("paper", rc={"xlabel.fontsize": 16, "ylabel.fontsize": 16,\
+                "xlabel.fontweight": "bold", "ylabel.fontweight": "bold"})
+            pairplot = sns.pairplot(data, hue='label', palette=palette, corner=True,
+                plot_kws=dict(marker='.', s=20))
+            pairplot.fig.set_size_inches(5, 5)
+            plt.savefig(f"{figpath}/training_points_iter_{batch_number}.png")
+            plt.close()
+
+        if dim == 2 and voronoi_type == 'full':
+            fix, ax = plt.subplots()
+            voronoi_plot_2d(voronoi_tessellation.vor, ax=ax, show_vertices=False,
+                line_width=2)
+            ax.plot(X[:, 0], X[:, 1], '.', markersize=10, color='m', label='Training Points')
+            plt.legend(fontsize=20)
+            plt.savefig(f"{figpath}/voronoi_tessellation_iter_{batch_number}.png")
+            plt.close()
+
+            fig, ax = plt.subplots(figsize=(12,8))
+            ax.plot(nsamples_list, voronoi_pred_error, linestyle='--', marker='o',  markersize=10, color='fuchsia', label='Voronio')
+            plt.legend(fontsize=20)
+            plt.xticks(np.arange(nsamples_list[0], nsamples_list[-1], 5), fontsize=16)
+            plt.xlabel('Number of Samples', fontsize=20)
+            plt.ylabel('MSE', fontsize=20)
+            plt.yscale('log')
+            plt.title('Surrogate Prediction Error', fontsize=20)
+            plt.savefig(f'{figpath}/prediction_error.png')
+
+                plt.close("all")
+
+    

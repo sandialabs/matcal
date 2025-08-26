@@ -1052,10 +1052,8 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
 
 
 class VoronoiBatchStudy(ParameterStudy):
-    def __init__(self, model, bounds,  X_test, y_test, surr_model_type='GPR', voronoi_type='full', finite=False,
-                 nsplits=8, nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
-                 group_kfold=False, thin=None, random_selection=None, nbatches=20,
-                 rng=None):
+    def __init__(self, model, bounds,  X_test, y_test, surr_model_type='GPR', voronoi_type='full', 
+                 finite_only=False, iterative_updates=True, rng=None):
         """Initialize the VoronoiBatchSamplingStudy
 
         :param model: Model to be evaluated, which has a 'fit' and 'predict' method 
@@ -1074,10 +1072,10 @@ class VoronoiBatchStudy(ParameterStudy):
         :type surr_model_type: str
         
         :param voronoi_type: Defines shich variation of voronoi sampling to use. Options are 'full' (default), 'local' and
-                             'sampling'. If voronoi_type = 'full', then the full voronoi tesselation is made. If
-                             voronoi_type = 'local', then a voronoi tesselelation is only made for nearby points as
+                             'sampling'. If voronoi_type == 'full', then the full voronoi tesselation is made. If
+                             voronoi_type == 'local', then a voronoi tesselelation is only made for nearby points as
                              determined through k-nearest neighbors. This option, may reduce computational demand in
-                             high dimensions. If voronoi_type = 'sampling', then new sample locations are determined
+                             high dimensions. If voronoi_type == 'sampling', then new sample locations are determined
                              through a sampling algorithm instead of choosing the furthest point in the voronoi region.
                              This approach may also reduce computational demand in high dimensions.
         :type voronoi_type: str
@@ -1087,14 +1085,55 @@ class VoronoiBatchStudy(ParameterStudy):
                        consider as candidate locations for new samples. In this case, vertices which fall outisde 
                        the parameter bounds are snipped to the convex hull defined by boundary points, which requires
                        more computational resources, especially in high dimensions.
-        :type finite: bool
+        :type finite_only: bool
         
-        :param iterative: If iterative=True (default), the voronoi tessellation is remade after each new sample is added. This promotes
-                          a design that is more space filling. If iterative=False, the voronoi tesselation is updated once
-                          per batch after all the samples are chosen. Setting iterative=False can be faster, especially in
-                          high dimensions but can result in some samples being clustered together.
+        :param iterative_updates: If iterative=True (default), the voronoi tessellation is remade after each new sample is added. 
+                          This promotes a design that is more space filling. If iterative=False, the voronoi tesselation 
+                          is updated once per batch after all the samples are chosen. Setting iterative=False can be faster,
+                          especially in high dimensions but can result in sample clustering.
         :type iterative: bool
 
+        :param rng: Pseudorandom number generator state. When rng is None, a new generator is created using entropy
+                    from the operating system.
+        :type rng: int
+
+        :return:
+        :type rtn:
+        
+        """
+
+        self._initialize_attributes(model, bounds, X_test, y_test, surr_model_type, voronoi_type, finite_only,
+                                    iterative_updates, rng)
+        
+    def _initialize_attributes(self, model, bounds, X_test, y_test, surr_model_type, voronoi_type, finite_only,
+                                iterative_updates, rng):
+        self.surr_model = model
+        self.surr_model_type = surr_model_type
+        self.bounds = bounds
+        self.X_test = X_test
+        self.y_test = y_test
+        self.voronoi_type = voronoi_type
+        self.finite_only = finite_only
+        self.iterative_updates = iterative_updates
+
+        self.dim = len(bounds)
+        self.boundary_points = make_nd_grid(bounds, 2)
+
+        # lists for tracking error as design evolves
+        self._nbatch_samples = []
+        self.mse = []
+        self.mape = []
+        self.mae = []
+        self.smape = []
+        self.surrogate_loss = []
+        
+        # convergence check epsilon
+        eps = 1e-5
+
+    def launch(self, nsplits=8, nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
+                 group_kfold=False, thin=None, random_selection=None, nbatches=20):
+        """ Perform Voronoi batch sampling
+        
         :param nsplits: The number of splits to use in k-fold cross validation. Default is 8.
         :type nsplits: int
     
@@ -1102,8 +1141,8 @@ class VoronoiBatchStudy(ParameterStudy):
                            sample locations. Default is 3.
         :type nmax_folds: int
 
-        :param nmax_loo: The number of points with the greatest Leave One Out CV error to keep as candidates for new
-                         sample locations. Default is 25.
+        :param nmax_loo: The number of points with the greatest LOOCV error to keep as candidates for new sample locations.
+                          Default is 25.
         :type nmax_loo: int
         
         :param cv_scale:
@@ -1127,72 +1166,19 @@ class VoronoiBatchStudy(ParameterStudy):
                                  high dimensions. Default is None.
         :type random_selection: int or None
         
-        :param nbatches:
+        :param nbatches: The number of sampling batches to perform. Default 20.
         :type nbatches: int
-        
-        :param figpath:
-        :type figpath:
-        
-        :param plot_figs:
-        :type plot_figs: bool
-
-        :param plot_figs:
-        :type plot_figs: bool
-        
-        :param rng: Pseudorandom number generator state. When rng is None, a new generator is created using entropy
-                    from the operating system.
-
-        :return:
-        :type rtn:
-        
         """
-
+        
         if random_selection is not None and thin is not None:
             raise ValueError("Only one of 'thin' or 'random_selection' can be activated. Not both.")
         if nmax_loo == 'all' and thin is None and random_selection is None:
             print("Samples will be drawn for all regions in nmax_folds since none of LOOCV, thinning, or  random selection are activated")
 
-        self.surr_model = model
-        self.surr_model_type = surr_model_type
-        self.bounds = bounds
-        self.X_test = X_test
-        self.y_test = y_test
-        self.nsplits = nsplits
-        self.nmax_folds = nmax_folds
-        self.nmax_loo = nmax_loo
-        self.cv_metric = cv_metric
-        self.group_kfold = group_kfold
-        self.thin = thin
-        self.random_selection = random_selection
-        self.nbatches = nbatches
-        self.figpath = figpath
-        self.voronoi_type = voronoi_type
-
-        self.finite_only = False
-        self.iterative_updates = True
-        if voronoi_type.split('_')[1] == 'finite':
-            self.finite_only = True
-        if voronoi_type.split('_')[2] == 'noniterative':
-            self.iterative_updates = False
-
-        self.dim = len(bounds)
-        self.boundary_points = make_nd_grid(bounds, 2)
-
-        self.nbatch_samples = []
-        self.mse = []
-        self.mape = []
-        self.mae = []
-        self.smape = []
-        self.surrogate_loss = []
-        eps = 1e-5
-
-        self.perform_voronoi_batch_sampling()
-
-    def peform_voronoi_batch_sampling(self):
-        """ Perform Voronoi batch sampling """
+        #return super().launch()
 
         # calculate initial surrogate error
-        self.calculate_errors()
+        self._calculate_errors()
 
         print(f"Initial surrogate error--> MSE: {self.mse[0]}, SMAPE: {self.smape[0]}, MAE: {self.mae[0]}")
         self.calculate_surrogate_loss()
@@ -1203,7 +1189,7 @@ class VoronoiBatchStudy(ParameterStudy):
         while True:
             print(f"Sampling batch {batch_number}. Currently {X.shape[0]} samples.")
             print("................................................................")
-            X, v_time = voronoi_batch_sampling(X, y, model=model, bounds=bounds,
+            X, v_time = self._perform_voronoi_batch_sampling(X, y, model=model, bounds=bounds,
                 boundary_points=boundary_points, nmax_folds=nmax_folds, nmax_loo=nmax_loo, iter_=batch_number,
                 iterative_updates=iterative_updates,
                 figdir=figpath, plot_figs=plot_figs, finite_only=finite_only, voronoi_type=voronoi_type.split('_')[0],
@@ -1249,53 +1235,17 @@ class VoronoiBatchStudy(ParameterStudy):
                 print("Surrogate not converged yet.")
             batch_number += 1
 
-            if False:
-                plt.close("all")
-                X_df = pd.DataFrame(X)
-                X_df['label'] = 'Training'
-                test_df = pd.DataFrame(X_test)
-                test_df['label'] = 'Test'
-                data = pd.concat([X_df, test_df])
-                palette = {'Training': 'blue', 'Test': 'red'}
-                sns.set_context("paper", rc={"xlabel.fontsize": 16, "ylabel.fontsize": 16,\
-                    "xlabel.fontweight": "bold", "ylabel.fontweight": "bold"})
-                pairplot = sns.pairplot(data, hue='label', palette=palette, corner=True,
-                    plot_kws=dict(marker='.', s=20))
-                pairplot.fig.set_size_inches(5, 5)
-                plt.savefig(f"{figpath}/training_points_iter_{batch_number}.png")
-                plt.close()
-
-            if dim == 2 and voronoi_type == 'full' and False:
-                fix, ax = plt.subplots()
-                voronoi_plot_2d(voronoi_tessellation.vor, ax=ax, show_vertices=False,
-                    line_width=2)
-                ax.plot(X[:, 0], X[:, 1], '.', markersize=10, color='m', label='Training Points')
-                plt.legend(fontsize=20)
-                plt.savefig(f"{figpath}/voronoi_tessellation_iter_{batch_number}.png")
-                plt.close()
-
-                fig, ax = plt.subplots(figsize=(12,8))
-                ax.plot(nsamples_list, voronoi_pred_error, linestyle='--', marker='o',  markersize=10, color='fuchsia', label='Voronio')
-                plt.legend(fontsize=20)
-                plt.xticks(np.arange(nsamples_list[0], nsamples_list[-1], 5), fontsize=16)
-                plt.xlabel('Number of Samples', fontsize=20)
-                plt.ylabel('MSE', fontsize=20)
-                plt.yscale('log')
-                plt.title('Surrogate Prediction Error', fontsize=20)
-                plt.savefig(f'{figpath}/prediction_error.png')
-
-                plt.close("all")
-
-    def calculate_errors(self):
+    def _calculate_errors(self):
         y_pred = self.surr_model.predict(self.X_test)
         pred_error = np.abs(y_pred - self.y_test)
+        ntest = len(self.X_test)
         self.mse.append(1/(ntest) * sum(pred_error ** 2))
         self.mape.append(1/(ntest) * sum((pred_error/np.abs(self.y_test)) * 100))
         self.mae.append(pred_error.mean())
         self.smape.append(2/(ntest) * sum(pred_error / (np.abs(self.y_test) + np.abs(y_pred)) ) * 100)
 
 
-    def calculate_surrogate_loss(self):
+    def _calculate_surrogate_loss(self):
         # convergence based on marginal log likelihood for GPR
         if self.surr_model_type == 'GPR':
             self.surrogate_loss.append(self.surr_model.surrogate.log_marginal_likelihood(\
@@ -1305,7 +1255,7 @@ class VoronoiBatchStudy(ParameterStudy):
             self.surrogate_loss.append(np.maximum(0, pred_error - epsilon).mean())
 
 
-    def voronoi_batch_sampling(self, X, y, model, bounds, boundary_points, nmax_folds=1,
+    def _perform_voronoi_batch_sampling(self, X, y, model, bounds, boundary_points, nmax_folds=1,
          nmax_loo=1, iter_=None, iterative_updates=True, figdir=None,
          plot_figs=False, finite_only=False, voronoi_type='full', n_splits=5,
          cv_metric='sum_abs_error', group_kfold=False, thin=None,
@@ -1550,7 +1500,7 @@ class VoronoiBatchStudy(ParameterStudy):
         return X, v_time
 
 
-    def find_indices_of_n_largest_kf_errors(kf, n):
+    def _find_indices_of_n_largest_kf_errors(kf, n):
 
         # Create a list of (key, error, sample_index) tuples
         items = [(key, value[0], value[1]) for key, value in kf.items()]
@@ -1567,7 +1517,7 @@ class VoronoiBatchStudy(ParameterStudy):
         return result_arrays
 
 
-    def find_indices_of_n_largest_errors(loo, n, sort=False):
+    def _find_indices_of_n_largest_errors(loo, n, sort=False):
         """
         Find the indices of the n largest values in an array of errors.
 
@@ -1614,7 +1564,7 @@ class VoronoiBatchStudy(ParameterStudy):
         return np.array(indices)
 
 
-    def make_nd_grid(bounds, npts_along_dim):
+    def _make_nd_grid(bounds, npts_along_dim):
 
         ndim = len(bounds)
         grid_pts = []
@@ -1627,7 +1577,7 @@ class VoronoiBatchStudy(ParameterStudy):
         return np.vstack(tuple(coords_ravel)).T
 
 
-    def generate_test_data(fun, bounds, ngrid_pts=25, grid=True, npts=None):
+    def _generate_test_data(fun, bounds, ngrid_pts=25, grid=True, npts=None):
 
         if grid:
             pts = make_nd_grid(bounds, ngrid_pts)
@@ -1640,11 +1590,11 @@ class VoronoiBatchStudy(ParameterStudy):
 
         return pts, y_true
 
-    def fit_model(model, X, y):
+    def _fit_model(model, X, y):
         model.fit(X, y)
         return model
 
-    def find_boundary_hull_ray_crossings(boundary_hull, U, z):
+    def _find_boundary_hull_ray_crossings(boundary_hull, U, z):
         """
         Find where a ray crosses the convex hull of the boundary.
 
@@ -1666,13 +1616,13 @@ class VoronoiBatchStudy(ParameterStudy):
             crossing[ss] = np.min(alpha[alpha >0]) * U[ss] + z
         return crossing
 
-    def clip_points(boundary_hull, samples, centroid):
+    def _clip_points(boundary_hull, samples, centroid):
         ray_direction = samples - centroid
         norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
         new_point = find_boundary_hull_ray_crossings(boundary_hull, norm_ray_direction, centroid)
         return new_point
 
-    def handle_points_outside_bounds(boundary_hull, bounds, ndim, samples, method='np_clip', centroid=None):
+    def _handle_points_outside_bounds(boundary_hull, bounds, ndim, samples, method='np_clip', centroid=None):
         lb = np.array(bounds)[:, 0]
         ub = np.array(bounds)[:, 1]
         outside_mask = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
@@ -1688,14 +1638,14 @@ class VoronoiBatchStudy(ParameterStudy):
             samples[outside_mask] = clipped_samples
         return samples
 
-    def find_farthest_sample_from_point(samples, point):
+    def _find_farthest_sample_from_point(samples, point):
         sample_distances_from_p_i = np.linalg.norm(samples - point, axis=1)
         farthest_idx = np.argmax(sample_distances_from_p_i)
         farthest_candidate = samples[farthest_idx]
         farthest_distance = sample_distances_from_p_i[farthest_idx]
         return farthest_candidate, farthest_distance, sample_distances_from_p_i
 
-    def farthest_point_adpative_sampling_var(initial_samples, initial_nn, tree, boundary_hull, P, p_i, bounds, num_initial=100, num_refined=500,
+    def _farthest_point_adpative_sampling_var(initial_samples, initial_nn, tree, boundary_hull, P, p_i, bounds, num_initial=100, num_refined=500,
         iterations=5, sigma_0=1.0, alpha=0.5, region_index=None, runID=None, k=15, nn_sigma=False, clip_method='np_clip'):
 
         nsamples, ndim = P.shape
