@@ -1109,12 +1109,12 @@ class VoronoiBatchStudy(ParameterStudy):
         self.iterative_updates = iterative_updates
 
         self.dim = len(bounds)
-        self.boundary_points = make_nd_grid(bounds, 2)
+        self.boundary_points = self.make_nd_grid(bounds, 2)
 
         # lists for tracking error as design evolves
         self._nbatch_samples = []
         self.mse = []
-        self.mape = []
+        self.mape    self._
         self.mae = []
         self.smape = []
         self.surrogate_loss = []
@@ -1171,20 +1171,16 @@ class VoronoiBatchStudy(ParameterStudy):
 
         # calculate initial surrogate error
         self._calculate_errors()
-
-        print(f"Initial surrogate error--> MSE: {self.mse[0]}, SMAPE: {self.smape[0]}, MAE: {self.mae[0]}")
         self.calculate_surrogate_loss()
 
-        nsamples_list.append(X.shape[0])
+        self._nbatch_samples.append(X.shape[0])
     #    for batch_number in range(20):  # Specify the number of new samples to draw in a batch
         batch_number = 0
         while True:
             print(f"Sampling batch {batch_number}. Currently {X.shape[0]} samples.")
             print("................................................................")
-            X, v_time = self._perform_voronoi_batch_sampling(X, y, model=model, bounds=bounds,
-                boundary_points=boundary_points, nmax_folds=nmax_folds, nmax_loo=nmax_loo, iter_=batch_number,
-                iterative_updates=iterative_updates,
-                figdir=figpath, plot_figs=plot_figs, finite_only=finite_only, voronoi_type=voronoi_type.split('_')[0],
+            X = self._perform_voronoi_batch_sampling(X, y, model=model,
+                nmax_folds=nmax_folds, nmax_loo=nmax_loo, iter_=batch_number,
                 n_splits=nsplits, cv_metric=cv_metric, group_kfold=group_kfold, thin=thin,
                 random_selection=random_selection, cv_scale=cv_scale)
 
@@ -1455,10 +1451,6 @@ class VoronoiBatchStudy(ParameterStudy):
                 plt.legend()
                 plt.savefig(f'{figdir}/new_sample_location_{loc_idx}_furthest_vertex_iter_{iter_}.png')
 
-        v_end = time.time()
-        v_time = v_end - v_start
-        print(f"voronoi operations: {v_end - v_start} sec, {(v_end - v_start)/60} min.")
-
         new_points = np.asarray(new_points)
         nnew = new_points.shape[0]
         unique_points = set(tuple(row) for row in new_points)
@@ -1489,7 +1481,7 @@ class VoronoiBatchStudy(ParameterStudy):
             plt.close("all")
 
         X = np.concatenate((X_orig, new_points))
-        return X, v_time
+        return X
 
 
     def _find_indices_of_n_largest_kf_errors(kf, n):
