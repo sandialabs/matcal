@@ -1569,7 +1569,19 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         
         expected_boundary_points = np.array([[-5, -5],[5, -5],[-5, 5],[5, 5]])
         self.assertTrue(np.all(vor_study.boundary_points == expected_boundary_points))
-        
+    
+    def test_calculate_errors(self):
+        pass
+    
+    def test_surrogate_loss(self):
+        pass
+    
+    def test_perform_voronoi_batch_sampling(self):
+        pass
+    
+    def test_launch(self):
+        # test last after other attributes tested
+        pass 
     def test_placeholder(self):
         if True:
             plt.close("all")
