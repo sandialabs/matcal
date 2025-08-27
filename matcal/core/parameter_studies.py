@@ -1116,18 +1116,30 @@ class VoronoiBatchStudy(ParameterStudy):
         self.iterative_updates = iterative_updates
 
         self.dim = len(bounds)
-        self.boundary_points = self.make_nd_grid(bounds, 2)
+        self.boundary_points = self._make_nd_grid(bounds, 2)
 
         # lists for tracking error as design evolves
         self._nbatch_samples = []
         self.mse = []
-        self.mape    self._
+        self.mape = []
         self.mae = []
         self.smape = []
         self.surrogate_loss = []
         
+        if rng is not None:
+           pass 
         # convergence check epsilon
         eps = 1e-5
+
+    def _make_nd_grid(self, bounds, npts_along_dim):
+
+        ndim = len(bounds)
+        grid_pts = []
+        for dim in np.arange(ndim):
+            grid_pts.append(np.linspace(bounds[dim][0], bounds[dim][1], npts_along_dim))
+        coords = np.meshgrid(*grid_pts)
+        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(ndim)]
+        return np.vstack(tuple(coords_ravel)).T
 
     def launch(self, nsplits=8, nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
                  group_kfold=False, thin=None, random_selection=None, nbatches=20):
@@ -1540,19 +1552,6 @@ class VoronoiBatchStudy(ParameterStudy):
         return np.array(indices)
 
 
-    def _make_nd_grid(bounds, npts_along_dim):
-
-        ndim = len(bounds)
-        grid_pts = []
-        for dim in np.arange(ndim):
-            grid_pts.append(np.linspace(bounds[dim][0], bounds[dim][1], npts_along_dim))
-        #grid_tuple = tuple(grid_pts)
-        #coords = np.meshgrid(*grid_tuple)
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(ndim)]
-        return np.vstack(tuple(coords_ravel)).T
-
-
     def _generate_test_data(fun, bounds, ngrid_pts=25, grid=True, npts=None):
 
         if grid:
@@ -1698,7 +1697,7 @@ class VoronoiTessellation:
         self.points = np.array(points)
         self.ndim = self.points.shape[1]
         self.bounds = bounds
-        self.boundary_points = self.make_nd_grid(npts_along_dim=2)
+        self.boundary_points = self._make_nd_grid(npts_along_dim=2)
         if not finite_only:
             self.boundary_hull = ConvexHull(self.boundary_points)
             self.boundary_hull_eq = self.boundary_hull.equations # (nfacet, ndim + 1)
@@ -1714,7 +1713,7 @@ class VoronoiTessellation:
         self.finite_only = finite_only
         self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
 
-    def make_nd_grid(self, npts_along_dim):
+    def _make_nd_grid(self, npts_along_dim):
         grid_pts = []
         for dim in np.arange(self.ndim):
             grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
