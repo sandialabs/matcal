@@ -1425,10 +1425,6 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
 
 class SurrogateModel:
     def __init__(self, input_scaling=False, output_scaling=True, **kwargs):
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.gaussian_process import GaussianProcessRegressor
-        from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-        
         self.input_scaling = input_scaling
         self.surrogate_type = 'gaussian_process'
 
@@ -1450,31 +1446,34 @@ class SurrogateModel:
                 self.output_scaler_with_std = kwargs[kwarg]
 
     def fit(self, X, y):
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
-            X = np.atleast_2d(X)
-            self.nsamples = X.shape[0]
-            self.nfeatures = X.shape[1]
+        X = np.atleast_2d(X)
+        self.nsamples = X.shape[0]
+        self.nfeatures = X.shape[1]
 
-            gp_train_features = X
-            if self.input_scaling:
-                self.input_scaler = StandardScaler()
-                scaled_features = self.input_scaler.fit_transform(X)
-                gp_train_features = scaled_features
-            gp_train_targets = y
+        gp_train_features = X
+        if self.input_scaling:
+            self.input_scaler = StandardScaler()
+            scaled_features = self.input_scaler.fit_transform(X)
+            gp_train_features = scaled_features
+        gp_train_targets = y
 
-            # squared exponential kernel
-            self.kernel = C(1.0, constant_value_bounds=(1e-3, 1e3))\
-                * RBF(np.ones(self.nfeatures), length_scale_bounds=(1e-3, 1e3))
+        # squared exponential kernel
+        self.kernel = C(1.0, constant_value_bounds=(1e-3, 1e3))\
+            * RBF(np.ones(self.nfeatures), length_scale_bounds=(1e-3, 1e3))
 
-            self.surrogate = \
-                GaussianProcessRegressor(
-                    kernel=self.kernel,
-                    n_restarts_optimizer=self.nrestarts,
-                    alpha=self.alpha,
-                    random_state=self.random_state,
-                    normalize_y=self.normalize_y)
-            self.surrogate.fit(
-                gp_train_features,
+        self.surrogate = \
+            GaussianProcessRegressor(
+                kernel=self.kernel,
+                n_restarts_optimizer=self.nrestarts,
+                alpha=self.alpha,
+                random_state=self.random_state,
+                normalize_y=self.normalize_y)
+        self.surrogate.fit(
+            gp_train_features,
                 gp_train_targets)
 
 
@@ -1535,7 +1534,18 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         bounds = [[-5, 5], [-5, 5]]
         X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
         vor_study = VoronoiBatchStudy(surr_model, bounds, X_test, y_test, rng=42)
-
+        self.assertFalse(vor_study.finite_only)
+        self.assertTrue(vor_study.iterative_updates)
+        self.assertEqual(vor_study.surr_model, surr_model)
+        self.assertEqual(vor_study.bounds, bounds)
+        self.assertTrue(np.all(vor_study.X_test == X_test))
+        self.assertTrue(np.all(vor_study.y_test == y_test))
+        self.assertEqual(vor_study.surr_model_type, 'GPR')
+        self.assertEqual(vor_study.voronoi_type, 'full')
+        
+        expected_boundary_points = np.array([[-5, -5],[5, -5],[-5, 5],[5, 5]])
+        self.assertTrue(np.all(vor_study.boundary_points == expected_boundary_points))
+        
     def test_placeholder(self):
         if True:
             plt.close("all")
@@ -1572,6 +1582,6 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             plt.title('Surrogate Prediction Error', fontsize=20)
             plt.savefig(f'{figpath}/prediction_error.png')
 
-                plt.close("all")
+            plt.close("all")
 
     
