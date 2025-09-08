@@ -1502,7 +1502,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         from scipy.stats.qmc import Halton
         from scipy.stats import qmc
 
-        model = TestVoronoiBatchStudy.fun2D
+        physical_model = TestVoronoiBatchStudy.fun2D
         dim = 2
                 
         l_bounds = [bounds[i][0] for i in np.arange(dim)]
@@ -1513,18 +1513,18 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         sampler = Halton(d=dim, seed=seed)
         X_unscaled = sampler.random(n=nsamples)
         X_init = qmc.scale(X_unscaled, l_bounds, u_bounds)
-        y_init = model(X_init)
+        y_init = physical_model(X_init)
 
         ntest_samples = 40
         test_pts_sampler = Halton(d=dim, seed=seed+2)
         X_test_unscaled = np.atleast_2d(test_pts_sampler.random(n=ntest_samples))
         X_test = np.atleast_2d(qmc.scale(X_test_unscaled, l_bounds, u_bounds))
-        y_test = model(X_test)
+        y_test = physical_model(X_test)
         
         # Initialize surrogate model with initial training data
         surr_model = SurrogateModel(input_scaling=True)
         surr_model.fit(X_init, y_init)
-        return X_init, y_init, X_test, y_test, surr_model
+        return X_init, y_init, X_test, y_test, physical_model, surr_model
     
     def setUp(self):
         super().setUp(__file__)
@@ -1532,11 +1532,12 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     def test_initialization(self):
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
-        X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
-        vor_study = VoronoiBatchStudy(surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
         self.assertFalse(vor_study.finite_only)
         self.assertTrue(vor_study.iterative_updates)
         self.assertEqual(vor_study.surr_model, surr_model)
+        self.assertEqual(vor_study.physical_model, physical_model)
         self.assertEqual(vor_study.bounds, bounds)
         self.assertTrue(np.all(vor_study.X == X_init))
         self.assertTrue(np.all(vor_study.y == y_init))
@@ -1546,13 +1547,13 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         self.assertEqual(vor_study.voronoi_type, 'full')
         
         expected_boundary_points = np.array([[-5, -5],[5, -5],[-5, 5],[5, 5]])
-        self.assertTrue(np.all(vor_study.boundary_points == expected_boundary_points))
+        self.assertTrue(np.all(vor_study._boundary_points == expected_boundary_points))
     
     def test_calculate_errors(self):
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
-        X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
-        vor_study = VoronoiBatchStudy(surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
         vor_study._calculate_errors()
         self.assertEqual(len(vor_study.mape), 1)
         self.assertGreater(vor_study.mape[0], 0)
@@ -1566,8 +1567,8 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     def test_calculate_surrogate_loss(self):
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
-        X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
-        vor_study = VoronoiBatchStudy(surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
         vor_study._calculate_surrogate_loss()
         self.assertEqual(len(vor_study.surrogate_loss), 1)
     
@@ -1616,4 +1617,57 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
 
             plt.close("all")
 
-    
+        # plot results from kmeans clustering if group_kfold = True
+        if True:
+            # Plot the results
+            plt.figure(figsize=(10, 6))
+            xdf = pd.DataFrame(X)
+            xdf['label'] = groups
+            plt.figure()
+            sns.pairplot(xdf, hue='label', palette='husl', plot_kws={'s':10})
+            plt.savefig(f"{figpath}/kmeans_groups_iter_{iter_}.png")
+            plt.close()
+
+        if plot_figs and ndim == 2:
+            fig, ax = plot_voronoi(voronoi_tessellation, iter_, highest_kf_error=max_fold_indices, figdir=figdir)
+            plt.close()
+        if plot_figs and ndim == 2:
+            fig, ax = plot_voronoi(voronoi_tessellation, iter_, highest_loo_error=worst_sample_indices, figdir=figdir)
+            plt.close()
+
+        if plot_figs and self.ndim == 2 and voronoi_type == 'full':
+            fig, ax = plot_voronoi(voronoi_tessellation, iter_, figdir=figdir)
+            plt.close()
+
+        if plot_figs and self.ndim == 2 and voronoi_type == "full":
+            fig, ax = plot_voronoi(voronoi_tessellation, iter_, sample_location=location,
+                location_idx=loc_idx, figdir=figdir)
+            ax.plot(region_vertices[..., 0], region_vertices[..., 1], '.', markersize=20, color='m', label='region vertices')
+            plt.legend()
+            plt.savefig(f'{figdir}/new_sample_location_{loc_idx}_vertices_iter_{iter_}.png')
+            ax.plot(furthest_vertex[..., 0], furthest_vertex[..., 1], '.', markersize=20, color='lime', label='furthest vertex')
+            plt.legend()
+            plt.savefig(f'{figdir}/new_sample_location_{loc_idx}_furthest_vertex_iter_{iter_}.png')
+
+        distances = np.linalg.norm(X - new_points[:, np.newaxis, :], axis=2)
+        tree = KDTree(X)
+        new_points_nn = tree.query(new_points, k=1)
+        nn_loc = X[new_points_nn[1]]
+        nn_distances = np.linalg.norm(nn_loc - new_points, axis=1)
+        print(f"New points min distance to nn: {nn_distances.min()}")
+        if True:
+            xdf = pd.DataFrame(X)
+            xdf['label'] = 'Current'
+            ndf = pd.DataFrame(new_points)
+            ndf['label'] = 'New'
+            data = pd.concat([xdf, ndf])
+            palette = {'Current' : 'blue', 'New': 'red'}
+            plt.figure()
+            sns.pairplot(data, hue='label', palette=palette, markers=['o', 's'], plot_kws={'s':10})
+            plt.savefig(f"{figpath}/new_and_old_points_iter_{iter_}.png")
+
+            plt.figure()
+            plt.hist(nn_distances)
+            plt.savefig(f"{figpath}/new_point_distance_to_nn_iter_{iter_}.png")
+            plt.close("all")
+
