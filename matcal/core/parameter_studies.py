@@ -1059,7 +1059,7 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
 
 
 class VoronoiBatchStudy(ParameterStudy):
-    def __init__(self, model, bounds,  X_test, y_test, surr_model_type='GPR', voronoi_type='full', 
+    def __init__(self, model, bounds, X, y, X_test, y_test, surr_model_type='GPR', voronoi_type='full', 
                  finite_only=False, iterative_updates=True, rng=None):
         """Initialize the VoronoiBatchSamplingStudy
 
@@ -1078,25 +1078,26 @@ class VoronoiBatchStudy(ParameterStudy):
         :param surr_model_type: Type of surrogate to be used. Options are 'GPR' (default) and 'SVR'.
         :type surr_model_type: str
         
-        :param voronoi_type: Defines shich variation of voronoi sampling to use. Options are 'full' (default), 'local' and
+        :param voronoi_type: Defines which variation of voronoi sampling to use. Options are 'full' (default), 'local' and
                              'sampling'. If voronoi_type == 'full', then the full voronoi tesselation is made. If
                              voronoi_type == 'local', then a voronoi tesselelation is only made for nearby points as
                              determined through k-nearest neighbors. This option, may reduce computational demand in
                              high dimensions. If voronoi_type == 'sampling', then new sample locations are determined
-                             through a sampling algorithm instead of choosing the furthest point in the voronoi region.
-                             This approach may also reduce computational demand in high dimensions.
+                             through a sampling algorithm instead of choosing the furthest point in the voronoi region. No
+                             Voronoi tessellation is made for voronoi_type == 'sampling'. This approach may also reduce 
+                             computational demand in high dimensions.
         :type voronoi_type: str
         
-        :param finite: With finite=True, only vertices which reside inside convex hull defined by boundary points
-                       are considered as candidate locations for new samples. With finite=False (default), all vertices are
+        :param finite: With finite = True, only vertices which reside inside convex hull defined by boundary points
+                       are considered as candidate locations for new samples. With finite = False (default), all vertices are
                        consider as candidate locations for new samples. In this case, vertices which fall outisde 
                        the parameter bounds are snipped to the convex hull defined by boundary points, which requires
                        more computational resources, especially in high dimensions.
         :type finite_only: bool
         
-        :param iterative_updates: If iterative=True (default), the voronoi tessellation is remade after each new sample is added. 
-                          This promotes a design that is more space filling. If iterative=False, the voronoi tesselation 
-                          is updated once per batch after all the samples are chosen. Setting iterative=False can be faster,
+        :param iterative_updates: With iterative = True (default), the voronoi tessellation is remade after each new sample is added. 
+                          This promotes a design that is more space filling. For iterative = False, the voronoi tesselation 
+                          is updated once per batch after all the samples are chosen. Setting iterative = False can be faster,
                           especially in high dimensions but can result in sample clustering.
         :type iterative: bool
 
@@ -1109,14 +1110,16 @@ class VoronoiBatchStudy(ParameterStudy):
         
         """
 
-        self._initialize_attributes(model, bounds, X_test, y_test, surr_model_type, voronoi_type, finite_only,
+        self._initialize_attributes(model, bounds, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
                                     iterative_updates, rng)
         
-    def _initialize_attributes(self, model, bounds, X_test, y_test, surr_model_type, voronoi_type, finite_only,
+    def _initialize_attributes(self, model, bounds, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
                                 iterative_updates, rng):
         self.surr_model = model
         self.surr_model_type = surr_model_type
         self.bounds = bounds
+        self.X = X
+        self.y = y
         self.X_test = X_test
         self.y_test = y_test
         self.voronoi_type = voronoi_type
@@ -1190,7 +1193,7 @@ class VoronoiBatchStudy(ParameterStudy):
         """
         
         if random_selection is not None and thin is not None:
-            raise ValueError("Only one of 'thin' or 'random_selection' can be activated. Not both.")
+            raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
         if nmax_loo == 'all' and thin is None and random_selection is None:
             print("Samples will be drawn for all regions in nmax_folds since none of LOOCV, thinning, or  random selection are activated")
 
@@ -1198,7 +1201,7 @@ class VoronoiBatchStudy(ParameterStudy):
         self._calculate_errors()
         self.calculate_surrogate_loss()
 
-        self._nbatch_samples.append(X.shape[0])
+        self._nbatch_samples.append(self.X.shape[0])
     #    for batch_number in range(20):  # Specify the number of new samples to draw in a batch
         batch_number = 0
         while True:
@@ -1246,10 +1249,12 @@ class VoronoiBatchStudy(ParameterStudy):
 
 
     def _calculate_surrogate_loss(self):
+        y_pred = self.surr_model.predict(self.X_test)
+        pred_error = np.abs(y_pred - self.y_test)
         # convergence based on marginal log likelihood for GPR
         if self.surr_model_type == 'GPR':
             self.surrogate_loss.append(self.surr_model.surrogate.log_marginal_likelihood(\
-                model.surrogate.kernel_.theta))
+                self.surr_model.surrogate.kernel_.theta))
         if self.surr_model_type == 'SVR':
             epsilon = self.surr_model.surrogate.epsilon
             self.surrogate_loss.append(np.maximum(0, pred_error - epsilon).mean())
