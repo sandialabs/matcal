@@ -1557,11 +1557,13 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         nsamples = 4
         bounds = [[-5, 5], [-5, 5]]
         X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
-        vor_study = VoronoiBatchStudy(surr_model, bounds, X_test, y_test, rng=42)
+        vor_study = VoronoiBatchStudy(surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
         self.assertFalse(vor_study.finite_only)
         self.assertTrue(vor_study.iterative_updates)
         self.assertEqual(vor_study.surr_model, surr_model)
         self.assertEqual(vor_study.bounds, bounds)
+        self.assertTrue(np.all(vor_study.X == X_init))
+        self.assertTrue(np.all(vor_study.y == y_init))
         self.assertTrue(np.all(vor_study.X_test == X_test))
         self.assertTrue(np.all(vor_study.y_test == y_test))
         self.assertEqual(vor_study.surr_model_type, 'GPR')
@@ -1571,17 +1573,35 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         self.assertTrue(np.all(vor_study.boundary_points == expected_boundary_points))
     
     def test_calculate_errors(self):
-        pass
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        vor_study._calculate_errors()
+        self.assertEqual(len(vor_study.mape), 1)
+        self.assertGreater(vor_study.mape[0], 0)
+        self.assertEqual(len(vor_study.mse), 1)
+        self.assertGreater(vor_study.mse[0], 0)
+        self.assertEqual(len(vor_study.mae), 1)
+        self.assertGreater(vor_study.mae[0], 0)
+        self.assertEqual(len(vor_study.smape), 1)
+        self.assertGreater(vor_study.smape[0], 0)
     
-    def test_surrogate_loss(self):
-        pass
+    def test_calculate_surrogate_loss(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        vor_study._calculate_surrogate_loss()
+        self.assertEqual(len(vor_study.surrogate_loss), 1)
     
     def test_perform_voronoi_batch_sampling(self):
         pass
     
     def test_launch(self):
         # test last after other attributes tested
-        pass 
+        pass
+     
     def test_placeholder(self):
         if True:
             plt.close("all")
