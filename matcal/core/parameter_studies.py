@@ -1274,32 +1274,13 @@ class VoronoiBatchStudy(ParameterStudy):
         X_orig = self.X.copy()
 
         if n_splits > 0:
-            print("Performing kfold cross-validation...")
-            kfcv = KFoldCrossValidation(self.surr_model, n_splits=n_splits, group_kfold=group_kfold, scale=cv_scale)
-            groups = None
-
-            if group_kfold:
-                from sklearn.cluster import KMeans
-                kmeans = KMeans(n_clusters=n_splits, random_state=42)
-                groups = kmeans.fit_predict(self.X)
-            kf = kfcv.perform_kfold_cv(self.X, self.y, metric=cv_metric, groups=groups)
-
-            # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
-            print("Finding max kfold error...")
-            max_folds = self._find_indices_of_n_largest_kf_errors(kf, nmax_folds)
-            max_fold_indices = np.concatenate(list(max_folds.values())) 
-
-            # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
-            print("Finding worst sample locations")
+            kf = self.perform_kfold_cross_validation(n_splits, group_kfold, cv_scale, cv_metric)
+            max_fold_indices = self.find_kfold_max_errors(kf, nmax_folds)
             if nmax_loo == 'all':
                 worst_sample_locations = self.X[max_fold_indices]
             else:
-                loocv = LeaveOneOutCrossValidation(self.surr_model, scale=cv_scale)
-                errors = loocv.perform_loocv(self.X, self.y, max_fold_indices, metric=cv_metric)
-
-                # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
-                max_loo_indices = self._find_indices_of_n_largest_errors(errors, nmax_loo)
-                worst_sample_locations = self.X[max_loo_indices]
+                worst_sample_locations = self._perform_loo_cross_validation(cv_scale, cv_metric,
+                                                                            max_fold_indices, nmax_loo)
         else:
             # do not perform kfold CV. New samples drawn for all X regions.
             worst_sample_locations = self.X
@@ -1418,7 +1399,39 @@ class VoronoiBatchStudy(ParameterStudy):
         X = np.concatenate((X_orig, new_points))
         return X
 
+    def _perform_kfold_cross_validation(self, n_splits, group_kfold, cv_scale, cv_metric):
+        print("Performing kfold cross-validation...")
+        kfcv = KFoldCrossValidation(self.surr_model, n_splits=n_splits, group_kfold=group_kfold, scale=cv_scale)
+        groups = None
 
+        if group_kfold:
+            from sklearn.cluster import KMeans
+            kmeans = KMeans(n_clusters=n_splits, random_state=42)
+            groups = kmeans.fit_predict(self.X)
+        kf = kfcv.perform_kfold_cv(self.X, self.y, metric=cv_metric, groups=groups)
+        return kf
+    
+    def _find_kfold_max_errors(self, kf, nmax_folds):
+        # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
+        print("Finding max kfold error...")
+        max_folds = self._find_indices_of_n_largest_kf_errors(kf, nmax_folds)
+        max_fold_indices = np.concatenate(list(max_folds.values())) 
+        return max_fold_indices
+    
+    def _perform_loo_cross_validation(self, cv_scale, cv_metric, max_fold_indices, nmax_loo):
+        # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
+        print("Finding worst sample locations")
+        loocv = LeaveOneOutCrossValidation(self.surr_model, scale=cv_scale)
+        errors = loocv.perform_loocv(self.X, self.y, max_fold_indices, metric=cv_metric)
+        worst_sample_locations = self._find_loo_max_errors(errors, nmax_loo)
+        return worst_sample_locations
+    
+    def _find_loo_max_errors(self, errors, nmax_loo):
+            # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
+            max_loo_indices = self._find_indices_of_n_largest_errors(errors, nmax_loo)
+            worst_sample_locations = self.X[max_loo_indices]
+            return worst_sample_locations
+        
     def _find_indices_of_n_largest_kf_errors(kf, n):
 
         # Create a list of (key, error, sample_index) tuples
@@ -1481,20 +1494,6 @@ class VoronoiBatchStudy(ParameterStudy):
                 return np.flip(indices)
 
         return np.array(indices)
-
-
-    def _generate_test_data(fun, bounds, ngrid_pts=25, grid=True, npts=None):
-
-        if grid:
-            pts = make_nd_grid(bounds, ngrid_pts)
-        else:
-            assert npts is not None
-            test_sampler = Halton(d=len(bounds), seed=42)
-            pts_unscaled = test_sampler.random(n=npts)
-            pts = qmc.scale(pts_unscaled, np.array(bounds)[:, 0], np.array(bounds)[:, 1])
-        y_true = fun(pts)
-
-        return pts, y_true
 
     def _fit_model(self):
         self.surr_model.fit(self.X, self.y)
