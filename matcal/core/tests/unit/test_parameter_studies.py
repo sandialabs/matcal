@@ -1632,6 +1632,16 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
         max_key = max(kf_results, key=kf_results.get)
         self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
+    
+    def test_perform_loo_cv(self):
+        pass
+    
+    def test_find_loo_max_errors(self):
+        pass
+    
+    def test_find_boundary_hull_ray_crossing(self):
+        pass
+    
      
     def test_perform_voronoi_batch_sampling(self):
         pass
