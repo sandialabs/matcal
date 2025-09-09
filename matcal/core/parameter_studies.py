@@ -1243,73 +1243,76 @@ class VoronoiBatchStudy(ParameterStudy):
         self._mae.append(pred_error.mean())
         self._smape.append(2/(ntest) * sum(pred_error / (np.abs(self.y_test) + np.abs(y_pred)) ) * 100)
 
-
     def _calculate_surrogate_loss(self):
         y_pred = self.surr_model.predict(self.X_test)
         pred_error = np.abs(y_pred - self.y_test)
-        # convergence based on marginal log likelihood for GPR
         if self.surr_model_type == 'GPR':
+            # convergence based on marginal log likelihood for GPR
             self._surrogate_loss.append(self.surr_model.surrogate.log_marginal_likelihood(\
                 self.surr_model.surrogate.kernel_.theta))
         if self.surr_model_type == 'SVR':
             epsilon = self.surr_model.surrogate.epsilon
             self._surrogate_loss.append(np.maximum(0, pred_error - epsilon).mean())
 
-
     def _perform_voronoi_batch_sampling(self, nmax_folds=1,
-         nmax_loo=1, iter_=None, iterative_updates=True, figdir=None,
-         plot_figs=False, finite_only=False, voronoi_type='full', n_splits=5,
+         nmax_loo=1, iter_=None, n_splits=5,
          cv_metric='sum_abs_error', group_kfold=False, thin=None,
-         random_selection=None, cv_scale=None):
+         random_selection=None, cv_scale=None, clip_method='np_clip'):
         """
         Perform Voronoi batch sampling based on the specified algorithm.
 
         params: see self.launch()
         
+        param clip_method: 'np_clip' or 'boundary_hull_clip'. Only activated if voronoi_type == 'sampling'.
+        type clip_method: str
+        
         Returns:
         list: New samples selected.
         """
         
-        # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
         X_orig = self.X.copy()
-
         if n_splits > 0:
+            # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
             kf = self.perform_kfold_cross_validation(n_splits, group_kfold, cv_scale, cv_metric)
+
+            # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
             max_fold_indices = self.find_kfold_max_errors(kf, nmax_folds)
             if nmax_loo == 'all':
                 worst_sample_locations = self.X[max_fold_indices]
             else:
-                worst_sample_locations = self._perform_loo_cross_validation(cv_scale, cv_metric,
+                # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
+                loo_errors = self._perform_loo_cross_validation(cv_scale, cv_metric,
                                                                             max_fold_indices, nmax_loo)
+                # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
+                worst_sample_locations = self._find_loo_max_errors(loo_errors, nmax_loo)
+                
         else:
-            # do not perform kfold CV. New samples drawn for all X regions.
+            # do not perform kfold or loo CV. New samples drawn for all X regions.
             worst_sample_locations = self.X
 
         if thin is not None:
+            # thin the new samples locations according to "thin"
             worst_sample_locations = worst_sample_locations[::thin, ...]
         elif random_selection is not None:
+            # randomly select the new sample locations from the candidates in worst_sample_locations
             draw_n = np.min((int(0.5 * worst_sample_locations.shape[0]), random_selection))
             random_rows = np.random.choice(worst_sample_locations.shape[0], size=draw_n, replace=False)
             worst_sample_locations = worst_sample_locations[random_rows, ...]
 
         print(f"Initializing voronoi/tree for batch {iter_}")
 
-        if voronoi_type == 'full':
+        if self.voronoi_type == 'full':
             # Initialize Voronoi tessellation
             voronoi_tessellation = VoronoiTessellation()
 
-        elif voronoi_type == 'local':
+        elif self.voronoi_type == 'local':
+            # Make a local voronoi tesselation for each new sample by using knearest neighbors
+            # to determine the closest points
             from scipy.spatial import KDTree
             all_points = self.X.copy()
             tree = KDTree(all_points)
 
-        elif voronoi_type == 'sampling':
-            from scipy.spatial import ConvexHull
-            clip_method = 'np_clip'
-            if clip_method == "boundary_hull_clip":
-                boundary_hull = ConvexHull(self.boundary_points)
-            else:
-                boundary_hull = None
+        elif self.voronoi_type == 'sampling':
             all_points = self.X.copy()
             tree = KDTree(all_points)
             lb = np.array(self.bounds)[:, 0]
@@ -1317,10 +1320,13 @@ class VoronoiBatchStudy(ParameterStudy):
             factor = 500
             while True:
                 num_initial = factor * self.ndim
+                # draw uniform samples within bounds
                 initial_samples = np.random.uniform(lb, ub, size=(num_initial, self.ndim))
-                initial_samples = self._handle_points_outside_bounds(boundary_hull,
+                #
+                initial_samples = self._handle_points_outside_bounds(self.boundary_hull,
                                                                      initial_samples, method=clip_method, 
                                                                      centroid=None)
+                # find each sample's nearest neighbor
                 initial_nn = tree.query(initial_samples, k=1)
                 nn_loc = all_points[initial_nn[1]]
                 intersect = np.intersect1d(nn_loc, worst_sample_locations) 
@@ -1336,8 +1342,8 @@ class VoronoiBatchStudy(ParameterStudy):
             if np.mod(loc_idx, 100) == 0:
                 print(f"Drawing new sample from region index {loc_idx} of {len(worst_sample_locations)}.")
 
-            if voronoi_type == 'full':
-                # identify corresponding voronoi cell
+            if self.voronoi_type == 'full':
+                # Identify corresponding voronoi cell
                 region_index = voronoi_tessellation.get_voronoi_region(location)[0]
 
                 # Step 5: Select the point within this sample’s Voronoi cell that is furthest from existing samples
@@ -1347,18 +1353,16 @@ class VoronoiBatchStudy(ParameterStudy):
                 furthest_vertex = region_vertices[furthest_vertex_index]
 
                 # Step 6: Add the new point and update Voronoi tessellation
-                if iterative_updates:
+                if self.iterative_updates:
                     voronoi_tessellation.add_points(furthest_vertex)
-                if plot_figs and self.ndim == 2 and voronoi_type == 'full':
-                    fig, ax = plot_voronoi(voronoi_tessellation, iter_, updated=True,
-                        added_point=furthest_vertex, location_idx=loc_idx, figdir=figdir)
-                # Step 7: Update X and y
+
+                # Step 7: Update X
                 new_points.append(furthest_vertex)
 
-            elif voronoi_type == 'local':
-                nearest_neighbors = tree.query(location, k=10*X.shape[1])
+            elif self.voronoi_type == 'local':
+                nearest_neighbors = tree.query(location, k=10*self.ndim)
                 nn_points = all_points[nearest_neighbors[1].squeeze()]
-                nn_vor = VoronoiTessellation(nn_points, bounds, boundary_points, finite_only=finite_only)
+                nn_vor = VoronoiTessellation(nn_points, self.bounds, self.boundary_points, finite_only=self.finite_only)
                 nn_region = nn_vor.get_voronoi_region(location)[0]
                 try: # i think there is an issue where identical points are showing up
                     nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
@@ -1369,23 +1373,22 @@ class VoronoiBatchStudy(ParameterStudy):
                     continue
                 furthest_vertex = nn_vert[nn_fvi]
                 new_points.append(furthest_vertex)
-                if iterative_updates:
+                if self.iterative_updates:
                     all_points = np.vstack((all_points, furthest_vertex))
                     tree = KDTree(all_points)
 
-            elif voronoi_type == 'sampling':
+            elif self.voronoi_type == 'sampling':
                 try:
-                    furthest_vertex = farthest_point_adpative_sampling_var(\
-                        initial_samples, initial_nn, tree, boundary_hull, all_points, location, bounds,\
+                    furthest_vertex = self._farthest_point_adpative_sampling_var(
+                        initial_samples, initial_nn, tree, all_points, location,
                         num_initial=1000*self.ndim, num_refined=500*self.ndim, iterations=2,\
                         sigma_0=0.75**self.ndim, alpha=1.0, k=10, nn_sigma=True, clip_method=clip_method)
                     if furthest_vertex is None:
                         continue
                     new_points.append(furthest_vertex)
-                    if iterative_updates:
+                    if self.iterative_updates:
                         all_points = np.vstack((all_points, furthest_vertex))
                         tree = KDTree(all_points)
-                        #unique_X = set(tuple(row) for row in X)
                 except ZeroDivisionError:
                     continue
 
@@ -1412,22 +1415,18 @@ class VoronoiBatchStudy(ParameterStudy):
         return kf
     
     def _find_kfold_max_errors(self, kf, nmax_folds):
-        # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
         print("Finding max kfold error...")
         max_folds = self._find_indices_of_n_largest_kf_errors(kf, nmax_folds)
         max_fold_indices = np.concatenate(list(max_folds.values())) 
         return max_fold_indices
     
     def _perform_loo_cross_validation(self, cv_scale, cv_metric, max_fold_indices, nmax_loo):
-        # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
         print("Finding worst sample locations")
         loocv = LeaveOneOutCrossValidation(self.surr_model, scale=cv_scale)
-        errors = loocv.perform_loocv(self.X, self.y, max_fold_indices, metric=cv_metric)
-        worst_sample_locations = self._find_loo_max_errors(errors, nmax_loo)
-        return worst_sample_locations
+        loo_errors = loocv.perform_loocv(self.X, self.y, max_fold_indices, metric=cv_metric)
+        return loo_errors
     
     def _find_loo_max_errors(self, errors, nmax_loo):
-            # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
             max_loo_indices = self._find_indices_of_n_largest_errors(errors, nmax_loo)
             worst_sample_locations = self.X[max_loo_indices]
             return worst_sample_locations
@@ -1447,7 +1446,6 @@ class VoronoiBatchStudy(ParameterStudy):
         result_arrays = {key: array for key, _, array in top_n_items}
 
         return result_arrays
-
 
     def _find_indices_of_n_largest_errors(loo, n, sort=False):
         """
@@ -1479,20 +1477,6 @@ class VoronoiBatchStudy(ParameterStudy):
         # Extract the indices associated with the top n largest floats
         indices = [item[2] for item in top_n_items]
 
-        if False:
-            # Convert the input to a NumPy array if it's not already
-            errors_array = np.concatenate(errors)
-
-            # Get the indices of the n largest values
-            indices = np.argsort(errors_array)[-n:]  # Get the last n indices from the sorted array
-
-            if sort:
-                # Sort the indices to return them in ascending order
-                return np.sort(indices)
-            else:
-                # Return the indices in the order of descending error
-                return np.flip(indices)
-
         return np.array(indices)
 
     def _fit_model(self):
@@ -1502,20 +1486,19 @@ class VoronoiBatchStudy(ParameterStudy):
         """
         Find where a ray crosses the convex hull of the boundary.
 
-        Parameters:
-        U (np.ndarray): Ray direction.
-        z (np.ndarray): Ray origin.
+        param U: Ray direction.
+        type U: nd_array
+        
+        param z: Ray origin.
+        type z: nd_array
 
         Returns:
         list: List of intersection points with the convex hull.
         """
-
-        eq = self.boundary_hull.equations # (nfacet, ndim + 1)
-        V, b = eq[:, :-1], eq[:, -1] # normal, offset
         crossing = np.zeros(U.shape)
         for ss in range(U.shape[0]):
-            denom = np.dot(V, U[ss])
-            num = -(b + np.dot(V, z.squeeze()))
+            denom = np.dot(self._boundary_hull_V, U[ss])
+            num = -(self._boundary_hull_b + np.dot(self._boundary_hull_V, z.squeeze()))
             alpha = num[denom!=0] / denom[denom!=0]
             crossing[ss] = np.min(alpha[alpha >0]) * U[ss] + z
         return crossing
@@ -1550,35 +1533,32 @@ class VoronoiBatchStudy(ParameterStudy):
         return farthest_candidate, farthest_distance, sample_distances_from_p_i
 
     def _farthest_point_adpative_sampling_var(self, initial_samples, initial_nn, tree, P, p_i, num_initial=100, num_refined=500,
-        iterations=5, sigma_0=1.0, alpha=0.5, region_index=None, runID=None, k=15, nn_sigma=False, clip_method='np_clip'):
+        iterations=5, sigma_0=1.0, alpha=0.5, k=15, nn_sigma=False, clip_method='np_clip'):
 
-        nsamples, ndim = P.shape
+        from scipy.stats import multivariate_normal
+        
         x_farthest = None
         max_dist = 0
         nearest_neighbors = tree.query(p_i, k=ndim*3)
         nn_distances_from_p_i = nearest_neighbors[0][..., 1:]
-        nn_points = P[nearest_neighbors[1][..., 1:].squeeze()]
         point_index = np.argwhere((P == p_i).all(axis=1)).squeeze()
         if nn_sigma:
             sigma_0 = nn_distances_from_p_i.var() ** 0.5
-        lb = np.array(bounds)[:, 0]
-        ub = np.array(bounds)[:, 1]
 
         # initial random sampling
         valid_samples = initial_samples[initial_nn[1] == point_index]
-        random_vector = multivariate_normal(np.zeros(ndim), np.ones(ndim)*sigma_0**2).rvs(size=num_initial//len(valid_samples))
+        random_vector = multivariate_normal(np.zeros(self.ndim), np.ones(self.ndim)*sigma_0**2).rvs(size=num_initial//len(valid_samples))
         unclipped_new_samples = np.vstack(valid_samples[:, np.newaxis, :] + random_vector)
         samples = self.handle_points_outside_bounds(unclipped_new_samples, method=clip_method, centroid=p_i)
 
         for t in range(iterations):
-
             sigma_t = sigma_0 * np.exp(-alpha * t) # dynamic variance reduction
             sample_nn = tree.query(samples, k=1)
             valid_samples = samples[sample_nn[1] == point_index]
 
             if valid_samples.shape[0] > 0:
                 farthest_candidate, farthest_distance, sample_distances_from_p_i =\
-                    self.find_farthest_sample_from_point(valid_samples, p_i)
+                    self._find_farthest_sample_from_point(valid_samples, p_i)
                 if farthest_distance > max_dist:
                     max_dist = farthest_distance
                     x_farthest = farthest_candidate
@@ -1598,7 +1578,7 @@ class VoronoiBatchStudy(ParameterStudy):
 
                     random_vector = multivariate_normal(np.zeros(ndim), np.ones(ndim)*sigma_t**2).rvs(size=num_refined//len(top_k))
                     unclipped_new_samples = np.vstack(top_k[:, np.newaxis, :] + random_vector)
-                    samples = self.handle_points_outside_bounds(unclipped_new_samples, method=clip_method, centroid= p_i)
+                    samples = self._handle_points_outside_bounds(unclipped_new_samples, method=clip_method, centroid= p_i)
             else:
                 print(f"no valid samples at iter {t}")
 
@@ -2058,7 +2038,6 @@ class KFoldCrossValidation:
         from joblib import Parallel, delayed
 
         X = np.atleast_2d(X)
-        nsamples = X.shape[0]
         if self.group_kfold:
             assert groups is not None
             cv = GroupKFold(n_splits=self.n_splits)
