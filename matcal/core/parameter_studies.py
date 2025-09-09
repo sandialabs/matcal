@@ -1190,8 +1190,6 @@ class VoronoiBatchStudy(ParameterStudy):
         :param nbatches: The number of sampling batches to perform. Default 20.
         :type nbatches: int
         """
-        from joblib import Parallel, delayed
-        
         if random_selection is not None and thin is not None:
             raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
         if nmax_loo == 'all' and thin is None and random_selection is None:
