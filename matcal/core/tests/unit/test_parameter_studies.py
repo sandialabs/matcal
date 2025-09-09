@@ -1671,3 +1671,6 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             plt.savefig(f"{figpath}/new_point_distance_to_nn_iter_{iter_}.png")
             plt.close("all")
 
+        if plot_figs and self.ndim == 2 and voronoi_type == 'full':
+            fig, ax = plot_voronoi(voronoi_tessellation, iter_, updated=True,
+            added_point=furthest_vertex, location_idx=loc_idx, figdir=figdir)
