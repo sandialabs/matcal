@@ -1254,10 +1254,10 @@ class VoronoiBatchStudy(ParameterStudy):
         X_orig = self.X.copy()
         if n_splits > 0:
             # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
-            kf = self.perform_kfold_cross_validation(n_splits, group_kfold, cv_scale, cv_metric)
+            kf = self._perform_kfold_cross_validation(n_splits, group_kfold, cv_scale, cv_metric)
 
             # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
-            max_fold_indices = self.find_kfold_max_errors(kf, nmax_folds)
+            max_fold_indices = self._find_kfold_max_errors(kf, nmax_folds)
             if nmax_loo == 'all':
                 worst_sample_locations = self.X[max_fold_indices]
             else:
@@ -1412,7 +1412,7 @@ class VoronoiBatchStudy(ParameterStudy):
             worst_sample_locations = self.X[max_loo_indices]
             return worst_sample_locations
         
-    def _find_indices_of_n_largest_kf_errors(kf, n):
+    def _find_indices_of_n_largest_kf_errors(self, kf, n):
 
         # Create a list of (key, error, sample_index) tuples
         items = [(key, value[0], value[1]) for key, value in kf.items()]
