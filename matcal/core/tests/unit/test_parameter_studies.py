@@ -1617,7 +1617,6 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     
     def test_find_boundary_hull_ray_crossing(self):
         pass
-    
      
     def test_perform_voronoi_batch_sampling(self):
         pass
