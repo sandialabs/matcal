@@ -1579,14 +1579,14 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
         vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
         vor_study._calculate_errors()
-        self.assertEqual(len(vor_study.mape), 1)
-        self.assertGreater(vor_study.mape[0], 0)
-        self.assertEqual(len(vor_study.mse), 1)
-        self.assertGreater(vor_study.mse[0], 0)
-        self.assertEqual(len(vor_study.mae), 1)
-        self.assertGreater(vor_study.mae[0], 0)
-        self.assertEqual(len(vor_study.smape), 1)
-        self.assertGreater(vor_study.smape[0], 0)
+        self.assertEqual(len(vor_study._mape), 1)
+        self.assertGreater(vor_study._mape[0], 0)
+        self.assertEqual(len(vor_study._mse), 1)
+        self.assertGreater(vor_study._mse[0], 0)
+        self.assertEqual(len(vor_study._mae), 1)
+        self.assertGreater(vor_study._mae[0], 0)
+        self.assertEqual(len(vor_study._smape), 1)
+        self.assertGreater(vor_study._smape[0], 0)
     
     def test_calculate_surrogate_loss(self):
         nsamples = 4
@@ -1594,8 +1594,45 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
         vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
         vor_study._calculate_surrogate_loss()
-        self.assertEqual(len(vor_study.surrogate_loss), 1)
-    
+        self.assertEqual(len(vor_study._surrogate_loss), 1)
+   
+    def test_perform_kf_cv(self):
+        nsamples = 4
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        n_splits = 2
+        kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
+
+        # Check that the results are in the expected format
+        self.assertIsInstance(kf_results, dict)
+        self.assertEqual(len(kf_results), n_splits)
+
+        # Check that each result is a tuple (kfold error, indices of test samples)
+        test_indices = []
+        for result in kf_results.values():
+            self.assertIsInstance(result, tuple)
+            self.assertIsInstance(result[0], float)  # error
+            self.assertIsInstance(result[1], np.ndarray)  # test indices
+            test_indices.append(result[1])
+        test_indices = np.vstack(test_indices)
+        
+        # check that each test sample is used once and only once
+        self.assertTrue(np.all(np.isin(np.arange(nsamples), test_indices)))
+        self.assertEqual(len(np.unique(test_indices)), nsamples)
+
+    def test_find_kfold_max_errors(self):
+        nsamples = 20
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        n_splits = 5
+        kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
+        nmax_folds = 1
+        max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
+        max_key = max(kf_results, key=kf_results.get)
+        self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
+     
     def test_perform_voronoi_batch_sampling(self):
         pass
     
