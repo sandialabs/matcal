@@ -1610,10 +1610,49 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
     
     def test_perform_loo_cv(self):
-        pass
-    
+        nsamples = 20
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        n_splits = 5
+        nmax_folds = 3
+        nmax_loo = 5
+        kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
+        max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
+        loo_errors = vor_study._perform_loo_cross_validation(None, 'sum_abs_error',
+                                                        max_fold_indices, nmax_loo)
+        self.assertIsInstance(loo_errors, dict)
+        self.assertEqual(len(loo_errors), len(max_fold_indices))
+        for val in loo_errors.values():
+            self.assertIsInstance(val, tuple)
+            self.assertIsInstance(val[0], float) # error
+            self.assertIsInstance(val[1], np.int64) # indice
+            
+        indices = [val[1] for val in loo_errors.values()]
+        # check that each indice in max_fold_indices appear once and only once
+        self.assertTrue(np.all(np.isin(max_fold_indices, indices)))
+         
     def test_find_loo_max_errors(self):
-        pass
+        nsamples = 20
+        bounds = [[-5, 5], [-5, 5]]
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        n_splits = 5
+        nmax_folds = 3
+        nmax_loo = 5
+        kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
+        max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
+        loo_errors = vor_study._perform_loo_cross_validation(None, 'sum_abs_error',
+                                                        max_fold_indices)
+        loo_errors_list = [value for key, value_tuple in loo_errors.items() for value in value_tuple]
+        loo_errors_array = np.asarray(loo_errors_list).reshape(-1, 2)
+        sorted_array = np.asarray(sorted(loo_errors_array, key=lambda x: x[0]))
+
+        # verify that the training samples with the greatest LOO error are returned
+        worst_sample_locations = vor_study._find_loo_max_errors(loo_errors, nmax_loo)
+        max_error_indices = sorted_array[-nmax_loo:, :][:, 1][::-1] # get indices of largest errors and reverse (greatest to smallest)
+        max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
+        self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
     
     def test_find_boundary_hull_ray_crossing(self):
         pass
@@ -1622,5 +1661,5 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         pass
     
     def test_launch(self):
-        # test last after other attributes tested
+        # test last after other methods tested
         pass 
