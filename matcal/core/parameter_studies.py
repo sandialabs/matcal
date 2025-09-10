@@ -1280,7 +1280,7 @@ class VoronoiBatchStudy(ParameterStudy):
             else:
                 # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
                 loo_errors = self._perform_loo_cross_validation(cv_scale, cv_metric,
-                                                                            max_fold_indices, nmax_loo)
+                                                                            max_fold_indices)
                 # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
                 worst_sample_locations = self._find_loo_max_errors(loo_errors, nmax_loo)
                 
@@ -1418,7 +1418,7 @@ class VoronoiBatchStudy(ParameterStudy):
         max_fold_indices = np.concatenate(list(max_folds.values())) 
         return max_fold_indices
     
-    def _perform_loo_cross_validation(self, cv_scale, cv_metric, max_fold_indices, nmax_loo):
+    def _perform_loo_cross_validation(self, cv_scale, cv_metric, max_fold_indices):
         print("Finding worst sample locations")
         loocv = LeaveOneOutCrossValidation(self.surr_model, scale=cv_scale)
         loo_errors = loocv.perform_loocv(self.X, self.y, max_fold_indices, metric=cv_metric)
@@ -1445,7 +1445,7 @@ class VoronoiBatchStudy(ParameterStudy):
 
         return result_arrays
 
-    def _find_indices_of_n_largest_errors(loo, n, sort=False):
+    def _find_indices_of_n_largest_errors(self, loo, n, sort=False):
         """
         Find the indices of the n largest values in an array of errors.
 
