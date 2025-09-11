@@ -1644,7 +1644,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
         max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
         loo_errors = vor_study._perform_loo_cross_validation(None, 'sum_abs_error',
-                                                        max_fold_indices, nmax_loo)
+                                                        max_fold_indices)
         self.assertIsInstance(loo_errors, dict)
         self.assertEqual(len(loo_errors), len(max_fold_indices))
         for val in loo_errors.values():
@@ -1678,12 +1678,25 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
         self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
     
-    def test_find_boundary_hull_ray_crossing(self):
-        pass
+    def test_find_sample_boundary_hull_ray_crossing(self):
+        
+        ray_direction = np.atleast_2d(np.array(([1, 1], [0, 1])))
+        ray_origin = np.array([0, 0])
+        
+        nsamples = 5
+        bounds = [[0, 1], [0, 1]]
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        crossing = vor_study._find_sample_boundary_hull_ray_crossings(ray_direction, ray_origin)
+        expected_crossing = np.array(([1, 1], [0, 1]))
+        self.assertTrue(np.all(crossing == expected_crossing))
      
     def test_perform_voronoi_batch_sampling(self):
         pass
     
     def test_launch(self):
-        # test last after other methods tested
-        pass 
+        nsamples = 5
+        bounds = [[0, 1], [0, 1]]
+        X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
+        vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+        vor_study.launch(nbatches=1)
