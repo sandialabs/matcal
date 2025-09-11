@@ -1185,7 +1185,7 @@ class VoronoiBatchStudy(ParameterStudy):
         self._nbatch_samples.append(self.X.shape[0])
     #    for batch_number in range(20):  # Specify the number of new samples to draw in a batch
         batch_number = 0
-        while True:
+        while True and batch_number < nbatches:
             print(f"Sampling batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
             print("................................................................")
             self.X = self._perform_voronoi_batch_sampling(nmax_folds=nmax_folds, nmax_loo=nmax_loo, 
@@ -1284,7 +1284,7 @@ class VoronoiBatchStudy(ParameterStudy):
 
         if self.voronoi_type == 'full':
             # Initialize Voronoi tessellation
-            voronoi_tessellation = VoronoiTessellation()
+            voronoi_tessellation = VoronoiTessellation(self.X, self.bounds, finite_only=self.finite_only)
 
         elif self.voronoi_type == 'local':
             # Make a local voronoi tesselation for each new sample by using knearest neighbors
@@ -1325,7 +1325,7 @@ class VoronoiBatchStudy(ParameterStudy):
 
             if self.voronoi_type == 'full':
                 # Identify corresponding voronoi cell
-                region_index = voronoi_tessellation.get_voronoi_region(location)[0]
+                region_index = voronoi_tessellation.get_voronoi_region(location)[0][0]
 
                 # Step 5: Select the point within this sample’s Voronoi cell that is furthest from existing samples
                 region_vertices, furthest_vertex_index = voronoi_tessellation.find_furthest_vertex(region_index)
@@ -1463,11 +1463,11 @@ class VoronoiBatchStudy(ParameterStudy):
     def _fit_model(self):
         self.surr_model.fit(self.X, self.y)
 
-    def _find_boundary_hull_ray_crossings(self, U, z):
+    def _find_sample_boundary_hull_ray_crossings(self, U, z):
         """
         Find where a ray crosses the convex hull of the boundary.
 
-        param U: Ray direction.
+        param U: Ray direction(s).
         type U: nd_array
         
         param z: Ray origin.
@@ -1476,18 +1476,23 @@ class VoronoiBatchStudy(ParameterStudy):
         Returns:
         list: List of intersection points with the convex hull.
         """
+        U = np.atleast_2d(U)
+        V = self._boundary_hull_V
+        b = self._boundary_hull_b
         crossing = np.zeros(U.shape)
         for ss in range(U.shape[0]):
-            denom = np.dot(self._boundary_hull_V, U[ss])
-            num = -(self._boundary_hull_b + np.dot(self._boundary_hull_V, z.squeeze()))
+            denom = np.dot(V, U[ss])
+            num = -(b + np.dot(V, z.squeeze()))
             alpha = num[denom!=0] / denom[denom!=0]
+            if not np.any(alpha > 0):
+                return None
             crossing[ss] = np.min(alpha[alpha >0]) * U[ss] + z
         return crossing
 
     def _clip_points(self, samples, centroid):
         ray_direction = samples - centroid
         norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
-        new_point = self._find_boundary_hull_ray_crossings(norm_ray_direction, centroid)
+        new_point = self._find_sample_boundary_hull_ray_crossings(norm_ray_direction, centroid)
         return new_point
 
     def _handle_points_outside_bounds(self, samples, method='np_clip', centroid=None):
@@ -1573,12 +1578,23 @@ class VoronoiTessellation:
 
         Initialize the Voronoi tessellation with given points and bounds.
 
-        Parameters:
-        points: np.ndarray
-            Array of points for Voronoi tessellation.
-        bounds: list of tuples
-            Bounds for the region, e.g., [(xmin, xmax), (ymin, ymax)] for 2D.
+        param points: Array of points that are the seeds of the Voronoi tessellation
+        type points: nd_array
+
+        param bounds: Bounds for the parameter space, e.g., [(xmin, xmax), (ymin, ymax)] for a 2D space.
+        type boudns: list of tuples
+        
+        param incremental: Allow adding points incrementally. This takes up additional resources.
+        type incremental: bool
+        
+        :param finite: With finite = True, only vertices which reside inside convex hull defined by boundary points
+                       are returned as vertices of a voronoi region. With finite = False (default), all vertices
+                       are returned. In this case, vertices which fall outisde the parameter bounds are snipped 
+                       to the convex hull defined by boundary points, which requires more computational
+                       resources, especially in high dimensions.
+        type finite_only: bool
         """
+        
         from scipy.spatial import Voronoi, Delaunay, voronoi_plot_2d, ConvexHull
         import pandas as pd
         import copy
@@ -1837,7 +1853,6 @@ class VoronoiTessellation:
         Returns:
         list: List of intersection points with the convex hull.
         """
-        
         V = self.boundary_hull_V
         b = self.boundary_hull_b
         denom = np.dot(V, U)
@@ -1888,11 +1903,12 @@ class VoronoiTessellation:
         points belongs to. If a point lies on a ridge or vertice, multiple regions are 
         returned for that point.
 
-        Parameters:
-        point (array-like): an array of points to find the region of.
+        param point: An array of points to find the region of.
+        type point: nd_array
 
-        Returns:
-        list: The Voronoi region(s) that contains the point.
+        rtn: list of lists, where each sublist contains the Voronoi region(s) that contains the point.
+             A point on a ridge has a sublist with two regions (for 2D). A point on a vertice has a sublist
+             with 3 regions (for 2D)
         """
         point_array = np.atleast_2d(point_array)
         region_index = []
@@ -1904,6 +1920,7 @@ class VoronoiTessellation:
             
             # Get the region index for the point
             region_index.append(self.vor.point_region[seed_index].tolist())
+        region_index = [sublist if sublist else [np.inf] for sublist in region_index]
         return region_index
     
     def get_closest_seed(self, point):
@@ -2018,17 +2035,22 @@ class KFoldCrossValidation:
         import matplotlib
         from joblib import Parallel, delayed
 
-        X = np.atleast_2d(X)
+        nsplits = self.n_splits
+        if self.n_splits > X.shape[0]:
+            nsplits = X.shape[0]
+            print("n_splits can't be greater than the number of samples in KFoldCrosValidation. Reducing\
+                  number of splits to the number of samples.")
+            
         if self.group_kfold:
             assert groups is not None
-            cv = GroupKFold(n_splits=self.n_splits)
+            cv = GroupKFold(n_splits=nsplits)
             # Use joblib to parallelize the cross-validation folds
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
                 for train_index, test_index in cv.split(X, y, groups)
             )
         else:
-            cv = KFold(n_splits=self.n_splits, shuffle=True, random_state=1)
+            cv = KFold(n_splits=nsplits, shuffle=True, random_state=1)
             # Use joblib to parallelize the cross-validation folds
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
