@@ -1769,7 +1769,7 @@ class VoronoiTessellation:
         """
         region_point_index, = np.argwhere(self.vor.point_region == region_index)
         region_vertices = []
-
+        
         if -2 in region:
             finite_indices = [v for v in region if v >= 0]
             #if len(finite_indices) == 0:
@@ -1913,7 +1913,8 @@ class VoronoiTessellation:
         point_array = np.atleast_2d(point_array)
         region_index = []
         for point in point_array:
-            if point in self.vor.points:
+            point_already_exists = np.any(np.all(self.vor.points == point, axis=1))
+            if point_already_exists:
                 seed_index, = np.where(np.all(self.vor.points == point, axis=1))
             else:
                 seed_index = self.get_closest_seed(point)
@@ -1979,6 +1980,17 @@ class VoronoiTessellation:
             ax.plot3D(*zip(vor.vertices[ridge[0]], vor.vertices[ridge[1]]), color='blue')
         plt.savefig("voronoi_3d.png")
 
+    def plot_voronoi_2d(self):
+        import matplotlib.pyplot as plt
+        from scipy.spatial import voronoi_plot_2d
+        
+        fig, ax = plt.subplots(figsize=(12,8))
+        voronoi_plot_2d(self.vor, ax=ax, show_vertices=True,
+            line_width=2, point_size=20)
+        for simplex in self.boundary_hull.simplices:
+            plt.plot(self.boundary_points[simplex, 0], self.boundary_points[simplex, 1], 'k-', lw=2)
+        plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_viz.png")
+        plt.close()
 
 class KFoldCrossValidation:
     def __init__(self, model, n_splits=5, group_kfold=False, scale=None):
