@@ -1690,13 +1690,32 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         crossing = vor_study._find_sample_boundary_hull_ray_crossings(ray_direction, ray_origin)
         expected_crossing = np.array(([1, 1], [0, 1]))
         self.assertTrue(np.all(crossing == expected_crossing))
-     
-    def test_perform_voronoi_batch_sampling(self):
-        pass
     
     def test_launch(self):
         nsamples = 5
         bounds = [[0, 1], [0, 1]]
         X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization_2d(nsamples, bounds)
         vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
-        vor_study.launch(nbatches=1)
+        vor_study.launch(nbatches=3)
+        
+        # verify that errors are decreasing
+        errors = [vor_study._mse, vor_study._smape, vor_study._mape, vor_study._mae]
+        for error in errors:
+            # error may not decrease every iteration. Looking for overall trend.
+            error_decreasing = error[0] > error[-1]
+            self.assertTrue(error_decreasing)
+
+        # verify that the number of samples is increasing each iteration
+        nsamples = vor_study._nbatch_samples
+        nsamples_increasing = all(x < y for x, y in zip(nsamples, nsamples[1:]))
+        self.assertTrue(nsamples_increasing)
+        
+        self.assertEqual(vor_study.X.shape[0], nsamples[-1])
+        
+        # verify that all samples are within bounds
+        samples = vor_study.X
+        lb = np.array(bounds)[:, 0]
+        ub = np.array(bounds)[:, 1]
+        outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
+        self.assertFalse(np.any(outside_samples))
+        
