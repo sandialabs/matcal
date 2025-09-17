@@ -992,66 +992,82 @@ class TestVoronoiTessellation(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
 
-    def test_2d_initialization(self):
-        nsamples = 4
-        dim = 2
-        bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        
-        for fo in [True, False]:
-            vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
-        
-            # Validate that ghost points are created correctly and that _all_points
-            # includes both original and ghost points.
-            self.assertEqual(vor._ghost_points.shape, (8, 2))
+    def test_initialization(self):
+        dims = [2, 3]
+        for dim in dims:
+            nsamples = 2 ** dim
+            bounds = [[-5, 5] for d in np.arange(dim)]
+            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
+            
+            for fo in [True, False]:
+                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
+            
+                # Validate that ghost points are created correctly and that _all_points
+                # includes both original and ghost points.
+                self.assertEqual(vor._ghost_points.shape[1], dim)
+                min_x, max_x = bounds[0]
+                min_y, max_y = bounds[1]
+                if dim == 3:
+                    min_z, max_z = bounds[2]
+                for point in vor._ghost_points:
+                    if dim == 2:
+                        x, y = point
+                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
+                                        msg=f"Ghost point {point} is inside the bounding box.")
+                    elif dim == 3:
+                        x, y, z = point
+                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y or z < min_z or z > max_z,
+                                        msg=f"Ghost point {point} is inside the bounding box.")
+                    
+                nghost = vor._ghost_points.shape[0]
+                self.assertEqual(vor._all_points.shape[0], nsamples + nghost, msg="vor._all_points does not have correct dimensions.")
+                self.assertEqual(vor._all_points[:nsamples, :].tolist(), X_init.tolist(), msg="vor._all_points does not contain X_init")
+                self.assertEqual(vor._all_points[nsamples:, :].tolist(), vor._ghost_points.tolist(), msg="vor._all_points does not contain ghost points.")
+                
+                self.assertTrue(all(vor._boo[nsamples:]), msg="Ghost points not correctly identified.")
+                self.assertFalse(any(vor._boo[:nsamples]), msg="Ghost points not correctly identified") 
+                
+                # Check that all training points belong to regions that contain no infinite vertices
+                training_point_regions = vor.vor.point_region[:nsamples].tolist()
+                finite_training_regions = [i for i in training_point_regions if -1 not in vor.vor.regions[i]]
+                self.assertEqual(training_point_regions, finite_training_regions)
+                
+                # Check that the dimension of the voronoi tessellation is correct
+                self.assertEqual(dim, vor.ndim, msg="Dimension of voronoi tessellation not correct.")
+            
+                # Check that ConvexHull is created only when finite_only is False
+                if fo:
+                    self.assertIsNone(vor.boundary_hull, msg="Boundary hull created for finite_only=False.")
+
+    def test_identify_vertices_outside_bounds(self):
+        dims = [2, 3]
+        for dim in dims:
+            nsamples = 4
+            bounds = [[-5, 5] for d in np.arange(dim)]
+            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
+            vor = VoronoiTessellation(X_init, bounds)
             min_x, max_x = bounds[0]
             min_y, max_y = bounds[1]
-            for point in vor._ghost_points:
-                x, y = point
-                self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
-                                msg=f"Ghost point {point} is inside the bounding box.")
-                
-            nghost = vor._ghost_points.shape[0]
-            self.assertEqual(vor._all_points.shape[0], nsamples + nghost, msg="vor._all_points does not have correct dimensions.")
-            self.assertEqual(vor._all_points[:nsamples, :].tolist(), X_init.tolist(), msg="vor._all_points does not contain X_init")
-            self.assertEqual(vor._all_points[nsamples:, :].tolist(), vor._ghost_points.tolist(), msg="vor._all_points does not contain ghost points.")
-            
-            self.assertTrue(all(vor._boo[nsamples:]), msg="Ghost points not correctly identified.")
-            self.assertFalse(any(vor._boo[:nsamples]), msg="Ghost points not correctly identified") 
-            
-            # Check that all training points belong to regions that contain no infinite vertices
-            training_point_regions = vor.vor.point_region[:nsamples].tolist()
-            finite_training_regions = [i for i in training_point_regions if -1 not in vor.vor.regions[i]]
-            self.assertEqual(training_point_regions, finite_training_regions)
-            
-            # Check that the dimension of the voronoi tessellation is correct
-            self.assertEqual(2, vor.ndim, msg="Dimension of voronoi tessellation not correct.")
+            if dim == 3:
+                min_z, max_z = bounds[2]
         
-            # Check that ConvexHull is created only when finite_only is False
-            if fo:
-                self.assertIsNone(vor.boundary_hull, msg="Boundary hull created for finite_only=False.")
-
-    def test_2d_identify_vertices_outside_bounds(self):
-        nsamples = 4
-        dim = 2
-        bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
-        min_x, max_x = bounds[0]
-        min_y, max_y = bounds[1]
-       
-        for point_idx in np.arange(nsamples):
-            region_idx = vor.get_voronoi_region(vor.vor.points[point_idx])[0][0]
-            region = vor.vor.regions[region_idx]
-            updated_region = vor.identify_vertices_outside_bounds(region)
-            outside_vertices = [region[i] for i in np.arange(len(updated_region)) if updated_region[i] < 0]
-            for vertex_idx in outside_vertices:
-                vertex = vor.vor.vertices[vertex_idx]
-                x, y = vertex
-                self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
-                                msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
-                vor_region = vor.get_voronoi_region(vertex)[0]
-                self.assertIn(region_idx, vor_region, msg="identified vertex not in region")
+            for point_idx in np.arange(nsamples):
+                region_idx = vor.get_voronoi_region(vor.vor.points[point_idx])[0][0]
+                region = vor.vor.regions[region_idx]
+                updated_region = vor.identify_vertices_outside_bounds(region)
+                outside_vertices = [region[i] for i in np.arange(len(updated_region)) if updated_region[i] < 0]
+                for vertex_idx in outside_vertices:
+                    vertex = vor.vor.vertices[vertex_idx]
+                    if dim == 2:
+                        x, y = vertex
+                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
+                                        msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
+                    elif dim == 3:
+                        x, y, z = vertex
+                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y or z < min_z or z > max_z,
+                                        msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
+                    vor_region = vor.get_voronoi_region(vertex)[0]
+                    self.assertIn(region_idx, vor_region, msg="identified vertex not in region")
 
     def test_2d_find_boundary_hull_ray_crossing(self):
         nsamples = 4
@@ -1073,6 +1089,26 @@ class TestVoronoiTessellation(MatcalUnitTest):
         result = vor.find_boundary_hull_ray_crossings(U, z)
         self.assertIsNone(result) 
     
+    def test_3d_find_boundary_hull_ray_crossing(self):
+        nsamples = 8
+        dim = 3
+        bounds = [[-5, 5], [-5, 5], [-5, 5]]
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
+        vor = VoronoiTessellation(X_init, bounds)
+
+        # test crossing        
+        U = np.array([1, 1, 1])  # Example ray direction
+        z = np.array([0, 0, 0])  # Example ray origin
+        expected_result = np.array([5, 5, 5])  # Replace with the expected intersection point
+        result = vor.find_boundary_hull_ray_crossings(U, z)
+        self.assertTrue(np.all(result == expected_result))
+
+        # test no crossing
+        z = np.array([6, 6, 6])  # Origin above the convex hull
+        U = np.array([1, 1, 1])  # Direction that does not intersect
+        result = vor.find_boundary_hull_ray_crossings(U, z)
+        self.assertIsNone(result) 
+        
     def test_2d_get_region_vertices(self):
         from scipy.spatial import voronoi_plot_2d, ConvexHull
         import matplotlib.pyplot as plt
