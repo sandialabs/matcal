@@ -925,18 +925,27 @@ class TestVoronoiTessellation(MatcalUnitTest):
     @staticmethod
     def fun2D(x):
         return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
-
-    @staticmethod
-    def fun3D(x):
-        pass
     
     @staticmethod
-    def initialization_2d(nsamples, bounds, seed=20):
+    def funND(x):
+        # Tang function
+        d = x.shape[1]
+        sum_ = 0
+        for ii in np.arange(d):
+            sum_ += (x[:, ii] ** 4) - (16 * x[:, ii] ** 2) + (5 * x[:, ii])
+        quadrant_filter = np.all(x < 0, axis=1)
+        sum_[quadrant_filter] = 0
+        return 0.5 * sum_  
+    
+    @staticmethod
+    def voronoi_initialization(dim, nsamples, bounds, seed=20):
         from scipy.stats.qmc import Halton
         from scipy.stats import qmc
 
-        model = TestVoronoiTessellation.fun2D
-        dim = 2
+        if dim == 2:
+            model = TestVoronoiTessellation.fun2D
+        elif dim == 3:
+            model = TestVoronoiTessellation.funND
                 
         l_bounds = [bounds[i][0] for i in np.arange(dim)]
         u_bounds = [bounds[i][1] for i in np.arange(dim)]
@@ -961,8 +970,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
     def test_2d_initialization(self):
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         
         for fo in [True, False]:
             vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
@@ -999,8 +1009,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
     def test_2d_identify_vertices_outside_bounds(self):
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
         min_x, max_x = bounds[0]
         min_y, max_y = bounds[1]
@@ -1020,8 +1031,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
     def test_2d_find_boundary_hull_ray_crossing(self):
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
 
         # test crossing        
@@ -1043,8 +1055,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         from matplotlib.path import Path
         from matplotlib.patches import Polygon as MplPolygon
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
         
         for pt_idx in np.arange(nsamples):
@@ -1118,8 +1131,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
     def test_2d_get_voronoi_vertices(self):
         from matplotlib.path import Path
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
         boundary_hull = vor.boundary_hull
         boundary_hull_points = boundary_hull.vertices
@@ -1156,8 +1170,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         
     def test_2d_get_closest_seed(self):
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
         
         # point close to seed: should return seed
@@ -1186,8 +1201,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         # sample point from within polygon, and assert that point is in the region
         
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
 
         # loop through all regions
@@ -1230,8 +1246,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
                
     def test_2d_get_region_seed(self):
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
         for pt_idx in np.arange(nsamples):
             region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
@@ -1242,8 +1259,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
     
     def test_2d_find_furthest_vertex(self):
         nsamples = 4
+        dim = 2
         bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.initialization_2d(nsamples, bounds)
+        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
         
         for pt_idx in np.arange(nsamples):

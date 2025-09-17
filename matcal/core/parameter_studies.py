@@ -1085,6 +1085,7 @@ class VoronoiBatchStudy(ParameterStudy):
         
         """
 
+        #super().__init__(*parameters)
         self._initialize_attributes(physical_model, surr_model, bounds, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
                                     iterative_updates, rng)
         
@@ -1213,7 +1214,18 @@ class VoronoiBatchStudy(ParameterStudy):
                 print("Surrogate not converged yet.")
             batch_number += 1
 
+        #self._populate_parameter_evaluations(self.X)
         #return super().launch()
+        
+    def _populate_parameter_evaluations(self, samples):
+        
+        param_order = self._parameter_collection.get_item_names() 
+
+        self._new_sample_start_index = len(self._parameter_sets_to_evaluate)
+        for sample in samples:
+            ss = { key:sample[i] for i, key in enumerate(param_order) }
+            self._add_parameter_evaluation(**ss)
+        self._check_parameter_sets_populated()
 
     def _calculate_errors(self):
         y_pred = self.surr_model.predict(self.X_test)
@@ -1570,6 +1582,12 @@ class VoronoiBatchStudy(ParameterStudy):
 
         return x_farthest
     
+    def _add_parameter_evaluation(self, **p):
+      super().add_parameter_evaluation(**p)
+
+    def add_parameter_evaluation(self, **parameters):
+        """"""
+        raise self.StudyInputError("Users cannot add parameter evaluations to a HaltonStudy.")
 
 class VoronoiTessellation:
     def __init__(self, points, bounds,
