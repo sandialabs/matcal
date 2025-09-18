@@ -1310,33 +1310,34 @@ class TestVoronoiTessellation(MatcalUnitTest):
                 region_seed = vor.points[region_point_idx]
                 self.assertTrue(np.all(seed == region_seed))
     
-    def test_2d_find_furthest_vertex(self):
-        nsamples = 4
-        dim = 2
-        bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
-        
-        for pt_idx in np.arange(nsamples):
-            seed = vor.points[pt_idx]
-            region_index = vor.get_voronoi_region(seed)[0][0]
-            region = vor.vor.regions[region_index]
-
-            # without snipping vertices: assert the identified furthest vertex has the greatest distance
-            vertices = vor.get_region_vertices(region_index, identify_outside_vertices=False)
-            all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=False)
-            distances = np.linalg.norm(seed - all_vertices, axis=1)
-            max_dist = np.argmax(distances)
-            self.assertEqual(max_dist, furthest_vertex)
-            self.assertTrue(np.all(all_vertices == vertices))
+    def test_find_furthest_vertex(self):
+        dims = [2, 3]
+        for dim in dims:        
+            nsamples = 2 ** dim
+            bounds = [[-5, 5] for d in np.arange(dim)]
+            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
+            vor = VoronoiTessellation(X_init, bounds)
             
-            # with snipping vertices: assert the identified furthest vertex has the greatest distance
-            vertices = vor.get_region_vertices(region_index, identify_outside_vertices=True)
-            all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=True)
-            distances = np.linalg.norm(seed - all_vertices, axis=1)
-            max_dist = np.argmax(distances)
-            self.assertEqual(max_dist, furthest_vertex)
-            self.assertTrue(np.all(all_vertices == vertices))
+            for pt_idx in np.arange(nsamples):
+                seed = vor.points[pt_idx]
+                region_index = vor.get_voronoi_region(seed)[0][0]
+                region = vor.vor.regions[region_index]
+
+                # without snipping vertices: assert the identified furthest vertex has the greatest distance
+                vertices = vor.get_region_vertices(region_index, identify_outside_vertices=False)
+                all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=False)
+                distances = np.linalg.norm(seed - all_vertices, axis=1)
+                max_dist = np.argmax(distances)
+                self.assertEqual(max_dist, furthest_vertex)
+                self.assertTrue(np.all(all_vertices == vertices))
+                
+                # with snipping vertices: assert the identified furthest vertex has the greatest distance
+                vertices = vor.get_region_vertices(region_index, identify_outside_vertices=True)
+                all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=True)
+                distances = np.linalg.norm(seed - all_vertices, axis=1)
+                max_dist = np.argmax(distances)
+                self.assertEqual(max_dist, furthest_vertex)
+                self.assertTrue(np.all(all_vertices == vertices))
 
 
 class TestKFoldCrossValidation(MatcalUnitTest):
