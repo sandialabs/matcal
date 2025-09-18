@@ -1251,81 +1251,74 @@ class TestVoronoiTessellation(MatcalUnitTest):
             vertices = np.asarray([list(row) for row in unique_vertices])
             self.assertEqual(set(map(tuple, bounded_vor_vertices)), set(map(tuple, vertices)))
         
-    def test_2d_get_closest_seed(self):
-        nsamples = 4
-        dim = 2
-        bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
-        
-        # point close to seed: should return seed
-        for i in np.arange(nsamples):
-            test_point = vor.points[i] * 1.01
-            closest_point = vor.vor.points[vor.get_closest_seed(test_point)]
-            self.assertTrue(np.all(closest_point == vor.points[i]))
+    def test_get_closest_seed(self):
+        dims = [2, 3]
+        for dim in dims:
+            nsamples = 2 ** dim
+            bounds = [[-5, 5] for d in np.arange(dim)]
+            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
+            vor = VoronoiTessellation(X_init, bounds)
             
-        # vertices of seed region: should return multiple seeds, including given seed
-        for pt_idx in np.arange(nsamples):
-            seed = vor.points[pt_idx]
-            region_index = vor.get_voronoi_region(seed)[0][0]
-            region_vertices = vor.vor.vertices[vor.vor.regions[region_index]]
-            for vertice in region_vertices:
-                closest_point_indices = vor.get_closest_seed(vertice)
-                self.assertGreater(len(closest_point_indices), 1)
-                closest_points = vor.vor.points[closest_point_indices]
-                self.assertTrue(seed in closest_points)
+            # point close to seed: should return seed
+            for i in np.arange(nsamples):
+                test_point = vor.points[i] * 1.01
+                closest_point = vor.vor.points[vor.get_closest_seed(test_point)]
+                self.assertTrue(np.all(closest_point == vor.points[i]))
+                
+            # vertices of seed region: should return multiple seeds, including given seed
+            for pt_idx in np.arange(nsamples):
+                seed = vor.points[pt_idx]
+                region_index = vor.get_voronoi_region(seed)[0][0]
+                region_vertices = vor.vor.vertices[vor.vor.regions[region_index]]
+                for vertice in region_vertices:
+                    closest_point_indices = vor.get_closest_seed(vertice)
+                    self.assertGreater(len(closest_point_indices), 1)
+                    closest_points = vor.vor.points[closest_point_indices]
+                    self.assertTrue(seed in closest_points)
     
-    def test_2d_get_voronoi_region(self):
+    def test_get_voronoi_region(self):
         from matplotlib.patches import Polygon
         from matplotlib.path import Path
         import random
+        from scipy.spatial import Delaunay
         
-        # create polygon from region vertices
+        # Create polyhedron from region vertices
         # sample point from within polygon, and assert that point is in the region
-        
-        nsamples = 4
-        dim = 2
-        bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
+        dims = [2, 3]
+        for dim in dims:
+            nsamples = 2 ** dim
+            bounds = [[-5, 5] for d in np.arange(dim)]
+            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
+            vor = VoronoiTessellation(X_init, bounds)
 
-        # loop through all regions
-        for region_idx, region in enumerate(vor.vor.regions):
-           
-            if -1 in region: # skip over regions with infinite vertices (all seeds have finite vertices)
-                continue
-            if not region: # skip over empty regions
-                continue
-             
-            # get region vertices
-            vertices = vor.vor.vertices[region]
+            # loop through all regions
+            for region_idx, region in enumerate(vor.vor.regions):
             
-            # create polygon
-            polygon = Polygon(vertices, closed=True)
-            path = polygon.get_path()
-            
-            # sample a point
-            max_attempts = 1000000
-            minx, miny = polygon.get_extents().min
-            maxx, maxy = polygon.get_extents().max
-            point_found = False
-            for iter in range(max_attempts):
-                # random point within bounding box of polygon
-                point = (random.uniform(minx, maxx), random.uniform(miny, maxy))
-                 # check if point is inside polygon
-                if path.contains_point(point):
-                    point_found = True
-                    break
-                else:
+                if -1 in region: # skip over regions with infinite vertices (all seeds have finite vertices)
                     continue
-            
-            if not point_found:
-                print(f"failed to sample point inside polygon {region_idx} after many attempts.")
-                continue
+                if not region: # skip over empty regions
+                    continue
+                
+                # Get region vertices
+                vertices = vor.vor.vertices[region]
+
+                # Create a Delaunay triangulation for the region vertices
+                delaunay_region = Delaunay(vertices)
+                
+                # Define the bounding box for sampling
+                min_coords = vertices.min(axis=0)
+                max_coords = vertices.max(axis=0)
+                
+                # Sample points
+                samples = np.random.uniform(min_coords, max_coords, (1000, dim))
+                # Create mask for samples that are inside the polyhedron
+                mask = delaunay_region.find_simplex(samples) >= 0
+                inside_samples = samples[mask] 
         
-            # check that get_voronoi_region returns given region
-            voronoi_region = vor.get_voronoi_region(point)
-            self.assertTrue(region_idx == voronoi_region[0][0])
+                # check that get_voronoi_region returns given region
+                voronoi_region_list = vor.get_voronoi_region(inside_samples)
+                voronoi_region = np.array(voronoi_region_list).squeeze()
+                self.assertTrue(np.all(region_idx == voronoi_region))
                
     def test_2d_get_region_seed(self):
         nsamples = 4
