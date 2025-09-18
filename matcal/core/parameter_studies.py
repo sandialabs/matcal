@@ -1849,18 +1849,15 @@ class VoronoiTessellation:
                 if urv[u] == -2: # and urv[v] > 0: # only one vertice is out of bounds - snip one end to the boundary hull
                     ray_end = self.vor.vertices[rv[u]]
                     ray_origin = self.vor.vertices[rv[v]]
-                    ray_direction = ray_end - ray_origin
-                    norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
+                    norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    if region_index in self.get_voronoi_region(new_vertice)[0]:
-                        if self.bhullD.find_simplex(new_vertice) >= 0:
+                    if region_index in self.get_voronoi_region(new_vertice)[0]: # confirm new vertice is in given region
+                        if self.bhullD.find_simplex(new_vertice) >= 0: # confirm point is within boundary hull
                             new_vertices.append(new_vertice)
-                    #new_vertices.append(new_vertice)
                 if urv[v] == -2: # both vertices are out of bounds - snip both ends to the boundary hull
                     ray_end = self.vor.vertices[rv[v]]
                     ray_origin = self.vor.vertices[rv[u]]
-                    ray_direction = ray_end - ray_origin
-                    norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
+                    norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
                     if region_index in self.get_voronoi_region(new_vertice)[0]:
                         if self.bhullD.find_simplex(new_vertice) >= 0:
@@ -1875,16 +1872,29 @@ class VoronoiTessellation:
                     unbounded_edges = [[i, edge] for i, edge in enumerate(updated_edges) if -2 in edge]
                     for i, ev in unbounded_edges:
                         u, v = np.argsort(ev)
-                        if ev[u] == -2 and ev[v] > 0:
+                        if ev[u] == -2: # and ev[v] > 0:
                             ray_end = self.vor.vertices[edges[i][u]]
                             ray_origin = self.vor.vertices[edges[i][v]]
-                            ray_direction = ray_end - ray_origin
-                            norm_ray_direction = ray_direction / np.linalg.norm(ray_direction)
+                            norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
                             new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                            new_vertices.append(new_vertice)
+                            if region_index in self.get_voronoi_region(new_vertice)[0]:
+                                if self.bhullD.find_simplex(new_vertice) >= 0:
+                                            new_vertices.append(new_vertice)
+                        if ev[v] == -2: # and ev[v] > 0:
+                            ray_end = self.vor.vertices[edges[i][v]]
+                            ray_origin = self.vor.vertices[edges[i][u]]
+                            norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
+                            new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
+                            if region_index in self.get_voronoi_region(new_vertice)[0]:
+                                if self.bhullD.find_simplex(new_vertice) >= 0:
+                                            new_vertices.append(new_vertice)
 
         return np.asarray(new_vertices)
 
+    def get_normal_ray_direction(self, ray_origin, ray_end):
+        ray_direction = ray_end - ray_origin
+        return ray_direction / np.linalg.norm(ray_direction)
+        
     def find_boundary_hull_ray_crossings(self, U, z):
         """
         Find where a ray crosses the convex hull of the boundary.
