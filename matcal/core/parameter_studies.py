@@ -1804,18 +1804,20 @@ class VoronoiTessellation:
         """
         region_point_index, = np.argwhere(self.vor.point_region == region_index)
         region_vertices = []
-        
         if -2 in region:
             finite_indices = [v for v in region if v >= 0]
-            #if len(finite_indices) == 0:
-            #    return None
-            #self.raise_if_no_finite_vertices(finite_indices, region_index)
-            finite_vertices = self.vor.vertices[finite_indices]
+            if len(finite_indices) > 0:
+                finite_vertices = self.vor.vertices[finite_indices]
             new_vertices = self.snip_ridge_vertices(\
                 region_index, region_point_index, region_tuple)
 
             # Replace the infinite vertex
-            region_vertices = np.concatenate((finite_vertices, new_vertices))
+            if len(finite_indices) > 0:
+                region_vertices = np.concatenate((finite_vertices, new_vertices))
+            elif len(new_vertices) > 0:
+                region_vertices = new_vertices
+            else:
+                return None
 
         else:
             region_vertices = self.vor.vertices[region]
