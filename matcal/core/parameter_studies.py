@@ -1051,7 +1051,7 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
 
 
 class VoronoiBatchStudy(ParameterStudy):
-    def __init__(self, physical_model, surr_model, bounds, X, y, X_test, y_test, surr_model_type='GPR', voronoi_type='full', 
+    def __init__(self, physical_model, surr_model, X, y, X_test, y_test, *parameters, surr_model_type='GPR', voronoi_type='full', 
                  finite_only=False, iterative_updates=True, rng=None):
         """Initialize the VoronoiBatchSamplingStudy
 
@@ -1102,17 +1102,26 @@ class VoronoiBatchStudy(ParameterStudy):
         
         """
 
-        #super().__init__(*parameters)
-        self._initialize_attributes(physical_model, surr_model, bounds, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
+        super().__init__(*parameters)
+        self.l_bounds = []
+        self.u_bounds = []
+        for _, key in enumerate(self._parameter_collection):
+            self.l_bounds.append(self._parameter_collection[key].get_lower_bound())
+            self.u_bounds.append(self._parameter_collection[key].get_upper_bound())
+        self.bounds = [[a, b] for a, b in zip(self.l_bounds, self.u_bounds)]
+        self.ndim = len(self._parameter_collection)
+        import pdb
+        pdb.set_trace()
+        
+        self._initialize_attributes(physical_model, surr_model, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
                                     iterative_updates, rng)
         
-    def _initialize_attributes(self, physical_model, surr_model, bounds, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
+    def _initialize_attributes(self, physical_model, surr_model, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
                                 iterative_updates, rng):
         from scipy.spatial import ConvexHull, Delaunay
         self.physical_model = physical_model
         self.surr_model = surr_model
         self.surr_model_type = surr_model_type
-        self.bounds = bounds
         self.X = X
         self.y = y
         self.X_test = X_test
@@ -1120,7 +1129,6 @@ class VoronoiBatchStudy(ParameterStudy):
         self.voronoi_type = voronoi_type
         self.finite_only = finite_only
         self.iterative_updates = iterative_updates
-        self.ndim = self.X.shape[1]
 
         self._boundary_points = self._make_nd_grid(2)
         self._boundary_hull = ConvexHull(self._boundary_points)
