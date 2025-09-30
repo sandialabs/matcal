@@ -47,6 +47,24 @@ def oneD_model(**param_dict):
     y = x ** 2
     return {"x": x, "y": y}
 
+def fun2D(**param_dict):
+    x = param_dict['theta1']
+    y = param_dict['theta2']
+    return np.sin(np.sqrt(x**2 + y**2))
+
+def fun3D(**param_dict):
+    # Tang function
+    x = []
+    x.append(param_dict['theta1'])
+    x.append(param_dict['theta2'])
+    x.append(param_dict['theta3'])
+    x = np.asarray(x)
+    sum_ = 0
+    for ii in np.arange(3):
+        sum_ += (x[:, ii] ** 4) - (16 * x[:, ii] ** 2) + (5 * x[:, ii])
+    quadrant_filter = np.all(x < 0, axis=1)
+    sum_[quadrant_filter] = 0
+    return 0.5 * sum_  
 
 class FiniteDifferenceTest(MatcalUnitTest):
 
@@ -495,7 +513,7 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         model_name = 'oneD'
         par_names = ['theta']
         
-        # set up model, objective, paramter collection
+        # set up model, objective, parameter collection
         model = PythonModel(oneD_model)
         model.set_name(model_name)
         parameter_collection = TestHaltonStudy.setup_1d_parameter_collection()
@@ -1561,6 +1579,22 @@ class SurrogateModel:
         return self.surrogate.predict(X)
    
 class TestVoronoiBatchStudy(MatcalUnitTest):
+    
+    _study_class = VoronoiBatchStudy
+    
+    @staticmethod
+    def setup_2d_parameter_collection():
+        theta1 = Parameter("theta1", -5, 5, distribution="uniform_uncertain")
+        theta2 = Parameter('theta2', -5, 5, distribution="uniform_uncertain")
+        return ParameterCollection("two_parameter", theta1, theta2)
+
+    @staticmethod
+    def setup_3d_parameter_collection():
+        theta1 = Parameter("theta1", -5, 5, distribution="uniform_uncertain")
+        theta2 = Parameter('theta2', -5, 5, distribution="uniform_uncertain")
+        theta3 = Parameter('theta3', -5, 5, distribution="uniform_uncertain")
+        return ParameterCollection("three_parameter", theta1, theta2, theta3)
+
     @staticmethod
     def fun2D(x):
         return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
@@ -1583,7 +1617,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
 
         if dim == 2:
             physical_model = TestVoronoiBatchStudy.fun2D
-        elif dim == 3:
+        elif dim == 3:            
             physical_model = TestVoronoiBatchStudy.funND
 
         l_bounds = [bounds[i][0] for i in np.arange(dim)]
@@ -1604,18 +1638,40 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         # Initialize surrogate model with initial training data
         surr_model = SurrogateModel(input_scaling=True)
         surr_model.fit(X_init, y_init)
+        
         return X_init, y_init, X_test, y_test, physical_model, surr_model
     
     def setUp(self):
         super().setUp(__file__)
-        
+    
+    def setup_study(self, parameter_collection, physical_model, objective, surr_model, X_init, y_init,
+                    X_test, y_test, rng=42):
+        study = self._study_class(physical_model, surr_model,
+                                  X_init, y_init, X_test, y_test, parameter_collection, rng=rng)
+        study.add_evaluation_set(physical_model, objective)
+        return study
+    
     def test_initialization(self):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            if dim == 2:
+                parameter_collection =  TestVoronoiBatchStudy.setup_2d_parameter_collection()
+                model = PythonModel(fun2D)
+                model_name = 'twoD'
+                model.set_name(model_name)
+            elif dim == 3:
+                parameter_collection = TestVoronoiBatchStudy.setup_3d_parameter_collection()
+                model = PythonModel(fun3D)
+                model_name = 'threeD'
+                model.set_name(model_name)
+            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(\
+                dim, nsamples, bounds)
+            objective = SimulationResultsSynchronizer("x", X_test, "y'")
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, objective, surr_model, X_init, y_init, X_test, y_test, rng=42)
+            
             self.assertFalse(vor_study.finite_only)
             self.assertTrue(vor_study.iterative_updates)
             self.assertEqual(vor_study.surr_model, surr_model)
@@ -1779,7 +1835,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     def test_launch(self):
         dims = [2, 3]
         for dim in dims:
-            nsamples = 50 #2 ** dim
+            nsamples = 50
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
             vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
