@@ -1092,9 +1092,7 @@ class VoronoiBatchStudy(ParameterStudy):
             self.l_bounds.append(self._parameter_collection[key].get_lower_bound())
             self.u_bounds.append(self._parameter_collection[key].get_upper_bound())
         self.bounds = [[a, b] for a, b in zip(self.l_bounds, self.u_bounds)]
-        self.ndim = len(self._parameter_collection)
-        import pdb
-        pdb.set_trace()
+        self.dim = len(self._parameter_collection)
         
         self._initialize_attributes(physical_model, surr_model, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
                                     iterative_updates, rng)
@@ -1135,10 +1133,10 @@ class VoronoiBatchStudy(ParameterStudy):
     def _make_nd_grid(self, npts_along_dim):
 
         grid_pts = []
-        for dim in np.arange(self.ndim):
+        for dim in np.arange(self.dim):
             grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
         coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.ndim)]
+        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.dim)]
         return np.vstack(tuple(coords_ravel)).T
 
     def launch(self, nsplits=8, nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
@@ -1226,7 +1224,8 @@ class VoronoiBatchStudy(ParameterStudy):
         #return super().launch()
         
     def _populate_parameter_evaluations(self, samples):
-        
+        import pdb
+        pdb.set_trace() 
         param_order = self._parameter_collection.get_item_names() 
 
         self._new_sample_start_index = len(self._parameter_sets_to_evaluate)
@@ -1320,9 +1319,9 @@ class VoronoiBatchStudy(ParameterStudy):
             ub = np.array(self.bounds)[:, 1]
             factor = 500
             while True:
-                num_initial = factor * self.ndim
+                num_initial = factor * self.dim
                 # draw uniform samples within bounds
-                initial_samples = np.random.uniform(lb, ub, size=(num_initial, self.ndim))
+                initial_samples = np.random.uniform(lb, ub, size=(num_initial, self.dim))
                 #
                 initial_samples = self._handle_points_outside_bounds(self.boundary_hull,
                                                                      initial_samples, method=clip_method, 
@@ -1361,7 +1360,7 @@ class VoronoiBatchStudy(ParameterStudy):
                 new_points.append(furthest_vertex)
 
             elif self.voronoi_type == 'local':
-                nearest_neighbors = tree.query(location, k=10*self.ndim)
+                nearest_neighbors = tree.query(location, k=10*self.dim)
                 nn_points = all_points[nearest_neighbors[1].squeeze()]
                 nn_vor = VoronoiTessellation(nn_points, self.bounds, self.boundary_points, finite_only=self.finite_only)
                 nn_region = nn_vor.get_voronoi_region(location)[0]
@@ -1382,8 +1381,8 @@ class VoronoiBatchStudy(ParameterStudy):
                 try:
                     furthest_vertex = self._farthest_point_adpative_sampling_var(
                         initial_samples, initial_nn, tree, all_points, location,
-                        num_initial=1000*self.ndim, num_refined=500*self.ndim, iterations=2,\
-                        sigma_0=0.75**self.ndim, alpha=1.0, k=10, nn_sigma=True, clip_method=clip_method)
+                        num_initial=1000*self.dim, num_refined=500*self.dim, iterations=2,\
+                        sigma_0=0.75**self.dim, alpha=1.0, k=10, nn_sigma=True, clip_method=clip_method)
                     if furthest_vertex is None:
                         continue
                     new_points.append(furthest_vertex)
@@ -1545,7 +1544,7 @@ class VoronoiBatchStudy(ParameterStudy):
         
         x_farthest = None
         max_dist = 0
-        nearest_neighbors = tree.query(p_i, k=ndim*3)
+        nearest_neighbors = tree.query(p_i, k=self.dim*3)
         nn_distances_from_p_i = nearest_neighbors[0][..., 1:]
         point_index = np.argwhere((P == p_i).all(axis=1)).squeeze()
         if nn_sigma:
@@ -1553,7 +1552,7 @@ class VoronoiBatchStudy(ParameterStudy):
 
         # initial random sampling
         valid_samples = initial_samples[initial_nn[1] == point_index]
-        random_vector = multivariate_normal(np.zeros(self.ndim), np.ones(self.ndim)*sigma_0**2).rvs(size=num_initial//len(valid_samples))
+        random_vector = multivariate_normal(np.zeros(self.dim), np.ones(self.dim)*sigma_0**2).rvs(size=num_initial//len(valid_samples))
         unclipped_new_samples = np.vstack(valid_samples[:, np.newaxis, :] + random_vector)
         samples = self.handle_points_outside_bounds(unclipped_new_samples, method=clip_method, centroid=p_i)
 
@@ -1582,7 +1581,7 @@ class VoronoiBatchStudy(ParameterStudy):
                         curr_top_k = top_k.copy()
                         curr_top_k_distances = sample_distances[np.argsort(-sample_distances)[:k]]
 
-                    random_vector = multivariate_normal(np.zeros(ndim), np.ones(ndim)*sigma_t**2).rvs(size=num_refined//len(top_k))
+                    random_vector = multivariate_normal(np.zeros(self.dim), np.ones(self.dim)*sigma_t**2).rvs(size=num_refined//len(top_k))
                     unclipped_new_samples = np.vstack(top_k[:, np.newaxis, :] + random_vector)
                     samples = self._handle_points_outside_bounds(unclipped_new_samples, method=clip_method, centroid= p_i)
             else:
@@ -1595,7 +1594,7 @@ class VoronoiBatchStudy(ParameterStudy):
 
     def add_parameter_evaluation(self, **parameters):
         """"""
-        raise self.StudyInputError("Users cannot add parameter evaluations to a HaltonStudy.")
+        raise self.StudyInputError("Users cannot add parameter evaluations to a VoronoiBatchStudy.")
 
 class VoronoiTessellation:
     def __init__(self, points, bounds,
@@ -1836,7 +1835,7 @@ class VoronoiTessellation:
                     ray_origin = self.vor.vertices[rv[v]]
                     norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    if region_index in self.get_voronoi_region(new_vertice)[0]: # confirm new vertice is in given region
+                    if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]: # confirm new vertice is in given region
                         if self.bhullD.find_simplex(new_vertice) >= 0: # confirm point is within boundary hull
                             new_vertices.append(new_vertice)
                 if urv[v] == -2: # both vertices are out of bounds - snip both ends to the boundary hull
@@ -1844,7 +1843,7 @@ class VoronoiTessellation:
                     ray_origin = self.vor.vertices[rv[u]]
                     norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
                     new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    if region_index in self.get_voronoi_region(new_vertice)[0]:
+                    if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
                         if self.bhullD.find_simplex(new_vertice) >= 0:
                             new_vertices.append(new_vertice)
 
@@ -1862,7 +1861,7 @@ class VoronoiTessellation:
                             ray_origin = self.vor.vertices[edges[i][v]]
                             norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
                             new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                            if region_index in self.get_voronoi_region(new_vertice)[0]:
+                            if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
                                 if self.bhullD.find_simplex(new_vertice) >= 0:
                                             new_vertices.append(new_vertice)
                         if ev[v] == -2: # and ev[v] > 0:
@@ -1870,7 +1869,7 @@ class VoronoiTessellation:
                             ray_origin = self.vor.vertices[edges[i][u]]
                             norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
                             new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                            if region_index in self.get_voronoi_region(new_vertice)[0]:
+                            if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
                                 if self.bhullD.find_simplex(new_vertice) >= 0:
                                             new_vertices.append(new_vertice)
 
@@ -1977,7 +1976,8 @@ class VoronoiTessellation:
         return closest_candidate_index        
 
     def add_points(self, points):
-        """ process a set of additional points""" 
+        """ process a set of additional points"""
+        from scipy.spatial import Voronoi 
         points = np.atleast_2d(points)
         try:
             # Qhull error in dim>2 with incremental=True and restart=False

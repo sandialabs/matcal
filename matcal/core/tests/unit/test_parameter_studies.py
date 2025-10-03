@@ -1617,8 +1617,16 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
 
         if dim == 2:
             physical_model = TestVoronoiBatchStudy.fun2D
+            parameter_collection =  TestVoronoiBatchStudy.setup_2d_parameter_collection()
+            #physical_model = PythonModel(fun2D)
+            #model_name = 'twoD'
+            #physical_model.set_name(model_name)
         elif dim == 3:            
             physical_model = TestVoronoiBatchStudy.funND
+            parameter_collection = TestVoronoiBatchStudy.setup_3d_parameter_collection()
+            #physical_model = PythonModel(fun3D)
+            #model_name = 'threeD'
+            #physical_model.set_name(model_name)
 
         l_bounds = [bounds[i][0] for i in np.arange(dim)]
         u_bounds = [bounds[i][1] for i in np.arange(dim)]
@@ -1639,16 +1647,18 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         surr_model = SurrogateModel(input_scaling=True)
         surr_model.fit(X_init, y_init)
         
-        return X_init, y_init, X_test, y_test, physical_model, surr_model
+        return X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection
+    
+    def evaluate_model(points, model):
+        pass
     
     def setUp(self):
         super().setUp(__file__)
     
-    def setup_study(self, parameter_collection, physical_model, objective, surr_model, X_init, y_init,
+    def setup_study(self, parameter_collection, physical_model, surr_model, X_init, y_init,
                     X_test, y_test, rng=42):
         study = self._study_class(physical_model, surr_model,
                                   X_init, y_init, X_test, y_test, parameter_collection, rng=rng)
-        study.add_evaluation_set(physical_model, objective)
         return study
     
     def test_initialization(self):
@@ -1656,21 +1666,12 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 2 ** dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            if dim == 2:
-                parameter_collection =  TestVoronoiBatchStudy.setup_2d_parameter_collection()
-                model = PythonModel(fun2D)
-                model_name = 'twoD'
-                model.set_name(model_name)
-            elif dim == 3:
-                parameter_collection = TestVoronoiBatchStudy.setup_3d_parameter_collection()
-                model = PythonModel(fun3D)
-                model_name = 'threeD'
-                model.set_name(model_name)
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(\
-                dim, nsamples, bounds)
-            objective = SimulationResultsSynchronizer("x", X_test, "y'")
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            #objective = SimulationResultsSynchronizer("x", X_test, "y'")
             vor_study = self.setup_study(\
-                parameter_collection, physical_model, objective, surr_model, X_init, y_init, X_test, y_test, rng=42)
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
+            #vor_study.add_evaluation_set(physical_model, objective)
             
             self.assertFalse(vor_study.finite_only)
             self.assertTrue(vor_study.iterative_updates)
@@ -1702,8 +1703,10 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 2 ** dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             vor_study._calculate_errors()
             self.assertEqual(len(vor_study._mape), 1)
             self.assertGreater(vor_study._mape[0], 0)
@@ -1719,8 +1722,10 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 2 ** dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             vor_study._calculate_surrogate_loss()
             self.assertEqual(len(vor_study._surrogate_loss), 1)
    
@@ -1729,8 +1734,10 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 2 ** dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             n_splits = 2
             kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
 
@@ -1756,8 +1763,10 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 10 * dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             n_splits = 5
             kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
             nmax_folds = 1
@@ -1770,8 +1779,10 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 10 * dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             n_splits = 5
             nmax_folds = 3
             nmax_loo = 5
@@ -1795,8 +1806,10 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 10 * dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             n_splits = 5
             nmax_folds = 3
             nmax_loo = 5
@@ -1827,8 +1840,10 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
                 expected_crossing = np.array(([5, 5, 5], [0, 5, 0]))
             nsamples = 2 ** dim
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             crossing = vor_study._find_sample_boundary_hull_ray_crossings(ray_direction, ray_origin)
             self.assertTrue(np.all(crossing == expected_crossing))
     
@@ -1837,9 +1852,12 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             nsamples = 50
             bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model = TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = VoronoiBatchStudy(physical_model, surr_model, bounds, X_init, y_init, X_test, y_test, rng=42)
+            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
+                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
+            vor_study = self.setup_study(\
+                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
             vor_study.launch(nbatches=3, nmax_folds=1, nmax_loo=10, nsplits=5)
+
             # verify that errors are decreasing
             errors = [vor_study._mse, vor_study._smape, vor_study._mae]
             for error in errors:
@@ -1860,4 +1878,9 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             ub = np.array(bounds)[:, 1]
             outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
             self.assertFalse(np.any(outside_samples))
+
+        #params = np.array([results.parameter_history[par] for par in par_names]).T.squeeze()         
+        #state0 = results.simulation_history[model_name].states['matcal_default_state']
+        #sim_history = results.simulation_history[model_name][state0]
+    
         
