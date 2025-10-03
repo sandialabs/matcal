@@ -47,24 +47,20 @@ def oneD_model(**param_dict):
     y = x ** 2
     return {"x": x, "y": y}
 
-def fun2D(**param_dict):
-    x = param_dict['theta1']
-    y = param_dict['theta2']
-    return np.sin(np.sqrt(x**2 + y**2))
+def fun2D(x, y):
+    f = np.sin(np.sqrt(x**2 + y**2))
+    return {"f": f}
 
-def fun3D(**param_dict):
+def fun3D(x, y, z):
     # Tang function
-    x = []
-    x.append(param_dict['theta1'])
-    x.append(param_dict['theta2'])
-    x.append(param_dict['theta3'])
-    x = np.asarray(x)
+    th = np.array([x, y, z])
     sum_ = 0
     for ii in np.arange(3):
-        sum_ += (x[:, ii] ** 4) - (16 * x[:, ii] ** 2) + (5 * x[:, ii])
-    quadrant_filter = np.all(x < 0, axis=1)
+        sum_ += (th[:, ii] ** 4) - (16 * th[:, ii] ** 2) + (5 * th[:, ii])
+    quadrant_filter = np.all(th < 0, axis=1)
     sum_[quadrant_filter] = 0
-    return 0.5 * sum_  
+    f = 0.5 * sum_
+    return {"f": f}
 
 class FiniteDifferenceTest(MatcalUnitTest):
 
@@ -1584,15 +1580,15 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     
     @staticmethod
     def setup_2d_parameter_collection():
-        theta1 = Parameter("theta1", -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('theta2', -5, 5, distribution="uniform_uncertain")
+        theta1 = Parameter("x", -5, 5, distribution="uniform_uncertain")
+        theta2 = Parameter('y', -5, 5, distribution="uniform_uncertain")
         return ParameterCollection("two_parameter", theta1, theta2)
 
     @staticmethod
     def setup_3d_parameter_collection():
-        theta1 = Parameter("theta1", -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('theta2', -5, 5, distribution="uniform_uncertain")
-        theta3 = Parameter('theta3', -5, 5, distribution="uniform_uncertain")
+        theta1 = Parameter("x", -5, 5, distribution="uniform_uncertain")
+        theta2 = Parameter('y', -5, 5, distribution="uniform_uncertain")
+        theta3 = Parameter('z', -5, 5, distribution="uniform_uncertain")
         return ParameterCollection("three_parameter", theta1, theta2, theta3)
 
     @staticmethod
@@ -1616,17 +1612,15 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         from scipy.stats import qmc
 
         if dim == 2:
-            physical_model = TestVoronoiBatchStudy.fun2D
+            physical_model = PythonModel(fun2D)
             parameter_collection =  TestVoronoiBatchStudy.setup_2d_parameter_collection()
-            #physical_model = PythonModel(fun2D)
-            #model_name = 'twoD'
-            #physical_model.set_name(model_name)
+            model_name = 'twoD'
+            physical_model.set_name(model_name)
         elif dim == 3:            
-            physical_model = TestVoronoiBatchStudy.funND
             parameter_collection = TestVoronoiBatchStudy.setup_3d_parameter_collection()
-            #physical_model = PythonModel(fun3D)
-            #model_name = 'threeD'
-            #physical_model.set_name(model_name)
+            physical_model = PythonModel(fun3D)
+            model_name = 'threeD'
+            physical_model.set_name(model_name)
 
         l_bounds = [bounds[i][0] for i in np.arange(dim)]
         u_bounds = [bounds[i][1] for i in np.arange(dim)]
@@ -1657,8 +1651,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     
     def setup_study(self, parameter_collection, physical_model, surr_model, X_init, y_init,
                     X_test, y_test, rng=42):
-        study = self._study_class(physical_model, surr_model,
-                                  X_init, y_init, X_test, y_test, parameter_collection, rng=rng)
+        study = self._study_class(parameter_collection, rng=rng)
         return study
     
     def test_initialization(self):
@@ -1668,11 +1661,18 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
                 TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            #objective = SimulationResultsSynchronizer("x", X_test, "y'")
+            objective = Objective("f")
             vor_study = self.setup_study(\
                 parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            #vor_study.add_evaluation_set(physical_model, objective)
-            
+            vor_study.add_evaluation_set(physical_model, objective)
+            vor_study.launch()
+            # change the function to be a quadradic curve f = a +bx + cx^2, x independent variable that is a vector [0, 1] 
+            # a, b, and c are parameters,
+            # simulationresultsynchronizer
+            # build surrogate that given a, b, c gives you f
+            # in study.set_surr_options need interpolation_field = 'x'
+            # look at training fraction option in surrogate (right now it's .8)
+            # study.set_surrogate_options(interpolation_field='x', training_fraction=0.8)
             self.assertFalse(vor_study.finite_only)
             self.assertTrue(vor_study.iterative_updates)
             self.assertEqual(vor_study.surr_model, surr_model)
