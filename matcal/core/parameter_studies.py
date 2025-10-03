@@ -692,8 +692,9 @@ class LaplaceStudy(_LaplaceStudyBase):
 
     def __init__(self, *parameters):
         super().__init__(*parameters)
+        self._calibrate_covariance = True
         self.set_noise_estimate()
-
+        
     def _get_finite_difference_evaluation_points(self):
         return self._finite_difference.compute_gradient_evaluation_points()
 
@@ -722,6 +723,16 @@ class LaplaceStudy(_LaplaceStudyBase):
                                      f"{self.study_class}.set_noise_estimate")
         self._noise_variance=noise_estimate**2
 
+    def set_calibrate_covariance(self, calibrate_covaraince=True):
+        """
+        By default, the laplace study will attempt to improve the 
+        covariance through a calibraiton. Optionally, turn this off or back on.
+
+        :param calibrate_covariance: flag to turn the covariance calibration process off or on
+        :type calibrate_covariance: bool
+        """
+        self._calibrate_covariance = calibrate_covaraince
+
     def update_laplace_estimate(self, noise_estimate):
         """Update the laplace study covariance estimate after with an 
         updated noise estimate."""
@@ -734,10 +745,11 @@ class LaplaceStudy(_LaplaceStudyBase):
 
     def _log_total_sensitivity_information(self):
         super()._log_total_sensitivity_information()
-        logger.info("Calibrated parameter covariance:")
-        init_sigma = (self._results.outcome["fitted_parameter_covariance"])
-        logger.info(str(repr(init_sigma)))
-        logger.info("\n")
+        if self._calibrate_covariance:
+            logger.info("Calibrated parameter covariance:")
+            fit_sigma = (self._results.outcome["fitted_parameter_covariance"])
+            logger.info(str(repr(fit_sigma)))
+            logger.info("\n")
 
     def _check_obj_qois_for_more_than_one_qoi(self, obj_set, obj_name):
         more_than_one_qoi = False
@@ -787,9 +799,14 @@ class LaplaceStudy(_LaplaceStudyBase):
                                                              self._noise_variance) 
         covariance_results = OrderedDict()
         covariance_results["estimated_parameter_covariance"] = estimated_covariance
-        fitted_posterior = _fit_posterior(center_resids, residual_sensitivities, estimated_covariance, 
+        if self._calibrate_covariance:
+            fitted_posterior = _fit_posterior(center_resids, residual_sensitivities, 
+                                              estimated_covariance, 
                                          self._noise_variance)
-        covariance_results["fitted_parameter_covariance"] = fitted_posterior
+            covariance_results["fitted_parameter_covariance"] = fitted_posterior
+        else:
+            logger.info("Skipping covariance calibration by user request.\n")
+
         return covariance_results
     
     def _extract_residual_information_for_processing(self):
