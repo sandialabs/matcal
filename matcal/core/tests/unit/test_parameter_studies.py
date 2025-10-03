@@ -699,6 +699,30 @@ class TestLaplaceStudy(StudyBaseUnitTests.CommonTests):
         gold_grad = np.array([lin_x, lin_x, lin_x]).T
         self.assert_close_arrays(study_param_results["grad_key:a"], gold_grad, show_on_fail=True)
 
+    def test_set_calibrate_covariance(self):
+        study = self._study_class(self.parameter_collection)
+        study.set_parameter_center(a=1)
+        self.assertTrue(study._calibrate_covariance)
+        study.set_calibrate_covariance(False)
+        self.assertFalse(study._calibrate_covariance)
+        model = PythonModel(linear_model_with_length)
+        data1 = convert_dictionary_to_data(linear_model_with_length(1))
+        data2 = convert_dictionary_to_data(linear_model_with_length(1.01))
+        data3 = convert_dictionary_to_data(linear_model_with_length(1.02))
+        dc = DataCollection("test", data1, data2, data3)
+
+        study.add_evaluation_set(model, DirectCurveBasedInterpolatedObjective("x","y"), 
+            dc, data_conditioner_class=ReturnPassedDataConditioner)
+        res = study.launch()
+        with self.assertRaises(AttributeError):
+            res.fitted_parameter_covariance
+        res.estimated_parameter_covariance
+        study_param_results = study._get_parameter_specific_results("grad_key")
+        self.assertEqual(study_param_results["mean:a"], 1)
+        lin_x = np.linspace(0,1,5)
+        gold_grad = np.array([lin_x, lin_x, lin_x]).T
+        self.assert_close_arrays(study_param_results["grad_key:a"], gold_grad, show_on_fail=True)
+
     def test_package_parameter_specific_results(self):
         param_collect = {'a':None, 'b':None}
         sens_info = {"param_dep":[0,1], "param_independent":0}

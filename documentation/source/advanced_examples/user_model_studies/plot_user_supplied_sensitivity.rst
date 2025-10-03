@@ -154,7 +154,7 @@ the ``states`` keyword argument.
 
     sens = LhsSensitivityStudy(cond_1, cond_2)
     sens.add_evaluation_set(model, objective, states=low_flux_state)
-    sens.set_core_limit(56)
+    sens.set_core_limit(48)
 
 
 
@@ -196,7 +196,7 @@ Now all that is left to do is to launch the study and wait for our results.
 .. code-block:: Python
 
     results = sens.launch()
-    print(results)
+    print("Pearson coefficients\n", results.pearson)
     make_standard_plots('time')
 
 
@@ -231,7 +231,14 @@ Now all that is left to do is to launch the study and wait for our results.
 
  .. code-block:: none
 
-    <matcal.core.study_base.StudyResults object at 0x155519130790>
+    Pearson coefficients
+     K_foam: [     nan 0.999576 0.995996 0.992275 0.988922 0.986295 0.984284 0.982768
+     0.981679 0.980925 0.980216      nan 0.999569 0.995994 0.992268 0.988906
+     0.986269 0.984248 0.982721 0.981622 0.980858 0.980139]
+    K_steel: [       nan -0.0759919  0.0808674  0.0978889  0.103245   0.104357
+      0.103263   0.100556   0.0963701  0.0908706  0.0844149        nan
+      0.240939   0.16384    0.157297   0.157191   0.159018   0.161274
+      0.163555   0.165676   0.167387   0.169073 ]
 
 
 
@@ -248,7 +255,7 @@ be output.
     sens = LhsSensitivityStudy(cond_1, cond_2)
     sens.set_random_seed(1702)
     sens.add_evaluation_set(model, objective, states=low_flux_state)
-    sens.set_core_limit(56)
+    sens.set_core_limit(48)
     sens.set_number_of_samples(20)
     sens.make_sobol_index_study()
     results = sens.launch()
@@ -273,7 +280,7 @@ As a result, for this study a total of 80 samples are run.
 
 .. code-block:: Python
 
-    print(results)
+    print("Sobol indices:\n", results.sobol)
 
 
 
@@ -283,7 +290,47 @@ As a result, for this study a total of 80 samples are run.
 
  .. code-block:: none
 
-    <matcal.core.study_base.StudyResults object at 0x155001eafe90>
+    Sobol indices:
+     K_foam: [[0.94134083 0.94356568]
+     [0.94718918 0.9531443 ]
+     [0.95128463 0.95956404]
+     [0.95447247 0.96447351]
+     [0.95673064 0.96796421]
+     [0.95830848 0.97044516]
+     [0.95937994 0.97218598]
+     [0.9600381  0.97332616]
+     [0.96038377 0.97400478]
+     [0.96064815 0.97457472]
+     [0.9447975  0.94527186]
+     [0.94932542 0.9544026 ]
+     [0.95308511 0.96077249]
+     [0.95620779 0.96577022]
+     [0.95852461 0.96941623]
+     [0.96022202 0.97209166]
+     [0.96145681 0.97405761]
+     [0.96231566 0.97545085]
+     [0.96289199 0.97640461]
+     [0.96342324 0.97729313]]
+    K_steel: [[-1.19619581e-03  2.85182485e-05]
+     [-9.18943150e-04  1.57997927e-05]
+     [-9.17387135e-04  1.58243175e-05]
+     [-1.02191575e-03  2.01410339e-05]
+     [-1.19221883e-03  2.80931532e-05]
+     [-1.40371495e-03  3.97827196e-05]
+     [-1.65161213e-03  5.60700807e-05]
+     [-1.93385708e-03  7.81054766e-05]
+     [-2.24235215e-03  1.06585123e-04]
+     [-2.58797334e-03  1.44413426e-04]
+     [ 1.04036755e-03  2.18186638e-05]
+     [ 8.53195655e-04  1.40247417e-05]
+     [ 8.33276291e-04  1.30954406e-05]
+     [ 8.67101453e-04  1.39710167e-05]
+     [ 9.22249565e-04  1.56327447e-05]
+     [ 9.83891608e-04  1.76275232e-05]
+     [ 1.04787534e-03  1.97898463e-05]
+     [ 1.11055835e-03  2.19912538e-05]
+     [ 1.16588918e-03  2.39837019e-05]
+     [ 1.22336584e-03  2.61418944e-05]]
 
 
 
@@ -318,12 +365,12 @@ sampling study producing Sobol indices.
 
     sens = LhsSensitivityStudy(cond_1, cond_2)
     sens.add_evaluation_set(model, objective, states=low_flux_state)
-    sens.set_core_limit(56)
+    sens.set_core_limit(48)
     sens.set_random_seed(1702)
     sens.set_number_of_samples(200)
     sens.make_sobol_index_study()
     results = sens.launch()
-    print(results)
+    print("Updated Sobol indices:\n", results.sobol)
 
 
 
@@ -333,7 +380,47 @@ sampling study producing Sobol indices.
 
  .. code-block:: none
 
-    <matcal.core.study_base.StudyResults object at 0x155002cbdd90>
+    Updated Sobol indices:
+     K_foam: [[1.01729177 1.01815039]
+     [1.01632713 1.01745161]
+     [1.01581985 1.01707549]
+     [1.01540227 1.01675873]
+     [1.01502117 1.01646154]
+     [1.01467344 1.01618765]
+     [1.01435519 1.01593714]
+     [1.01406974 1.01571509]
+     [1.01382922 1.01553424]
+     [1.01357718 1.01534713]
+     [1.01754963 1.01863023]
+     [1.01652001 1.01763749]
+     [1.01602055 1.01719073]
+     [1.01563524 1.01685226]
+     [1.01530049 1.01655276]
+     [1.01500866 1.01628655]
+     [1.01475627 1.01605209]
+     [1.01454748 1.01585433]
+     [1.01439286 1.0157053 ]
+     [1.01424405 1.01556047]]
+    K_steel: [[-5.93538202e-05  2.43937396e-05]
+     [-2.86560337e-05  1.47345748e-05]
+     [-2.70083895e-05  1.51291295e-05]
+     [-3.06401276e-05  1.94139954e-05]
+     [-3.40218824e-05  2.71778318e-05]
+     [-3.58288668e-05  3.85878687e-05]
+     [-3.47026406e-05  5.45095512e-05]
+     [-2.94062033e-05  7.60959479e-05]
+     [-1.88814599e-05  1.04054920e-04]
+     [-1.64752497e-06  1.41266760e-04]
+     [ 1.08084036e-04  1.76967938e-05]
+     [ 6.60797538e-05  1.24762318e-05]
+     [ 5.75503936e-05  1.21701080e-05]
+     [ 5.73054632e-05  1.33173683e-05]
+     [ 5.98862461e-05  1.51329738e-05]
+     [ 6.37180626e-05  1.72411691e-05]
+     [ 6.79094183e-05  1.95078353e-05]
+     [ 7.20202832e-05  2.18105940e-05]
+     [ 7.53833850e-05  2.39035493e-05]
+     [ 7.88162506e-05  2.61772375e-05]]
 
 
 
@@ -407,7 +494,7 @@ another set of data to help us study the steel.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (19 minutes 44.180 seconds)
+   **Total running time of the script:** (33 minutes 40.050 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_user_model_studies_plot_user_supplied_sensitivity.py:

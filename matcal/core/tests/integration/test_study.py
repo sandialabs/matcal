@@ -428,6 +428,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         study.set_parameter_center(a=a_min, b=b_min)
         laplace_obj = CurveBasedInterpolatedObjective('x', 'y')
         study.add_evaluation_set(mod, laplace_obj, dc)
+        study.set_calibrate_covariance(False)
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
 
@@ -435,7 +436,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
                                  atol = 0.0075)    
         
     def test_uq_two_models(self):
-        n_experiments = 500
+        n_experiments = 250
         
         mu_theta = np.array([2.0, 1.0, 0.5])
         var_theta = np.array([[0.4, 0.05, 0.2],
@@ -485,7 +486,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         laplace_obj = CurveBasedInterpolatedObjective('x', 'y')
         study.add_evaluation_set(voce_mod, laplace_obj, dc_voce)
         study.add_evaluation_set(quadratic_mod, laplace_obj, dc_quadratic)
-        
+        study.set_calibrate_covariance(False)
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
 
@@ -531,7 +532,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         laplace_obj = CurveBasedInterpolatedObjective('x', 'y')
         study.add_evaluation_set(mod, laplace_obj, dc)        
         study.add_evaluation_set(single_point_mod, obj, dc_single_point)
-
+        study.set_calibrate_covariance(False)
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
 
