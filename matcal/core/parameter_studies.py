@@ -1050,9 +1050,12 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
     return combined_array
 
 
-class VoronoiBatchStudy(ParameterStudy):
-    def __init__(self, physical_model, surr_model, X, y, X_test, y_test, *parameters, surr_model_type='GPR', voronoi_type='full', 
-                 finite_only=False, iterative_updates=True, rng=None):
+class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
+    # __init__ should only take *parameters
+    # Consider deriving from HaltonStudy
+    # Add a method where the user can pass a surrogate generator from Surrogates, if that is not called, have a defualt (GP) set up
+    # Make a method "set voronoi options" to set voronio_type, ...
+    def __init__(self, *parameters, rng=None):
         """Initialize the VoronoiBatchSamplingStudy
 
         :param model: Model to be evaluated, which has a 'fit' and 'predict' method 
@@ -1103,6 +1106,7 @@ class VoronoiBatchStudy(ParameterStudy):
         """
 
         super().__init__(*parameters)
+        self._surrogate_options = {}
         self.l_bounds = []
         self.u_bounds = []
         for _, key in enumerate(self._parameter_collection):
@@ -1111,19 +1115,10 @@ class VoronoiBatchStudy(ParameterStudy):
         self.bounds = [[a, b] for a, b in zip(self.l_bounds, self.u_bounds)]
         self.dim = len(self._parameter_collection)
         
-        self._initialize_attributes(physical_model, surr_model, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
-                                    iterative_updates, rng)
+        self._initialize_attributes('full', False, True, rng)
         
-    def _initialize_attributes(self, physical_model, surr_model, X, y, X_test, y_test, surr_model_type, voronoi_type, finite_only,
-                                iterative_updates, rng):
+    def _initialize_attributes(self, voronoi_type, finite_only, iterative_updates, rng):
         from scipy.spatial import ConvexHull, Delaunay
-        self.physical_model = physical_model
-        self.surr_model = surr_model
-        self.surr_model_type = surr_model_type
-        self.X = X
-        self.y = y
-        self.X_test = X_test
-        self.y_test = y_test
         self.voronoi_type = voronoi_type
         self.finite_only = finite_only
         self.iterative_updates = iterative_updates
@@ -1136,11 +1131,7 @@ class VoronoiBatchStudy(ParameterStudy):
 
         # lists for tracking error as design evolves
         self._nbatch_samples = []
-        self._mse = []
-        self._mape = []
-        self._mae = []
-        self._smape = []
-        self._surrogate_loss = []
+        self._current_surrogate_score = []
         
         if rng is not None:
            pass 
@@ -1197,70 +1188,85 @@ class VoronoiBatchStudy(ParameterStudy):
         :param nbatches: The number of sampling batches to perform. Default 20.
         :type nbatches: int
         """
+        nsamples = 10 * self.dim
+        # genereates initial training set from HaltonStudy
+        super().launch(nsamples)
+        self._fit_surrogate_model()
+        self._calculate_errors()
+        self._set_voronoi_options()
+        
+        params_formatted = []
+        for param in self._results.parameter_history:
+            params_formatted.append(self._results.parameter_history[param])
+        self.X = np.array(params_formatted).T  
+        
         if random_selection is not None and thin is not None:
             raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
         if nmax_loo == 'all' and thin is None and random_selection is None:
             print("Samples will be drawn for all regions in nmax_folds since none of LOOCV, thinning, or  random selection are activated")
 
-        # calculate initial surrogate error
-        self._calculate_errors()
-        self._calculate_surrogate_loss()
-
-        self._nbatch_samples.append(self.X.shape[0])
+        self._nbatch_samples.append(nsamples)
     #    for batch_number in range(20):  # Specify the number of new samples to draw in a batch
         batch_number = 0
         while True and batch_number < nbatches:
             print(f"Sampling batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
             print("................................................................")
+            # change it so that the output is just the new points, only evaluate new samples
             self.X = self._perform_voronoi_batch_sampling(nmax_folds=nmax_folds, nmax_loo=nmax_loo, 
                                                      iter_=batch_number, n_splits=nsplits, 
                                                      cv_metric=cv_metric, group_kfold=group_kfold,
                                                      thin=thin, random_selection=random_selection,
                                                      cv_scale=cv_scale)
-
-            self.y = self.physical_model(self.X)
-            self._fit_model()
+            self._populate_parameter_evaluations(self.X)
+            param_sets = self._parameter_sets_to_evaluate
+            # output will be stress/strain curves - test for multi-dimensional output array
+            self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
+            # need to transform the data into needed format
+            self._fit_surrogate_model()
             self._calculate_errors()
-            self._calculate_surrogate_loss()
-            self._nbatch_samples.append(self.X.shape[0])
+            self._nbatch_samples.append(self.results.number_of_evaluations)
             
             # convergence check
-            if np.abs(self._surrogate_loss[batch_number+1] - self._surrogate_loss[batch_number]) <= self._eps:
-                print(f"BREAKING: Convergence from surrogate loss.")
-                print(self._surrogate_loss)
-                break
-            elif np.abs(self._mse[batch_number+1] - self._mse[batch_number]) <= self._eps:
-                print(f"BREAKING: Convergence from MSE.")
-                print(self._mse)
+            if np.abs(self._current_surrogate_score[batch_number+1] - self._current_surrogate_score[batch_number]) <= self._eps:
+                print(f"BREAKING: Convergence from surrogate score.")
+                print(self._current_surrogate_score)
                 break
             else:
                 print("Surrogate not converged yet.")
             batch_number += 1
 
-        #self._populate_parameter_evaluations(self.X)
-        #return super().launch()
+    def _set_voronoi_options(self):
+        pass
+    
+    def _build_initial_training_set(self):
+        nsamples = 10 * self.dim
+        halton_study = HaltonStudy(parameter_collection, scramble=False, rng=42)
+        
+    def set_surrogate_options(self, **options):
+        self._surrogate_options = options
         
     def _populate_parameter_evaluations(self, samples):
-        import pdb
-        pdb.set_trace() 
+        self._parameter_sets_to_evaluate = []
         param_order = self._parameter_collection.get_item_names() 
 
-        self._new_sample_start_index = len(self._parameter_sets_to_evaluate)
+        #self._new_sample_start_index = len(self._parameter_sets_to_evaluate)
         for sample in samples:
             ss = { key:sample[i] for i, key in enumerate(param_order) }
             self._add_parameter_evaluation(**ss)
         self._check_parameter_sets_populated()
 
     def _calculate_errors(self):
-        y_pred = self.surr_model.predict(self.X_test)
-        pred_error = np.abs(y_pred - self.y_test)
-        ntest = len(self.X_test)
-        self._mse.append(1/(ntest) * sum(pred_error ** 2))
-        self._mape.append(1/(ntest) * sum((pred_error/np.abs(self.y_test)) * 100))
-        self._mae.append(pred_error.mean())
-        self._smape.append(2/(ntest) * sum(pred_error / (np.abs(self.y_test) + np.abs(y_pred)) ) * 100)
+        test_score = self._surrogate.scores['test']
+        combined_score = []
+        for field_idx, field_name in enumerate(test_score):
+            if isinstance(test_score[field_name], (dict, OrderedDict)):
+                # look into what this score is in Scipy
+                combined_score += list(test_score[field_name]['mean'])
+        self._current_surrogate_score.append(np.linalg.norm(combined_score))
 
     def _calculate_surrogate_loss(self):
+        # DO NOT CALL
+        # should be a part of surrogate generator (not here)
         y_pred = self.surr_model.predict(self.X_test)
         pred_error = np.abs(y_pred - self.y_test)
         if self.surr_model_type == 'GPR':
@@ -1496,9 +1502,12 @@ class VoronoiBatchStudy(ParameterStudy):
 
         return np.array(indices)
 
-    def _fit_model(self):
-        self.surr_model.fit(self.X, self.y)
-
+    def _fit_surrogate_model(self):
+        from matcal.core.surrogates import SurrogateGenerator
+        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
+        # to evaluate use self._surrogate(X)
+        self._surrogate = surrogate_generator.generate('voronoi_surrogate')
+        
     def _find_sample_boundary_hull_ray_crossings(self, U, z):
         """
         Find where a ray crosses the convex hull of the boundary.
