@@ -260,7 +260,8 @@ class CSVDataImporter(DataImporterBase):
             csv_options = self._create_import_options(nskip)
             data = np.genfromtxt(self._filename, **csv_options)
         except Exception as err:
-            raise err("Error occurred while reading data file {}\n {}".format(self._filename, err))       
+            error_msg = f"Error occurred while reading data file {self._filename}:\n {repr(err)}"
+            raise RuntimeError(error_msg)       
         return data, state_dict
 
     def _create_import_options(self, nskip):
