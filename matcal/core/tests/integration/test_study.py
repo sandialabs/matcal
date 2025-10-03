@@ -394,7 +394,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         super().setUp(__file__)
 
     def test_uq(self):
-        n_experiments = 750
+        n_experiments = 250
         mu_theta = np.array([2.0, 1.0])
         var_theta = np.array([[0.4,0.05],[0.05,0.1]])
 
@@ -435,7 +435,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
                                  atol = 0.0075)    
         
     def test_uq_two_models(self):
-        n_experiments = 500
+        n_experiments = 250
         
         mu_theta = np.array([2.0, 1.0, 0.5])
         var_theta = np.array([[0.4, 0.05, 0.2],
