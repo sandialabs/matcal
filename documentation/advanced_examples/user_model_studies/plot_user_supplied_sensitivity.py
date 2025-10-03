@@ -79,7 +79,7 @@ model.set_results_filename(sim_results_file)
 # the ``states`` keyword argument. 
 sens = LhsSensitivityStudy(cond_1, cond_2)
 sens.add_evaluation_set(model, objective, states=low_flux_state)
-sens.set_core_limit(56)
+sens.set_core_limit(48)
 
 #%%
 # The last input needed is how many samples to take in the LHS study. 
@@ -95,7 +95,7 @@ sens.set_number_of_samples(20)
 #%%
 # Now all that is left to do is to launch the study and wait for our results. 
 results = sens.launch()
-print(results)
+print("Pearson coefficients\n", results.pearson)
 make_standard_plots('time')
 
 #%% 
@@ -104,7 +104,7 @@ make_standard_plots('time')
 sens = LhsSensitivityStudy(cond_1, cond_2)
 sens.set_random_seed(1702)
 sens.add_evaluation_set(model, objective, states=low_flux_state)
-sens.set_core_limit(56)
+sens.set_core_limit(48)
 sens.set_number_of_samples(20)
 sens.make_sobol_index_study()
 results = sens.launch()
@@ -116,7 +116,7 @@ results = sens.launch()
 # where :math:`N` is the number of requested samples 
 # and :math:`M` is the number of study parameters in the study.
 # As a result, for this study a total of 80 samples are run.
-print(results)
+print("Sobol indices:\n", results.sobol)
 
 #%%
 # As can bee seen above, there are some unexpected results. The 
@@ -142,12 +142,12 @@ print(results)
 # sampling study producing Sobol indices. 
 sens = LhsSensitivityStudy(cond_1, cond_2)
 sens.add_evaluation_set(model, objective, states=low_flux_state)
-sens.set_core_limit(56)
+sens.set_core_limit(48)
 sens.set_random_seed(1702)
 sens.set_number_of_samples(200)
 sens.make_sobol_index_study()
 results = sens.launch()
-print(results)
+print("Updated Sobol indices:\n", results.sobol)
 
 #%%
 # In these results, we see that all of the indices have changed

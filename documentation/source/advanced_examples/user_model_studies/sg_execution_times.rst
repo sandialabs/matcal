@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**02:23.199** total execution time for 2 files **from advanced_examples/user_model_studies**:
+**33:40.050** total execution time for 2 files **from advanced_examples/user_model_studies**:
 
 .. container::
 
@@ -32,9 +32,9 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_advanced_examples_user_model_studies_plot_user_supplied_calibration.py` (``plot_user_supplied_calibration.py``)
-     - 02:23.199
-     - 0.0
    * - :ref:`sphx_glr_advanced_examples_user_model_studies_plot_user_supplied_sensitivity.py` (``plot_user_supplied_sensitivity.py``)
+     - 33:40.050
+     - 0.0
+   * - :ref:`sphx_glr_advanced_examples_user_model_studies_plot_user_supplied_calibration.py` (``plot_user_supplied_calibration.py``)
      - 00:00.000
      - 0.0
