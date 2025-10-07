@@ -1059,161 +1059,38 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
 
 
 class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
-    # __init__ should only take *parameters
-    # Consider deriving from HaltonStudy
-    # Add a method where the user can pass a surrogate generator from Surrogates, if that is not called, have a defualt (GP) set up
-    # Make a method "set voronoi options" to set voronio_type, ...
-    def __init__(self, *parameters, rng=None):
+    def __init__(self, *parameters):
         """Initialize the VoronoiBatchSamplingStudy
-
-        :param model: Model to be evaluated, which has a 'fit' and 'predict' method 
-        :type model:
-        
-        :param bounds: upper and lower bound of each parameter. Defines bounds of sampling region.
-        :type bounds: list
-
-        :param X_test: Parameter samples reserved for testing.
-        :type X_test: nd_array
-        
-        :param y_test: Model output corresponding to X_test reserved for testing.
-        :type y_test: nd_array
-        
-        :param surr_model_type: Type of surrogate to be used. Options are 'GPR' (default) and 'SVR'.
-        :type surr_model_type: str
-        
-        :param voronoi_type: Defines which variation of voronoi sampling to use. Options are 'full' (default), 'local' and
-                             'sampling'. If voronoi_type == 'full', then the full voronoi tesselation is made. If
-                             voronoi_type == 'local', then a voronoi tesselelation is only made for nearby points as
-                             determined through k-nearest neighbors. This option, may reduce computational demand in
-                             high dimensions. If voronoi_type == 'sampling', then new sample locations are determined
-                             through a sampling algorithm instead of choosing the furthest point in the voronoi region. No
-                             Voronoi tessellation is made for voronoi_type == 'sampling'. This approach may also reduce 
-                             computational demand in high dimensions.
-        :type voronoi_type: str
-        
-        :param finite: With finite = True, only vertices which reside inside convex hull defined by boundary points
-                       are considered as candidate locations for new samples. With finite = False (default), all vertices are
-                       consider as candidate locations for new samples. In this case, vertices which fall outisde 
-                       the parameter bounds are snipped to the convex hull defined by boundary points, which requires
-                       more computational resources, especially in high dimensions.
-        :type finite_only: bool
-        
-        :param iterative_updates: With iterative = True (default), the voronoi tessellation is remade after each new sample is added. 
-                          This promotes a design that is more space filling. For iterative = False, the voronoi tesselation 
-                          is updated once per batch after all the samples are chosen. Setting iterative = False can be faster,
-                          especially in high dimensions but can result in sample clustering.
-        :type iterative: bool
-
-        :param rng: Pseudorandom number generator state. When rng is None, a new generator is created using entropy
-                    from the operating system.
-        :type rng: int
-
-        :return:
-        :type rtn:
-        
         """
-
         super().__init__(*parameters)
-        self._surrogate_options = {}
-        self.l_bounds = []
-        self.u_bounds = []
-        for _, key in enumerate(self._parameter_collection):
-            self.l_bounds.append(self._parameter_collection[key].get_lower_bound())
-            self.u_bounds.append(self._parameter_collection[key].get_upper_bound())
-        self.bounds = [[a, b] for a, b in zip(self.l_bounds, self.u_bounds)]
-        self.dim = len(self._parameter_collection)
         
-        self._initialize_attributes('full', False, True, rng)
-        
-    def _initialize_attributes(self, voronoi_type, finite_only, iterative_updates, rng):
-        from scipy.spatial import ConvexHull, Delaunay
-        self.voronoi_type = voronoi_type
-        self.finite_only = finite_only
-        self.iterative_updates = iterative_updates
-
-        self._boundary_points = self._make_nd_grid(2)
-        self._boundary_hull = ConvexHull(self._boundary_points)
-        self._boundary_hull_eq = self._boundary_hull.equations # (nfacet, ndim + 1)
-        self._boundary_hull_V, self._boundary_hull_b = self._boundary_hull_eq[:, :-1], self._boundary_hull_eq[:, -1] # normal, offset
-        self._bhullD = Delaunay(self._boundary_points)
-
-        # lists for tracking error as design evolves
-        self._nbatch_samples = []
-        self._current_surrogate_score = []
-        
-        if rng is not None:
-           pass 
-        # convergence check epsilon
-        self._eps = 1e-5
-
-    def _make_nd_grid(self, npts_along_dim):
-
-        grid_pts = []
-        for dim in np.arange(self.dim):
-            grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.dim)]
-        return np.vstack(tuple(coords_ravel)).T
-
-    def launch(self, nsplits=8, nmax_folds=3, nmax_loo=25, cv_scale=None, cv_metric='sum_abs_error',
-                 group_kfold=False, thin=None, random_selection=None, nbatches=20):
-        """ Perform Voronoi batch sampling
-        
-        :param nsplits: The number of splits to use in k-fold cross validation. Default is 8. If nsplits = 0, then 
-                        kfold cross validation is not performed. Instead, new samples are selected from each voronoi
-                        region.
-        :type nsplits: int
-    
-        :param nmax_folds: The number of points with the greatest k-fold CV error to keep as candidates for new
-                           sample locations. Default is 3.
-        :type nmax_folds: int
-
-        :param nmax_loo: The number of points with the greatest LOOCV error to keep as candidates for new sample locations.
-                          Default is 25.
-        :type nmax_loo: int
-        
-        :param cv_scale:
-        :tpye cv_scale:
-        
-        :param cv_metric: Determines which metric to use when calculating errors during cross validation. Options are
-                          'sum_abs_error' (default), 'mse', 'mape', 'rmse', 'sum_abs_perc_error'. 
-        :type cv_metric: str
-        
-        :param group_kfolds: If set to True, then groups in KFold CV are pre-determined through k-means clustering
-                             so that samples close together are always in the same fold during cross validation. If
-                             set to False (default), then groups are randomly assinged by the KFold algorithm.
-        :type group_kfolds: bool
-
-        :param thin: If defined, then every nth candidate sample location is chosen as a new sample location. This helps
-                    to reduce computational demand in high dimensions. Default is None.
-        :type thin: int or None
-        
-        :param random_selection: If defined, then this defines the number of new samples that are randomly chosen
-                                 from candidate sample locations. This helps to reduce computational demand in
-                                 high dimensions. Default is None.
-        :type random_selection: int or None
-        
-        :param nbatches: The number of sampling batches to perform. Default 20.
-        :type nbatches: int
+    def launch(self, **options):
+        """ Launch adaptive surrogate build using Voronoi batch sampling        
         """
-        nsamples = 10 * self.dim
-        # genereates initial training set from HaltonStudy
-        super().launch(nsamples)
+        self._initialize_attributes()
+        
+        # set voronoi and surrogate options if provided
+        voronoi_options = options.get('voronoi_options')
+        surrogate_options = options.get('surrogate_options', {})
+        if isinstance(voronoi_options, dict):
+            self._set_voronoi_options(**voronoi_options)
+        if isinstance(surrogate_options, dict):
+            self._set_surrogate_optons(**surrogate_options)
+            
+        # generate initial training set from HaltonStudy
+        super().launch(self._nsamples)
+        
+        # build/train surrogate with initial training set and calculate initial error
         self._fit_surrogate_model()
         self._calculate_errors()
-        self._set_voronoi_options()
         
         params_formatted = []
         for param in self._results.parameter_history:
             params_formatted.append(self._results.parameter_history[param])
         self.X = np.array(params_formatted).T  
-        
-        if random_selection is not None and thin is not None:
-            raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
-        if nmax_loo == 'all' and thin is None and random_selection is None:
-            print("Samples will be drawn for all regions in nmax_folds since none of LOOCV, thinning, or  random selection are activated")
-
-        self._nbatch_samples.append(nsamples)
+    
+    def perform_voronoi_batch_sampling(self): 
+        self._nbatch_samples.append(self._nsamples)
     #    for batch_number in range(20):  # Specify the number of new samples to draw in a batch
         batch_number = 0
         while True and batch_number < nbatches:
@@ -1243,27 +1120,87 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                 print("Surrogate not converged yet.")
             batch_number += 1
 
-    def _set_voronoi_options(self):
-        pass
+        # lists for tracking error as design evolves
+        self._nbatch_samples = []
+        self._current_surrogate_score = []
+        
+    def _fit_surrogate_model(self):
+        from matcal.core.surrogates import SurrogateGenerator
+        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
+        # to evaluate use self._surrogate(X)
+        self._surrogate = surrogate_generator.generate('voronoi_surrogate')
+        
+    def _initialize_attributes(self):
+        self._extract_bounds_from_PC()
+        self._build_boundary_hull()
+        self.voronoi_type = 'Full'
+        self.finite_only = False
+        self.iterative_updates = True
+        self.dim = len(self._parameter_collection)
+        self.nsamples = 10 * self.dim
+        self.nsplits = 8
+        self.nmax_folds = 3
+        self.nmax_loo = 25
+        self.cv_scale=None
+        self.cv_metric='sum_abs_error'
+        self.group_kfold=False
+        self.thin=None
+        self.random_selection=None
+        self.nbatches=20
     
+    def _extract_bounds_from_PC(self):
+        self._l_bounds = []
+        self._u_bounds = []
+        for _, key in enumerate(self._parameter_collection):
+            self._l_bounds.append(self._parameter_collection[key].get_lower_bound())
+            self._u_bounds.append(self._parameter_collection[key].get_upper_bound())
+        self._bounds = [[a, b] for a, b in zip(self._l_bounds, self._u_bounds)]
+
+    def _build_boundary_hull(self):
+        from scipy.spatial import ConvexHull, Delaunay
+        self._boundary_points = self._make_nd_grid(2)
+        self._boundary_hull = ConvexHull(self._boundary_points)
+        self._boundary_hull_eq = self._boundary_hull.equations # (nfacet, ndim + 1)
+        self._boundary_hull_V, self._boundary_hull_b = self._boundary_hull_eq[:, :-1], self._boundary_hull_eq[:, -1] # normal, offset
+        self._bhullD = Delaunay(self._boundary_points)
+
+    def _make_nd_grid(self, npts_along_dim):
+
+        grid_pts = []
+        for dim in np.arange(self.dim):
+            grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
+        coords = np.meshgrid(*grid_pts)
+        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.dim)]
+        return np.vstack(tuple(coords_ravel)).T
+
+    def _set_voronoi_options(self, **voronoi_kwargs):
+        """Set voronoi properties. See documentation for properties that an be altered and their options."""
+        self._voronoi_kwargs = voronoi_kwargs
+        for key, value in voronoi_kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
+        if self.random_selection is not None and self.thin is not None:
+            raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
+    
+    def set_surrogate_options(self, **options):
+        self._surrogate_options = options
+        
     def _build_initial_training_set(self):
         nsamples = 10 * self.dim
         halton_study = HaltonStudy(parameter_collection, scramble=False, rng=42)
-        
-    def set_surrogate_options(self, **options):
-        self._surrogate_options = options
         
     def _populate_parameter_evaluations(self, samples):
         self._parameter_sets_to_evaluate = []
         param_order = self._parameter_collection.get_item_names() 
 
-        #self._new_sample_start_index = len(self._parameter_sets_to_evaluate)
         for sample in samples:
             ss = { key:sample[i] for i, key in enumerate(param_order) }
             self._add_parameter_evaluation(**ss)
         self._check_parameter_sets_populated()
 
-    def _calculate_errors(self):
+    def _calculate_surrogate_score(self):
         test_score = self._surrogate.scores['test']
         combined_score = []
         for field_idx, field_name in enumerate(test_score):
@@ -1510,12 +1447,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
 
         return np.array(indices)
 
-    def _fit_surrogate_model(self):
-        from matcal.core.surrogates import SurrogateGenerator
-        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
-        # to evaluate use self._surrogate(X)
-        self._surrogate = surrogate_generator.generate('voronoi_surrogate')
-        
     def _find_sample_boundary_hull_ray_crossings(self, U, z):
         """
         Find where a ray crosses the convex hull of the boundary.
