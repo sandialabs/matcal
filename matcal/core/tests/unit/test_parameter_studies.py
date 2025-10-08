@@ -24,7 +24,7 @@ from matcal.core.parameter_studies import (FiniteDifference, ClassicLaplaceStudy
                                            VoronoiTessellation,
                                            KFoldCrossValidation,
                                            LeaveOneOutCrossValidation,
-                                           VoronoiBatchStudy, )
+                                           VoronoiAdaptiveSurrogateStudy, )
 from matcal.core.state import State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests, model_func
@@ -1578,33 +1578,28 @@ class SurrogateModel:
    
 class TestVoronoiBatchStudy(MatcalUnitTest):
     
-    _study_class = VoronoiBatchStudy
+    _study_class = VoronoiAdaptiveSurrogateStudy
     
     @staticmethod
-    def setup_2d_parameter_collection():
+    def setup_parameter_collection(dim):
         theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
         theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        return ParameterCollection("two_parameter", theta1, theta2)
-
-    @staticmethod
-    def setup_3d_parameter_collection():
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        theta3 = Parameter('c', -5, 5, distribution="uniform_uncertain")
-        return ParameterCollection("three_parameter", theta1, theta2, theta3)
+        if dim == 2:
+            return ParameterCollection("two_parameter", theta1, theta2)
+        elif dim == 3:
+            theta3 = Parameter('c', -5, 5, distribution="uniform_uncertain")
+            return ParameterCollection("three_parameter", theta1, theta2, theta3)
 
     @staticmethod
     def setup_model(dim):
         if dim == 2:
             physical_model = PythonModel(quadratic_model_2d)
-            parameter_collection =  TestVoronoiBatchStudy.setup_2d_parameter_collection()
             model_name = 'quadratic_2d'
-            physical_model.set_name(model_name)
         elif dim == 3:            
-            parameter_collection = TestVoronoiBatchStudy.setup_3d_parameter_collection()
             physical_model = PythonModel(quadratic_model_3d)
             model_name = 'quadratic_3d'
-            physical_model.set_name(model_name)
+        physical_model.set_name(model_name)
+        parameter_collection =  TestVoronoiBatchStudy.setup_parameter_collection(dim)
 
         return physical_model, parameter_collection
     
@@ -1614,23 +1609,16 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
     
-    def setup_study(self, parameter_collection, rng=42):
-        study = self._study_class(parameter_collection, rng=rng)
-        return study
-    
     def test_initialization(self):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
             physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self.setup_study(parameter_collection, rng=42)
+            vor_study = self._study_class(parameter_collection, rng=42)
             test_points = None
             objective = SimulationResultsSynchronizer("x", test_points, "f")
             vor_study.add_evaluation_set(physical_model, objective)
             vor_study.launch()
-            # change the function to be a quadradic curve f = a +bx + cx^2, x independent variable that is a vector [0, 1] 
-            # a, b, and c are parameters,
-            # simulationresultsynchronizer
             # build surrogate that given a, b, c gives you f
             # in study.set_surr_options need interpolation_field = 'x'
             # look at training fraction option in surrogate (right now it's .8)
