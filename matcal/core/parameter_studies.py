@@ -1055,92 +1055,48 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         """Initialize the VoronoiBatchSamplingStudy
         """
         super().__init__(*parameters)
+        self._initialize_attributes()
         
     def launch(self, **options):
         """ Launch adaptive surrogate build using Voronoi batch sampling        
         """
-        self._initialize_attributes()
-        
         # set voronoi and surrogate options if provided
-        voronoi_options = options.get('voronoi_options')
+        voronoi_sampling_options = options.get('voronoi_sampling_options', {})
         surrogate_options = options.get('surrogate_options', {})
-        if isinstance(voronoi_options, dict):
-            self._set_voronoi_options(**voronoi_options)
-        if isinstance(surrogate_options, dict):
-            self._set_surrogate_optons(**surrogate_options)
-            
+        self._set_voronoi_sampling_options(**voronoi_sampling_options)
+        self._set_surrogate_optons(**surrogate_options)
+        self._voronoi_options = {'finite_only':self.finite_only} 
+        
         # generate initial training set from HaltonStudy
         super().launch(self._nsamples)
         
         # build/train surrogate with initial training set and calculate initial error
         self._fit_surrogate_model()
-        self._calculate_errors()
-        
-        params_formatted = []
-        for param in self._results.parameter_history:
-            params_formatted.append(self._results.parameter_history[param])
-        self.X = np.array(params_formatted).T  
-    
-    def perform_voronoi_batch_sampling(self): 
-        self._nbatch_samples.append(self._nsamples)
-    #    for batch_number in range(20):  # Specify the number of new samples to draw in a batch
-        batch_number = 0
-        while True and batch_number < nbatches:
-            print(f"Sampling batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
-            print("................................................................")
-            # change it so that the output is just the new points, only evaluate new samples
-            self.X = self._perform_voronoi_batch_sampling(nmax_folds=nmax_folds, nmax_loo=nmax_loo, 
-                                                     iter_=batch_number, n_splits=nsplits, 
-                                                     cv_metric=cv_metric, group_kfold=group_kfold,
-                                                     thin=thin, random_selection=random_selection,
-                                                     cv_scale=cv_scale)
-            self._populate_parameter_evaluations(self.X)
-            param_sets = self._parameter_sets_to_evaluate
-            # output will be stress/strain curves - test for multi-dimensional output array
-            self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
-            # need to transform the data into needed format
-            self._fit_surrogate_model()
-            self._calculate_errors()
-            self._nbatch_samples.append(self.results.number_of_evaluations)
-            
-            # convergence check
-            if np.abs(self._current_surrogate_score[batch_number+1] - self._current_surrogate_score[batch_number]) <= self._eps:
-                print(f"BREAKING: Convergence from surrogate score.")
-                print(self._current_surrogate_score)
-                break
-            else:
-                print("Surrogate not converged yet.")
-            batch_number += 1
-
-        # lists for tracking error as design evolves
-        self._nbatch_samples = []
-        self._current_surrogate_score = []
-        
-    def _fit_surrogate_model(self):
-        from matcal.core.surrogates import SurrogateGenerator
-        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
-        # to evaluate use self._surrogate(X)
-        self._surrogate = surrogate_generator.generate('voronoi_surrogate')
+        self._calculate_surrogate_score()
+        self._format_params()
+        self._perform_voronoi_batch_sampling()
         
     def _initialize_attributes(self):
-        self._extract_bounds_from_PC()
+        self._extract_bounds_from_parameter_collection()
         self._build_boundary_hull()
+        self._nsamples = 10 * self.dim
         self.voronoi_type = 'Full'
         self.finite_only = False
         self.iterative_updates = True
         self.dim = len(self._parameter_collection)
-        self.nsamples = 10 * self.dim
         self.nsplits = 8
         self.nmax_folds = 3
         self.nmax_loo = 25
-        self.cv_scale=None
-        self.cv_metric='sum_abs_error'
-        self.group_kfold=False
-        self.thin=None
-        self.random_selection=None
-        self.nbatches=20
-    
-    def _extract_bounds_from_PC(self):
+        self.cv_scale = None
+        self.cv_metric = 'sum_abs_error'
+        self.group_kfold = False
+        self.thin = None
+        self.random_selection = None
+        self.nbatches = 20
+        self._current_surrogate_score = []
+        self._nbatch_samples = []
+        
+    def _extract_bounds_from_parameter_collection(self):
         self._l_bounds = []
         self._u_bounds = []
         for _, key in enumerate(self._parameter_collection):
@@ -1157,7 +1113,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._bhullD = Delaunay(self._boundary_points)
 
     def _make_nd_grid(self, npts_along_dim):
-
         grid_pts = []
         for dim in np.arange(self.dim):
             grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
@@ -1165,10 +1120,10 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.dim)]
         return np.vstack(tuple(coords_ravel)).T
 
-    def _set_voronoi_options(self, **voronoi_kwargs):
+    def _set_voronoi_sampling_options(self, **voronoi_sampling_kwargs):
         """Set voronoi properties. See documentation for properties that an be altered and their options."""
-        self._voronoi_kwargs = voronoi_kwargs
-        for key, value in voronoi_kwargs.items():
+        self._voronoi_kwargs = voronoi_sampling_kwargs
+        for key, value in voronoi_sampling_kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
             else:
@@ -1176,22 +1131,25 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         if self.random_selection is not None and self.thin is not None:
             raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
     
-    def set_surrogate_options(self, **options):
+    def _set_surrogate_options(self, **surrogate_options):
+        # we really want the training fraction to be 1.0, this adaptive sampling algorithm counts on all points
+        # being used to train, up to user to set aside test set of data
+        self.interpolation_field = 'x'
+        self.training_fraction = 0.8
+        for key, value in surrogate_options.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'{self.__class__.name__}' has no attribute '{key}'")
+        options = {'interpolation_field': interpolation_field, 'training_fraction': training_fraction}    
         self._surrogate_options = options
         
-    def _build_initial_training_set(self):
-        nsamples = 10 * self.dim
-        halton_study = HaltonStudy(parameter_collection, scramble=False, rng=42)
+    def _fit_surrogate_model(self):
+        from matcal.core.surrogates import SurrogateGenerator
+        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
+        # to evaluate use self._surrogate(X)
+        self._surrogate = surrogate_generator.generate('voronoi_surrogate')
         
-    def _populate_parameter_evaluations(self, samples):
-        self._parameter_sets_to_evaluate = []
-        param_order = self._parameter_collection.get_item_names() 
-
-        for sample in samples:
-            ss = { key:sample[i] for i, key in enumerate(param_order) }
-            self._add_parameter_evaluation(**ss)
-        self._check_parameter_sets_populated()
-
     def _calculate_surrogate_score(self):
         test_score = self._surrogate.scores['test']
         combined_score = []
@@ -1200,6 +1158,51 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                 # look into what this score is in Scipy
                 combined_score += list(test_score[field_name]['mean'])
         self._current_surrogate_score.append(np.linalg.norm(combined_score))
+
+    def _format_params(self):
+        params_formatted = []
+        for param in self._results.parameter_history:
+            params_formatted.append(self._results.parameter_history[param])
+        self.X = np.array(params_formatted).T  
+    
+    def _format_output(self):
+        output_formatted = []
+        # return self.y
+        # needed for kf and loo cross validation
+        
+    def _perform_voronoi_batch_sampling(self): 
+        self._nbatch_samples.append(self.results.number_of_evaluations)
+        batch_number = 0
+        while batch_number < self.nbatches:
+            print(f"Sampling batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
+            print("................................................................")
+            new_samples = self._create_voronoi_tess_and_choose_new_samples(iter_=batch_number)
+            self._populate_parameter_evaluations(new_samples)
+            param_sets = self._parameter_sets_to_evaluate
+            self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
+            self._fit_surrogate_model()
+            self._calculate_errors()
+            self._nbatch_samples.append(self.results.number_of_evaluations)
+            # update self.X
+            self._format_params()
+            
+            # convergence check
+            if np.abs(self._current_surrogate_score[batch_number+1] - self._current_surrogate_score[batch_number]) <= self._eps:
+                print(f"BREAKING: Convergence from surrogate score.")
+                print(self._current_surrogate_score)
+                break
+            else:
+                print("Surrogate not converged yet.")
+            batch_number += 1
+
+    def _populate_parameter_evaluations(self, samples):
+        self._parameter_sets_to_evaluate = []
+        param_order = self._parameter_collection.get_item_names() 
+
+        for sample in samples:
+            ss = { key:sample[i] for i, key in enumerate(param_order) }
+            self._add_parameter_evaluation(**ss)
+        self._check_parameter_sets_populated()
 
     def _calculate_surrogate_loss(self):
         # DO NOT CALL
@@ -1214,115 +1217,89 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             epsilon = self.surr_model.surrogate.epsilon
             self._surrogate_loss.append(np.maximum(0, pred_error - epsilon).mean())
 
-    def _perform_voronoi_batch_sampling(self, nmax_folds=1,
-         nmax_loo=1, iter_=None, n_splits=5,
-         cv_metric='sum_abs_error', group_kfold=False, thin=None,
-         random_selection=None, cv_scale=None, clip_method='np_clip'):
+    def _create_voronoi_tess_and_choose_new_samples(self, iter_):
         """
         Perform Voronoi batch sampling based on the specified algorithm.
-
-        params: see self.launch()
-        
-        param clip_method: 'np_clip' or 'boundary_hull_clip'. Only activated if voronoi_type == 'sampling'.
-        type clip_method: str
         
         Returns:
         list: New samples selected.
         """
         
-        X_orig = self.X.copy()
-        if n_splits > 0:
+        if self.n_splits > 0:
             # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
-            kf = self._perform_kfold_cross_validation(n_splits, group_kfold, cv_scale, cv_metric)
+            kf = self._perform_kfold_cross_validation(self.n_splits, self.group_kfold, self.cv_scale, self.cv_metric)
 
             # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
-            max_fold_indices = self._find_kfold_max_errors(kf, nmax_folds)
-            if nmax_loo == 'all':
+            max_fold_indices = self._find_kfold_max_errors(kf, self.nmax_folds)
+            if self.nmax_loo == 'all':
                 worst_sample_locations = self.X[max_fold_indices]
             else:
                 # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
-                loo_errors = self._perform_loo_cross_validation(cv_scale, cv_metric,
-                                                                            max_fold_indices)
+                loo_errors = self._perform_loo_cross_validation(max_fold_indices)
                 # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
-                worst_sample_locations = self._find_loo_max_errors(loo_errors, nmax_loo)
+                worst_sample_locations = self._find_loo_max_errors(loo_errors)
                 
         else:
-            # do not perform kfold or loo CV. New samples drawn for all X regions.
+            # Do not perform kfold or loo CV. New samples drawn for all Voroni regions.
             worst_sample_locations = self.X
 
-        if thin is not None:
+        if self.thin is not None:
             # thin the new samples locations according to "thin"
-            worst_sample_locations = worst_sample_locations[::thin, ...]
-        elif random_selection is not None:
+            worst_sample_locations = worst_sample_locations[::self.thin, ...]
+        elif self.random_selection is not None:
             # randomly select the new sample locations from the candidates in worst_sample_locations
-            draw_n = np.min((int(0.5 * worst_sample_locations.shape[0]), random_selection))
+            draw_n = np.min((int(0.5 * worst_sample_locations.shape[0]), self.random_selection))
             random_rows = np.random.choice(worst_sample_locations.shape[0], size=draw_n, replace=False)
             worst_sample_locations = worst_sample_locations[random_rows, ...]
 
+        self._worst_sample_locations = worst_sample_locations
         print(f"Initializing voronoi/tree for batch {iter_}")
-
+        self._create_voronoi_tess()
+        self._find_new_sample_locations()
+        
+    def _create_voronoi_tess(self):
         if self.voronoi_type == 'full':
             # Initialize Voronoi tessellation
-            voronoi_tessellation = VoronoiTessellation(self.X, self.bounds, finite_only=self.finite_only)
+            self._voronoi_tessellation = VoronoiTessellation(self.X, self._bounds)
+            self._voronoi_tessellation.build(**self._voronoi_options)
 
         elif self.voronoi_type == 'local':
             # Make a local voronoi tesselation for each new sample by using knearest neighbors
             # to determine the closest points
             from scipy.spatial import KDTree
             all_points = self.X.copy()
-            tree = KDTree(all_points)
+            self._tree = KDTree(all_points)
+                
+    def _find_new_sample_locations(self):
 
-        elif self.voronoi_type == 'sampling':
-            all_points = self.X.copy()
-            tree = KDTree(all_points)
-            lb = np.array(self.bounds)[:, 0]
-            ub = np.array(self.bounds)[:, 1]
-            factor = 500
-            while True:
-                num_initial = factor * self.dim
-                # draw uniform samples within bounds
-                initial_samples = np.random.uniform(lb, ub, size=(num_initial, self.dim))
-                #
-                initial_samples = self._handle_points_outside_bounds(self.boundary_hull,
-                                                                     initial_samples, method=clip_method, 
-                                                                     centroid=None)
-                # find each sample's nearest neighbor
-                initial_nn = tree.query(initial_samples, k=1)
-                nn_loc = all_points[initial_nn[1]]
-                intersect = np.intersect1d(nn_loc, worst_sample_locations) 
-                if len(np.unique(intersect)) < len(worst_sample_locations):
-                    factor += 100
-                    continue
-                else:
-                    break
-
-        new_points = []
+        self._new_points = []
         print("Finding new sample locations...")
-        for loc_idx, location in enumerate(worst_sample_locations):
+        for loc_idx, location in enumerate(self._worst_sample_locations):
             if np.mod(loc_idx, 100) == 0:
-                print(f"Drawing new sample from region index {loc_idx} of {len(worst_sample_locations)}.")
+                print(f"Drawing new sample from region index {loc_idx} of {len(self._worst_sample_locations)}.")
 
             if self.voronoi_type == 'full':
                 # Identify corresponding voronoi cell
-                region_index = voronoi_tessellation.get_voronoi_region(location)[0][0]
+                region_index = self._voronoi_tessellation.get_voronoi_region(location)[0][0]
 
                 # Step 5: Select the point within this sample’s Voronoi cell that is furthest from existing samples
-                region_vertices, furthest_vertex_index = voronoi_tessellation.find_furthest_vertex(region_index)
+                region_vertices, furthest_vertex_index = self._voronoi_tessellation.find_furthest_vertex(region_index)
                 if region_vertices is None:
                     continue
                 furthest_vertex = region_vertices[furthest_vertex_index]
 
                 # Step 6: Add the new point and update Voronoi tessellation
                 if self.iterative_updates:
-                    voronoi_tessellation.add_points(furthest_vertex)
+                    self._voronoi_tessellation.add_points(furthest_vertex)
 
                 # Step 7: Update X
-                new_points.append(furthest_vertex)
+                self._new_points.append(furthest_vertex)
 
             elif self.voronoi_type == 'local':
                 nearest_neighbors = tree.query(location, k=10*self.dim)
                 nn_points = all_points[nearest_neighbors[1].squeeze()]
-                nn_vor = VoronoiTessellation(nn_points, self.bounds, self.boundary_points, finite_only=self.finite_only)
+                nn_vor = VoronoiTessellation(nn_points, self.bounds)
+                nn_vor.build(**self._voronoi_options)
                 nn_region = nn_vor.get_voronoi_region(location)[0]
                 try: # i think there is an issue where identical points are showing up
                     nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
@@ -1332,82 +1309,62 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                 if nn_vert is None:
                     continue
                 furthest_vertex = nn_vert[nn_fvi]
-                new_points.append(furthest_vertex)
+                self._new_points.append(furthest_vertex)
                 if self.iterative_updates:
                     all_points = np.vstack((all_points, furthest_vertex))
                     tree = KDTree(all_points)
 
-            elif self.voronoi_type == 'sampling':
-                try:
-                    furthest_vertex = self._farthest_point_adpative_sampling_var(
-                        initial_samples, initial_nn, tree, all_points, location,
-                        num_initial=1000*self.dim, num_refined=500*self.dim, iterations=2,\
-                        sigma_0=0.75**self.dim, alpha=1.0, k=10, nn_sigma=True, clip_method=clip_method)
-                    if furthest_vertex is None:
-                        continue
-                    new_points.append(furthest_vertex)
-                    if self.iterative_updates:
-                        all_points = np.vstack((all_points, furthest_vertex))
-                        tree = KDTree(all_points)
-                except ZeroDivisionError:
-                    continue
+        self._new_points = np.asarray(self._new_points)
+        # Make sure all new points are unique
+        unique_points = set(tuple(row) for row in self._new_points)
+        self._new_points = np.asarray([list(row) for row in unique_points])
 
-        new_points = np.asarray(new_points)
-        nnew = new_points.shape[0]
-        unique_points = set(tuple(row) for row in new_points)
-        new_points = np.asarray([list(row) for row in unique_points])
-        nnew_unique = new_points.shape[0]
-        print(f"{nnew_unique} of the {nnew} new points are unique.")
-
-        X = np.concatenate((X_orig, new_points))
-        return X
-
-    def _perform_kfold_cross_validation(self, n_splits, group_kfold, cv_scale, cv_metric):
+    def _perform_kfold_cross_validation(self):
+        self._kf = None
         print("Performing kfold cross-validation...")
-        kfcv = KFoldCrossValidation(self.surr_model, n_splits=n_splits, group_kfold=group_kfold, scale=cv_scale)
+        kfcv = KFoldCrossValidation(self.surr_model, n_splits=self.n_splits, group_kfold=self.group_kfold, scale=self.cv_scale)
         groups = None
 
         if group_kfold:
             from sklearn.cluster import KMeans
             kmeans = KMeans(n_clusters=n_splits, random_state=42)
             groups = kmeans.fit_predict(self.X)
-        kf = kfcv.perform_kfold_cv(self.X, self.y, metric=cv_metric, groups=groups)
-        return kf
+        self._kf = kfcv.perform_kfold_cv(self.X, self.y, metric=cv_metric, groups=groups)
     
-    def _find_kfold_max_errors(self, kf, nmax_folds):
+    def _find_kfold_max_errors(self):
+        self._max_fold_indices = None
         print("Finding max kfold error...")
-        max_folds = self._find_indices_of_n_largest_kf_errors(kf, nmax_folds)
-        max_fold_indices = np.concatenate(list(max_folds.values())) 
-        return max_fold_indices
+        max_folds = self._find_indices_of_n_largest_kf_errors()
+        self._max_fold_indices = np.concatenate(list(max_folds.values())) 
     
-    def _perform_loo_cross_validation(self, cv_scale, cv_metric, max_fold_indices):
+    def _perform_loo_cross_validation(self):
+        self._loo_errors = None
         print("Finding worst sample locations")
-        loocv = LeaveOneOutCrossValidation(self.surr_model, scale=cv_scale)
-        loo_errors = loocv.perform_loocv(self.X, self.y, max_fold_indices, metric=cv_metric)
-        return loo_errors
+        loocv = LeaveOneOutCrossValidation(self.surr_model, scale=self.cv_scale)
+        self._loo_errors = loocv.perform_loocv(self.X, self.y, self._max_fold_indices, metric=self.cv_metric)
     
-    def _find_loo_max_errors(self, errors, nmax_loo):
-            max_loo_indices = self._find_indices_of_n_largest_errors(errors, nmax_loo)
-            worst_sample_locations = self.X[max_loo_indices]
-            return worst_sample_locations
+    def _find_loo_max_errors(self):
+            self._worst_sample_locations = None
+            max_loo_indices = self._find_indices_of_n_largest_errors()
+            self._worst_sample_locations = self.X[max_loo_indices]
         
-    def _find_indices_of_n_largest_kf_errors(self, kf, n):
+    def _find_indices_of_n_largest_kf_errors(self):
 
         # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in kf.items()]
+        items = [(key, value[0], value[1]) for key, value in self._kf.items()]
 
         # Sort the items based on the error in descending order
         sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
 
         # Get the top n items
-        top_n_items = sorted_items[:n]
+        top_n_items = sorted_items[:self.nmax_folds]
 
         # Extract the arrays associated with the top n largest floats
         result_arrays = {key: array for key, _, array in top_n_items}
 
         return result_arrays
 
-    def _find_indices_of_n_largest_errors(self, loo, n, sort=False):
+    def _find_indices_of_n_largest_errors(self):
         """
         Find the indices of the n largest values in an array of errors.
 
@@ -1419,14 +1376,14 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         np.ndarray: An array of indices corresponding to the n largest values.
         """
 
-        if n < 1:
+        if self.nmax_loo < 1:
             # treat as ratio of indices to keep
-            nkeep = int(n * len(loo))
+            nkeep = int(self.nmax_loo * len(self._loo_errors))
         else:
-            nkeep = int(n)
+            nkeep = int(self.nmax_loo)
 
         # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in loo.items()]
+        items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
 
         # Sort the items based on the error in descending order
         sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
@@ -1551,20 +1508,52 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
 
     def add_parameter_evaluation(self, **parameters):
         """"""
-        raise self.StudyInputError("Users cannot add parameter evaluations to a VoronoiBatchStudy.")
+        raise self.StudyInputError("Users cannot add parameter evaluations to a VoronoiAdaptiveSurrogateStudy.")
 
 class VoronoiTessellation:
-    def __init__(self, points, bounds,
-                 incremental=False, finite_only=False):
+    def __init__(self, points, bounds):
         """Initialize the VoronoiBatchSamplingStudy
-
-        Initialize the Voronoi tessellation with given points and bounds.
-
+        
         param points: Array of points that are the seeds of the Voronoi tessellation
         type points: nd_array
 
         param bounds: Bounds for the parameter space, e.g., [(xmin, xmax), (ymin, ymax)] for a 2D space.
         type boudns: list of tuples
+        """
+        self.points = np.array(points)
+        self.ndim = self.points.shape[1]
+        self.bounds = bounds
+        
+    def build(self, **options):
+        """Initialize the Voronoi tessellation with given points and bounds.
+        """
+        from scipy.spatial import Voronoi, Delaunay, ConvexHull
+
+        self._initialize_attributes()
+        self._set_voronoi_options(**options)
+
+        self.boundary_points = self._make_nd_grid(npts_along_dim=2)
+        if not self.finite_only:
+            self.boundary_hull = ConvexHull(self.boundary_points)
+            self.boundary_hull_eq = self.boundary_hull.equations # (nfacet, ndim + 1)
+            self.boundary_hull_V, self.boundary_hull_b = self.boundary_hull_eq[:, :-1], self.boundary_hull_eq[:, -1] # normal, offset
+            self.bhullD = Delaunay(self.boundary_points)
+        else:
+            self.boundary_hull = None
+            self.bhullD = None
+        self.create_ghost_points()
+        self._all_points = np.vstack([self.points, self._ghost_points])
+        
+        self.vor = Voronoi(self._all_points, incremental=self.incremental)
+        self.ghost_busters()
+        self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
+
+    def _initialize_attributes(self):
+        self.finite_only = False
+        self.incremental = False
+         
+    def _set_voronoi_options(self, **voronoi_kwargs):
+        """Set voronoi properties. See documentation for properties that an be altered and their options.
         
         param incremental: Allow adding points incrementally. This takes up additional resources.
         type incremental: bool
@@ -1576,31 +1565,13 @@ class VoronoiTessellation:
                        resources, especially in high dimensions.
         type finite_only: bool
         """
+        self._voronoi_kwargs = voronoi_kwargs
+        for key, value in voronoi_kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
         
-        from scipy.spatial import Voronoi, Delaunay, voronoi_plot_2d, ConvexHull
-        import pandas as pd
-        import copy
-        from mpl_toolkits.mplot3d import Axes3D
-
-        self.points = np.array(points)
-        self.ndim = self.points.shape[1]
-        self.bounds = bounds
-        self.boundary_points = self._make_nd_grid(npts_along_dim=2)
-        if not finite_only:
-            self.boundary_hull = ConvexHull(self.boundary_points)
-            self.boundary_hull_eq = self.boundary_hull.equations # (nfacet, ndim + 1)
-            self.boundary_hull_V, self.boundary_hull_b = self.boundary_hull_eq[:, :-1], self.boundary_hull_eq[:, -1] # normal, offset
-            self.bhullD = Delaunay(self.boundary_points)
-        else:
-            self.boundary_hull = None
-            self.bhullD = None
-        self.create_ghost_points()
-        self._all_points = np.vstack([self.points, self._ghost_points])
-        self.vor = Voronoi(self._all_points, incremental=incremental)
-        self.ghost_busters()
-        self.finite_only = finite_only
-        self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
-
     def _make_nd_grid(self, npts_along_dim):
         grid_pts = []
         for dim in np.arange(self.ndim):
