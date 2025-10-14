@@ -1511,71 +1511,6 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             self.assertEqual(len(np.unique(test_indices)), self.nsamples)
 
 
-class SurrogateModel:
-    def __init__(self, input_scaling=False, output_scaling=True, **kwargs):
-        self.input_scaling = input_scaling
-        self.surrogate_type = 'gaussian_process'
-
-        self.nrestarts = 50
-        self.alpha = 1.0e-8
-        self.normalize_y = output_scaling
-        self.random_state = None
-        self.output_scaler_with_std = True
-        for kwarg in kwargs:
-            if kwarg == 'n_restarts_optimizer':
-                self.nrestarts = kwargs[kwarg]
-            if kwarg == 'alpha':
-                self.alpha = kwargs[kwarg]
-            if kwarg == 'normalize_y':
-                self.normalize_y = kwargs[kwarg]
-            if kwarg == 'random_state':
-                self.random_state = kwargs[kwarg]
-            if kwarg == 'output_scaler_with_std':
-                self.output_scaler_with_std = kwargs[kwarg]
-
-    def fit(self, X, y):
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.gaussian_process import GaussianProcessRegressor
-        from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-
-        X = np.atleast_2d(X)
-        self.nsamples = X.shape[0]
-        self.nfeatures = X.shape[1]
-
-        gp_train_features = X
-        if self.input_scaling:
-            self.input_scaler = StandardScaler()
-            scaled_features = self.input_scaler.fit_transform(X)
-            gp_train_features = scaled_features
-        gp_train_targets = y
-
-        # squared exponential kernel
-        self.kernel = C(1.0, constant_value_bounds=(1e-3, 1e3))\
-            * RBF(np.ones(self.nfeatures), length_scale_bounds=(1e-3, 1e3))
-
-        self.surrogate = \
-            GaussianProcessRegressor(
-                kernel=self.kernel,
-                n_restarts_optimizer=self.nrestarts,
-                alpha=self.alpha,
-                random_state=self.random_state,
-                normalize_y=self.normalize_y)
-        self.surrogate.fit(
-            gp_train_features,
-                gp_train_targets)
-
-
-    def predict(self, X):
-
-        X = np.atleast_2d(X)
-        assert X.ndim == 2
-        assert X.shape[1] == self.nfeatures
-
-        if self.input_scaling:
-            X = self.input_scaler.transform(X)
-
-        return self.surrogate.predict(X)
-   
 class TestVoronoiBatchStudy(MatcalUnitTest):
     
     _study_class = VoronoiAdaptiveSurrogateStudy
@@ -1612,17 +1547,19 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     def test_initialization(self):
         dims = [2, 3]
         for dim in dims:
-            nsamples = 2 ** dim
             physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self._study_class(parameter_collection, rng=42)
-            test_points = None
+            vor_study = self._study_class(parameter_collection)
+            test_points = np.linspace(.25, .75, 10)
             objective = SimulationResultsSynchronizer("x", test_points, "f")
             vor_study.add_evaluation_set(physical_model, objective)
-            vor_study.launch()
+            
+            voronoi_sampling_options = {}
+            surrogate_options = {}
+            options = {'voronoi_sampling_options': voronoi_sampling_options,
+                       'surrogate_options': surrogate_options}
+             
+            vor_study.launch(**options)
             # build surrogate that given a, b, c gives you f
-            # in study.set_surr_options need interpolation_field = 'x'
-            # look at training fraction option in surrogate (right now it's .8)
-            # study.set_surrogate_options(interpolation_field='x', training_fraction=0.8)
             self.assertFalse(vor_study.finite_only)
             self.assertTrue(vor_study.iterative_updates)
             self.assertEqual(vor_study.surr_model, surr_model)
