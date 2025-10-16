@@ -1549,12 +1549,19 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
             vor_study = self._study_class(parameter_collection)
+
             test_points = np.linspace(.25, .75, 10)
             objective = SimulationResultsSynchronizer("x", test_points, "f")
             vor_study.add_evaluation_set(physical_model, objective)
             
-            voronoi_sampling_options = {}
-            surrogate_options = {}
+            voronoi_sampling_options = {'voronoi_type':'Full',
+                                        'finite_only':False,
+                                        'iterative_updates':True,
+                                        'nsplits':8,
+                                        'nmax_folds':3,
+                                        'nmax_loo':25,
+                                        'nmaxbatches':20}
+            surrogate_options = {'interpolation_field':'x'}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
                        'surrogate_options': surrogate_options}
              
