@@ -1060,20 +1060,22 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def launch(self, **options):
         """ Launch adaptive surrogate build using Voronoi batch sampling        
         """
+        # generate initial training set from HaltonStudy and put model
+        # parameters and output in desired format
+        super().launch(self._nsamples)
+        self._format_params()
+        self._format_output()
+        
         # set voronoi and surrogate options if provided
         voronoi_sampling_options = options.get('voronoi_sampling_options', {})
         surrogate_options = options.get('surrogate_options', {})
         self._set_voronoi_sampling_options(**voronoi_sampling_options)
-        self._set_surrogate_optons(**surrogate_options)
-        self._voronoi_options = {'finite_only':self.finite_only} 
-        
-        # generate initial training set from HaltonStudy
-        super().launch(self._nsamples)
+        self._set_surrogate_options(**surrogate_options)
+        self._voronoi_options = {'finite_only' : self.finite_only} 
         
         # build/train surrogate with initial training set and calculate initial error
         self._fit_surrogate_model()
         self._calculate_surrogate_score()
-        self._format_params()
         self._perform_voronoi_batch_sampling()
         
     def _initialize_attributes(self):
@@ -1092,7 +1094,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.group_kfold = False
         self.thin = None
         self.random_selection = None
-        self.nbatches = 20
+        self.nmaxbatches = 20
         self._current_surrogate_score = []
         self._nbatch_samples = []
         
@@ -1115,7 +1117,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _make_nd_grid(self, npts_along_dim):
         grid_pts = []
         for dim in np.arange(self.dim):
-            grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
+            grid_pts.append(np.linspace(self._bounds[dim][0], self._bounds[dim][1], npts_along_dim))
         coords = np.meshgrid(*grid_pts)
         coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.dim)]
         return np.vstack(tuple(coords_ravel)).T
@@ -1135,13 +1137,15 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         # we really want the training fraction to be 1.0, this adaptive sampling algorithm counts on all points
         # being used to train, up to user to set aside test set of data
         self.interpolation_field = 'x'
-        self.training_fraction = 0.8
+        self._training_fraction = len(self.X)
         for key, value in surrogate_options.items():
             if hasattr(self, key):
+                if key == 'training_fraciton':
+                    raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.")
                 setattr(self, key, value)
             else:
                 raise AttributeError(f"'{self.__class__.name__}' has no attribute '{key}'")
-        options = {'interpolation_field': interpolation_field, 'training_fraction': training_fraction}    
+        options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction}    
         self._surrogate_options = options
         
     def _fit_surrogate_model(self):
@@ -1166,14 +1170,17 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.X = np.array(params_formatted).T  
     
     def _format_output(self):
-        output_formatted = []
-        # return self.y
-        # needed for kf and loo cross validation
+        model_name = self._get_model_names()[0]
+        state0 = self._results.simulation_history[model_name].states['matcal_default_state']
+        sim_history = self._results.simulation_history[model_name][state0]
+        nsamples = len(self.X)
+        data = [sim_history[i]['f'][:] for i in range(nsamples)]
+        self.y = np.asarray(data)
         
     def _perform_voronoi_batch_sampling(self): 
         self._nbatch_samples.append(self.results.number_of_evaluations)
         batch_number = 0
-        while batch_number < self.nbatches:
+        while batch_number < self.nmaxbatches:
             print(f"Sampling batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
             print("................................................................")
             new_samples = self._create_voronoi_tess_and_choose_new_samples(iter_=batch_number)
@@ -1183,8 +1190,9 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             self._fit_surrogate_model()
             self._calculate_errors()
             self._nbatch_samples.append(self.results.number_of_evaluations)
-            # update self.X
+            # update self.X and self.y
             self._format_params()
+            self._format_output()
             
             # convergence check
             if np.abs(self._current_surrogate_score[batch_number+1] - self._current_surrogate_score[batch_number]) <= self._eps:
@@ -1225,12 +1233,12 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         list: New samples selected.
         """
         
-        if self.n_splits > 0:
+        if self.nsplits > 0:
             # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
-            kf = self._perform_kfold_cross_validation(self.n_splits, self.group_kfold, self.cv_scale, self.cv_metric)
+            self._perform_kfold_cross_validation()
 
             # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
-            max_fold_indices = self._find_kfold_max_errors(kf, self.nmax_folds)
+            max_fold_indices = self._find_kfold_max_errors()
             if self.nmax_loo == 'all':
                 worst_sample_locations = self.X[max_fold_indices]
             else:
@@ -1322,14 +1330,14 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _perform_kfold_cross_validation(self):
         self._kf = None
         print("Performing kfold cross-validation...")
-        kfcv = KFoldCrossValidation(self.surr_model, n_splits=self.n_splits, group_kfold=self.group_kfold, scale=self.cv_scale)
+        kfcv = KFoldCrossValidation(self._surrogate, nsplits=self.nsplits, group_kfold=self.group_kfold, scale=self.cv_scale)
         groups = None
 
-        if group_kfold:
+        if self.group_kfold:
             from sklearn.cluster import KMeans
-            kmeans = KMeans(n_clusters=n_splits, random_state=42)
+            kmeans = KMeans(n_clusters=nsplits, random_state=42)
             groups = kmeans.fit_predict(self.X)
-        self._kf = kfcv.perform_kfold_cv(self.X, self.y, metric=cv_metric, groups=groups)
+        self._kf = kfcv.perform_kfold_cv(self.X, self.y, metric=self.cv_metric, groups=groups)
     
     def _find_kfold_max_errors(self):
         self._max_fold_indices = None
@@ -1397,7 +1405,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         return np.array(indices)
 
     def _add_parameter_evaluation(self, **p):
-      super().add_parameter_evaluation(**p)
+      super()._add_parameter_evaluation(**p)
 
     def add_parameter_evaluation(self, **parameters):
         """"""
@@ -1852,17 +1860,17 @@ class VoronoiTessellation:
         plt.close()
 
 class KFoldCrossValidation:
-    def __init__(self, model, n_splits=5, group_kfold=False, scale=None):
+    def __init__(self, model, nsplits=5, group_kfold=False, scale=None):
         """
         Initialize the K-Fold Cross-Validation with a given surrogate model.
 
         Parameters:
         model: A machine learning model that has fit and predict methods.
-        n_splits: int
+        nsplits: int
             The number of folds for K-Fold Cross-Validation.
         """
         self.model = model
-        self.n_splits = n_splits
+        self.nsplits = nsplits
         self.group_kfold = group_kfold
         self.scale = scale
 
@@ -1906,15 +1914,15 @@ class KFoldCrossValidation:
         import matplotlib
         from joblib import Parallel, delayed
 
-        nsplits = self.n_splits
-        if self.n_splits > X.shape[0]:
+        nsplits = self.nsplits
+        if self.nsplits > X.shape[0]:
             nsplits = X.shape[0]
-            print("n_splits can't be greater than the number of samples in KFoldCrosValidation. Reducing\
+            print("nsplits can't be greater than the number of samples in KFoldCrosValidation. Reducing\
                   number of splits to the number of samples.")
             
         if self.group_kfold:
             assert groups is not None
-            cv = GroupKFold(n_splits=nsplits)
+            cv = GroupKFold(nsplits=nsplits)
             # Use joblib to parallelize the cross-validation folds
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
@@ -1923,6 +1931,16 @@ class KFoldCrossValidation:
         else:
             cv = KFold(n_splits=nsplits, shuffle=True, random_state=1)
             # Use joblib to parallelize the cross-validation folds
+            import pdb 
+            pdb.set_trace()
+            
+            for train_idx, test_idx in cv.split(X):
+                print("Train:", train_idx, " Test:", test_idx)
+            
+            # I need to be able to set training fraction to 1.0 when
+            # generating the surrogates. Not being able to set the fraction to
+            # 1.0 is especially problematic when doing cross validation, where the
+            # test and train data is already split.
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
                 for train_index, test_index in cv.split(X)
@@ -1937,11 +1955,12 @@ class KFoldCrossValidation:
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
 
+        # How do I regenerate surrogate model with training/test subset?
         # Fit the model on the training data
         self.model.fit(X_train, y_train)
 
         # Make predictions for the test set
-        y_pred = self.model.predict(X_test)
+        y_pred = self._surrogate(X_test)
         if self.scale == 'cbrt':
             y_pred = cbrt(y_pred)
             y_test = cbrt(y_test)
@@ -1997,10 +2016,10 @@ class KFoldCrossValidation:
                        lw=10, cmap=cmap_cv, vmin=-0.2, vmax=1.2)
 
         # Set y-ticks and labels
-        y_ticks = np.arange(self.n_splits) + 0.5
-        ax.set(yticks=y_ticks, yticklabels=range(self.n_splits),
+        y_ticks = np.arange(self.nsplits) + 0.5
+        ax.set(yticks=y_ticks, yticklabels=range(self.nsplits),
                xlabel="X index", ylabel="Fold",
-               ylim=[self.n_splits, -0.2], xlim=[0, xlim_max])
+               ylim=[self.nsplits, -0.2], xlim=[0, xlim_max])
 
         # Set plot title and create legend
         ax.set_title("KFold", fontsize=14)
@@ -2015,7 +2034,7 @@ class LeaveOneOutCrossValidation:
         Initialize the LOOCV with a given surrogate model.
 
         Parameters:
-        model: A machine learning model that has fit and predict methods.
+        model: The surrogate model being fit with the training points.
         """
         self.model = model
         self.scale = scale
@@ -2046,11 +2065,12 @@ class LeaveOneOutCrossValidation:
         X_test = X[i].reshape(1, -1)  # Reshape for a single sample
         y_test = y[i]
 
+        # How do I regenerate surrogate model with training/test subset?
         # Fit the model on the training data
         self.model.fit(X_train, y_train)
 
         # Make a prediction for the left-out sample
-        y_pred = self.model.predict(X_test)
+        y_pred = self._surrogate(X_test)
         if self.scale == 'cbrt':
             y_pred = cbrt(y_pred)
             y_test = cbrt(y_test)
@@ -2073,7 +2093,6 @@ class LeaveOneOutCrossValidation:
             error = self.calculate_sum_abs_error(y_test, y_pred)
 
         return error, i
-
 
     def perform_loocv(self, X, y, indices, metric='sum_abs_error'):
 
