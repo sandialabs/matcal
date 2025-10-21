@@ -1391,14 +1391,15 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.y = np.array([1, 2, 3, 4, 5])
         self.nsamples = len(self.X)
         self.model = LinearRegression()
-        self.kfold = KFoldCrossValidation(model=self.model, n_splits=5)
+        self.kfold = KFoldCrossValidation()
 
     def test_initialization(self):
         from sklearn.linear_model import LinearRegression
-        self.assertEqual(self.kfold.n_splits, 5)
-        self.assertIsInstance(self.kfold.model, LinearRegression)
+        self.assertEqual(self.kfold.nsplits, 5)
         self.assertFalse(self.kfold.group_kfold)
         self.assertIsNone(self.kfold.scale)
+        self.assertEqual(self.kfold.metric, 'sum_abs_error')
+        self.assertIsNone(self.kfold.groups)
 
     def test_calculate_sum_abs_error(self):
         y_true = np.array([1, 2, 3])
@@ -1431,12 +1432,12 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assertAlmostEqual(error, 0.57735, places=5)
 
     def test_perform_kfold_cv(self):
-        metric = 'mse'
-        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, metric, groups=None)
+        kfcv_options = {'metric': 'mse'}
+        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
        
         # Check that the results are in the expected format
         self.assertIsInstance(kf_results, dict)
-        self.assertEqual(len(kf_results), self.kfold.n_splits)
+        self.assertEqual(len(kf_results), self.kfold.nsplits)
 
         # Check that each result is a tuple (kfold error, indices of test samples)
         test_indices = []
@@ -1455,7 +1456,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
     def test_cross_val_fold(self):
         train_index = [0, 1, 2]
         test_index = [3, 4]
-        error, test_idx_returned = self.kfold.cross_val_fold(train_index, test_index, self.X, self.y, 'mse')
+        error, test_idx_returned = self.kfold.evaluate_fold(train_index, test_index, self.X, self.y)
         self.assertEqual(test_idx_returned, test_index)
         self.assertIsInstance(error, float)          
        
@@ -1471,12 +1472,12 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         self.y = np.array([1, 2, 3, 4, 5])
         self.nsamples = len(self.X)
         self.model = LinearRegression()
-        self.loocv = LeaveOneOutCrossValidation(model=self.model)
+        self.loocv = LeaveOneOutCrossValidation()
 
     def test_initialization(self):
         from sklearn.linear_model import LinearRegression
-        self.assertIsInstance(self.loocv.model, LinearRegression)
         self.assertIsNone(self.loocv.scale)
+        self.assertEqual(self.loocv.metric, 'sum_abs_error')
 
     def test_calculate_sum_abs_error(self):
         y_true = np.array([1, 2, 3])
