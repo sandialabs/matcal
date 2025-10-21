@@ -1503,11 +1503,14 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         rmse = self.loocv.calculate_rmse(y_true, y_pred)
         self.assertAlmostEqual(rmse, 0.57735, places=5)
 
-    def test_loo_val(self):
+    def test_evaluate_sample(self):
         metrics = ['sum_abs_error', 'mape', 'mse', 'rmse', 'sum_abs_perc_error']
         for metric in metrics:
+            loo_options = {'metric' : metric}
             for i in np.arange(self.nsamples):
-                error, index = self.loocv.loo_val(self.X, self.y, metric, i)
+                self.loocv._set_loocv_options(**loo_options)
+                self.assertEqual(self.loocv.metric, metric)
+                error, index = self.loocv.evaluate_sample(self.X, self.y, i)
                 self.assertEqual(index, i)
                 self.assertIsInstance(error, float)
         
@@ -1515,8 +1518,10 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         indices = range(self.nsamples)
         metrics = ['sum_abs_error', 'mape', 'mse', 'rmse', 'sum_abs_perc_error']
         for metric in metrics:
-            loo_results = self.loocv.perform_loocv(self.X, self.y, indices, metric=metric)
+            loo_options = {'metric' : metric}
+            loo_results = self.loocv.perform_loocv(self.X, self.y, indices, **loo_options)
             
+            self.assertEqual(self.loocv.metric, metric)
             self.assertIsInstance(loo_results, dict)
             self.assertEqual(len(loo_results), self.nsamples)
             self.assertIn(0, loo_results)  # Check if the first index is present in results
