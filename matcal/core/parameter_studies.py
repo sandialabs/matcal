@@ -1065,7 +1065,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         super().launch(self._nsamples)
         self._format_params()
         self._format_output()
-        
+       
         # set voronoi and surrogate options if provided
         voronoi_sampling_options = options.get('voronoi_sampling_options', {})
         surrogate_options = options.get('surrogate_options', {})
@@ -1134,17 +1134,20 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
     
     def _set_surrogate_options(self, **surrogate_options):
-        # we really want the training fraction to be 1.0, this adaptive sampling algorithm counts on all points
-        # being used to train, up to user to set aside test set of data
         self.interpolation_field = 'x'
         self._training_fraction = len(self.X)
         for key, value in surrogate_options.items():
             if hasattr(self, key):
                 if key == 'training_fraciton':
-                    raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.")
+                    raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.0")
                 setattr(self, key, value)
             else:
                 raise AttributeError(f"'{self.__class__.name__}' has no attribute '{key}'")
+        options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction}    
+        self._surrogate_options = options
+    
+    def _update_surrogate_training_fraction(self):
+        self._training_fraction = len(self.X)
         options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction}    
         self._surrogate_options = options
         
@@ -1187,10 +1190,10 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             self._populate_parameter_evaluations(new_samples)
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
+            self._update_surrogate_training_fraction()
             self._fit_surrogate_model()
             self._calculate_errors()
             self._nbatch_samples.append(self.results.number_of_evaluations)
-            # update self.X and self.y
             self._format_params()
             self._format_output()
             
@@ -1238,14 +1241,14 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             self._perform_kfold_cross_validation()
 
             # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
-            max_fold_indices = self._find_kfold_max_errors()
+            self._find_kfold_max_errors()
             if self.nmax_loo == 'all':
-                worst_sample_locations = self.X[max_fold_indices]
+                worst_sample_locations = self.X[self._max_fold_indices]
             else:
                 # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
-                loo_errors = self._perform_loo_cross_validation(max_fold_indices)
+                self._perform_loo_cross_validation()
                 # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
-                worst_sample_locations = self._find_loo_max_errors(loo_errors)
+                worst_sample_locations = self._find_loo_max_errors()
                 
         else:
             # Do not perform kfold or loo CV. New samples drawn for all Voroni regions.
@@ -1306,10 +1309,10 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             elif self.voronoi_type == 'local':
                 nearest_neighbors = tree.query(location, k=10*self.dim)
                 nn_points = all_points[nearest_neighbors[1].squeeze()]
-                nn_vor = VoronoiTessellation(nn_points, self.bounds)
+                nn_vor = VoronoiTessellation(nn_points, self._bounds)
                 nn_vor.build(**self._voronoi_options)
                 nn_region = nn_vor.get_voronoi_region(location)[0]
-                try: # i think there is an issue where identical points are showing up
+                try:
                     nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
                 except:
                     continue
@@ -1330,14 +1333,19 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _perform_kfold_cross_validation(self):
         self._kf = None
         print("Performing kfold cross-validation...")
-        kfcv = KFoldCrossValidation(self._surrogate, nsplits=self.nsplits, group_kfold=self.group_kfold, scale=self.cv_scale)
+        # passing self to KFCV for surrogate training, although not implemented, suspect it may be needed in the future
+        kfcv = KFoldCrossValidation(self)
         groups = None
 
         if self.group_kfold:
             from sklearn.cluster import KMeans
-            kmeans = KMeans(n_clusters=nsplits, random_state=42)
+            kmeans = KMeans(n_clusters=self.nsplits, random_state=42)
             groups = kmeans.fit_predict(self.X)
-        self._kf = kfcv.perform_kfold_cv(self.X, self.y, metric=self.cv_metric, groups=groups)
+        
+        kfcv_options = {'nsplits' : self.nsplits, 'group_kfold' : self.group_kfold,
+                        'scale' : self.cv_scale, 'metric' : self.cv_metric,
+                        'groups' : groups}
+        self._kf = kfcv.perform_kfold_cv(self.X, self.y, **kfcv_options)
     
     def _find_kfold_max_errors(self):
         self._max_fold_indices = None
@@ -1348,8 +1356,8 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _perform_loo_cross_validation(self):
         self._loo_errors = None
         print("Finding worst sample locations")
-        loocv = LeaveOneOutCrossValidation(self.surr_model, scale=self.cv_scale)
-        self._loo_errors = loocv.perform_loocv(self.X, self.y, self._max_fold_indices, metric=self.cv_metric)
+        loocv = LeaveOneOutCrossValidation(self)
+        self._loo_errors = loocv.perform_loocv(self.surr_model, self.cv_scale, self.X, self.y, self._max_fold_indices, metric=self.cv_metric)
     
     def _find_loo_max_errors(self):
             self._worst_sample_locations = None
@@ -1860,7 +1868,7 @@ class VoronoiTessellation:
         plt.close()
 
 class KFoldCrossValidation:
-    def __init__(self, model, nsplits=5, group_kfold=False, scale=None):
+    def __init__(self):
         """
         Initialize the K-Fold Cross-Validation with a given surrogate model.
 
@@ -1869,10 +1877,7 @@ class KFoldCrossValidation:
         nsplits: int
             The number of folds for K-Fold Cross-Validation.
         """
-        self.model = model
-        self.nsplits = nsplits
-        self.group_kfold = group_kfold
-        self.scale = scale
+        self._initialize_attributes()
 
     def calculate_sum_abs_error(self, y_true, y_pred):
         return  np.sum(np.abs(y_true - y_pred))
@@ -1893,7 +1898,27 @@ class KFoldCrossValidation:
     def calculate_sum_abs_perc_error(self, y_true, y_pred):
         return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
 
-    def perform_kfold_cv(self, X, y, metric='sum_abs_error', groups=None):
+    def _initialize_attributes(self):
+        self.nsplits = 5
+        self.group_kfold = False
+        self.scale = None
+        self.metric = 'sum_abs_error'
+        self.groups = None
+
+    def _set_kfcv_options(self, **kfcv_kwargs):
+        """Set KFold CV properties."""
+        self._kfcv_kwargs = kfcv_kwargs
+        for key, value in kfcv_kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
+        if self.nsplits > self.X.shape[0]:
+            self.nsplits = self.X.shape[0]
+            print("nsplits can't be greater than the number of samples in KFoldCrosValidation. Reducing\
+                  number of splits to the number of samples.")
+        
+    def perform_kfold_cv(self, X, y, **kfcv_options):
         """
         Perform K-Fold Cross-Validation.
 
@@ -1907,34 +1932,25 @@ class KFoldCrossValidation:
         tuple: (index_of_max_error, max_error)
             The index of the sample with the greatest prediction error and the corresponding error value.
         """
-        from sklearn.metrics import mean_squared_error
-        from sklearn.model_selection import GroupKFold, KFold, cross_val_score
-        import matplotlib.pyplot as plt
-        from matplotlib.patches import Patch
-        import matplotlib
+        from sklearn.model_selection import GroupKFold, KFold
         from joblib import Parallel, delayed
 
-        nsplits = self.nsplits
-        if self.nsplits > X.shape[0]:
-            nsplits = X.shape[0]
-            print("nsplits can't be greater than the number of samples in KFoldCrosValidation. Reducing\
-                  number of splits to the number of samples.")
-            
+        self.X = X
+        self.y = y
+        self._set_kfcv_options(**kfcv_options)
+        
         if self.group_kfold:
-            assert groups is not None
-            cv = GroupKFold(nsplits=nsplits)
+            assert self.groups is not None
+            cv = GroupKFold(nsplits=self.nsplits)
             # Use joblib to parallelize the cross-validation folds
             kf_results = Parallel(n_jobs=-1)(
-                delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
-                for train_index, test_index in cv.split(X, y, groups)
+                delayed(self.cross_val_fold)(train_index, test_index, self.X, self.y, self.metric)
+                for train_index, test_index in cv.split(X, y, self.groups)
             )
         else:
-            cv = KFold(n_splits=nsplits, shuffle=True, random_state=1)
+            cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
             # Use joblib to parallelize the cross-validation folds
-            import pdb 
-            pdb.set_trace()
-            
-            for train_idx, test_idx in cv.split(X):
+            for train_idx, test_idx in cv.split(self.X):
                 print("Train:", train_idx, " Test:", test_idx)
             
             # I need to be able to set training fraction to 1.0 when
@@ -1942,42 +1958,43 @@ class KFoldCrossValidation:
             # 1.0 is especially problematic when doing cross validation, where the
             # test and train data is already split.
             kf_results = Parallel(n_jobs=-1)(
-                delayed(self.cross_val_fold)(train_index, test_index, X, y, metric)
-                for train_index, test_index in cv.split(X)
+                delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
+                for train_index, test_index in cv.split(self.X)
             )
 
         # Convert the results to a dictionary
         kf = {k_idx: result for k_idx, result in enumerate(kf_results)}
         return kf
 
-    def cross_val_fold(self, train_index, test_index, X, y, metric):
+    def evaluate_fold(self, train_index, test_index, X, y):
         """Perform a single fold of cross-validation."""
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
 
         # How do I regenerate surrogate model with training/test subset?
         # Fit the model on the training data
-        self.model.fit(X_train, y_train)
+        fold_surrogate = CrossValidationSurrogate()
+        fold_surrogate._fit_cv_surrogate(X_train, y_train)
 
         # Make predictions for the test set
-        y_pred = self._surrogate(X_test)
+        y_pred = fold_surrogate._predict(X_test)
         if self.scale == 'cbrt':
-            y_pred = cbrt(y_pred)
-            y_test = cbrt(y_test)
+            y_pred = self.perform_cbrt_transform(y_pred)
+            y_test = self.perform_cbrt_transform(y_test)
         elif self.scale == 'log':
             y_pred = np.log(y_pred)
             y_test = np.log(y_test)
 
         # Calculate the prediction errors for the test samples
-        if metric == 'sum_abs_error':
+        if self.metric == 'sum_abs_error':
             error = self.calculate_sum_abs_error(y_test, y_pred)
-        elif metric == 'mape':
+        elif self.metric == 'mape':
             error = self.calculate_mean_abs_perc_error(y_test, y_pred)
-        elif metric == 'mse':
+        elif self.metric == 'mse':
             error = self.calculate_mse(y_test, y_pred)
-        elif metric == 'rmse':
+        elif self.metric == 'rmse':
             error = self.calculate_rmse(y_test, y_pred)
-        elif metric == 'sum_abs_perc_error':
+        elif self.metric == 'sum_abs_perc_error':
             error = self.calculate_sum_abs_perc_error(y_test, y_pred)
         else:
             print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
@@ -1985,7 +2002,7 @@ class KFoldCrossValidation:
 
         return error, test_index
 
-    def cbrt(y):
+    def perform_cbrt_transform(self, y):
         return np.sign(y) * np.abs(y) ** (1/3)
 
     def plot_kfold(self, cv, X, y, ax, xlim_max=100):
@@ -1999,6 +2016,9 @@ class KFoldCrossValidation:
         ax: Matplotlib axis object
         xlim_max: Maximum limit for the x-axis
         """
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Patch
+        import matplotlib
 
         # Set color map for the plot
         cmap_cv = plt.cm.coolwarm
@@ -2029,15 +2049,93 @@ class KFoldCrossValidation:
 
 
 class LeaveOneOutCrossValidation:
-    def __init__(self, model, scale=None):
+    def __init__(self):
         """
-        Initialize the LOOCV with a given surrogate model.
+        Initialize the LOOCV.
+        """
+        self._initialize_attributes()
+        
+    def _initialize_attributes(self):
+        self.scale = None
+        self.metric = 'sum_abs_error'
+        
+    def _set_loocv_options(self, **loocv_kwargs):
+        """Set LeaveOneOut CV properties."""
+        self._loocv_kwargs = loocv_kwargs
+        for key, value in loocv_kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
+
+    def perform_loocv(self, X, y, indices, **loocv_options):
+
+        """
+        Perform Leave-One-Out Cross-Validation.
 
         Parameters:
-        model: The surrogate model being fit with the training points.
+        X: np.ndarray
+            Feature matrix (training samples).
+        y: np.ndarray
+            Target values (ground truth).
+
+        Returns:
+        tuple: (index_of_max_error, max_error)
+            The index of the sample with the greatest prediction error and the corresponding error value.
         """
-        self.model = model
-        self.scale = scale
+
+        from joblib import Parallel, delayed
+        self._set_loocv_options(**loocv_options)
+        
+        loo_results = Parallel(n_jobs=-1)(
+            delayed(self.evaluate_sample)(X, y, i)
+            for i in indices
+        )
+
+        loo = {loo_idx: result for loo_idx, result in enumerate(loo_results)}
+
+        return loo
+    
+    def evaluate_sample(self, X, y, i):
+        # Leave one out: create training and test sets
+        X_train = np.delete(X, i, axis=0)
+        y_train = np.delete(y, i, axis=0)
+        X_test = X[i].reshape(1, -1)  # Reshape for a single sample
+        y_test = y[i]
+
+        # How do I regenerate surrogate model with training/test subset?
+        # Fit the model on the training data
+        fold_surrogate = CrossValidationSurrogate()
+        fold_surrogate._fit_cv_surrogate(X_train, y_train)
+
+        # Make predictions for the left-out sample
+        y_pred = fold_surrogate._predict(X_test)
+
+        if self.scale == 'cbrt':
+            y_pred = self.perform_cbrt_transform(y_pred)
+            y_test = self.perform_cbrt_transform(y_test)
+        elif self.scale == 'log':
+            y_pred = np.log(y_pred)
+            y_test = np.log(y_test)
+
+        if self.metric == 'sum_abs_error':
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+        elif self.metric == 'mape':
+            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
+        elif self.metric == 'mse':
+            error = self.calculate_mse(y_test, y_pred)
+        elif self.metric == 'rmse':
+            error = self.calculate_rmse(y_test, y_pred)
+        elif self.metric == 'sum_abs_perc_error':
+            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
+        else:
+            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
+            error = self.calculate_sum_abs_error(y_test, y_pred)
+
+        return error, i
+
+    def perform_cbrt_transform(self, y):
+        return np.sign(y) * np.abs(y) ** (1/3)
 
     def calculate_sum_abs_error(self, y_true, y_pred):
         return  np.sum(np.abs(y_true - y_pred))
@@ -2058,64 +2156,37 @@ class LeaveOneOutCrossValidation:
     def calculate_sum_abs_perc_error(self, y_true, y_pred):
         return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
 
-    def loo_val(self, X, y, metric, i):
-        # Leave one out: create training and test sets
-        X_train = np.delete(X, i, axis=0)
-        y_train = np.delete(y, i, axis=0)
-        X_test = X[i].reshape(1, -1)  # Reshape for a single sample
-        y_test = y[i]
 
-        # How do I regenerate surrogate model with training/test subset?
-        # Fit the model on the training data
-        self.model.fit(X_train, y_train)
-
-        # Make a prediction for the left-out sample
-        y_pred = self._surrogate(X_test)
-        if self.scale == 'cbrt':
-            y_pred = cbrt(y_pred)
-            y_test = cbrt(y_test)
-        elif self.scale == 'log':
-            y_pred = np.log(y_pred)
-            y_test = np.log(y_test)
-
-        if metric == 'sum_abs_error':
-            error = self.calculate_sum_abs_error(y_test, y_pred)
-        elif metric == 'mape':
-            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
-        elif metric == 'mse':
-            error = self.calculate_mse(y_test, y_pred)
-        elif metric == 'rmse':
-            error = self.calculate_rmse(y_test, y_pred)
-        elif metric == 'sum_abs_perc_error':
-            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
-        else:
-            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
-            error = self.calculate_sum_abs_error(y_test, y_pred)
-
-        return error, i
-
-    def perform_loocv(self, X, y, indices, metric='sum_abs_error'):
-
-        """
-        Perform Leave-One-Out Cross-Validation.
-
-        Parameters:
-        X: np.ndarray
-            Feature matrix (training samples).
-        y: np.ndarray
-            Target values (ground truth).
-
-        Returns:
-        tuple: (index_of_max_error, max_error)
-            The index of the sample with the greatest prediction error and the corresponding error value.
-        """
-
-        from joblib import Parallel, delayed
-        loo_results = Parallel(n_jobs=-1)(
-            delayed(self.loo_val)(X, y, metric, i)
-            for i in indices
+class CrossValidationSurrogate:
+    def __init__(self, input_scaling=True, output_scaling=True):
+        self.input_scaling = input_scaling
+        self.normalize_y = output_scaling
+        
+    def _fit_cv_surrogate(self, X, y):
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+        
+        X = np.atleast_2d(X)
+        train_features = X
+        train_targets = y
+        self.nfeatures = X.shape[1]
+        if self.input_scaling:
+            self.input_scaler = StandardScaler()
+            train_features = self.input_scaler.fit_transform(X)
+        kernel = C(1.0, constant_value_bounds=(1e-3, 1e3))\
+            * RBF(np.ones(self.nfeatures), length_scale_bounds=(1e-3, 1e3))
+        self.surrogate = GaussianProcessRegressor(
+            kernel=kernel,
+            n_restarts_optimizer=50,
+            alpha=1e-8,
+            normalize_y=self.normalize_y
         )
-
-        loo = {loo_idx: result for loo_idx, result in enumerate(loo_results)}
-
-        return loo
+        self.surrogate.fit(train_features, train_targets)
+        
+    def _predict(self, X):
+        X = np.atleast_2d(X)
+        if self.input_scaling:
+            X = self.input_scaler.transform(X)
+            
+        return self.surrogate.predict(X)
