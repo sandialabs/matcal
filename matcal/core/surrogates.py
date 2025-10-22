@@ -117,7 +117,6 @@ class SurrogateGenerator:
         self._fields_to_log_scale = []
         self._train_score = OrderedDict()
         self._test_score = OrderedDict()
-        self._need_to_update_data = True
 
     def set_model_and_state(self, model_name=None, state=None):
         """
@@ -146,19 +145,13 @@ class SurrogateGenerator:
                                        "SurrogateGenerator.set_model_and_state", 
                                        "state")
             self._state = state
-        self._need_to_update_data = True
         
-    def _update_source_data(self, evaluation_information, interpolation_field, 
-                            interpolation_locations):
+    def _select_relavent_study_data(self, evaluation_information):
         parsed_eval_info = _parse_evaluation_info(evaluation_information, self._model_name)  
-        self._input_parameter_history, _sim_hist_data_collection = parsed_eval_info                                                          
-        training_data_history = _select_state_data(self._state, _sim_hist_data_collection)
-        
-        self._interpolation_locations = _process_interpolation_locations(training_data_history, 
-                                                                         interpolation_locations, 
-                                                                         interpolation_field)
-        self._training_data_history = training_data_history
-        self._need_to_update_data = False
+        input_parameter_history, _sim_hist_data_collection = parsed_eval_info                                                          
+        data_history = _select_state_data(self._state, _sim_hist_data_collection)
+        return data_history, input_parameter_history
+    
     def set_PCA_details(self, decomp_var=.99, reconstruction_error = None):
         """
         :param decomp_var: What level of the total variance should be accounted for in the PCA
@@ -207,7 +200,6 @@ class SurrogateGenerator:
         self._regressor_type = regressor_type
         self._regressor_kwargs = regressor_kwargs
         if (interpolation_locations is not None):
-            self._need_to_update_data = True
             self._interpolation_locations = interpolation_locations
 
     def set_fields_to_log_scale(self, *field_names):
@@ -257,18 +249,16 @@ class SurrogateGenerator:
         :rtype: :class:`~matcal.core.surrogates.MatCalPCASurrogateBase` 
         """
         check_value_is_nonempty_str(save_filename, "save_filename", "SurrogateGenerator.generate")
-        if self._need_to_update_data:
-            self._update_source_data(self._eval_info, self._interpolation_field, 
-                                     self._interpolation_locations)
-        self._training_data_history = _apply_preprocessing_function(preprocessing_function, 
-                                                                    self._training_data_history)
-
+        data_history, param_history, param_ranges = self._package_surrogate_generator_input_data(
+            preprocessing_function)
         fields_of_interest = _identify_fields_of_interest(self._training_data_history, 
                                                           self._interpolation_field)
-        source_dict = _process_training_data(self._training_data_history, fields_of_interest,
+        self._interpolation_locations = _process_interpolation_locations(data_history, 
+                                                                         self._interpolation_locations, 
+                                                                         self._interpolation_field)
+        source_dict = _process_training_data(data_history, fields_of_interest,
                                            self._interpolation_locations, self._interpolation_field)
-        param_fields = _import_parameter_hist(self._input_parameter_history)
-        param_ranges = _package_parameter_ranges(self._input_parameter_history)
+    
         support_information = {'parameter_ranges':param_ranges, 
                 "interpolation_field":self._interpolation_field,
                 'interpolation_locations':self._interpolation_locations, 
@@ -278,12 +268,19 @@ class SurrogateGenerator:
         logger.info(f'Generating and scoring {self._regressor_type} surrogates. '+
                     'The ideal score is 1.0.')
         surrogate_class = _surrogate_selection.identify(self._surrogate_type)
-        new_surrogate = surrogate_class.fit(param_fields, source_dict, self._fields_to_log_scale,
+        new_surrogate = surrogate_class.fit(param_history, source_dict, self._fields_to_log_scale,
                                             self._decomp_tool, support_information)
-        self._plot_worst_recreations(new_surrogate, param_fields, source_dict, 
+        self._plot_worst_recreations(new_surrogate, param_history, source_dict, 
                                      plot_n_worst, save_filename)
         return new_surrogate
-    
+
+    def _package_surrogate_generator_input_data(self, preprocessing_function):
+        data_history, input_parameter_history = self._select_relavent_study_data(self._eval_info)
+        data_history = _apply_preprocessing_function(preprocessing_function, data_history)
+        param_history = _import_parameter_hist(input_parameter_history)
+        param_ranges = _package_parameter_ranges(input_parameter_history)
+        return data_history, param_history, param_ranges
+        
     def _plot_worst_recreations(self, surrogate, parameters, source_data, n_worst, save_filename):
         if n_worst < 1:
             return
