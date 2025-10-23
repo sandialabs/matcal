@@ -101,7 +101,6 @@ class SurrogateGenerator:
         """
         self._interpolation_field = interpolation_field
         self._input_parameter_history = None
-        self._training_data_history = None
         self._interpolation_locations = interpolation_locations
         self._eval_info = evaluation_information
         self._model_name = None
@@ -144,7 +143,7 @@ class SurrogateGenerator:
                                        "state")
             self._state = state
         
-    def _select_relavent_study_data(self, evaluation_information):
+    def _select_relevant_study_data(self, evaluation_information):
         parsed_eval_info = _parse_evaluation_info(evaluation_information, self._model_name)  
         input_parameter_history, _sim_hist_data_collection = parsed_eval_info                                                          
         data_history = _select_state_data(self._state, _sim_hist_data_collection)
@@ -247,14 +246,14 @@ class SurrogateGenerator:
         :rtype: :class:`~matcal.core.surrogates.MatCalPCASurrogateBase` 
         """
         check_value_is_nonempty_str(save_filename, "save_filename", "SurrogateGenerator.generate")
-        data_history, param_history, param_ranges = self._package_surrogate_generator_input_data(
+        training_data_history, param_history, param_ranges = self._package_surrogate_generator_input_data(
             preprocessing_function)
-        fields_of_interest = _identify_fields_of_interest(self._training_data_history, 
+        fields_of_interest = _identify_fields_of_interest(training_data_history, 
                                                           self._interpolation_field)
-        self._interpolation_locations = _process_interpolation_locations(data_history, 
+        self._interpolation_locations = _process_interpolation_locations(training_data_history, 
                                                                          self._interpolation_locations, 
                                                                          self._interpolation_field)
-        source_dict = _process_training_data(data_history, fields_of_interest,
+        source_dict = _process_training_data(training_data_history, fields_of_interest,
                                            self._interpolation_locations, self._interpolation_field)
     
         support_information = {'parameter_ranges':param_ranges, 
@@ -273,7 +272,7 @@ class SurrogateGenerator:
         return new_surrogate
 
     def _package_surrogate_generator_input_data(self, preprocessing_function):
-        data_history, input_parameter_history = self._select_relavent_study_data(self._eval_info)
+        data_history, input_parameter_history = self._select_relevant_study_data(self._eval_info)
         data_history = _apply_preprocessing_function(preprocessing_function, data_history)
         param_history = _import_parameter_hist(input_parameter_history)
         param_ranges = _package_parameter_ranges(input_parameter_history)
@@ -649,46 +648,61 @@ def _get_data(source_dict, field):
     source_data = source_dict[field]
     return source_data
 
+
 def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_latent_data,
                         training_fraction, regressor_type, regressor_kwargs, regressor_init_func):
-    from sklearn.model_selection import train_test_split
     n_fold_validation = 1
-    _train_score = []
-    _test_score = []
+    train_score = []
+    test_score = []
     best_regressor = None
-    best_test_score = -1e4
+    best_test_score = 1e-4
+    
     for training_repeat in range(n_fold_validation):
-        data_split_results = train_test_split(scaled_parameters, 
-                                                scaled_latent_data, 
-                                                train_size=training_fraction)
-        param_train, param_test, data_train, data_test = data_split_results
+        param_train, param_test, data_train, data_test = _select_training_and_test_data(
+            scaled_parameters, scaled_latent_data,
+            training_fraction)
+        
         n_parameters = scaled_parameters.shape[1]
         regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
         data_train = _ensure_2d_array(data_train, 1)
         data_test = _ensure_2d_array(data_test, 1)
         regressor.fit(param_train, data_train)
-        _train_score.append(regressor.score(param_train, data_train))
+        train_score.append(regressor.score(param_train, data_train))
         new_test_scores = regressor.score(param_test, data_test)
         worst_new_test_score = np.min(new_test_scores)
         if worst_new_test_score > best_test_score:
             best_regressor = regressor
-        _test_score.append(new_test_scores)
-    if best_regressor == None:
+        test_score.append(new_test_scores)
+    if best_regressor is None:
         raise RuntimeError("Failed to train a regressor that performs well enough on test data.")
-
+    
     logger.info(f"    Training Complete: {training_fraction*100} % of data used for training")
-    logger.info(f"    Surrogate scores for {field} over {n_fold_validation} repeats:")
-    _train_score = _convert_instances_to_stats(_train_score, "Train")
-    _test_score = _convert_instances_to_stats(_test_score, "Test")
-    return regressor, _train_score, _test_score
+    logger.info(f"    Surrogate scores for {field}: ")
+    train_score = _convert_instances_to_stats(train_score, "Train")
+    test_score = _convert_instances_to_stats(test_score, "Test")
+    return regressor, train_score, test_score
+
+
+def _select_training_and_test_data(scaled_parameters, scaled_latent_data,
+                                   training_fraction):
+    from sklearn.model_selection import train_test_split
+    data_split_results = train_test_split(scaled_parameters, 
+                                            scaled_latent_data, 
+                                            train_size=training_fraction)
+    param_train, param_test, data_train, data_test = data_split_results
+    return param_train, param_test, data_train, data_test
 
 
 def _convert_instances_to_stats(scores, score_set_name):
     score_stats = OrderedDict()
     a_scores = np.array(scores)
-    score_stats['mean'] = np.mean(a_scores, axis = 0)
-    score_stats['max'] = np.max(a_scores, axis = 0)
-    score_stats['min'] = np.min(a_scores, axis = 0)
+    try:
+        score_stats['mean'] = np.mean(a_scores, axis = 0)
+        score_stats['max'] = np.max(a_scores, axis = 0)
+        score_stats['min'] = np.min(a_scores, axis = 0)
+    except:
+        import pdb
+        pdb.set_trace()
     
     score_message = f"\t{score_set_name}:\n"
     for name, value in score_stats.items():
