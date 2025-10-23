@@ -1333,7 +1333,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _perform_kfold_cross_validation(self):
         self._kf = None
         print("Performing kfold cross-validation...")
-        # passing self to KFCV for surrogate training, although not implemented, suspect it may be needed in the future
         kfcv = KFoldCrossValidation(self)
         groups = None
 
@@ -1419,6 +1418,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         """"""
         raise self.StudyInputError("Users cannot add parameter evaluations to a VoronoiAdaptiveSurrogateStudy.")
 
+
 class VoronoiTessellation:
     def __init__(self, points, bounds):
         """Initialize the VoronoiBatchSamplingStudy
@@ -1488,7 +1488,6 @@ class VoronoiTessellation:
         coords = np.meshgrid(*grid_pts)
         coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.ndim)]
         return np.vstack(tuple(coords_ravel)).T
-            
         
     def create_ghost_points(self, stretchCoef=1.75, centCoef=1.5):
         """Reflect points nearest to the boundary hull across the nearest
@@ -1545,7 +1544,6 @@ class VoronoiTessellation:
 
         elif not identify_outside_vertices:
             return self.vor.vertices[region]
-
 
     def get_voronoi_vertices(self, identify_outside_vertices=True):
         """Return the vertices of the Voronoi tessellation."""
@@ -1866,6 +1864,7 @@ class VoronoiTessellation:
             plt.plot(self.boundary_points[simplex, 0], self.boundary_points[simplex, 1], 'k-', lw=2)
         plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_viz.png")
         plt.close()
+
 
 class KFoldCrossValidation:
     def __init__(self):
