@@ -20,6 +20,7 @@ logger = initialize_matcal_logger(__name__)
 
 surrogate_restart_suffix = 'source_information'
 
+### WORKING on incorporationg test data###
 class _DoNothingDataTransformer:
     def inverse_transform(self, source_data):
         return source_data
@@ -57,7 +58,8 @@ class SurrogateGenerator:
     def __init__(self, evaluation_information, interpolation_field=None, 
                 interpolation_locations=200, 
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
-                regressor_type="Gaussian Process", **regressor_kwargs):
+                regressor_type="Gaussian Process", test_evaluation_information=None,
+                **regressor_kwargs):
         """
         :param evaluation_information: A container of the relevant 
             information to form a surrogate off of 
@@ -68,11 +70,11 @@ class SurrogateGenerator:
         :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`
 
         :param training_fraction: What fraction of the source data to use as training data. 
-            Value should be 0 < training_fraction < 1. 
+            Value should be 0 < training_fraction <= 1. If training_fraction == 1, test_evaluation_information
+            must be provided.
         :type training_fraction: float
 
-        :param interpolation_field: the field that will be t
-            he independent field for surrogate results.            
+        :param interpolation_field: the field that will be the independent field for surrogate results.            
         :type interpolation_field: str
 
         :interpolation_locations: the number of interpolation locations for the 
@@ -95,6 +97,12 @@ class SurrogateGenerator:
             uses the implementations of these tools from the sklearn library. 
         :type regressor_type: str
 
+        :param test_evaluation_information: A container of the relevant
+            information to test a surrogate off of a body of data generated
+            from a MatCal sampling study. This data is only used and must
+            be provided if training_fraction == 1.0.
+        :type test_evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        
         :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
             Please refer to the sklearn documentation for more information for what can be passed to 
             the predictors. 
@@ -103,6 +111,7 @@ class SurrogateGenerator:
         self._input_parameter_history = None
         self._interpolation_locations = interpolation_locations
         self._eval_info = evaluation_information
+        self._test_eval_info = test_evaluation_information
         self._model_name = None
         self._state = None
         self._training_fraction  = training_fraction
@@ -245,34 +254,54 @@ class SurrogateGenerator:
         :return: a callable surrogate
         :rtype: :class:`~matcal.core.surrogates.MatCalPCASurrogateBase` 
         """
+        test_source_dict = None
+        test_param_history = None
         check_value_is_nonempty_str(save_filename, "save_filename", "SurrogateGenerator.generate")
         training_data_history, param_history, param_ranges = self._package_surrogate_generator_input_data(
-            preprocessing_function)
+            preprocessing_function, self._eval_info)
         fields_of_interest = _identify_fields_of_interest(training_data_history, 
                                                           self._interpolation_field)
+        if self._training_fraction == 1.0:
+            self._check_test_evaluation_provided()
+            test_data_history, test_param_history, test_param_ranges = self._package_surrogate_generator_input_data(
+                preprocessing_function, self._test_eval_info)
+            test_fields_of_interest = _identify_fields_of_interest(test_data_history, 
+                                                            self._interpolation_field)
+            assert fields_of_interest == test_fields_of_interest
+             
         self._interpolation_locations = _process_interpolation_locations(training_data_history, 
                                                                          self._interpolation_locations, 
                                                                          self._interpolation_field)
         source_dict = _process_training_data(training_data_history, fields_of_interest,
                                            self._interpolation_locations, self._interpolation_field)
+        if self._training_fraction == 1.0:
+            test_source_dict = _process_training_data(test_data_history, test_fields_of_interest,
+                                               self._interpolation_locations, self._interpolation_field)
     
         support_information = {'parameter_ranges':param_ranges, 
                 "interpolation_field":self._interpolation_field,
                 'interpolation_locations':self._interpolation_locations, 
                 'training_fraction': self._training_fraction,
                 'regressor_type': self._regressor_type, 
-                'regressor_kwargs': self._regressor_kwargs, 'save_filename': save_filename}
+                'regressor_kwargs': self._regressor_kwargs,
+                'save_filename': save_filename}
         logger.info(f'Generating and scoring {self._regressor_type} surrogates. '+
                     'The ideal score is 1.0.')
         surrogate_class = _surrogate_selection.identify(self._surrogate_type)
         new_surrogate = surrogate_class.fit(param_history, source_dict, self._fields_to_log_scale,
-                                            self._decomp_tool, support_information)
+                                            self._decomp_tool, support_information,
+                                            test_parameter_fields=test_param_history,
+                                            test_source_history=test_source_dict)
         self._plot_worst_recreations(new_surrogate, param_history, source_dict, 
                                      plot_n_worst, save_filename)
         return new_surrogate
 
-    def _package_surrogate_generator_input_data(self, preprocessing_function):
-        data_history, input_parameter_history = self._select_relevant_study_data(self._eval_info)
+    def _check_test_evaluation_information_provided(self):
+        if self._test_eval_info is None:
+            raise ValueError("Test evaluations must be provided when training_fraction = 1.0.")
+        
+    def _package_surrogate_generator_input_data(self, preprocessing_function, eval_info):
+        data_history, input_parameter_history = self._select_relevant_study_data(eval_info)
         data_history = _apply_preprocessing_function(preprocessing_function, data_history)
         param_history = _import_parameter_hist(input_parameter_history)
         param_ranges = _package_parameter_ranges(input_parameter_history)
@@ -644,37 +673,47 @@ class MatCalSurrogateBase(ABC):
         self._load(surrogate_information) 
 
 
+def _get_decomp_results(source_history, field, make_log_scale, decomposition_tool):
+    source_data = _get_data(source_history, field)
+    decomp_results = decomposition_tool.generate(source_data, make_log_scale)
+    return decomp_results
+    
+def _scale_parameters(parameter_fields, fields_to_log_scale):
+    parameter_scaler_set = _make_parameter_scaler_set(parameter_fields, fields_to_log_scale)
+    scaled_parameters = parameter_scaler_set.transform_to_array(parameter_fields)
+    return parameter_scaler_set, scaled_parameters
+
+        
 def _get_data(source_dict, field):
     source_data = source_dict[field]
     return source_data
 
 
 def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_latent_data,
-                        training_fraction, regressor_type, regressor_kwargs, regressor_init_func):
-    n_fold_validation = 1
+                        training_fraction, regressor_type, regressor_kwargs, regressor_init_func,
+                        test_scaled_latent_data=None, test_scaled_parameters=None):
     train_score = []
     test_score = []
-    best_regressor = None
-    best_test_score = 1e-4
-    
-    for training_repeat in range(n_fold_validation):
+   
+    if training_fraction == 1.0:
+        param_train = scaled_parameters
+        param_test = test_scaled_parameters
+        data_train = scaled_latent_data
+        data_test = test_scaled_latent_data
+    else: 
         param_train, param_test, data_train, data_test = _select_training_and_test_data(
             scaled_parameters, scaled_latent_data,
             training_fraction)
-        
-        n_parameters = scaled_parameters.shape[1]
-        regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
-        data_train = _ensure_2d_array(data_train, 1)
-        data_test = _ensure_2d_array(data_test, 1)
-        regressor.fit(param_train, data_train)
-        train_score.append(regressor.score(param_train, data_train))
-        new_test_scores = regressor.score(param_test, data_test)
-        worst_new_test_score = np.min(new_test_scores)
-        if worst_new_test_score > best_test_score:
-            best_regressor = regressor
-        test_score.append(new_test_scores)
-    if best_regressor is None:
-        raise RuntimeError("Failed to train a regressor that performs well enough on test data.")
+   
+    import pdb
+    pdb.set_trace() 
+    n_parameters = scaled_parameters.shape[1]
+    regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
+    data_train = _ensure_2d_array(data_train, 1)
+    data_test = _ensure_2d_array(data_test, 1)
+    regressor.fit(param_train, data_train)
+    train_score.append(regressor.score(param_train, data_train))
+    test_score.append(regressor.score(param_test, data_test))
     
     logger.info(f"    Training Complete: {training_fraction*100} % of data used for training")
     logger.info(f"    Surrogate scores for {field}: ")
@@ -830,24 +869,32 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         return results
 
     def _fit(parameter_fields, source_history, fields_to_log_scale, decomposition_tool,
-             support_information, regressor_initializer, surrogate_class, load_key):
-        parameter_scaler_set = _make_parameter_scaler_set(parameter_fields, fields_to_log_scale)
-        scaled_parameters = parameter_scaler_set.transform_to_array(parameter_fields)
+             support_information, regressor_initializer, surrogate_class, load_key,
+             test_parameter_fields=None, test_source_history=None):
+        
+        parameter_scaler_set, scaled_parameters = _scale_parameters(parameter_fields, fields_to_log_scale)
+        if support_information['training_fraction'] == 1.0:
+            test_parameter_scaler_set, test_scaled_parameters = _scale_parameters(test_parameter_fields, fields_to_log_scale)
+        
         field_surrogate_tools = OrderedDict()
         train_scores = OrderedDict()
         test_scores = OrderedDict()
         for field in list(source_history.keys()):
             logger.info(f"\nGenerating Surrogate for {field}")
-            source_data = _get_data(source_history, field)
             make_log_scale = field in fields_to_log_scale
-            decomp_results = decomposition_tool.generate(source_data, make_log_scale)
+            decomp_results = _get_decomp_results(source_history, field, make_log_scale, decomposition_tool)
             data_scaler, decomposer, scaled_latent_data, latent_scaler = decomp_results
+            if support_information['training_fraction'] == 1.0:
+                test_decomp_results = _get_decomp_results(test_source_history, field,
+                                                          make_log_scale, decomposition_tool)
+                test_data_scaler, test_decomposer, test_scaled_latent_data, test_latent_scaler = test_decomp_results
             if not isinstance(decomposer, _DoNothingDataTransformer):
                 _record_variance_behaviors(decomposer, support_information['save_filename'], field)
             training_results = _train_parameter_to_pca_weight_regressor(scaled_parameters, 
                     field, scaled_latent_data, 
                     support_information['training_fraction'], support_information['regressor_type'],
-                    support_information['regressor_kwargs'], regressor_initializer)
+                    support_information['regressor_kwargs'], regressor_initializer,
+                    test_scaled_latent_data=None, test_scaled_parameters=None)
             regressor, train_scores[field], test_scores[field] = training_results
             packed_field_tools = [regressor, decomposer, data_scaler, latent_scaler]
             field_surrogate_tools[field] = packed_field_tools
@@ -894,11 +941,13 @@ class MatCalMonolithicPCASurrogate(MatCalPCASurrogateBase):
     name = "PCA Monolythic Regressor"
     
     def fit(parameter_history, source_history, fields_to_log_scale, decomposition_variance,
-            support_information):
+            support_information, test_parameter_fields=None, test_source_history=None):
         return MatCalPCASurrogateBase._fit(parameter_history, source_history, fields_to_log_scale, 
                                            decomposition_variance, support_information,
                                            _initialize_regressor, __class__, 
-                                           MatCalMonolithicPCASurrogate.name)
+                                           MatCalMonolithicPCASurrogate.name,
+                                           test_parameter_fields=test_parameter_fields,
+                                           test_source_history=test_source_history)
 
 
 class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
@@ -912,11 +961,13 @@ class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
     name = "PCA Multiple Regressors"
     
     def fit(parameter_history, source_history, fields_to_log_scale, decomposition_tool,
-            support_information):
+            support_information, test_parameter_fields=None, test_source_history=None):
         return MatCalPCASurrogateBase._fit(parameter_history, source_history, 
                                            fields_to_log_scale, decomposition_tool,
                                            support_information, _modal_regressor,
-                                           __class__, MatCalMultiModalPCASurrogate.name)
+                                           __class__, MatCalMultiModalPCASurrogate.name,
+                                           test_parameter_fields=test_parameter_fields,
+                                           test_source_history=test_source_history)
 
 
 _surrogate_selection = BasicIdentifier()
