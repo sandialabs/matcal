@@ -135,6 +135,7 @@ class ParameterStudy(StudyBase):
     def _study_specific_postprocessing(self):
         """"""
 
+
 class HaltonStudy(ParameterStudy):
     def __init__(self, *parameters, scramble=True, rng=None):
         """Initialize the HaltonStudy
@@ -146,9 +147,6 @@ class HaltonStudy(ParameterStudy):
             is created using entropy from the operating system.
         :type rng: int
         """
-        # optional: check that all parameters are continuous design or
-        # uniform uncertain
-
         super().__init__(*parameters)
         self.l_bounds = []
         self.u_bounds = []
@@ -251,6 +249,7 @@ class HaltonStudy(ParameterStudy):
     def add_parameter_evaluation(self, **parameters):
         """"""
         raise self.StudyInputError("Users cannot add parameter evaluations to a HaltonStudy.")
+
 
 class FiniteDifference:
 
