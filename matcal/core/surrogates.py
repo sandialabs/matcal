@@ -22,7 +22,6 @@ logger = initialize_matcal_logger(__name__)
 
 surrogate_restart_suffix = 'source_information'
 
-### WORKING on incorporationg test data###
 class _DoNothingDataTransformer:
     def inverse_transform(self, source_data):
         return source_data
@@ -160,7 +159,7 @@ class SurrogateGenerator:
         data_history = _select_state_data(self._state, _sim_hist_data_collection)
         return data_history, input_parameter_history
     
-    def set_PCA_details(self, decomp_var=.99, reconstruction_error = None):
+    def set_PCA_details(self, decomp_var=.99, reconstruction_error=None):
         """
         :param decomp_var: What level of the total variance should be accounted for in the PCA
             decomposition. Values closer to 1 will keep more modes than lower values. The more modes
@@ -292,7 +291,7 @@ class SurrogateGenerator:
         surrogate_class = _surrogate_selection.identify(self._surrogate_type)
         new_surrogate = surrogate_class.fit(param_history, source_dict, self._fields_to_log_scale,
                                             self._decomp_tool, support_information,
-                                            test_parameter_fields=test_param_history,
+                                            test_parameter_history=test_param_history,
                                             test_source_history=test_source_dict)
         self._plot_worst_recreations(new_surrogate, param_history, source_dict, 
                                      plot_n_worst, save_filename)
@@ -707,8 +706,6 @@ def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_la
             scaled_parameters, scaled_latent_data,
             training_fraction)
    
-    import pdb
-    pdb.set_trace() 
     n_parameters = scaled_parameters.shape[1]
     regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
     data_train = _ensure_2d_array(data_train, 1)
@@ -943,12 +940,12 @@ class MatCalMonolithicPCASurrogate(MatCalPCASurrogateBase):
     name = "PCA Monolythic Regressor"
     
     def fit(parameter_history, source_history, fields_to_log_scale, decomposition_variance,
-            support_information, test_parameter_fields=None, test_source_history=None):
+            support_information, test_parameter_history=None, test_source_history=None):
         return MatCalPCASurrogateBase._fit(parameter_history, source_history, fields_to_log_scale, 
                                            decomposition_variance, support_information,
                                            _initialize_regressor, __class__, 
                                            MatCalMonolithicPCASurrogate.name,
-                                           test_parameter_fields=test_parameter_fields,
+                                           test_parameter_fields=test_parameter_history,
                                            test_source_history=test_source_history)
 
 
@@ -963,12 +960,12 @@ class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
     name = "PCA Multiple Regressors"
     
     def fit(parameter_history, source_history, fields_to_log_scale, decomposition_tool,
-            support_information, test_parameter_fields=None, test_source_history=None):
+            support_information, test_parameter_history=None, test_source_history=None):
         return MatCalPCASurrogateBase._fit(parameter_history, source_history, 
                                            fields_to_log_scale, decomposition_tool,
                                            support_information, _modal_regressor,
                                            __class__, MatCalMultiModalPCASurrogate.name,
-                                           test_parameter_fields=test_parameter_fields,
+                                           test_parameter_fields=test_parameter_history,
                                            test_source_history=test_source_history)
 
 
