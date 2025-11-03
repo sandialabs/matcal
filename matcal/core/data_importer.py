@@ -263,6 +263,7 @@ class CSVDataImporter(DataImporterBase):
             nskip, state_dict = self.read_csv_header()
             nskip = self._skip_leading_comments(nskip)
             csv_options = self._create_import_options(nskip)
+            print(csv_options)
             data = np.genfromtxt(self._filename, **csv_options)
         except Exception as err:
             error_msg = f"Error occurred while reading data file {self._filename}:\n {repr(err)}"
@@ -340,7 +341,7 @@ class CSVDataImporter(DataImporterBase):
         return has_state_information
 
     def _process_value(self, value):
-        if isinstance(value, (float, int, np.double)):
+        if isinstance(value, (numbers.Real, numbers.Integral)):
             return float(value)
         elif isinstance(value, str) and value.isnumeric():
             return float(value)
@@ -392,8 +393,6 @@ def _mac_detect_dos(filename:str)->bool:
                 line = f.readline()
             except Exception:
                 pass
-        
-        
         new_lines = repr(f.newlines)
         has_dos = dos_newline in new_lines
     return has_dos
@@ -425,7 +424,8 @@ def _report_invalid_utc_lines(filename: str) ->str:
 
 class DOSFileError(RuntimeError):
     def __init__(self, filename: str):
-        message = f"{filename}: is a DOS file. Please convert it to a unix type file with a tool like dos2unix\n"
+        message = (f"{filename}: is a DOS file. Please convert it to"
+                   " numbers a unix type file with a tool like dos2unix\n")
         super().__init__(message)
 
 

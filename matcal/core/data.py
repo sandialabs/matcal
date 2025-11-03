@@ -1431,16 +1431,15 @@ def _create_array_from_dict(dict_data):
 
 def _determine_data_type(item, key):
     dtype=item.dtype
-   
-    if np.issubclass(item.dtype.type, numbers.Integral):
+    if np.issubclass(item.dtype.type, (numbers.Integral, numbers.Real)):
         dtype=float
     else:
         dtype=dtype
     if item.ndim <= 1:
-        dtype = (key, dtype)
-        return dtype
+        type_to_return = (key, dtype)
     else:
-        return (key, dtype, item.shape[1:])
+        type_to_return = (key, dtype, item.shape[1:])
+    return type_to_return
 
 
 class UnequalTimeDimensionSizeError(RuntimeError):
