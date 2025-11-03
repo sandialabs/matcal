@@ -1049,11 +1049,11 @@ class StudyResults:
         eval_key = self.get_eval_set_name(model, obj)
         obj_evals = self.objective_history[eval_key].objectives
         summed_state_objs = np.zeros(len(obj_evals))
-        for idx, eval in enumerate(obj_evals):
-            for state in eval:
-                for data in eval[state]:
-                    for field in data.field_names:
-                        summed_state_objs[idx] += data[field]
+        for evaluation_number, eval_data_collection in enumerate(obj_evals):
+            for state in eval_data_collection:
+                for objective_data in eval_data_collection[state]:
+                    for field in objective_data.field_names:
+                        summed_state_objs[evaluation_number] += objective_data[field][0]
         return summed_state_objs
 
     def get_objectives_for_model(self, model):
