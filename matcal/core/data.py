@@ -1425,7 +1425,7 @@ def _create_array_from_dict(dict_data):
             raise UnequalTimeDimensionSizeError(key)
         data_types.append(_determine_data_type(item, key))
         row_data.append(item)
-    converted_array = np.core.records.fromarrays(row_data, dtype=data_types)
+    converted_array = np.rec.array(row_data, dtype=data_types)
     return converted_array
 
 
