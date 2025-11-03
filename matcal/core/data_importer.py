@@ -123,8 +123,8 @@ class DataImporterBase(ABC):
             raise TypeError(self._get_uninterpretable_data_error_message(data, column))
 
     def _is_data_interpretable(self, data):
-        return (np.issubdtype(data.dtype, np.integer) or np.issubdtype(data.dtype, np.floating) or \
-                (data.dtype.kind in ["U", "S"] and self._import_strings))
+        return (self._is_number_subclass(data) or 
+               (data.dtype.kind in ["U", "S"] and self._import_strings))
 
     def _is_data_entry_interpretable(self, data_value):
         is_numeric = isinstance(data_value, numbers.Number)
@@ -134,9 +134,14 @@ class DataImporterBase(ABC):
         return is_numeric or is_numeric_string
 
     def _check_data_is_finite(self, data, column):
-        if np.issubdtype(data.dtype, np.integer) or np.issubdtype(data.dtype, np.floating):
+        if self._is_numbers_subclass(data):
             if not (np.isfinite(data).all() == True):
                 raise TypeError(self._get_nonfinte_data_error_message(data, column))
+
+    def _is_number_subclass(data):
+        import numbers
+        return (np.issubclass(data.dtype.type, numbers.Integral) or 
+                np.issubclass(data.dtype.type, numbers.Real))
 
     def _drop_NaNs_from_data(self, data):
         NaN_rows_to_drop = []
