@@ -134,14 +134,14 @@ class DataImporterBase(ABC):
         return is_numeric or is_numeric_string
 
     def _check_data_is_finite(self, data, column):
-        if self._is_numbers_subclass(data):
+        if self._is_number_subclass(data):
             if not (np.isfinite(data).all() == True):
                 raise TypeError(self._get_nonfinte_data_error_message(data, column))
 
-    def _is_number_subclass(data):
+    def _is_number_subclass(self, data):
         import numbers
-        return (np.issubclass(data.dtype.type, numbers.Integral) or 
-                np.issubclass(data.dtype.type, numbers.Real))
+        return (issubclass(data.dtype.type, numbers.Integral) or 
+                issubclass(data.dtype.type, numbers.Real))
 
     def _drop_NaNs_from_data(self, data):
         NaN_rows_to_drop = []

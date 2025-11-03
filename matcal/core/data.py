@@ -1431,7 +1431,7 @@ def _create_array_from_dict(dict_data):
 
 def _determine_data_type(item, key):
     dtype=item.dtype
-    if np.issubclass(item.dtype.type, (numbers.Integral, numbers.Real)):
+    if issubclass(item.dtype.type, (numbers.Integral, numbers.Real)):
         dtype=float
     else:
         dtype=dtype
