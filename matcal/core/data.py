@@ -82,8 +82,8 @@ class Data(np.ndarray):
         self._id_number = getattr(obj, '_id_number', None)
         self._name = getattr(obj, '_name', None)
 
-    def __array_wrap__(self, out_array, context=None):
-        return np.ndarray.__array_wrap__(self, out_array, context)
+    def __array_wrap__(self, out_array, context=None, return_scalar=False):
+        return np.ndarray.__array_wrap__(self, out_array, context, return_scalar)
 
     def set_state(self, state):
         """
