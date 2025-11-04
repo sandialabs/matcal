@@ -13,7 +13,6 @@ import os, gc
 
 
 def my_function(**param_dict):
-    import numpy as np
     x = np.linspace(0, 10, 25)
     y = param_dict['m'] * x
     return {"x": x, "y": y}

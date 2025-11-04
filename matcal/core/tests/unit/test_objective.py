@@ -101,7 +101,6 @@ class MetricFunctionTest(MatcalUnitTest):
 
 
 def user_weight_func(indep_var, dep_avr, resids):
-    import numpy as np
     weights = indep_var*0+1
     return resids*weights
 

@@ -3,7 +3,6 @@ The data module contains classes and functions for converting
 data into the structure that MatCal requires for studies.
 """
 
-from matcal.core.utilities import _time_interpolate
 from matcal.core.serializer_wrapper import _format_serial
 import numpy as np
 from itertools import count

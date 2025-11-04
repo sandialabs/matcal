@@ -8,14 +8,12 @@ from matcal.core.calibration_studies import (ScipyMinimizeStudy,
 
 
 def python_model_1(param_1, param_2, state_param_1, state_param_2):
-    import numpy as np
     x = np.linspace(0, 1, 100)
     response = param_1*state_param_2+param_2*x*x+state_param_1
     return {'x':x, 'response':response}
 
 
 def python_model_2(param_1, param_2, state_param_1, state_param_2):
-    import numpy as np
     x = np.linspace(0, 1, 100)
     response = param_1*state_param_1*x*x+param_2*x+state_param_2
     return {'x':x, 'response':response}

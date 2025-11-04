@@ -17,6 +17,19 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest, is_mac
 TEST_RERERENCE_DIR = os.path.join(os.path.dirname(__file__), 
                                   "test_reference", "data_importer")
 
+TEST_RERERENCE_DIR = os.path.join(
+    os.path.dirname(__file__), "test_reference", "data_importer"
+)
+
+default_csv_file = os.path.join(TEST_RERERENCE_DIR, "default.csv")
+headerless_csv_file = os.path.join(TEST_RERERENCE_DIR, "headerless.csv")
+state_header_csv_file = os.path.join(TEST_RERERENCE_DIR, "state_header.csv")
+example_state = State("example")
+csv_batch_pattern = os.path.join(TEST_RERERENCE_DIR, "exp_data_[0-3].csv")
+csv_batch = glob.glob(csv_batch_pattern)
+dashed_header_file = os.path.join(TEST_RERERENCE_DIR, "data_with_dashes.csv")
+
+
 def read_csv(filename, header=None):
     with open(filename, 'r') as csvfile:
 
@@ -95,6 +108,8 @@ class CSVDataImporterTest(MatcalUnitTest):
 
         with self.assertRaises(TypeError):
             d_test = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "non_interpretable_data.csv"))
+            kwargs = {'skip_header': 0, 'delimiter': ',', 'names': True, 'dtype': None, 'encoding': None, 'excludelist': None, 'autostrip': True, 'deletechars': '', 'comments': '#'}
+            np.genfromtxt(os.path.join(TEST_RERERENCE_DIR, "non_interpretable_data.csv"), **kwargs)
             d_test.load()
 
     def test_drop_NaNs(self):
@@ -266,7 +281,19 @@ class CSVDataImporterTest(MatcalUnitTest):
         with self.assertRaises(InvalidCharacterError):
             data = data_importer.load()
 
-    
+
+def test_read_strings():
+    # strings
+    p1 = os.path.join(TEST_RERERENCE_DIR, "str_test.csv")
+    data1 = CSVDataImporter(p1, import_strings=True).load()
+    assert "e" in data1["load"]
+
+    # characters
+    p2 = os.path.join(TEST_RERERENCE_DIR, "char_test.csv")
+    data2 = CSVDataImporter(p2, import_strings=True).load()
+    assert "&" in data2["load"]
+
+
 class FileEncodingTest(MatcalUnitTest):
 
     def setUp(self):

@@ -12,6 +12,14 @@ from matcal.core.parameter_studies import ParameterStudy
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
+def model(a,b):
+    x = np.linspace(0,1,10)
+
+    y = x**a+b
+    z = a**x+b
+    return {"x":x, "y":y, "z":z}
+
+
 class TestMakeStandardPlots(MatcalUnitTest):
 
     def setUp(self):
@@ -21,13 +29,6 @@ class TestMakeStandardPlots(MatcalUnitTest):
         x = np.linspace(0,1,10)
         data_dict = {"x":x, "y":x**2+1, "z":2.1**x + .9}
         data = convert_dictionary_to_data(data_dict)
-        def model(a,b):
-            import numpy as np
-            x = np.linspace(0,1,10)
-
-            y = x**a+b
-            z = a**x+b
-            return {"x":x, "y":y, "z":z}
 
         pymodel = PythonModel(model)
 
@@ -54,13 +55,6 @@ class TestMakeStandardPlots(MatcalUnitTest):
         x = np.linspace(0,1,10)
         data_dict = {"x":x, "y":x**2+1, "z":2.1**x + .9}
         data = convert_dictionary_to_data(data_dict)
-        def model(a,b):
-            import numpy as np
-            x = np.linspace(0,1,10)
-
-            y = x**a+b
-            z = a**x+b
-            return {"x":x, "y":y, "z":z}
 
         pymodel = PythonModel(model)
 
@@ -84,14 +78,6 @@ class TestMakeStandardPlots(MatcalUnitTest):
         x = np.linspace(0,1,10)
         data_dict = {"x":x, "y":x**2+1, "z":2.1**x + .9}
         data = convert_dictionary_to_data(data_dict)
-        def model(a,b):
-            import numpy as np
-            x = np.linspace(0,1,10)
-
-            y = x**a+b
-            z = a**x+b
-            return {"x":x, "y":y, "z":z}
-
         pymodel = PythonModel(model)
 
         param_a = Parameter("a",0, 4, 1)
