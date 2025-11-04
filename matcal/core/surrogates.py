@@ -723,7 +723,7 @@ class _modal_regressor:
             raise ValueError(err_msg)
         self._initialize_regressors(n_inputs, n_modes)
         for mode_idx, regressor in enumerate(self._mode_regressors):
-            regressor.fit(input_values, mode_values[:, mode_idx])
+            regressor.fit(input_values, np.atleast2d(mode_values[:, mode_idx]))
     
     @property
     def num_modes(self):

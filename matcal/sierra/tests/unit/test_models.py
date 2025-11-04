@@ -817,7 +817,6 @@ class MatcalThreeDimensionalStandardModelUnitTestNewBase:
             self.assertTrue(ff_output.has_global_output(self._load_var))
             self.assertTrue(ff_output.has_global_output(self._displacement_var))
             self.assertTrue(ff_output.has_global_output("time"))
-            return ff_output
 
         def test_outputs_added_adiabatic(self):
             model = self.init_model()
@@ -962,7 +961,12 @@ class UniaxialTensionStandardModelUnitTestBase:
             self.assertTrue(hb_output.has_global_output("z_contraction"))
 
         def test_derived_outputs_added_full_field(self):
-            ff_output = super().test_common_outputs_added_full_field()
+            model = self.init_model()
+            data = convert_dictionary_to_data({self._displacement_var:[0,1]})
+            model.add_boundary_condition_data(data)
+            model.activate_full_field_data_output(0.1, 0.1)
+            model._setup_state(SolitaryState(), build_mesh=False)
+            ff_output = model._input_file._full_field_output            
             self.assertTrue(ff_output.has_global_output("engineering_strain"))
             self.assertTrue(ff_output.has_global_output("engineering_stress"))
             self.assertTrue(ff_output.has_global_output("x_contraction"))
