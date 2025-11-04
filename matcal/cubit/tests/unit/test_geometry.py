@@ -34,6 +34,9 @@ class TestUniaxialTensionLoadingGeometry(abc.ABC):
     def _geometry_class(self):
         """"""
 
+    def __init__():
+        pass
+    
     class CommonTests(MatcalUnitTest):
     
         def test_uniaxial_tension_extensometer_vs_gauge_length(self):
