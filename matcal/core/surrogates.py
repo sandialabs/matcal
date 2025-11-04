@@ -5,6 +5,8 @@ from numbers import Integral, Real
 import numpy as np
 from typing import Callable
 
+from sklearn.base import BaseEstimator
+
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.data_importer import FileData
 from matcal.core.logger import initialize_matcal_logger
@@ -1006,7 +1008,7 @@ def _identify_fields_of_interest(sim_list,  indep_field):
     return field_of_interest
 
 
-class _MatCalLogScaler:
+class _MatCalLogScaler(BaseEstimator):
     
     def __init__(self):
         self._offset = None
@@ -1029,7 +1031,6 @@ class _MatCalLogScaler:
         self._check_data(trans_data)
         return np.power(10, trans_data) + self._offset - self._lower_limit
     
-
     def _check_data(self, data):
         if not isinstance(data, np.ndarray):
             raise TypeError("Passed data must be of type np.ndarray")
