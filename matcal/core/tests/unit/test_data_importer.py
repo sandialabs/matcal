@@ -14,20 +14,8 @@ from matcal.core.state import State, SolitaryState
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest, is_mac
 
 
-TEST_RERERENCE_DIR = os.path.join(os.path.dirname(__file__), 
+TEST_REFERENCE_DIR = os.path.join(os.path.dirname(__file__), 
                                   "test_reference", "data_importer")
-
-TEST_RERERENCE_DIR = os.path.join(
-    os.path.dirname(__file__), "test_reference", "data_importer"
-)
-
-default_csv_file = os.path.join(TEST_RERERENCE_DIR, "default.csv")
-headerless_csv_file = os.path.join(TEST_RERERENCE_DIR, "headerless.csv")
-state_header_csv_file = os.path.join(TEST_RERERENCE_DIR, "state_header.csv")
-example_state = State("example")
-csv_batch_pattern = os.path.join(TEST_RERERENCE_DIR, "exp_data_[0-3].csv")
-csv_batch = glob.glob(csv_batch_pattern)
-dashed_header_file = os.path.join(TEST_RERERENCE_DIR, "data_with_dashes.csv")
 
 
 def read_csv(filename, header=None):
@@ -62,14 +50,14 @@ class CSVDataImporterTest(MatcalUnitTest):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.default_csv_file = os.path.join(TEST_RERERENCE_DIR, "default.csv")
-        cls.headerless_csv_file = os.path.join(TEST_RERERENCE_DIR, "headerless.csv")
-        cls.state_header_csv_file = os.path.join(TEST_RERERENCE_DIR, "state_header.csv")
+        cls.default_csv_file = os.path.join(TEST_REFERENCE_DIR, "default.csv")
+        cls.headerless_csv_file = os.path.join(TEST_REFERENCE_DIR, "headerless.csv")
+        cls.state_header_csv_file = os.path.join(TEST_REFERENCE_DIR, "state_header.csv")
         cls.example_state = State("example")
-        cls.csv_batch_pattern = os.path.join(TEST_RERERENCE_DIR, "exp_data_[0-3].csv")
+        cls.csv_batch_pattern = os.path.join(TEST_REFERENCE_DIR, "exp_data_[0-3].csv")
         
         cls.csv_batch = glob.glob(cls.csv_batch_pattern)
-        cls.dashed_header_file = os.path.join(TEST_RERERENCE_DIR, "data_with_dashes.csv")
+        cls.dashed_header_file = os.path.join(TEST_REFERENCE_DIR, "data_with_dashes.csv")
 
     def test_non_existent_file_will_throw_file_not_found_error(self):
         with self.assertRaises(FileNotFoundError):
@@ -90,38 +78,37 @@ class CSVDataImporterTest(MatcalUnitTest):
 
     def test_non_interpretable_file_will_throw_data_format_error(self):
         with self.assertRaises(TypeError):
-            d_nan = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "nan_test.csv"), 
+            d_nan = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "nan_test.csv"), 
                                 import_strings=True)
             d_nan.load()
 
         with self.assertRaises(TypeError):
-            d_inf = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "inf_test.csv"))
+            d_inf = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "inf_test.csv"))
             d_inf.load()
 
         with self.assertRaises(TypeError):
-            d_str = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "str_test.csv"))
+            d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "str_test.csv"))
             d_str.load()
 
+
         with self.assertRaises(TypeError):
-            d_char = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "char_test.csv"))
+            d_char = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "char_test.csv"))
             d_char.load()
 
         with self.assertRaises(TypeError):
-            d_test = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "non_interpretable_data.csv"))
-            kwargs = {'skip_header': 0, 'delimiter': ',', 'names': True, 'dtype': None, 'encoding': None, 'excludelist': None, 'autostrip': True, 'deletechars': '', 'comments': '#'}
-            np.genfromtxt(os.path.join(TEST_RERERENCE_DIR, "non_interpretable_data.csv"), **kwargs)
+            d_test = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "non_interpretable_data.csv"))
             d_test.load()
 
     def test_drop_NaNs(self):
         with self.assertRaises(TypeError):
-            d_str = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "data_with_nans_infs.csv"))
+            d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"))
             data = d_str.load()
 
-        d_str = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "data_with_nans_infs.csv"),
+        d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"),
                                  drop_NaNs=True)
         data = d_str.load()
 
-        data_gold = np.genfromtxt(os.path.join(TEST_RERERENCE_DIR, "data_with_nans_infs.csv")
+        data_gold = np.genfromtxt(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv")
                                   , skip_header=1, delimiter=",")
         data_gold = data_gold[np.isfinite(data_gold).all(axis=1), :]
  
@@ -129,12 +116,14 @@ class CSVDataImporterTest(MatcalUnitTest):
         self.assert_close_arrays(data_gold[:,1], data["displacement"])
         
     def test_read_strings(self):
-        d_str = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "str_test.csv"), 
+        d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "str_test.csv"), 
                                 import_strings=True)
         data = d_str.load()
         self.assertTrue("e" in data["load"])
 
-        d_char = CSVDataImporter(os.path.join(TEST_RERERENCE_DIR, "char_test.csv"),
+        #The below should work with ints in the char column, but does not. Waiting for 
+        # NumPy to chime in on the ticket.
+        d_char = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "char_test.csv"),
                                  import_strings=True)
         data = d_char.load()
         self.assertTrue("&" in data["load"])
@@ -250,7 +239,7 @@ class CSVDataImporterTest(MatcalUnitTest):
             self.assertTrue("P2" in state.params)
 
     def test_batch_loader_error(self):
-        pattern = os.path.join(TEST_RERERENCE_DIR, "exp_data_*.csv")
+        pattern = os.path.join(TEST_REFERENCE_DIR, "exp_data_*.csv")
         B = BatchDataImporter(pattern).batch
 
     def test_equal(self):
@@ -270,28 +259,16 @@ class CSVDataImporterTest(MatcalUnitTest):
         self.assertListEqual(list(data['F']), [21, 42, 63, 84])
 
     def test_csv_dos_import_raise_DOSFileError(self):
-        dos_file = os.path.join(TEST_RERERENCE_DIR, "tga_pmdi_dos.csv")
+        dos_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_dos.csv")
         data_importer = CSVDataImporter(dos_file)
         with self.assertRaises(DOSFileError):
             data = data_importer.load()
         
     def test_csv_has_unsupported_character_raise_InvalidCharacterError(self):
-        converted_file = os.path.join(TEST_RERERENCE_DIR, "tga_pmdi_converted.csv")
+        converted_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_converted.csv")
         data_importer = CSVDataImporter(converted_file)
         with self.assertRaises(InvalidCharacterError):
             data = data_importer.load()
-
-
-def test_read_strings():
-    # strings
-    p1 = os.path.join(TEST_RERERENCE_DIR, "str_test.csv")
-    data1 = CSVDataImporter(p1, import_strings=True).load()
-    assert "e" in data1["load"]
-
-    # characters
-    p2 = os.path.join(TEST_RERERENCE_DIR, "char_test.csv")
-    data2 = CSVDataImporter(p2, import_strings=True).load()
-    assert "&" in data2["load"]
 
 
 class FileEncodingTest(MatcalUnitTest):
@@ -301,31 +278,31 @@ class FileEncodingTest(MatcalUnitTest):
 
     @unittest.skipIf(is_mac(), "mac defaults do not work for this")
     def test_return_dos_report(self):
-        dos_file = os.path.join(TEST_RERERENCE_DIR, "tga_pmdi_dos.csv")
+        dos_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_dos.csv")
         goal = ["ISO-8859 text, with CRLF line terminators", "CSV text"]     
         self.assertTrue(_get_unix_file_report(dos_file) in goal)
 
     @unittest.skipIf(is_mac(), "mac defaults do not work for this")
     def test_return_converted_dos_report(self):
-        converted_file = os.path.join(TEST_RERERENCE_DIR, "tga_pmdi_converted.csv")
+        converted_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_converted.csv")
         goal = ["ISO-8859 text", "CSV text"]     
         self.assertTrue(_get_unix_file_report(converted_file) in goal)
 
     @unittest.skipIf(is_mac(), "mac defaults do not work for this")
     def test_return_converted_and_cleaned_dos_report(self):
-        unix_file = os.path.join(TEST_RERERENCE_DIR, "tga_pmdi_unix.csv")
+        unix_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_unix.csv")
         goal = ["ASCII text", "CSV text"]     
         self.assertTrue(_get_unix_file_report(unix_file) in goal)
     
     @unittest.skipIf(is_mac(), "mac defaults do not work for this")
     def test_return_ascii_report(self):
-        ascii_file = os.path.join(TEST_RERERENCE_DIR, "x_array.csv")
+        ascii_file = os.path.join(TEST_REFERENCE_DIR, "x_array.csv")
         goal = "ASCII text"        
         self.assertEqual(_get_unix_file_report(ascii_file), goal)
 
     @unittest.skipIf(is_mac(), "mac defaults do not work for this")
     def test_has_invalid_utc_characters_returns_string(self):
-        converted_file = os.path.join(TEST_RERERENCE_DIR, "tga_pmdi_converted.csv")
+        converted_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_converted.csv")
         goal = '2 min,\xb0C,%,%/min\n'       
         self.assertEqual(_report_invalid_utc_lines(converted_file), goal)
 
@@ -367,11 +344,11 @@ class DataImporterFactoryTest(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
-        self.default_csv_file = os.path.join(TEST_RERERENCE_DIR, "default.csv")
+        self.default_csv_file = os.path.join(TEST_REFERENCE_DIR, "default.csv")
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.state_header_csv_file_user_ext = os.path.join(TEST_RERERENCE_DIR, 
+        cls.state_header_csv_file_user_ext = os.path.join(TEST_REFERENCE_DIR, 
                                                           "state_header.user_ext")
         cls.example_state = State("example")
 
@@ -419,12 +396,12 @@ class DataImporterFactoryTest(MatcalUnitTest):
 
     def test_drop_NaNs(self):
         with self.assertRaises(TypeError):
-            data = FileData(os.path.join(TEST_RERERENCE_DIR, "data_with_nans_infs.csv"))
+            data = FileData(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"))
 
-        data = FileData(os.path.join(TEST_RERERENCE_DIR, "data_with_nans_infs.csv"),
+        data = FileData(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"),
                          drop_NaNs=True)
 
-        data_gold = np.genfromtxt(os.path.join(TEST_RERERENCE_DIR, "data_with_nans_infs.csv"),
+        data_gold = np.genfromtxt(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"),
                                    skip_header=1, delimiter=",")
         data_gold = data_gold[np.isfinite(data_gold).all(axis=1), :]
  
@@ -435,10 +412,10 @@ class DataImporterFactoryTest(MatcalUnitTest):
 class TestCSVFileData(MatcalUnitTest):
     def setUp(self) -> None:
         super().setUp(__file__)
-        self._field_data_snapshot_file = os.path.join(TEST_RERERENCE_DIR, 
+        self._field_data_snapshot_file = os.path.join(TEST_REFERENCE_DIR, 
                                                       "17_A-4B_pull-sys1-0000_0.csv")
         self.field_data = FileData(self._field_data_snapshot_file)
-        self.ref_data_file = os.path.join(TEST_RERERENCE_DIR, "x_csv_array.csv")
+        self.ref_data_file = os.path.join(TEST_REFERENCE_DIR, "x_csv_array.csv")
         self.ref_data = read_csv(self.ref_data_file, ["X"])
 
     def test_get_data_dataframe(self):
@@ -462,30 +439,30 @@ class TestCSVFileData(MatcalUnitTest):
         self.assert_close_arrays(x_array, ref_x_array)
 
     def test_skip_commented_tail_line(self):
-        filename = os.path.join(TEST_RERERENCE_DIR, "comment_trailing.csv")
+        filename = os.path.join(TEST_REFERENCE_DIR, "comment_trailing.csv")
         self._confirm_matching_data(filename)
 
     def test_skip_commented_header_and_tail_line(self):
-        filename = os.path.join(TEST_RERERENCE_DIR, "comment_header_and_tail.csv")
+        filename = os.path.join(TEST_REFERENCE_DIR, "comment_header_and_tail.csv")
         self._confirm_matching_data(filename)
 
     def test_skip_commented_middle_line(self):
-        filename = os.path.join(TEST_RERERENCE_DIR, "comment_middle.csv")
+        filename = os.path.join(TEST_REFERENCE_DIR, "comment_middle.csv")
         self._confirm_matching_data(filename)
 
     def test_skip_commented_header_line(self):
-        filename = os.path.join(TEST_RERERENCE_DIR, "comment_header.csv")
+        filename = os.path.join(TEST_REFERENCE_DIR, "comment_header.csv")
         self._confirm_matching_data(filename)
 
     def test_skip_commented_header_line_with_state(self):
-        filename = os.path.join(TEST_RERERENCE_DIR, "comment_header_with_state.csv")
+        filename = os.path.join(TEST_REFERENCE_DIR, "comment_header_with_state.csv")
         data = self._confirm_matching_data(filename)
         state_params = data.state.params
         state_gold = {"state_param_1":1, "state_param_2":"state_string"}
         self.assertEqual(state_params, state_gold)
 
     def test_skip_commented_disperesed_with_state(self):
-        filename = os.path.join(TEST_RERERENCE_DIR, "comments_dispersed_with_state.csv")
+        filename = os.path.join(TEST_REFERENCE_DIR, "comments_dispersed_with_state.csv")
         data = self._confirm_matching_data(filename)
         state_params = data.state.params
         state_gold = {"state_param_1":"state_string1", "state_param_2":1, 
@@ -506,7 +483,7 @@ class TestCSVFileData(MatcalUnitTest):
 class TestMatlabFileDataMatV7(MatcalUnitTest):
     def setUp(self) -> None:
         super().setUp(__file__)
-        self._dic_snapshot_file = os.path.join(TEST_RERERENCE_DIR, "simple_2D_dic.mat")
+        self._dic_snapshot_file = os.path.join(TEST_REFERENCE_DIR, "simple_2D_dic.mat")
         self.dic_data = FileData(self._dic_snapshot_file)
 
     def test_get_data_dataframe(self):
