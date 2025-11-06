@@ -68,17 +68,6 @@ class ExodusFieldDataSeriesImporter(FieldDataParserBase):
         exodus_offset = 1
         return _extract_exodus_surfaces(self._exodus_handle, exodus_offset)
 
-    def get_values_for_all_time(self, block_index, field_name):
-        number_of_elements = self._get_number_of_elements(block_index, field_name)
-        values = np.zeros([number_of_elements, self._number_of_frames])
-        for i in range(self._number_of_frames):
-            time_index = i + 1
-            block_value = self._exodus_handle.get_element_variable_values(block_index, 
-                                                                          field_name, time_index)
-            values[:, i] = block_value
-
-        return np.array(values)
-
     def get_all_element_values_for_all_time(self, block_index, field_name):
         number_of_elements = self._get_number_of_elements(block_index, field_name)
         values = np.zeros([number_of_elements, self._number_of_frames])

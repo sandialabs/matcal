@@ -3,9 +3,9 @@ from collections import OrderedDict
 from glob import glob
 from numbers import Integral, Real
 import numpy as np
+from sklearn.base import BaseEstimator
 from typing import Callable
 
-from sklearn.base import BaseEstimator
 
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.data_importer import FileData
