@@ -1,17 +1,15 @@
 import argparse
-from matcal.core.data import convert_dictionary_to_data
-from matcal.core.data_importer import FileData
 import numpy as np
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
-from bokeh.models import ColumnDataSource, Slider, MultiSelect, FileInput, Toggle, CustomJS, Div
+from bokeh.models import ColumnDataSource, Slider, MultiSelect, FileInput, Toggle, Div
 from bokeh.plotting import figure
 from base64 import b64decode
 import pandas as pd
 import io
 
 from matcal.core.serializer_wrapper import matcal_load   
-from matcal.core.surrogates import MatCalMonolithicPCASurrogate, load_matcal_surrogate
+from matcal.core.surrogates import load_matcal_surrogate
 
 COLUMN_WIDTH=600
 

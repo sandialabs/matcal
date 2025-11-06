@@ -538,7 +538,12 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         # prediction error should be less with more Halton samples
         self.assertGreater(pred_error, new_pred_error)
     
-         
+
+def model_linear(a):
+    disp = np.linspace(0,1, 10)
+    load = a*disp
+    return {"displacement":disp, "load":load}
+
 class TestLaplaceStudy(StudyBaseUnitTests.CommonTests):
 
     _study_class = LaplaceStudy
@@ -614,12 +619,7 @@ class TestLaplaceStudy(StudyBaseUnitTests.CommonTests):
         
         study = self._study_class(self.parameter_collection)
 
-        def model(a):
-            import numpy as np
-            disp = np.linspace(0,1, 10)
-            load = a*disp
-            return {"displacement":disp, "load":load}
-        py_mod = PythonModel(model)
+        py_mod = PythonModel(model_linear)
         py_mod.set_name("py_mod")
         obj1 = Objective("x")
 

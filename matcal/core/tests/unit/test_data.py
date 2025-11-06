@@ -762,7 +762,7 @@ class TestDictionaryToData(MatcalUnitTest):
         data_type = _determine_data_type(data, key)
         self.assertEqual(len(data_type), 2)
         self.assertEqual(data_type[0], key)
-        self.assertEqual(data_type[1], 'float')
+        self.assertEqual(data_type[1], float)
 
     def test_determine_data_type_2d_returns_touple_w_size(self):
         n = 5
@@ -772,7 +772,7 @@ class TestDictionaryToData(MatcalUnitTest):
         data_type = _determine_data_type(data, key)
         self.assertEqual(len(data_type), 3)
         self.assertEqual(data_type[0], key)
-        self.assertEqual(data_type[1], 'float')
+        self.assertEqual(data_type[1], float)
         self.assertEqual(data_type[2], (m,))
 
     def test_converting_to_dict_then_to_data(self):

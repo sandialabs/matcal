@@ -123,8 +123,8 @@ class DataImporterBase(ABC):
             raise TypeError(self._get_uninterpretable_data_error_message(data, column))
 
     def _is_data_interpretable(self, data):
-        return (np.issubdtype(data.dtype, np.integer) or np.issubdtype(data.dtype, np.floating) or \
-                (data.dtype.kind in ["U", "S"] and self._import_strings))
+        return (self._is_number_subclass(data) or 
+               (data.dtype.kind in ["U", "S"] and self._import_strings))
 
     def _is_data_entry_interpretable(self, data_value):
         is_numeric = isinstance(data_value, numbers.Number)
@@ -134,9 +134,14 @@ class DataImporterBase(ABC):
         return is_numeric or is_numeric_string
 
     def _check_data_is_finite(self, data, column):
-        if np.issubdtype(data.dtype, np.integer) or np.issubdtype(data.dtype, np.floating):
+        if self._is_number_subclass(data):
             if not (np.isfinite(data).all() == True):
                 raise TypeError(self._get_nonfinte_data_error_message(data, column))
+
+    def _is_number_subclass(self, data):
+        import numbers
+        return (issubclass(data.dtype.type, numbers.Integral) or 
+                issubclass(data.dtype.type, numbers.Real))
 
     def _drop_NaNs_from_data(self, data):
         NaN_rows_to_drop = []
@@ -260,7 +265,8 @@ class CSVDataImporter(DataImporterBase):
             csv_options = self._create_import_options(nskip)
             data = np.genfromtxt(self._filename, **csv_options)
         except Exception as err:
-            raise err("Error occurred while reading data file {}\n {}".format(self._filename, err))       
+            error_msg = f"Error occurred while reading data file {self._filename}:\n {repr(err)}"
+            raise RuntimeError(error_msg)       
         return data, state_dict
 
     def _create_import_options(self, nskip):
@@ -334,7 +340,7 @@ class CSVDataImporter(DataImporterBase):
         return has_state_information
 
     def _process_value(self, value):
-        if isinstance(value, (float, int, np.double)):
+        if isinstance(value, (numbers.Real, numbers.Integral)):
             return float(value)
         elif isinstance(value, str) and value.isnumeric():
             return float(value)
@@ -386,8 +392,6 @@ def _mac_detect_dos(filename:str)->bool:
                 line = f.readline()
             except Exception:
                 pass
-        
-        
         new_lines = repr(f.newlines)
         has_dos = dos_newline in new_lines
     return has_dos
@@ -419,7 +423,8 @@ def _report_invalid_utc_lines(filename: str) ->str:
 
 class DOSFileError(RuntimeError):
     def __init__(self, filename: str):
-        message = f"{filename}: is a DOS file. Please convert it to a unix type file with a tool like dos2unix\n"
+        message = (f"{filename}: is a DOS file. Please convert it to"
+                   " numbers a unix type file with a tool like dos2unix\n")
         super().__init__(message)
 
 

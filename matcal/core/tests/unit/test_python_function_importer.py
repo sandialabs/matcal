@@ -1,4 +1,5 @@
 import os
+import numpy as np
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.python_function_importer import python_function_importer, PythonFunctionImportInputError, \
@@ -8,8 +9,6 @@ from matcal.core.python_function_importer import python_function_importer, Pytho
 def linear_python_model(**variables):
     time_max = 10
     num_time_steps = 100
-
-    import numpy as np
     time = np.linspace(0, time_max, num_time_steps)
     values = variables['slope'] * time + variables['intercept']
     return {'time': time, "Y": values}
@@ -61,8 +60,6 @@ class TestPythonFunctionImporter(MatcalUnitTest):
         func = self.py_func_importer_global.python_function
         vars = {'slope': 2, 'intercept': 1}
         values = func(**vars)
-
-        import numpy as np
         values_goal = 2 * np.linspace(0, 10, 100) + 1.
         self.assert_close_arrays(values["Y"], values_goal)
 
@@ -70,8 +67,6 @@ class TestPythonFunctionImporter(MatcalUnitTest):
         func = self.py_func_importer_global.python_function
         vars = {'slope': 2, 'intercept': 1}
         values = func(**vars)
-
-        import numpy as np
         values_goal = 2 * np.linspace(0, 10, 100) + 1.
         self.assert_close_arrays(values["Y"], values_goal)
 
@@ -91,7 +86,6 @@ class TestPythonFunctionImporter(MatcalUnitTest):
         vars = {'slope': 2, 'intercept': 1}
         values = func(**vars)
 
-        import numpy as np
         values_goal = 2 * np.linspace(0, 10, 100) + 1.
         self.assert_close_arrays(values["Y"], values_goal)
 
