@@ -261,12 +261,9 @@ class SurrogateGenerator:
         fields_of_interest = _identify_fields_of_interest(training_data_history, 
                                                           self._interpolation_field)
         if self._training_fraction == 1.0:
-            self._check_test_evaluation_provided()
+            self._check_test_evaluation_information_provided()
             test_data_history, test_param_history, test_param_ranges = self._package_surrogate_generator_input_data(
                 preprocessing_function, self._test_eval_info)
-            test_fields_of_interest = _identify_fields_of_interest(test_data_history, 
-                                                            self._interpolation_field)
-            assert fields_of_interest == test_fields_of_interest
              
         self._interpolation_locations = _process_interpolation_locations(training_data_history, 
                                                                          self._interpolation_locations, 
@@ -274,7 +271,7 @@ class SurrogateGenerator:
         source_dict = _process_training_data(training_data_history, fields_of_interest,
                                            self._interpolation_locations, self._interpolation_field)
         if self._training_fraction == 1.0:
-            test_source_dict = _process_training_data(test_data_history, test_fields_of_interest,
+            test_source_dict = _process_training_data(test_data_history, fields_of_interest,
                                                self._interpolation_locations, self._interpolation_field)
     
         support_information = {'parameter_ranges':param_ranges, 
@@ -676,6 +673,16 @@ def _get_decomp_results(source_history, field, make_log_scale, decomposition_too
     source_data = _get_data(source_history, field)
     decomp_results = decomposition_tool.generate(source_data, make_log_scale)
     return decomp_results
+
+
+def _get_test_decomp_results(source_history, field, data_scaler, decomposer, latent_scaler):
+    """Transform test data after scalers and decomposition tool have already been trained on training data."""
+    source_data = _get_data(source_history, field)
+    scaled_data = data_scaler.transform(source_data)
+    latent_data = decomposer.transform(scaled_data)
+    latent_data = _ensure_2d_array(latent_data, 1)
+    scaled_latent_test_data = latent_scaler.transform(latent_data)
+    return scaled_latent_test_data
     
 def _scale_parameters(parameter_fields, fields_to_log_scale):
     parameter_scaler_set = _make_parameter_scaler_set(parameter_fields, fields_to_log_scale)
@@ -732,13 +739,9 @@ def _select_training_and_test_data(scaled_parameters, scaled_latent_data,
 def _convert_instances_to_stats(scores, score_set_name):
     score_stats = OrderedDict()
     a_scores = np.array(scores)
-    try:
-        score_stats['mean'] = np.mean(a_scores, axis = 0)
-        score_stats['max'] = np.max(a_scores, axis = 0)
-        score_stats['min'] = np.min(a_scores, axis = 0)
-    except:
-        import pdb
-        pdb.set_trace()
+    score_stats['mean'] = np.mean(a_scores, axis = 0)
+    score_stats['max'] = np.max(a_scores, axis = 0)
+    score_stats['min'] = np.min(a_scores, axis = 0)
     
     score_message = f"\t{score_set_name}:\n"
     for name, value in score_stats.items():
@@ -868,10 +871,11 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
     def _fit(parameter_fields, source_history, fields_to_log_scale, decomposition_tool,
              support_information, regressor_initializer, surrogate_class, load_key,
              test_parameter_fields=None, test_source_history=None):
-        
+        scaled_latent_test_data = None
+        test_scaled_parameters = None
         parameter_scaler_set, scaled_parameters = _scale_parameters(parameter_fields, fields_to_log_scale)
         if support_information['training_fraction'] == 1.0:
-            test_parameter_scaler_set, test_scaled_parameters = _scale_parameters(test_parameter_fields, fields_to_log_scale)
+            test_scaled_parameters = parameter_scaler_set.transform_to_array(test_parameter_fields)
         
         field_surrogate_tools = OrderedDict()
         train_scores = OrderedDict()
@@ -881,17 +885,19 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
             make_log_scale = field in fields_to_log_scale
             decomp_results = _get_decomp_results(source_history, field, make_log_scale, decomposition_tool)
             data_scaler, decomposer, scaled_latent_data, latent_scaler = decomp_results
+            
             if support_information['training_fraction'] == 1.0:
-                test_decomp_results = _get_decomp_results(test_source_history, field,
-                                                          make_log_scale, decomposition_tool)
-                test_data_scaler, test_decomposer, test_scaled_latent_data, test_latent_scaler = test_decomp_results
+                scaled_latent_test_data = _get_test_decomp_results(test_source_history, field,
+                                                                   data_scaler, decomposer, latent_scaler)
+                
             if not isinstance(decomposer, _DoNothingDataTransformer):
                 _record_variance_behaviors(decomposer, support_information['save_filename'], field)
             training_results = _train_parameter_to_pca_weight_regressor(scaled_parameters, 
                     field, scaled_latent_data, 
                     support_information['training_fraction'], support_information['regressor_type'],
                     support_information['regressor_kwargs'], regressor_initializer,
-                    test_scaled_latent_data=None, test_scaled_parameters=None)
+                    test_scaled_latent_data=scaled_latent_test_data, test_scaled_parameters=test_scaled_parameters)
+        
             regressor, train_scores[field], test_scores[field] = training_results
             packed_field_tools = [regressor, decomposer, data_scaler, latent_scaler]
             field_surrogate_tools[field] = packed_field_tools
