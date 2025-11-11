@@ -22,7 +22,7 @@ def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high,
     matcal_save("test_surrogate_source_data.joblib", res)
     
     if training_fraction == 1.0:
-        test_res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, n_samples,
+        test_res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, 100,
                                                       test_function, rng=20, **parameter_mod)
         matcal_save("test_surrogate_test_data.joblib", test_res)
         
@@ -155,6 +155,9 @@ class TestSurrogateGenerator(MatcalUnitTest):
         self._confirm_good_test_scores(surrogate)
 
     def test_surrogate_for_line_training_fraction_1(self):
+        ###    WORKING HERE     ###
+        ### Test Scores are Negative - Looking into this ####
+        ### suspect transformations in MatCalPCASurrogateBase._fit ###
         def test_function(m, b, n_features=None):
             if n_features == None:
                 n_features = np.random.randint(10, 50)
@@ -175,7 +178,7 @@ class TestSurrogateGenerator(MatcalUnitTest):
 
         sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
                                                      indep_var, test_function, training_fraction=1.0)
-        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process", 1.0)
         surrogate = sur_gen.generate('my_surrogate')
 
         self._confirm_alignment_to_function(p_low, p_high, show_array, probes, err_tol, n_interp, 
