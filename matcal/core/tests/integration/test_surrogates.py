@@ -155,9 +155,6 @@ class TestSurrogateGenerator(MatcalUnitTest):
         self._confirm_good_test_scores(surrogate)
 
     def test_surrogate_for_line_training_fraction_1(self):
-        ###    WORKING HERE     ###
-        ### Test Scores are Negative - Looking into this ####
-        ### suspect transformations in MatCalPCASurrogateBase._fit ###
         def test_function(m, b, n_features=None):
             if n_features == None:
                 n_features = np.random.randint(10, 50)
