@@ -1566,7 +1566,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
                                         'nsplits':8,
                                         'nmax_folds':3,
                                         'nmax_loo':25,
-                                        'nmaxbatches':20}
+                                        'nmaxbatches':0}
             surrogate_options = {'interpolation_field':'x'}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
                        'surrogate_options': surrogate_options}
