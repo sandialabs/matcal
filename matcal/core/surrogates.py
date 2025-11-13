@@ -262,8 +262,7 @@ class SurrogateGenerator:
             preprocessing_function, self._eval_info)
         fields_of_interest = _identify_fields_of_interest(training_data_history, 
                                                           self._interpolation_field)
-        import pdb
-        pdb.set_trace()
+
         if self._training_fraction == 1.0:
             self._check_test_evaluation_information_provided()
             test_data_history, test_param_history, test_param_ranges = self._package_surrogate_generator_input_data(
