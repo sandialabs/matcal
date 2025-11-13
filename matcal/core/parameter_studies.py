@@ -192,11 +192,11 @@ class HaltonStudy(ParameterStudy):
                      Halton sequence by an amount determined by 'skip'.
         :type skip: int
         """
-        self._set_number_of_samples(nsamples, skip)
+        self._set_number_of_samples_and_generate(nsamples, skip)
         
         return super().launch()
 
-    def _set_number_of_samples(self, nsamples, skip):
+    def _set_number_of_samples_and_generate(self, nsamples, skip):
         """ generates samples from Halton Sequence and
         scales to bounds if bounds are defined.
 
@@ -1061,6 +1061,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         """
         # generate initial training set from HaltonStudy and put model
         # parameters and output in desired format
+        ## !! Need to generate study for test data !! ##
         super().launch(self._nsamples)
         self._format_params()
         self._format_output()
@@ -1073,6 +1074,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._voronoi_options = {'finite_only' : self.finite_only} 
         
         # build/train surrogate with initial training set and calculate initial error
+        # !! need to pass test data in to surrogate !! ##
         self._fit_surrogate_model()
         self._calculate_surrogate_score()
         self._perform_voronoi_batch_sampling()
@@ -1134,7 +1136,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     
     def _set_surrogate_options(self, **surrogate_options):
         self.interpolation_field = 'x'
-        self._training_fraction = len(self.X)
+        self._training_fraction = 1.0
         for key, value in surrogate_options.items():
             if hasattr(self, key):
                 if key == 'training_fraciton':
@@ -1150,9 +1152,10 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction}    
         self._surrogate_options = options
         
-    def _fit_surrogate_model(self):
+    def _fit_surrogate_model(self, test_evaluation_information=None):
         from matcal.core.surrogates import SurrogateGenerator
-        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
+        surrogate_generator = SurrogateGenerator(self, test_evaluation_information=test_evaluation_information,
+                                                 **self._surrogate_options)
         # to evaluate use self._surrogate(X)
         self._surrogate = surrogate_generator.generate('voronoi_surrogate')
         
@@ -1190,6 +1193,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
             self._update_surrogate_training_fraction()
+            ## !! Pass test data into surrogate !! ##
             self._fit_surrogate_model()
             self._calculate_errors()
             self._nbatch_samples.append(self.results.number_of_evaluations)
@@ -1951,10 +1955,6 @@ class KFoldCrossValidation:
             for train_idx, test_idx in cv.split(self.X):
                 print("Train:", train_idx, " Test:", test_idx)
             
-            # I need to be able to set training fraction to 1.0 when
-            # generating the surrogates. Not being able to set the fraction to
-            # 1.0 is especially problematic when doing cross validation, where the
-            # test and train data is already split.
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
                 for train_index, test_index in cv.split(self.X)
@@ -1969,7 +1969,7 @@ class KFoldCrossValidation:
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
 
-        # How do I regenerate surrogate model with training/test subset?
+        ## !! Need to regenerate surrogate model with training/test parameter study subset !! ##
         # Fit the model on the training data
         fold_surrogate = CrossValidationSurrogate()
         fold_surrogate._fit_cv_surrogate(X_train, y_train)
@@ -2101,7 +2101,7 @@ class LeaveOneOutCrossValidation:
         X_test = X[i].reshape(1, -1)  # Reshape for a single sample
         y_test = y[i]
 
-        # How do I regenerate surrogate model with training/test subset?
+        ## !! Need to regenerate surrogate model with training/test parameter study subset !! ##
         # Fit the model on the training data
         fold_surrogate = CrossValidationSurrogate()
         fold_surrogate._fit_cv_surrogate(X_train, y_train)
