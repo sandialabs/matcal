@@ -59,7 +59,7 @@ class SurrogateGenerator:
     def __init__(self, evaluation_information, interpolation_field=None, 
                 interpolation_locations=200, 
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
-                regressor_type="Gaussian Process", test_evaluation_information=None,
+                regressor_type="Gaussian Process", test_eval_info=None,
                 **regressor_kwargs):
         """
         :param evaluation_information: A container of the relevant 
@@ -112,7 +112,7 @@ class SurrogateGenerator:
         self._input_parameter_history = None
         self._interpolation_locations = interpolation_locations
         self._eval_info = evaluation_information
-        self._test_eval_info = test_evaluation_information
+        self._test_eval_info = test_eval_info
         self._model_name = None
         self._state = None
         self._training_fraction  = training_fraction
