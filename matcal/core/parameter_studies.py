@@ -1057,6 +1057,13 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
     return combined_array
 
 
+def _fit_surrogate_model(eval_info, **surrogate_opts):
+    from matcal.core.surrogates import SurrogateGenerator
+    surrogate_generator = SurrogateGenerator(eval_info, **surrogate_opts)
+    # to evaluate use self._surrogate(X)
+    return surrogate_generator.generate('voronoi_surrogate')
+        
+
 class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def __init__(self, *parameters):
         """Initialize the VoronoiBatchSamplingStudy
@@ -1079,7 +1086,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._voronoi_options = {'finite_only' : self.finite_only} 
         
         # build/train surrogate with initial training set and calculate initial error
-        self._fit_surrogate_model()
+        self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
         self._calculate_surrogate_score()
         self._perform_voronoi_batch_sampling()
         
@@ -1156,12 +1163,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                    'test_eval_info': self.test_eval_info}    
         self._surrogate_options = options
     
-    def _fit_surrogate_model(self):
-        from matcal.core.surrogates import SurrogateGenerator
-        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
-        # to evaluate use self._surrogate(X)
-        self._surrogate = surrogate_generator.generate('voronoi_surrogate')
-        
     def _calculate_surrogate_score(self):
         test_score = self._surrogate.scores['test']
         combined_score = []
@@ -1970,14 +1971,14 @@ class KFoldCrossValidation:
         """Perform a single fold of cross-validation."""
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
+        train_eval_info = {'input': X_train, 'output': y_train}
+        test_eval_info = {'input': X_test, 'output': y_test}
 
-        ## !! Need to regenerate surrogate model with training/test parameter study subset !! ##
         # Fit the model on the training data
-        fold_surrogate = CrossValidationSurrogate()
-        fold_surrogate._fit_cv_surrogate(X_train, y_train)
-
+        fold_surrogate = _fit_surrogate_model(train_eval_info, test_eval_info)
+        
         # Make predictions for the test set
-        y_pred = fold_surrogate._predict(X_test)
+        y_pred = fold_surrogate(X_test)
         if self.scale == 'cbrt':
             y_pred = self.perform_cbrt_transform(y_pred)
             y_test = self.perform_cbrt_transform(y_test)
@@ -2103,13 +2104,14 @@ class LeaveOneOutCrossValidation:
         X_test = X[i].reshape(1, -1)  # Reshape for a single sample
         y_test = y[i]
 
-        ## !! Need to regenerate surrogate model with training/test parameter study subset !! ##
+        train_eval_info = {'input': X_train, 'output': y_train}
+        test_eval_info = {'input': X_test, 'output': y_test}
+
         # Fit the model on the training data
-        fold_surrogate = CrossValidationSurrogate()
-        fold_surrogate._fit_cv_surrogate(X_train, y_train)
+        fold_surrogate = _fit_surrogate_model(train_eval_info, test_eval_info)
 
         # Make predictions for the left-out sample
-        y_pred = fold_surrogate._predict(X_test)
+        y_pred = fold_surrogate(X_test)
 
         if self.scale == 'cbrt':
             y_pred = self.perform_cbrt_transform(y_pred)
@@ -2155,38 +2157,3 @@ class LeaveOneOutCrossValidation:
 
     def calculate_sum_abs_perc_error(self, y_true, y_pred):
         return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
-
-
-class CrossValidationSurrogate:
-    def __init__(self, input_scaling=True, output_scaling=True):
-        self.input_scaling = input_scaling
-        self.normalize_y = output_scaling
-        
-    def _fit_cv_surrogate(self, X, y):
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.gaussian_process import GaussianProcessRegressor
-        from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-        
-        X = np.atleast_2d(X)
-        train_features = X
-        train_targets = y
-        self.nfeatures = X.shape[1]
-        if self.input_scaling:
-            self.input_scaler = StandardScaler()
-            train_features = self.input_scaler.fit_transform(X)
-        kernel = C(1.0, constant_value_bounds=(1e-3, 1e3))\
-            * RBF(np.ones(self.nfeatures), length_scale_bounds=(1e-3, 1e3))
-        self.surrogate = GaussianProcessRegressor(
-            kernel=kernel,
-            n_restarts_optimizer=50,
-            alpha=1e-8,
-            normalize_y=self.normalize_y
-        )
-        self.surrogate.fit(train_features, train_targets)
-        
-    def _predict(self, X):
-        X = np.atleast_2d(X)
-        if self.input_scaling:
-            X = self.input_scaler.transform(X)
-            
-        return self.surrogate.predict(X)
