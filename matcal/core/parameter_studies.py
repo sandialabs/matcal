@@ -1067,9 +1067,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def launch(self, **options):
         """ Launch adaptive surrogate build using Voronoi batch sampling        
         """
-        # generate initial training set from HaltonStudy and put model
-        # parameters and output in desired format
-        ## !! Need to generate study for test data !! ##
         super().launch(self._nsamples)
         self._format_params()
         self._format_output()
@@ -1082,7 +1079,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._voronoi_options = {'finite_only' : self.finite_only} 
         
         # build/train surrogate with initial training set and calculate initial error
-        # !! need to pass test data in to surrogate !! ##
         self._fit_surrogate_model()
         self._calculate_surrogate_score()
         self._perform_voronoi_batch_sampling()
@@ -1106,6 +1102,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.nmaxbatches = 20
         self._current_surrogate_score = []
         self._nbatch_samples = []
+        self.test_eval_info = None
         
     def _extract_bounds_from_parameter_collection(self):
         self._l_bounds = []
@@ -1133,7 +1130,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
 
     def _set_voronoi_sampling_options(self, **voronoi_sampling_kwargs):
         """Set voronoi properties. See documentation for properties that an be altered and their options."""
-        self._voronoi_kwargs = voronoi_sampling_kwargs
         for key, value in voronoi_sampling_kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
@@ -1147,23 +1143,22 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._training_fraction = 1.0
         for key, value in surrogate_options.items():
             if hasattr(self, key):
-                if key == 'training_fraciton':
+                if key == 'training_fraction':
                     raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.0")
                 setattr(self, key, value)
             else:
-                raise AttributeError(f"'{self.__class__.name__}' has no attribute '{key}'")
-        options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction}    
+                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
+        
+        if self.test_eval_info is None:
+            raise AttributeError("User must provide surrogate test information from parameter study (i.e. HaltonStudy).")
+        
+        options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction,
+                   'test_eval_info': self.test_eval_info}    
         self._surrogate_options = options
     
-    def _update_surrogate_training_fraction(self):
-        self._training_fraction = len(self.X)
-        options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction}    
-        self._surrogate_options = options
-        
-    def _fit_surrogate_model(self, test_evaluation_information=None):
+    def _fit_surrogate_model(self):
         from matcal.core.surrogates import SurrogateGenerator
-        surrogate_generator = SurrogateGenerator(self, test_evaluation_information=test_evaluation_information,
-                                                 **self._surrogate_options)
+        surrogate_generator = SurrogateGenerator(self, **self._surrogate_options)
         # to evaluate use self._surrogate(X)
         self._surrogate = surrogate_generator.generate('voronoi_surrogate')
         
@@ -1485,7 +1480,6 @@ class VoronoiTessellation:
                        resources, especially in high dimensions.
         type finite_only: bool
         """
-        self._voronoi_kwargs = voronoi_kwargs
         for key, value in voronoi_kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)

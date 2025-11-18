@@ -1544,6 +1544,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
 class TestVoronoiBatchStudy(MatcalUnitTest):
     
     _study_class = VoronoiAdaptiveSurrogateStudy
+    _study_test_class = HaltonStudy
     
     @staticmethod
     def setup_parameter_collection(dim):
@@ -1579,19 +1580,24 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         for dim in dims:
             physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
             vor_study = self._study_class(parameter_collection)
+            hal_test_study = self._study_test_class(parameter_collection)
+            ntest_samples = 50
 
             test_points = np.linspace(.25, .75, 10)
             objective = SimulationResultsSynchronizer("x", test_points, "f")
             vor_study.add_evaluation_set(physical_model, objective)
+            hal_test_study.add_evaluation_set(physical_model, objective)
+            test_information = hal_test_study.launch(ntest_samples)
             
-            voronoi_sampling_options = {'voronoi_type':'Full',
+            voronoi_sampling_options = {'voronoi_type':'full',
                                         'finite_only':False,
                                         'iterative_updates':True,
                                         'nsplits':8,
                                         'nmax_folds':3,
                                         'nmax_loo':25,
                                         'nmaxbatches':0}
-            surrogate_options = {'interpolation_field':'x'}
+            surrogate_options = {'interpolation_field':'x',
+                                 'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
                        'surrogate_options': surrogate_options}
              
@@ -1599,14 +1605,6 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             # build surrogate that given a, b, c gives you f
             self.assertFalse(vor_study.finite_only)
             self.assertTrue(vor_study.iterative_updates)
-            self.assertEqual(vor_study.surr_model, surr_model)
-            self.assertEqual(vor_study.physical_model, physical_model)
-            self.assertEqual(vor_study.bounds, bounds)
-            self.assertTrue(np.all(vor_study.X == X_init))
-            self.assertTrue(np.all(vor_study.y == y_init))
-            self.assertTrue(np.all(vor_study.X_test == X_test))
-            self.assertTrue(np.all(vor_study.y_test == y_test))
-            self.assertEqual(vor_study.surr_model_type, 'GPR')
             self.assertEqual(vor_study.voronoi_type, 'full')
             
             if dim == 2:
