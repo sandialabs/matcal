@@ -1350,7 +1350,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         
         kfcv_options = {'nsplits' : self.nsplits, 'group_kfold' : self.group_kfold,
                         'scale' : self.cv_scale, 'metric' : self.cv_metric,
-                        'groups' : groups}
+                        'groups' : groups, 'interpolation_field':self.interpolation_field}
         self._kf = kfcv.perform_kfold_cv(self.X, self.y, **kfcv_options)
     
     def _find_kfold_max_errors(self):
@@ -1363,7 +1363,12 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._loo_errors = None
         print("Finding worst sample locations")
         loocv = LeaveOneOutCrossValidation(self)
-        self._loo_errors = loocv.perform_loocv(self.surr_model, self.cv_scale, self.X, self.y, self._max_fold_indices, metric=self.cv_metric)
+        loo_options = {'scale':self.cv_scale,
+                       'metric':self.cv_metric,
+                       'interpolation_field':self.interpolation_field}
+        
+        self._loo_errors = loocv.perform_loocv(self.X, self.y, self.max_fold_indcies,
+                                               **loo_options)
     
     def _find_loo_max_errors(self):
             self._worst_sample_locations = None
@@ -1474,12 +1479,12 @@ class VoronoiTessellation:
         param incremental: Allow adding points incrementally. This takes up additional resources.
         type incremental: bool
         
-        :param finite: With finite = True, only vertices which reside inside convex hull defined by boundary points
+        param finite: With finite = True, only vertices which reside inside convex hull defined by boundary points
                        are returned as vertices of a voronoi region. With finite = False (default), all vertices
                        are returned. In this case, vertices which fall outisde the parameter bounds are snipped 
                        to the convex hull defined by boundary points, which requires more computational
                        resources, especially in high dimensions.
-        type finite_only: bool
+        type finite: bool
         """
         for key, value in voronoi_kwargs.items():
             if hasattr(self, key):
@@ -1884,32 +1889,14 @@ class KFoldCrossValidation:
         """
         self._initialize_attributes()
 
-    def calculate_sum_abs_error(self, y_true, y_pred):
-        return  np.sum(np.abs(y_true - y_pred))
-
-    def calculate_abs_perc_error(self, y_true, y_pred):
-        return np.abs((y_true - y_pred) / y_true) * 100
-
-    def calculate_mean_abs_perc_error(self, y_true, y_pred):
-        return np.mean(self.calculate_abs_perc_error(y_true, y_pred))
-
-    def calculate_mse(self, y_true, y_pred):
-        sq_error =  (y_true - y_pred) ** 2
-        return np.mean(sq_error)
-
-    def calculate_rmse(self, y_true, y_pred):
-        return np.sqrt(self.calculate_mse(y_true, y_pred))
-
-    def calculate_sum_abs_perc_error(self, y_true, y_pred):
-        return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
-
     def _initialize_attributes(self):
         self.nsplits = 5
         self.group_kfold = False
         self.scale = None
         self.metric = 'sum_abs_error'
         self.groups = None
-
+        self.interpolation_field = 'x'
+        
     def _set_kfcv_options(self, **kfcv_kwargs):
         """Set KFold CV properties."""
         self._kfcv_kwargs = kfcv_kwargs
@@ -1969,84 +1956,21 @@ class KFoldCrossValidation:
 
     def evaluate_fold(self, train_index, test_index, X, y):
         """Perform a single fold of cross-validation."""
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-        train_eval_info = {'input': X_train, 'output': y_train}
-        test_eval_info = {'input': X_test, 'output': y_test}
 
-        # Fit the model on the training data
-        fold_surrogate = _fit_surrogate_model(train_eval_info, test_eval_info)
+        info = self.extract_fold_info(train_index, test_index, X, y)
+        train_eval_info, test_eval_info, X_test, y_test = info
+        surrogate_options = get_cv_surrogate_options(test_eval_info,
+                                                     self.interpolation_field) 
         
-        # Make predictions for the test set
+        # Fit the model on the training data
+        fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
+        
+        # Make predictions for the test set and calculate error
         y_pred = fold_surrogate(X_test)
-        if self.scale == 'cbrt':
-            y_pred = self.perform_cbrt_transform(y_pred)
-            y_test = self.perform_cbrt_transform(y_test)
-        elif self.scale == 'log':
-            y_pred = np.log(y_pred)
-            y_test = np.log(y_test)
-
-        # Calculate the prediction errors for the test samples
-        if self.metric == 'sum_abs_error':
-            error = self.calculate_sum_abs_error(y_test, y_pred)
-        elif self.metric == 'mape':
-            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
-        elif self.metric == 'mse':
-            error = self.calculate_mse(y_test, y_pred)
-        elif self.metric == 'rmse':
-            error = self.calculate_rmse(y_test, y_pred)
-        elif self.metric == 'sum_abs_perc_error':
-            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
-        else:
-            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
-            error = self.calculate_sum_abs_error(y_test, y_pred)
+        y_test, y_pred = transform_output(y_test, y_pred)
+        error = calculate_error(self.metric, y_test, y_pred)
 
         return error, test_index
-
-    def perform_cbrt_transform(self, y):
-        return np.sign(y) * np.abs(y) ** (1/3)
-
-    def plot_kfold(self, cv, X, y, ax, xlim_max=100):
-        """
-        Plots the indices for a cross-validation object.
-
-        Parameters:
-        cv: Cross-validation object
-        X: Feature set
-        y: Target variable
-        ax: Matplotlib axis object
-        xlim_max: Maximum limit for the x-axis
-        """
-        import matplotlib.pyplot as plt
-        from matplotlib.patches import Patch
-        import matplotlib
-
-        # Set color map for the plot
-        cmap_cv = plt.cm.coolwarm
-        cv_split = cv.split(X=X, y=y)
-
-        for i_split, (train_idx, test_idx) in enumerate(cv_split):
-            # Create an array of NaNs and fill in training/testing indices
-            indices = np.full(len(X), np.nan)
-            indices[test_idx], indices[train_idx] = 1, 0
-
-            # Plot the training and testing indices
-            ax_x = range(len(indices))
-            ax_y = [i_split + 0.5] * len(indices)
-            ax.scatter(ax_x, ax_y, c=indices, marker="_", 
-                       lw=10, cmap=cmap_cv, vmin=-0.2, vmax=1.2)
-
-        # Set y-ticks and labels
-        y_ticks = np.arange(self.nsplits) + 0.5
-        ax.set(yticks=y_ticks, yticklabels=range(self.nsplits),
-               xlabel="X index", ylabel="Fold",
-               ylim=[self.nsplits, -0.2], xlim=[0, xlim_max])
-
-        # Set plot title and create legend
-        ax.set_title("KFold", fontsize=14)
-        legend_patches = [Patch(color=cmap_cv(0.8), label="Testing set"),
-                          Patch(color=cmap_cv(0.02), label="Training set")]
-        ax.legend(handles=legend_patches, loc=(1.03, 0.8))# Example usage
 
 
 class LeaveOneOutCrossValidation:
@@ -2059,6 +1983,7 @@ class LeaveOneOutCrossValidation:
     def _initialize_attributes(self):
         self.scale = None
         self.metric = 'sum_abs_error'
+        self.interpolation_field = 'x'
         
     def _set_loocv_options(self, **loocv_kwargs):
         """Set LeaveOneOut CV properties."""
@@ -2097,63 +2022,104 @@ class LeaveOneOutCrossValidation:
 
         return loo
     
-    def evaluate_sample(self, X, y, i):
+    def evaluate_sample(self, X, y, index):
         # Leave one out: create training and test sets
-        X_train = np.delete(X, i, axis=0)
-        y_train = np.delete(y, i, axis=0)
-        X_test = X[i].reshape(1, -1)  # Reshape for a single sample
-        y_test = y[i]
-
-        train_eval_info = {'input': X_train, 'output': y_train}
-        test_eval_info = {'input': X_test, 'output': y_test}
-
+        info = extract_loo_info(index, X, y)
+        train_eval_info, test_eval_info, X_test, y_test = info
+        surrogate_options = get_cv_surrogate_options(test_eval_info,
+                                                     self.interpolation_field)
         # Fit the model on the training data
-        fold_surrogate = _fit_surrogate_model(train_eval_info, test_eval_info)
+        fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
 
-        # Make predictions for the left-out sample
+        # Make predictions for the left-out sample and calculate error
         y_pred = fold_surrogate(X_test)
+        y_test, y_pred = transform_output(y_test, y_pred)
+        error = calculate_error(self.metric, y_test, y_pred)
 
-        if self.scale == 'cbrt':
-            y_pred = self.perform_cbrt_transform(y_pred)
-            y_test = self.perform_cbrt_transform(y_test)
-        elif self.scale == 'log':
-            y_pred = np.log(y_pred)
-            y_test = np.log(y_test)
+        return error, index
 
-        if self.metric == 'sum_abs_error':
-            error = self.calculate_sum_abs_error(y_test, y_pred)
-        elif self.metric == 'mape':
-            error = self.calculate_mean_abs_perc_error(y_test, y_pred)
-        elif self.metric == 'mse':
-            error = self.calculate_mse(y_test, y_pred)
-        elif self.metric == 'rmse':
-            error = self.calculate_rmse(y_test, y_pred)
-        elif self.metric == 'sum_abs_perc_error':
-            error = self.calculate_sum_abs_perc_error(y_test, y_pred)
-        else:
-            print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
-            error = self.calculate_sum_abs_error(y_test, y_pred)
 
-        return error, i
+def get_cv_surrogate_options(test_eval_info, interpolation_field):
+    surrogate_options = {'interpolation_field':interpolation_field,
+                         'training_fraction': 1.0,
+                         'test_eval_info':test_eval_info}
+    return surrogate_options
 
-    def perform_cbrt_transform(self, y):
-        return np.sign(y) * np.abs(y) ** (1/3)
+   
+def extract_fold_info(train_index, test_index, X, y):
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+    train_eval_info = {'input': X_train, 'output': y_train}
+    test_eval_info = {'input': X_test, 'output': y_test}
+    return train_eval_info, test_eval_info, X_test, y_test
 
-    def calculate_sum_abs_error(self, y_true, y_pred):
-        return  np.sum(np.abs(y_true - y_pred))
 
-    def calculate_abs_perc_error(self, y_true, y_pred):
-        return np.abs((y_true - y_pred) / y_true) * 100
+def extract_loo_info(index, X, y):
+    X_train = np.delete(X, index, axis=0)
+    y_train = np.delete(y, index, axis=0)
+    X_test = X[index].reshape(1, -1)  # Reshape for a single sample
+    y_test = y[index]
+    train_eval_info = {'input': X_train, 'output': y_train}
+    test_eval_info = {'input': X_test, 'output': y_test}
+    return train_eval_info, test_eval_info, X_test, y_test
+    
 
-    def calculate_mean_abs_perc_error(self, y_true, y_pred):
-        return np.mean(self.calculate_abs_perc_error(y_true, y_pred))
+def perform_cbrt_transform(y):
+    return np.sign(y) * np.abs(y) ** (1/3)
 
-    def calculate_mse(self, y_true, y_pred):
-        sq_error =  (y_true - y_pred) ** 2
-        return np.mean(sq_error)
 
-    def calculate_rmse(self, y_true, y_pred):
-        return np.sqrt(self.calculate_mse(y_true, y_pred))
+def transform_output(y_test, y_pred):
+    y_test = transform_y(y_test)
+    y_pred = transform_y(y_pred)
+    return y_test, y_pred
 
-    def calculate_sum_abs_perc_error(self, y_true, y_pred):
-        return np.sum(self.calculate_abs_perc_error(y_true, y_pred))
+
+def transform_y(scale, y):
+    if scale == 'cbrt':
+        return perform_cbrt_transform(y)
+    elif scale == 'log':
+        return np.log(y)
+    elif scale is None:
+        return y
+        
+         
+def calculate_error(metric, y_test, y_pred):
+    
+    if metric == 'sum_abs_error':
+        return calculate_sum_abs_error(y_test, y_pred)
+    elif metric == 'mape':
+        return calculate_mean_abs_perc_error(y_test, y_pred)
+    elif metric == 'mse':
+        return calculate_mse(y_test, y_pred)
+    elif metric == 'rmse':
+        return calculate_rmse(y_test, y_pred)
+    elif metric == 'sum_abs_perc_error':
+        return calculate_sum_abs_perc_error(y_test, y_pred)
+    else:
+        print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
+        return calculate_sum_abs_error(y_test, y_pred)
+
+
+def calculate_sum_abs_error(y_true, y_pred):
+    return  np.sum(np.abs(y_true - y_pred))
+
+
+def calculate_abs_perc_error(y_true, y_pred):
+    return np.abs((y_true - y_pred) / y_true) * 100
+
+
+def calculate_mean_abs_perc_error(y_true, y_pred):
+    return np.mean(calculate_abs_perc_error(y_true, y_pred))
+
+
+def calculate_mse(y_true, y_pred):
+    sq_error =  (y_true - y_pred) ** 2
+    return np.mean(sq_error)
+
+
+def calculate_rmse(y_true, y_pred):
+    return np.sqrt(calculate_mse(y_true, y_pred))
+
+
+def calculate_sum_abs_perc_error(y_true, y_pred):
+    return np.sum(calculate_abs_perc_error(y_true, y_pred))
