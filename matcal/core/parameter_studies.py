@@ -1057,11 +1057,13 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
     return combined_array
 
 
-def _fit_surrogate_model(eval_info, **surrogate_opts):
+def _fit_surrogate_model(eval_info, save_filename='voronoi_surrogate', state=None, **surrogate_opts):
     from matcal.core.surrogates import SurrogateGenerator
     surrogate_generator = SurrogateGenerator(eval_info, **surrogate_opts)
+    if state is not None:     
+        surrogate_generator.set_model_and_state(state=state)
     # to evaluate use self._surrogate(X)
-    return surrogate_generator.generate('voronoi_surrogate')
+    return surrogate_generator.generate(save_filename)
         
 
 class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
@@ -1110,6 +1112,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._current_surrogate_score = []
         self._nbatch_samples = []
         self.test_eval_info = None
+        self.par_names = self._parameter_collection.get_item_names()
         
     def _extract_bounds_from_parameter_collection(self):
         self._l_bounds = []
@@ -1348,9 +1351,10 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             kmeans = KMeans(n_clusters=self.nsplits, random_state=42)
             groups = kmeans.fit_predict(self.X)
         
-        kfcv_options = {'nsplits' : self.nsplits, 'group_kfold' : self.group_kfold,
-                        'scale' : self.cv_scale, 'metric' : self.cv_metric,
-                        'groups' : groups, 'interpolation_field':self.interpolation_field}
+        kfcv_options = {'nsplits':self.nsplits, 'group_kfold':self.group_kfold,
+                        'scale':self.cv_scale, 'metric':self.cv_metric,
+                        'groups':groups, 'interpolation_field':self.interpolation_field,
+                        'par_names':self.par_names}
         self._kf = kfcv.perform_kfold_cv(self.X, self.y, **kfcv_options)
     
     def _find_kfold_max_errors(self):
@@ -1365,7 +1369,8 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         loocv = LeaveOneOutCrossValidation(self)
         loo_options = {'scale':self.cv_scale,
                        'metric':self.cv_metric,
-                       'interpolation_field':self.interpolation_field}
+                       'interpolation_field':self.interpolation_field,
+                       'par_names':self.par_names}
         
         self._loo_errors = loocv.perform_loocv(self.X, self.y, self.max_fold_indcies,
                                                **loo_options)
@@ -1896,7 +1901,8 @@ class KFoldCrossValidation:
         self.metric = 'sum_abs_error'
         self.groups = None
         self.interpolation_field = 'x'
-        
+        self.par_names = None
+         
     def _set_kfcv_options(self, **kfcv_kwargs):
         """Set KFold CV properties."""
         self._kfcv_kwargs = kfcv_kwargs
@@ -1930,21 +1936,22 @@ class KFoldCrossValidation:
         self.X = X
         self.y = y
         self._set_kfcv_options(**kfcv_options)
-        
+       
         if self.group_kfold:
             assert self.groups is not None
             cv = GroupKFold(nsplits=self.nsplits)
-            # Use joblib to parallelize the cross-validation folds
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.cross_val_fold)(train_index, test_index, self.X, self.y, self.metric)
                 for train_index, test_index in cv.split(X, y, self.groups)
             )
         else:
             cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
-            # Use joblib to parallelize the cross-validation folds
             for train_idx, test_idx in cv.split(self.X):
                 print("Train:", train_idx, " Test:", test_idx)
             
+            train_index = [0, 1, 3, 4]
+            test_index = [2]
+            error, test_index = self.evaluate_fold(train_index, test_index, self.X, self.y)
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
                 for train_index, test_index in cv.split(self.X)
@@ -1967,10 +1974,28 @@ class KFoldCrossValidation:
         
         # Make predictions for the test set and calculate error
         y_pred = fold_surrogate(X_test)
-        y_test, y_pred = transform_output(y_test, y_pred)
+        y_test, y_pred = transform_output(self.scale, y_test, y_pred)
         error = calculate_error(self.metric, y_test, y_pred)
 
         return error, test_index
+   
+    def extract_fold_info(self, train_index, test_index, X, y):
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+        
+        #input needs to be an ordered dict
+        import pdb
+        pdb.set_trace()
+        train_input_ordered_dict = OrderedDict(
+            (key, X_train[:, i].tolist()) for i, key in enumerate(self.par_names)
+        )
+        train_eval_info = {'input': train_input_ordered_dict, 'output': {'state0':y_train}}
+        
+        test_input_ordered_dict = OrderedDict(
+            (key, X_test[:, i].tolist()) for i, key in enumerate(self.par_names)
+        )        
+        test_eval_info = {'input': test_input_ordered_dict, 'output': {'state0':y_test}}
+        return train_eval_info, test_eval_info, X_test, y_test
 
 
 class LeaveOneOutCrossValidation:
@@ -2014,7 +2039,7 @@ class LeaveOneOutCrossValidation:
         self._set_loocv_options(**loocv_options)
         
         loo_results = Parallel(n_jobs=-1)(
-            delayed(self.evaluate_sample)(X, y, i)
+            delayed(self.evaluate_loo_sample)(X, y, i)
             for i in indices
         )
 
@@ -2022,9 +2047,9 @@ class LeaveOneOutCrossValidation:
 
         return loo
     
-    def evaluate_sample(self, X, y, index):
+    def evaluate_loo_sample(self, X, y, index):
         # Leave one out: create training and test sets
-        info = extract_loo_info(index, X, y)
+        info = self.extract_loo_info(index, X, y)
         train_eval_info, test_eval_info, X_test, y_test = info
         surrogate_options = get_cv_surrogate_options(test_eval_info,
                                                      self.interpolation_field)
@@ -2033,43 +2058,35 @@ class LeaveOneOutCrossValidation:
 
         # Make predictions for the left-out sample and calculate error
         y_pred = fold_surrogate(X_test)
-        y_test, y_pred = transform_output(y_test, y_pred)
+        y_test, y_pred = transform_output(self.scale, y_test, y_pred)
         error = calculate_error(self.metric, y_test, y_pred)
 
         return error, index
 
-
+    def extract_loo_info(self, index, X, y):
+        X_train = np.delete(X, index, axis=0)
+        y_train = np.delete(y, index, axis=0)
+        X_test = X[index].reshape(1, -1)  # Reshape for a single sample
+        y_test = y[index]
+        train_eval_info = {'input': X_train, 'output': y_train}
+        test_eval_info = {'input': X_test, 'output': y_test}
+        return train_eval_info, test_eval_info, X_test, y_test
+    
+    
 def get_cv_surrogate_options(test_eval_info, interpolation_field):
     surrogate_options = {'interpolation_field':interpolation_field,
                          'training_fraction': 1.0,
-                         'test_eval_info':test_eval_info}
+                         'test_eval_info':test_eval_info,
+                         'state':'state0'}
     return surrogate_options
 
-   
-def extract_fold_info(train_index, test_index, X, y):
-    X_train, X_test = X[train_index], X[test_index]
-    y_train, y_test = y[train_index], y[test_index]
-    train_eval_info = {'input': X_train, 'output': y_train}
-    test_eval_info = {'input': X_test, 'output': y_test}
-    return train_eval_info, test_eval_info, X_test, y_test
-
-
-def extract_loo_info(index, X, y):
-    X_train = np.delete(X, index, axis=0)
-    y_train = np.delete(y, index, axis=0)
-    X_test = X[index].reshape(1, -1)  # Reshape for a single sample
-    y_test = y[index]
-    train_eval_info = {'input': X_train, 'output': y_train}
-    test_eval_info = {'input': X_test, 'output': y_test}
-    return train_eval_info, test_eval_info, X_test, y_test
-    
 
 def perform_cbrt_transform(y):
     return np.sign(y) * np.abs(y) ** (1/3)
 
 
-def transform_output(y_test, y_pred):
-    y_test = transform_y(y_test)
+def transform_output(scale, y_test, y_pred):
+    y_test = transform_y(scale, y_test)
     y_pred = transform_y(y_pred)
     return y_test, y_pred
 
@@ -2084,7 +2101,6 @@ def transform_y(scale, y):
         
          
 def calculate_error(metric, y_test, y_pred):
-    
     if metric == 'sum_abs_error':
         return calculate_sum_abs_error(y_test, y_pred)
     elif metric == 'mape':
