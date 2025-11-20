@@ -45,14 +45,15 @@ def linear_model_with_length(a, *args, **kwargs):
 def oneD_model(**param_dict):
     x = param_dict['theta']
     y = x ** 2
-    return {"x": x, "y": y}
+    return {"x":x, "y":y}
 
 def quadratic_model_2d(**parameters):
+    """Quadratic curve: f = a + bx. x independent variable."""
     x = np.linspace(0, 1, 100)
     a = parameters['a']
     b = parameters['b']
     f = a + b * x
-    return {"x": x, "f": f}
+    return {"x":x, "f":f}
 
 def quadratic_model_3d(**parameters):
     """Quadratic curve: f = a + bx + cx^2. x independent variable."""
@@ -62,7 +63,7 @@ def quadratic_model_3d(**parameters):
     b = parameters['b']
     c = parameters['c']
     f = a + b * x + c * x ** 2
-    return {"x": x, "f": f} 
+    return {"x":x, "f":f} 
     
 class FiniteDifferenceTest(MatcalUnitTest):
 
@@ -1400,45 +1401,76 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assertIsNone(self.kfold.scale)
         self.assertEqual(self.kfold.metric, 'sum_abs_error')
         self.assertIsNone(self.kfold.groups)
+        self.assertEqual(self.kfold.interpolation_field, 'x')
+
+    def test_set_kfcv_options(self):
+        from sklearn.linear_model import LinearRegression
+        kfcv_options = {'nsplits':4, 'group_kfold':True,
+                        'scale': 'cbrt', 'metric':'mse',
+                        'groups': None,
+                        'interpolation_field': 'x',
+                        }
+        self.kfold.X = self.X
+        self.kfold._set_kfcv_options(**kfcv_options)
+        self.assertEqual(self.kfold.nsplits, 4)
+        self.assertTrue(self.kfold.group_kfold)
+        self.assertEqual(self.kfold.scale, 'cbrt')
+        self.assertEqual(self.kfold.metric, 'mse')
+        self.assertIsNone(self.kfold.groups)
+        self.assertEqual(self.kfold.interpolation_field, 'x')
+        
+        # Test setting splits > number of samples. Should revert to length of X
+        kfcv_options = {'nsplits': 10}
+        self.kfold._set_kfcv_options(**kfcv_options)
+        self.assertEqual(self.kfold.nsplits, 5)
 
     def test_calculate_sum_abs_error(self):
+        from matcal.core.parameter_studies import calculate_sum_abs_error
         y_true = np.array([1, 2, 3])
         y_pred = np.array([1, 2, 4])
-        error = self.kfold.calculate_sum_abs_error(y_true, y_pred)
+        error = calculate_sum_abs_error(y_true, y_pred)
         self.assertEqual(error, 1)
 
     def test_calculate_mean_abs_perc_error(self):
+        from matcal.core.parameter_studies import calculate_mean_abs_perc_error
         y_true = np.array([1, 2, 3])
         y_pred = np.array([1, 2, 4])
-        error = self.kfold.calculate_mean_abs_perc_error(y_true, y_pred)
+        error = calculate_mean_abs_perc_error(y_true, y_pred)
         self.assertAlmostEqual(error, 11.11, places=2)
 
     def test_calculate_sum_abs_perc_error(self):
+        from matcal.core.parameter_studies import calculate_sum_abs_perc_error
         y_true = np.array([1, 2, 3])
         y_pred = np.array([1, 2, 4])
-        error = self.kfold.calculate_sum_abs_perc_error(y_true, y_pred)
+        error = calculate_sum_abs_perc_error(y_true, y_pred)
         self.assertAlmostEqual(error, 33.33, places=2)
 
     def test_calculate_mse(self):
+        from matcal.core.parameter_studies import calculate_mse
         y_true = np.array([1, 2, 3])
         y_pred = np.array([1, 2, 4])
-        error = self.kfold.calculate_mse(y_true, y_pred)
+        error = calculate_mse(y_true, y_pred)
         self.assertAlmostEqual(error, 0.33, places=2)
 
     def test_calculate_rmse(self):
+        from matcal.core.parameter_studies import calculate_rmse
         y_true = np.array([1, 2, 3])
         y_pred = np.array([1, 2, 4])
-        error = self.kfold.calculate_rmse(y_true, y_pred)
+        error = calculate_rmse(y_true, y_pred)
         self.assertAlmostEqual(error, 0.57735, places=5)
 
     def test_perform_kfold_cv(self):
-        kfcv_options = {'metric': 'mse'}
+        kfcv_options = {'metric': 'mse',
+                        'interpolation_field':'x',
+                        'par_names':['a']}
         kf_results = self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
        
         # Check that the results are in the expected format
         self.assertIsInstance(kf_results, dict)
         self.assertEqual(len(kf_results), self.kfold.nsplits)
 
+        import pdb
+        pdb.set_trace()
         # Check that each result is a tuple (kfold error, indices of test samples)
         test_indices = []
         for result in kf_results.values():
@@ -1478,30 +1510,6 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         from sklearn.linear_model import LinearRegression
         self.assertIsNone(self.loocv.scale)
         self.assertEqual(self.loocv.metric, 'sum_abs_error')
-
-    def test_calculate_sum_abs_error(self):
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        error = self.loocv.calculate_sum_abs_error(y_true, y_pred)
-        self.assertEqual(error, 1)
-
-    def test_calculate_mean_abs_perc_error(self):
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        error = self.loocv.calculate_mean_abs_perc_error(y_true, y_pred)
-        self.assertAlmostEqual(error, 11.11, places=2)
-
-    def test_calculate_mse(self):
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        mse = self.loocv.calculate_mse(y_true, y_pred)
-        self.assertAlmostEqual(mse, 0.33, places=2)
-
-    def test_calculate_rmse(self):
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        rmse = self.loocv.calculate_rmse(y_true, y_pred)
-        self.assertAlmostEqual(rmse, 0.57735, places=5)
 
     def test_evaluate_sample(self):
         metrics = ['sum_abs_error', 'mape', 'mse', 'rmse', 'sum_abs_perc_error']
@@ -1595,7 +1603,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
                                         'nsplits':8,
                                         'nmax_folds':3,
                                         'nmax_loo':25,
-                                        'nmaxbatches':0}
+                                        'nmaxbatches':1}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
