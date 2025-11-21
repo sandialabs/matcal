@@ -59,7 +59,7 @@ class ScipyMinimizeOneParameterPythonTest(MatcalUnitTest):
 
     def test_trust_constr_minimize_calibration(self):
         run_study_for_method(self, method="trust-constr", 
-                             step_size=1e-5, options={"maxiter":100})
+                             step_size=1e-5, options={"maxiter":100}, tol=1e-5)
 
 
 class ScipyLeastSquaresOneParameterPythonTest(MatcalUnitTest):

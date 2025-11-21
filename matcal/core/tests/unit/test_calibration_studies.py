@@ -51,10 +51,10 @@ def run_study_for_method(test, method=None, study=ScipyMinimizeStudy,
     calibration.set_results_storage_options(weighted_conditioned=True)
     results = calibration.launch()
     test.assertAlmostEqual(results.outcome['best:m'], goal_value, delta=goal_value * test.error_tol)
+    print(results.exit_message)
     test.assertTrue(results.success)
     test.assertIsNotNone(results.exit_status)
     test.assertNotEqual(results.exit_message, "")
-    print(results.exit_message)
     return results, curve_data, model, objective, goal_value
 
 def run_serial_study_for_method(test, **kwargs):
