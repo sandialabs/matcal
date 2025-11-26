@@ -419,7 +419,7 @@ def _process_training_data(training_data_list,
                          fields_of_interest,
                          interpolation_locations, 
                          interpolation_field):
-    
+   
     processed_data = _initialize_processed_data(training_data_list, fields_of_interest,
                                                  interpolation_locations)
     

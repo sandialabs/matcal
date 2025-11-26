@@ -1182,12 +1182,17 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.X = np.array(params_formatted).T  
     
     def _format_output(self):
+        from matcal.core.data import convert_data_to_dictionary
         model_name = self._get_model_names()[0]
         state0 = self._results.simulation_history[model_name].states['matcal_default_state']
         sim_history = self._results.simulation_history[model_name][state0]
         nsamples = len(self.X)
-        data = [sim_history[i]['f'][:] for i in range(nsamples)]
-        self.y = np.asarray(data)
+        data = []
+        for nn in np.arange(nsamples):
+            data.append(convert_data_to_dictionary(sim_history[nn]))
+        #data = [sim_history[i]['f'][:] for i in range(nsamples)]
+        #self.y = np.asarray(data)
+        self.y = data
         
     def _perform_voronoi_batch_sampling(self): 
         self._nbatch_samples.append(self.results.number_of_evaluations)
@@ -1343,7 +1348,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _perform_kfold_cross_validation(self):
         self._kf = None
         print("Performing kfold cross-validation...")
-        kfcv = KFoldCrossValidation(self)
+        kfcv = KFoldCrossValidation()
         groups = None
 
         if self.group_kfold:
@@ -1902,6 +1907,7 @@ class KFoldCrossValidation:
         self.groups = None
         self.interpolation_field = 'x'
         self.par_names = None
+        self.field_names = None
          
     def _set_kfcv_options(self, **kfcv_kwargs):
         """Set KFold CV properties."""
@@ -1948,10 +1954,15 @@ class KFoldCrossValidation:
             cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
             for train_idx, test_idx in cv.split(self.X):
                 print("Train:", train_idx, " Test:", test_idx)
-            
+          
+            ################################### 
+            # need this to debug, will remove # 
+            ###################################
             train_index = [0, 1, 3, 4]
             test_index = [2]
             error, test_index = self.evaluate_fold(train_index, test_index, self.X, self.y)
+            ###################################
+            ###################################
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
                 for train_index, test_index in cv.split(self.X)
@@ -1969,6 +1980,11 @@ class KFoldCrossValidation:
         surrogate_options = get_cv_surrogate_options(test_eval_info,
                                                      self.interpolation_field) 
         
+        ################################################
+        ## WORKING HERE ##
+        ################################################
+        ## PROBLEM WITH THE NUMBER OF FEATURES in PCA ##
+        ################################################
         # Fit the model on the training data
         fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
         
@@ -1976,26 +1992,29 @@ class KFoldCrossValidation:
         y_pred = fold_surrogate(X_test)
         y_test, y_pred = transform_output(self.scale, y_test, y_pred)
         error = calculate_error(self.metric, y_test, y_pred)
-
         return error, test_index
    
     def extract_fold_info(self, train_index, test_index, X, y):
         X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
+        y_train = [y[i] for i in train_index]
+        y_test = [y[i] for i in test_index]
+        #y_train, y_test = y[train_index], y[test_index]
         
         #input needs to be an ordered dict
-        import pdb
-        pdb.set_trace()
-        train_input_ordered_dict = OrderedDict(
-            (key, X_train[:, i].tolist()) for i, key in enumerate(self.par_names)
-        )
-        train_eval_info = {'input': train_input_ordered_dict, 'output': {'state0':y_train}}
+
+        #train_input_ordered_dict = OrderedDict(
+        #    (key, X_train[:, i].tolist()) for i, key in enumerate(self.par_names)
+        #)
+        #train_eval_info = {'input': train_input_ordered_dict, 'output': {'state0':y_train}}
         
-        test_input_ordered_dict = OrderedDict(
-            (key, X_test[:, i].tolist()) for i, key in enumerate(self.par_names)
-        )        
-        test_eval_info = {'input': test_input_ordered_dict, 'output': {'state0':y_test}}
-        return train_eval_info, test_eval_info, X_test, y_test
+        #test_input_ordered_dict = OrderedDict(
+        #    (key, X_test[:, i].tolist()) for i, key in enumerate(self.par_names)
+        #)        
+        #test_eval_info = {'input': test_input_ordered_dict, 'output': {'state0':y_test}}
+        #return train_eval_info, test_eval_info, X_test, y_test
+        train_res, test_res = _setup_studies_for_cv(self.par_names,
+                                                    X_train, X_test, y_train, y_test)
+        return train_res, test_res, X_test, y_test
 
 
 class LeaveOneOutCrossValidation:
@@ -2076,8 +2095,8 @@ class LeaveOneOutCrossValidation:
 def get_cv_surrogate_options(test_eval_info, interpolation_field):
     surrogate_options = {'interpolation_field':interpolation_field,
                          'training_fraction': 1.0,
-                         'test_eval_info':test_eval_info,
-                         'state':'state0'}
+                         'test_eval_info':test_eval_info}
+                         #'state':'state0'}
     return surrogate_options
 
 
@@ -2139,3 +2158,45 @@ def calculate_rmse(y_true, y_pred):
 
 def calculate_sum_abs_perc_error(y_true, y_pred):
     return np.sum(calculate_abs_perc_error(y_true, y_pred))
+
+
+def _setup_studies_for_cv(p_names, train_samples, test_samples,
+                               train_evals, test_evals):
+    res = _get_parameter_and_simulation_hist(p_names, train_samples, train_evals)
+    #matcal_save("test_surrogate_source_data.joblib", res)
+    
+    test_res = _get_parameter_and_simulation_hist(p_names, test_samples, test_evals)
+    #matcal_save("test_surrogate_test_data.joblib", test_res)
+        
+    return res, test_res
+
+
+def _get_parameter_and_simulation_hist(p_names, p_samples, m_evals):
+    from matcal.core.study_base import StudyResults
+    p_hist = _format_parameter_hist(p_names, p_samples)
+    res_hist = _format_parameter_evaluations(p_names, m_evals)
+    res = StudyResults()
+    res._update_parameter_history(p_hist, list(p_hist.keys()))
+
+    res._update_simulation_history(res_hist, 'cv')
+    return res
+
+
+def _format_parameter_hist(names, p_samples):
+    from matcal.core.parameters import ParameterCollection
+    n_samples = p_samples.shape[0]
+    params = OrderedDict()
+    pc = ParameterCollection('cv')
+    for idx in range(n_samples):
+        params[f"eval_{idx}"] = OrderedDict()
+        for n_idx, param_name in enumerate(names):
+            params[f"eval_{idx}"][param_name] = p_samples[idx, n_idx]
+    return params 
+
+
+def _format_parameter_evaluations(param_order, model_evals):
+    from matcal.core.data import convert_dictionary_to_data, DataCollection
+    results_hist = DataCollection("CV data collection")
+    for eval in model_evals:
+        results_hist.add(convert_dictionary_to_data(eval))
+    return results_hist
