@@ -1,4 +1,4 @@
-from matcal.core.constants import BATCH_RESTART_FILENAME
+import gc
 import numpy as np
 
 from matcal.core.calibration_studies import (ScipyMinimizeStudy, ScipyLeastSquaresStudy, 
@@ -9,7 +9,6 @@ from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.objective import CurveBasedInterpolatedObjective
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests
-import os, gc
 
 
 def my_function(**param_dict):
@@ -27,7 +26,7 @@ def get_goal_data(ref_value):
 def run_study_for_method(test, method=None, study=ScipyMinimizeStudy, 
                          step_size=1e-6, 
                          initial_guess=100.0,
-                         central_finite_diff=False, metric_function=None, 
+                         central_finite_diff=False, metric_function=None, core_limit=6,
                          **kwargs):
     slope = Parameter("m", -100., 100., initial_guess)
     parameter_collection = ParameterCollection("one_parameter", slope)
@@ -43,66 +42,28 @@ def run_study_for_method(test, method=None, study=ScipyMinimizeStudy,
     if metric_function != None:
         objective.set_metric_function(metric_function)
     calibration.add_evaluation_set(model, objective, curve_data)
-    calibration.set_core_limit(6)
+    if core_limit is not None:
+        calibration.set_core_limit(core_limit)
+    else:
+        calibration.run_in_serial()
     calibration.set_step_size(step_size)
     calibration.use_three_point_finite_difference(central_finite_diff)
-    results = calibration.launch()
-    test.assertAlmostEqual(results.outcome['best:m'], goal_value, delta=goal_value * test.error_tol)
-
-def run_serial_study_for_method(test, method=None, study=ScipyMinimizeStudy, 
-                         step_size=1e-6, 
-                         initial_guess=100.0,
-                         central_finite_diff=False, metric_function=None, 
-                         **kwargs):
-    slope = Parameter("m", -100., 100., initial_guess)
-    parameter_collection = ParameterCollection("one_parameter", slope)
-
-    goal_value = 2.
-    curve_data = get_goal_data(goal_value)
-
-    model = PythonModel(my_function)
-
-    calibration = study(parameter_collection, method=method,
-                         **kwargs)
-    objective = CurveBasedInterpolatedObjective("x", "y")
-    if metric_function != None:
-        objective.set_metric_function(metric_function)
-    calibration.add_evaluation_set(model, objective, curve_data)
-    calibration.set_core_limit(6)
-    calibration.set_step_size(step_size)
-    calibration.use_three_point_finite_difference(central_finite_diff)
-    calibration.run_in_serial()
-    results = calibration.launch()
-    test.assertAlmostEqual(results.outcome['best:m'], goal_value, delta=goal_value * test.error_tol)
-
-def run_serial_study_for_method_get_history(test, method=None, study=ScipyMinimizeStudy, 
-                         step_size=1e-6, 
-                         initial_guess=100.0,
-                         central_finite_diff=False, metric_function=None, 
-                         **kwargs):
-    slope = Parameter("m", -100., 100., initial_guess)
-    parameter_collection = ParameterCollection("one_parameter", slope)
-
-    goal_value = 2.
-    curve_data = get_goal_data(goal_value)
-
-    model = PythonModel(my_function)
-
-    calibration = study(parameter_collection, method=method,
-                         **kwargs)
-    objective = CurveBasedInterpolatedObjective("x", "y")
-    if metric_function != None:
-        objective.set_metric_function(metric_function)
-    calibration.add_evaluation_set(model, objective, curve_data)
-    calibration.set_core_limit(6)
-    calibration.set_step_size(step_size)
-    calibration.use_three_point_finite_difference(central_finite_diff)
-    calibration.run_in_serial()
     calibration.set_results_storage_options(weighted_conditioned=True)
     results = calibration.launch()
     test.assertAlmostEqual(results.outcome['best:m'], goal_value, delta=goal_value * test.error_tol)
-    goal_message_start = 'Success'
-    test.assertTrue(results.exit_status[:len(goal_message_start)], goal_message_start)
+    print(results.exit_message)
+    test.assertTrue(results.success)
+    test.assertIsNotNone(results.exit_status)
+    test.assertNotEqual(results.exit_message, "")
+    return results, curve_data, model, objective, goal_value
+
+def run_serial_study_for_method(test, **kwargs):
+    run_study_for_method(test, core_limit=None, **kwargs)
+
+def run_serial_study_for_method_get_history(test, **kwargs):
+    results, curve_data, model, objective, goal_value = run_study_for_method(test, **kwargs)
+    test.assertAlmostEqual(results.outcome['best:m'], goal_value, delta=goal_value * test.error_tol)
+    test.assertTrue(results.success)
     test.assertAlmostEqual(results.parameter_history['m'][0], 100)
     test.assertAlmostEqual(results.parameter_history['m'][-1], goal_value, delta=goal_value * test.error_tol)
 
@@ -215,17 +176,18 @@ class TestScipyMinimizeStudy(StudyBaseUnitTests.CommonTests):
     def test_scipy_jac_studie_3_point(self):
         self.error_tol=1e-6
         gc.collect()
-        run_serial_study_for_method(self, 'SLSQP', self._study_class, jac='3-point')
-        
-        
+        run_serial_study_for_method(self, method='SLSQP', study=self._study_class, jac='3-point')
+                
     def test_scipy_jac_studie_2_point(self):
         self.error_tol=1e-6
         gc.collect()
-        run_serial_study_for_method(self, 'trust-constr', self._study_class, jac='2-point')
+        run_serial_study_for_method(self, method='trust-constr', 
+                                    study=self._study_class, jac='2-point')
 
     def test_scipy_studies_new_results(self):
         self.error_tol=1e-5
-        run_serial_study_for_method_get_history(self, 'SLSQP', self._study_class, jac='3-point', tol=1e-7)
+        run_serial_study_for_method_get_history(self, method='SLSQP', study=self._study_class,
+                                                 jac='3-point', tol=1e-7)
 
     def test_update_kwargs_with_hessian_argument(self):
         study = self._study_class(self.parameter_collection, method='trust-constr')

@@ -118,3 +118,21 @@ def initialize_matcal_logger(name, add_stream_handlers=True):
         logger.addHandler(output_stream_handler)
         logger.addHandler(error_stream_handler)
     return logger
+
+import logging
+import sys
+
+
+class StdStreamLogger(object):
+    def __init__(self, logger, level=logging.INFO):
+        self.logger = logger
+        self.level = level
+
+    def write(self, stream):
+        cleaned_lines = stream.rstrip()
+        split_cleaned_lines = cleaned_lines.splitlines()
+        for line in split_cleaned_lines:
+            self.logger.log(self.level, line.rstrip())
+
+    def flush(self):
+        pass

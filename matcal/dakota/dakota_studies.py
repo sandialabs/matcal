@@ -93,7 +93,10 @@ class DakotaStudyBase(StudyBase):
         dakota_results = self._return_output_information("./dakota.out")
         self._initialize_parameters_if_skipped_by_dakota()
         self._results._set_outcome(self._package_results(dakota_results))
-        
+        self._results._set_exit_information(None, None,
+                                            "Termination information not recorded for Dakota." +
+                                            "Check terminal output, 'dakota.out' and " +
+                                            "other dakota related output files. ")
         return self._results
 
     def _select_matcal_interface(self):

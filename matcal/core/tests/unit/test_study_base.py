@@ -632,7 +632,10 @@ class StudyResultsBaseUnitTests(object):
             
         def test_can_return_termination_status(self):
             rc = self._random_init()
-            rc.exit_status
+            self.assertEqual(rc.exit_status, 0)
+            self.assertTrue(rc.success)
+            self.assertEqual(rc.exit_message, 
+                             "Successful:\nYay\nAlgorithm returned exit status:\n0")
             
         def test_can_return_eval_sets(self):
             rc = self._random_init()
@@ -839,7 +842,7 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
                                                                simple_fun, 
                                                                record_weighted_conditioned, 
                                                                results_save_frequency=results_save_frequency)
-        sr._initialize_exit_status(True, '')
+        sr._set_exit_information(True, 0, 'Yay')
         outcome = {'Best:a':0, "Best:b":1}
         sr._set_outcome(outcome)
         return sr
@@ -861,7 +864,7 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
                                                                record_weighted_conditioned, 
                                                                best, 
                                                                results_save_frequency)
-        sr._initialize_exit_status(True, '')
+        sr._set_exit_information(True, 0, 'Yay')
         outcome = {'Best:a':0, "Best:b":1}
         sr._set_outcome(outcome)
         return sr
@@ -902,7 +905,10 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
     
         self.assertTrue(isinstance(results, StudyResults))
         self.assertEqual(len(results.parameter_history), 2)
-        
+        self.assertTrue(results.success, True)
+        self.assertEqual(results.exit_status, 0)
+        self.assertEqual(results.exit_message, "Successful:\n\nAlgorithm returned exit status:\n0")
+
     def test_export_eval_result_to_file(self):
         n_pts = 11
         time = np.linspace(0, 1, n_pts)
