@@ -1057,12 +1057,9 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
     return combined_array
 
 
-def _fit_surrogate_model(eval_info, save_filename='voronoi_surrogate', state=None, **surrogate_opts):
+def _fit_surrogate_model(eval_info, save_filename='voronoi_surrogate', **surrogate_opts):
     from matcal.core.surrogates import SurrogateGenerator
     surrogate_generator = SurrogateGenerator(eval_info, **surrogate_opts)
-    if state is not None:     
-        surrogate_generator.set_model_and_state(state=state)
-    # to evaluate use self._surrogate(X)
     return surrogate_generator.generate(save_filename)
         
 
@@ -1089,7 +1086,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         
         # build/train surrogate with initial training set and calculate initial error
         self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
-        self._calculate_surrogate_score()
+        self._current_surrogate_score.append(_get_surrogate_metric(self._surrogate, 'score'))
         self._perform_voronoi_batch_sampling()
         
     def _initialize_attributes(self):
@@ -1104,7 +1101,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.nmax_folds = 3
         self.nmax_loo = 25
         self.cv_scale = None
-        self.cv_metric = 'sum_abs_error'
+        self.cv_metric = 'mse'
         self.group_kfold = False
         self.thin = None
         self.random_selection = None
@@ -1113,7 +1110,9 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._nbatch_samples = []
         self.test_eval_info = None
         self.par_names = self._parameter_collection.get_item_names()
-        
+        self._eps = 1e-4
+        self._convergence_metric = 'nlpd'
+         
     def _extract_bounds_from_parameter_collection(self):
         self._l_bounds = []
         self._u_bounds = []
@@ -1166,15 +1165,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                    'test_eval_info': self.test_eval_info}    
         self._surrogate_options = options
     
-    def _calculate_surrogate_score(self):
-        test_score = self._surrogate.scores['test']
-        combined_score = []
-        for field_idx, field_name in enumerate(test_score):
-            if isinstance(test_score[field_name], (dict, OrderedDict)):
-                # look into what this score is in Scipy
-                combined_score += list(test_score[field_name]['mean'])
-        self._current_surrogate_score.append(np.linalg.norm(combined_score))
-
     def _format_params(self):
         params_formatted = []
         for param in self._results.parameter_history:
@@ -1190,23 +1180,20 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         data = []
         for nn in np.arange(nsamples):
             data.append(convert_data_to_dictionary(sim_history[nn]))
-        #data = [sim_history[i]['f'][:] for i in range(nsamples)]
-        #self.y = np.asarray(data)
         self.y = data
         
     def _perform_voronoi_batch_sampling(self): 
         self._nbatch_samples.append(self.results.number_of_evaluations)
         batch_number = 0
         while batch_number < self.nmaxbatches:
-            print(f"Sampling batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
+            print(f"Active Learning Batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
             print("................................................................")
-            new_samples = self._create_voronoi_tess_and_choose_new_samples(iter_=batch_number)
-            self._populate_parameter_evaluations(new_samples)
+            self._create_voronoi_tess_and_choose_new_samples(iter_=batch_number)
+            self._populate_parameter_evaluations(self._new_points)
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
-            self._update_surrogate_training_fraction()
-            self._fit_surrogate_model()
-            self._calculate_errors()
+            self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
+            self._current_surrogate_score.append(_get_surrogate_metric(self._surrogate, self._convergence_metric))
             self._nbatch_samples.append(self.results.number_of_evaluations)
             self._format_params()
             self._format_output()
@@ -1214,10 +1201,11 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             # convergence check
             if np.abs(self._current_surrogate_score[batch_number+1] - self._current_surrogate_score[batch_number]) <= self._eps:
                 print(f"BREAKING: Convergence from surrogate score.")
-                print(self._current_surrogate_score)
+                print(f"{self._convergence_metric}: {self._current_surrogate_score}")
                 break
             else:
                 print("Surrogate not converged yet.")
+                print(f"{self._convergence_metric}: {self._current_surrogate_score}")
             batch_number += 1
 
     def _populate_parameter_evaluations(self, samples):
@@ -1228,19 +1216,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             ss = { key:sample[i] for i, key in enumerate(param_order) }
             self._add_parameter_evaluation(**ss)
         self._check_parameter_sets_populated()
-
-    def _calculate_surrogate_loss(self):
-        # DO NOT CALL
-        # should be a part of surrogate generator (not here)
-        y_pred = self.surr_model.predict(self.X_test)
-        pred_error = np.abs(y_pred - self.y_test)
-        if self.surr_model_type == 'GPR':
-            # convergence based on marginal log likelihood for GPR
-            self._surrogate_loss.append(self.surr_model.surrogate.log_marginal_likelihood(\
-                self.surr_model.surrogate.kernel_.theta))
-        if self.surr_model_type == 'SVR':
-            epsilon = self.surr_model.surrogate.epsilon
-            self._surrogate_loss.append(np.maximum(0, pred_error - epsilon).mean())
 
     def _create_voronoi_tess_and_choose_new_samples(self, iter_):
         """
@@ -1256,8 +1231,9 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
 
             # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
             self._find_kfold_max_errors()
+            
             if self.nmax_loo == 'all':
-                worst_sample_locations = self.X[self._max_fold_indices]
+                worst_sample_locations = self.X[self._max_fold_error_indices]
             else:
                 # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
                 self._perform_loo_cross_validation()
@@ -1298,7 +1274,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _find_new_sample_locations(self):
 
         self._new_points = []
-        print("Finding new sample locations...")
+        print("Finding new sample locations")
         for loc_idx, location in enumerate(self._worst_sample_locations):
             if np.mod(loc_idx, 100) == 0:
                 print(f"Drawing new sample from region index {loc_idx} of {len(self._worst_sample_locations)}.")
@@ -1346,7 +1322,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
 
     def _perform_kfold_cross_validation(self):
         self._kf = None
-        print("Performing kfold cross-validation...")
+        print("Performing kfold cross-validation")
         kfcv = KFoldCrossValidation()
         groups = None
 
@@ -1362,27 +1338,27 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._kf = kfcv.perform_kfold_cv(self.X, self.y, **kfcv_options)
     
     def _find_kfold_max_errors(self):
-        self._max_fold_indices = None
-        print("Finding max kfold error...")
+        self._max_fold_error_indices = None
+        print("Finding max kfold error")
         max_folds = self._find_indices_of_n_largest_kf_errors()
-        self._max_fold_indices = np.concatenate(list(max_folds.values())) 
+        self._max_fold_error_indices = np.concatenate(list(max_folds.values())) 
     
     def _perform_loo_cross_validation(self):
         self._loo_errors = None
         print("Finding worst sample locations")
-        loocv = LeaveOneOutCrossValidation(self)
+        loocv = LeaveOneOutCrossValidation()
         loo_options = {'scale':self.cv_scale,
                        'metric':self.cv_metric,
                        'interpolation_field':self.interpolation_field,
                        'par_names':self.par_names}
         
-        self._loo_errors = loocv.perform_loocv(self.X, self.y, self.max_fold_indcies,
+        self._loo_errors = loocv.perform_loocv(self.X, self.y, self._max_fold_error_indices,
                                                **loo_options)
     
     def _find_loo_max_errors(self):
             self._worst_sample_locations = None
             max_loo_indices = self._find_indices_of_n_largest_errors()
-            self._worst_sample_locations = self.X[max_loo_indices]
+            return self.X[max_loo_indices]
         
     def _find_indices_of_n_largest_kf_errors(self):
 
@@ -1785,7 +1761,6 @@ class VoronoiTessellation:
         array: The Voronoi seed that belongs to the indexed region.
         """
 
-        # Find the index of the point
         point_index, = np.where(self.vor.point_region == region_index)
         return np.atleast_2d(self.vor.points[point_index[0]])
 
@@ -1906,7 +1881,6 @@ class KFoldCrossValidation:
         self.groups = None
         self.interpolation_field = 'x'
         self.par_names = None
-        self.field_names = None
          
     def _set_kfcv_options(self, **kfcv_kwargs):
         """Set KFold CV properties."""
@@ -1951,17 +1925,6 @@ class KFoldCrossValidation:
             )
         else:
             cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
-            for train_idx, test_idx in cv.split(self.X):
-                print("Train:", train_idx, " Test:", test_idx)
-          
-            ####################################### 
-            # need this to debug, will be removed # 
-            #######################################
-            train_index = [0, 1, 3, 4]
-            test_index = [2]
-            error, test_index = self.evaluate_fold(train_index, test_index, self.X, self.y)
-            ###################################
-            ###################################
             kf_results = Parallel(n_jobs=-1)(
                 delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
                 for train_index, test_index in cv.split(self.X)
@@ -1985,7 +1948,7 @@ class KFoldCrossValidation:
         # Make predictions for the test set and calculate error
         y_pred = fold_surrogate(X_test)
         y_test, y_pred = transform_output(self.scale, y_test, y_pred)
-        error = calculate_error(self.metric, y_test, y_pred)
+        error = _get_surrogate_metric(fold_surrogate, self.metric)
         return error, test_index
    
     def extract_fold_info(self, train_index, test_index, X, y):
@@ -2006,8 +1969,9 @@ class LeaveOneOutCrossValidation:
         
     def _initialize_attributes(self):
         self.scale = None
-        self.metric = 'sum_abs_error'
+        self.metric = 'mse'
         self.interpolation_field = 'x'
+        self.par_names = None
         
     def _set_loocv_options(self, **loocv_kwargs):
         """Set LeaveOneOut CV properties."""
@@ -2043,7 +2007,6 @@ class LeaveOneOutCrossValidation:
         )
 
         loo = {loo_idx: result for loo_idx, result in enumerate(loo_results)}
-
         return loo
     
     def evaluate_loo_sample(self, X, y, index):
@@ -2053,30 +2016,30 @@ class LeaveOneOutCrossValidation:
         surrogate_options = get_cv_surrogate_options(test_eval_info,
                                                      self.interpolation_field)
         # Fit the model on the training data
-        fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
+        loo_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
 
         # Make predictions for the left-out sample and calculate error
-        y_pred = fold_surrogate(X_test)
+        y_pred = loo_surrogate(X_test)
         y_test, y_pred = transform_output(self.scale, y_test, y_pred)
-        error = calculate_error(self.metric, y_test, y_pred)
-
+        error = _get_surrogate_metric(loo_surrogate, self.metric)
         return error, index
 
     def extract_loo_info(self, index, X, y):
         X_train = np.delete(X, index, axis=0)
-        y_train = np.delete(y, index, axis=0)
+        y_train = y.copy()
+        del y_train[index]
         X_test = X[index].reshape(1, -1)  # Reshape for a single sample
-        y_test = y[index]
-        train_eval_info = {'input': X_train, 'output': y_train}
-        test_eval_info = {'input': X_test, 'output': y_test}
-        return train_eval_info, test_eval_info, X_test, y_test
+        y_test = [y[index]]
+        train_res, test_res = _setup_studies_for_cv(self.par_names,
+                                                    X_train, X_test,
+                                                    y_train, y_test)
+        return train_res, test_res, X_test, y_test
     
     
 def get_cv_surrogate_options(test_eval_info, interpolation_field):
     surrogate_options = {'interpolation_field':interpolation_field,
                          'training_fraction': 1.0,
                          'test_eval_info':test_eval_info}
-                         #'state':'state0'}
     return surrogate_options
 
 
@@ -2086,7 +2049,7 @@ def perform_cbrt_transform(y):
 
 def transform_output(scale, y_test, y_pred):
     y_test = transform_y(scale, y_test)
-    y_pred = transform_y(y_pred)
+    y_pred = transform_y(scale, y_pred)
     return y_test, y_pred
 
 
@@ -2097,57 +2060,12 @@ def transform_y(scale, y):
         return np.log(y)
     elif scale is None:
         return y
-        
-         
-def calculate_error(metric, y_test, y_pred):
-    if metric == 'sum_abs_error':
-        return calculate_sum_abs_error(y_test, y_pred)
-    elif metric == 'mape':
-        return calculate_mean_abs_perc_error(y_test, y_pred)
-    elif metric == 'mse':
-        return calculate_mse(y_test, y_pred)
-    elif metric == 'rmse':
-        return calculate_rmse(y_test, y_pred)
-    elif metric == 'sum_abs_perc_error':
-        return calculate_sum_abs_perc_error(y_test, y_pred)
-    else:
-        print("Chosen metric for kfold cross validation not recognized. Reverting to the sum of absolute errors.")
-        return calculate_sum_abs_error(y_test, y_pred)
-
-
-def calculate_sum_abs_error(y_true, y_pred):
-    return  np.sum(np.abs(y_true - y_pred))
-
-
-def calculate_abs_perc_error(y_true, y_pred):
-    return np.abs((y_true - y_pred) / y_true) * 100
-
-
-def calculate_mean_abs_perc_error(y_true, y_pred):
-    return np.mean(calculate_abs_perc_error(y_true, y_pred))
-
-
-def calculate_mse(y_true, y_pred):
-    sq_error =  (y_true - y_pred) ** 2
-    return np.mean(sq_error)
-
-
-def calculate_rmse(y_true, y_pred):
-    return np.sqrt(calculate_mse(y_true, y_pred))
-
-
-def calculate_sum_abs_perc_error(y_true, y_pred):
-    return np.sum(calculate_abs_perc_error(y_true, y_pred))
 
 
 def _setup_studies_for_cv(p_names, train_samples, test_samples,
                                train_evals, test_evals):
     res = _get_parameter_and_simulation_hist(p_names, train_samples, train_evals)
-    #matcal_save("test_surrogate_source_data.joblib", res)
-    
     test_res = _get_parameter_and_simulation_hist(p_names, test_samples, test_evals)
-    #matcal_save("test_surrogate_test_data.joblib", test_res)
-        
     return res, test_res
 
 
@@ -2179,3 +2097,12 @@ def _format_parameter_evaluations(param_order, model_evals):
     for eval in model_evals:
         results_hist.add(convert_dictionary_to_data(eval))
     return results_hist
+
+
+def _get_surrogate_metric(surrogate, metric):
+    test_score = surrogate.scores['test']
+    combined_score = []
+    for field_idx, field_name in enumerate(test_score):
+        if isinstance(test_score[field_name], (dict, OrderedDict)):
+            combined_score += list(test_score[field_name][metric])
+    return np.linalg.norm(combined_score)
