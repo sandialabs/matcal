@@ -683,7 +683,7 @@ def _get_test_decomp_results(source_history, field, data_scaler, decomposer, lat
     source_data = _get_data(source_history, field)
     scaled_data = data_scaler.transform(source_data)
     latent_data = decomposer.transform(scaled_data)
-    latent_data = _ensure_2d_array(latent_data, 1)
+    latent_data = _ensure_2d_array(latent_data, 1, check_relative_dims=False)
     scaled_latent_test_data = latent_scaler.transform(latent_data)
     return scaled_latent_test_data
     
@@ -980,8 +980,8 @@ _surrogate_selection = BasicIdentifier()
 _surrogate_selection.register(MatCalMultiModalPCASurrogate.name, MatCalMultiModalPCASurrogate)
 _surrogate_selection.register(MatCalMonolithicPCASurrogate.name, MatCalMonolithicPCASurrogate)
 
-
-def _ensure_2d_array(active_array, constrained_dim=0):
+# break transpose out into own function (after elif)
+def _ensure_2d_array(active_array, constrained_dim=0, check_relative_dims=True):
     if not isinstance(active_array, np.ndarray):
         active_array = np.array([active_array])    
     if active_array.ndim == 1:
@@ -990,9 +990,10 @@ def _ensure_2d_array(active_array, constrained_dim=0):
         else:
             active_array = active_array.reshape(-1, 1)
     elif active_array.ndim == 2:
-        aa_shape = active_array.shape
-        if aa_shape[constrained_dim] > aa_shape[1-constrained_dim]:
-            active_array = active_array.T
+        if check_relative_dims:
+            aa_shape = active_array.shape
+            if aa_shape[constrained_dim] > aa_shape[1-constrained_dim]:
+                active_array = active_array.T
     return active_array
 
 

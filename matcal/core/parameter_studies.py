@@ -1205,7 +1205,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
             self._update_surrogate_training_fraction()
-            ## !! Pass test data into surrogate !! ##
             self._fit_surrogate_model()
             self._calculate_errors()
             self._nbatch_samples.append(self.results.number_of_evaluations)
@@ -1955,9 +1954,9 @@ class KFoldCrossValidation:
             for train_idx, test_idx in cv.split(self.X):
                 print("Train:", train_idx, " Test:", test_idx)
           
-            ################################### 
-            # need this to debug, will remove # 
-            ###################################
+            ####################################### 
+            # need this to debug, will be removed # 
+            #######################################
             train_index = [0, 1, 3, 4]
             test_index = [2]
             error, test_index = self.evaluate_fold(train_index, test_index, self.X, self.y)
@@ -1980,11 +1979,6 @@ class KFoldCrossValidation:
         surrogate_options = get_cv_surrogate_options(test_eval_info,
                                                      self.interpolation_field) 
         
-        ################################################
-        ## WORKING HERE ##
-        ################################################
-        ## PROBLEM WITH THE NUMBER OF FEATURES in PCA ##
-        ################################################
         # Fit the model on the training data
         fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
         
@@ -1998,20 +1992,6 @@ class KFoldCrossValidation:
         X_train, X_test = X[train_index], X[test_index]
         y_train = [y[i] for i in train_index]
         y_test = [y[i] for i in test_index]
-        #y_train, y_test = y[train_index], y[test_index]
-        
-        #input needs to be an ordered dict
-
-        #train_input_ordered_dict = OrderedDict(
-        #    (key, X_train[:, i].tolist()) for i, key in enumerate(self.par_names)
-        #)
-        #train_eval_info = {'input': train_input_ordered_dict, 'output': {'state0':y_train}}
-        
-        #test_input_ordered_dict = OrderedDict(
-        #    (key, X_test[:, i].tolist()) for i, key in enumerate(self.par_names)
-        #)        
-        #test_eval_info = {'input': test_input_ordered_dict, 'output': {'state0':y_test}}
-        #return train_eval_info, test_eval_info, X_test, y_test
         train_res, test_res = _setup_studies_for_cv(self.par_names,
                                                     X_train, X_test, y_train, y_test)
         return train_res, test_res, X_test, y_test
@@ -2177,7 +2157,6 @@ def _get_parameter_and_simulation_hist(p_names, p_samples, m_evals):
     res_hist = _format_parameter_evaluations(p_names, m_evals)
     res = StudyResults()
     res._update_parameter_history(p_hist, list(p_hist.keys()))
-
     res._update_simulation_history(res_hist, 'cv')
     return res
 
