@@ -701,9 +701,6 @@ def _get_data(source_dict, field):
 def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_latent_data,
                         training_fraction, regressor_type, regressor_kwargs, regressor_init_func,
                         test_scaled_latent_data=None, test_scaled_parameters=None):
-    train_score = []
-    test_score = []
-   
     if training_fraction == 1.0:
         param_train = scaled_parameters
         param_test = test_scaled_parameters
@@ -717,10 +714,11 @@ def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_la
     n_parameters = scaled_parameters.shape[1]
     regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
     data_train = _ensure_2d_array(data_train, 1)
-    data_test = _ensure_2d_array(data_test, 1)
+    data_test = _ensure_2d_array(data_test, 1, check_relative_dims=False)
     regressor.fit(param_train, data_train)
-    train_score.append(regressor.score(param_train, data_train))
-    test_score.append(regressor.score(param_test, data_test))
+    
+    train_score = _calculate_performance_metrics(regressor, param_train, data_train)
+    test_score = _calculate_performance_metrics(regressor, param_test, data_test)
     
     logger.info(f"    Training Complete: {training_fraction*100} % of data used for training")
     logger.info(f"    Surrogate scores for {field}: ")
@@ -739,13 +737,23 @@ def _select_training_and_test_data(scaled_parameters, scaled_latent_data,
     return param_train, param_test, data_train, data_test
 
 
+def _calculate_performance_metrics(regressor, param, data):
+    metrics = []
+    metrics.append(regressor.score(param, data))
+    metrics.append(regressor.nlpd(param, data))
+    metrics.append(regressor.mse(param, data))
+    metrics.append(regressor.rmse(param, data))
+    return metrics
+    
+    
 def _convert_instances_to_stats(scores, score_set_name):
     score_stats = OrderedDict()
     a_scores = np.array(scores)
-    score_stats['mean'] = np.mean(a_scores, axis = 0)
-    score_stats['max'] = np.max(a_scores, axis = 0)
-    score_stats['min'] = np.min(a_scores, axis = 0)
-    
+    score_stats['score'] = a_scores[0]
+    score_stats['nlpd'] = a_scores[1]
+    score_stats['mse'] = a_scores[2]
+    score_stats['rmse'] = a_scores[3]
+     
     score_message = f"\t{score_set_name}:\n"
     for name, value in score_stats.items():
         score_message += f"\t {name} : {value}\n"    
@@ -786,6 +794,27 @@ class _modal_regressor:
             mode_scores[mode_idx] = regressor.score(input_values, mode_values[:, mode_idx])
         return mode_scores
     
+    def nlpd(self, input_values, mode_values):
+        nlpd = np.zeros(self.num_modes)
+        for mode_idx, regressor in enumerate(self._mode_regressors):
+            mu, std = regressor.predict(input_values, return_std=True)
+            var = std ** 2
+            y_true = mode_values[:, mode_idx]
+            nlpd[mode_idx] = 0.5 * np.mean( np.log(2 * np.pi * var) + ((y_true - mu) ** 2) / var)
+        return nlpd
+
+    def mse(self, input_values, mode_values):
+        mse = np.zeros(self.num_modes)
+        for mode_idx, regressor in enumerate(self._mode_regressors):
+            y_pred = regressor.predict(input_values)
+            y_true = mode_values[:, mode_idx]
+            mse[mode_idx] = np.mean( (y_true - y_pred) ** 2)
+        return mse
+
+    def rmse(self, input_values, mode_values):
+        rmse = self.mse(input_values, mode_values) ** 0.5
+        return rmse
+
     def predict(self, input_values):
         n_predictions = input_values.shape[0]
         prediction = np.zeros([n_predictions, self.num_modes])
