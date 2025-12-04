@@ -1146,10 +1146,15 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                 raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
         if self.random_selection is not None and self.thin is not None:
             raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
+        valid_cv_metrics = ['rmse', 'nlpd']
+        if self.cv_metric not in valid_cv_metrics:
+            raise ValueError("cv_metric not implemented. 'cv_metric' must one of 'rmse', 'nlpd'")
     
     def _set_surrogate_options(self, **surrogate_options):
+        # this should not be hard-coded
         self.interpolation_field = 'x'
         self._training_fraction = 1.0
+        self._cv_test_set = False
         for key, value in surrogate_options.items():
             if hasattr(self, key):
                 if key == 'training_fraction':
@@ -1946,8 +1951,6 @@ class KFoldCrossValidation:
         fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
         
         # Make predictions for the test set and calculate error
-        y_pred = fold_surrogate(X_test)
-        y_test, y_pred = transform_output(self.scale, y_test, y_pred)
         error = _get_surrogate_metric(fold_surrogate, self.metric)
         return error, test_index
    
@@ -2019,8 +2022,6 @@ class LeaveOneOutCrossValidation:
         loo_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
 
         # Make predictions for the left-out sample and calculate error
-        y_pred = loo_surrogate(X_test)
-        y_test, y_pred = transform_output(self.scale, y_test, y_pred)
         error = _get_surrogate_metric(loo_surrogate, self.metric)
         return error, index
 
@@ -2038,8 +2039,9 @@ class LeaveOneOutCrossValidation:
     
 def get_cv_surrogate_options(test_eval_info, interpolation_field):
     surrogate_options = {'interpolation_field':interpolation_field,
-                         'training_fraction': 1.0,
-                         'test_eval_info':test_eval_info}
+                         'training_fraction':1.0,
+                         'test_eval_info':test_eval_info,
+                         'cv_test_set':True}
     return surrogate_options
 
 

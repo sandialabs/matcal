@@ -59,7 +59,7 @@ class SurrogateGenerator:
     def __init__(self, evaluation_information, interpolation_field=None, 
                 interpolation_locations=200, 
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
-                regressor_type="Gaussian Process", test_eval_info=None,
+                regressor_type="Gaussian Process", test_eval_info=None, cv_test_set=False,
                 **regressor_kwargs):
         """
         :param evaluation_information: A container of the relevant 
@@ -113,6 +113,7 @@ class SurrogateGenerator:
         self._interpolation_locations = interpolation_locations
         self._eval_info = evaluation_information
         self._test_eval_info = test_eval_info
+        self._cv_test_set = cv_test_set
         self._model_name = None
         self._state = None
         self._training_fraction  = training_fraction
@@ -262,7 +263,6 @@ class SurrogateGenerator:
             preprocessing_function, self._eval_info)
         fields_of_interest = _identify_fields_of_interest(training_data_history, 
                                                           self._interpolation_field)
-
         if self._training_fraction == 1.0:
             self._check_test_evaluation_information_provided()
             test_data_history, test_param_history, test_param_ranges = self._package_surrogate_generator_input_data(
@@ -290,7 +290,8 @@ class SurrogateGenerator:
         new_surrogate = surrogate_class.fit(param_history, source_dict, self._fields_to_log_scale,
                                             self._decomp_tool, support_information,
                                             test_parameter_history=test_param_history,
-                                            test_source_history=test_source_dict)
+                                            test_source_history=test_source_dict,
+                                            cv_test_set=self._cv_test_set)
         self._plot_worst_recreations(new_surrogate, param_history, source_dict, 
                                      plot_n_worst, save_filename)
         return new_surrogate
@@ -678,12 +679,16 @@ def _get_decomp_results(source_history, field, make_log_scale, decomposition_too
     return decomp_results
 
 
-def _get_test_decomp_results(source_history, field, data_scaler, decomposer, latent_scaler):
+def _get_test_decomp_results(source_history, field, data_scaler, decomposer, latent_scaler, cv_test_set=False):
     """Transform test data after scalers and decomposition tool have already been trained on training data."""
+    check_relative_dims = True
+    if cv_test_set:
+        check_relative_dims = False
+        
     source_data = _get_data(source_history, field)
     scaled_data = data_scaler.transform(source_data)
     latent_data = decomposer.transform(scaled_data)
-    latent_data = _ensure_2d_array(latent_data, 1, check_relative_dims=False)
+    latent_data = _ensure_2d_array(latent_data, 1, check_relative_dims=check_relative_dims)
     scaled_latent_test_data = latent_scaler.transform(latent_data)
     return scaled_latent_test_data
     
@@ -700,7 +705,7 @@ def _get_data(source_dict, field):
 
 def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_latent_data,
                         training_fraction, regressor_type, regressor_kwargs, regressor_init_func,
-                        test_scaled_latent_data=None, test_scaled_parameters=None):
+                        test_scaled_latent_data=None, test_scaled_parameters=None, cv_test_set=False):
     if training_fraction == 1.0:
         param_train = scaled_parameters
         param_test = test_scaled_parameters
@@ -714,7 +719,10 @@ def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_la
     n_parameters = scaled_parameters.shape[1]
     regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
     data_train = _ensure_2d_array(data_train, 1)
-    data_test = _ensure_2d_array(data_test, 1, check_relative_dims=False)
+    check_relative_dims = True
+    if cv_test_set:
+        check_relative_dims = False
+    data_test = _ensure_2d_array(data_test, 1, check_relative_dims=check_relative_dims)
     regressor.fit(param_train, data_train)
     
     train_score = _calculate_performance_metrics(regressor, param_train, data_train)
@@ -722,8 +730,9 @@ def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_la
     
     logger.info(f"    Training Complete: {training_fraction*100} % of data used for training")
     logger.info(f"    Surrogate scores for {field}: ")
-    train_score = _convert_instances_to_stats(train_score, "Train")
-    test_score = _convert_instances_to_stats(test_score, "Test")
+    print_score = not cv_test_set
+    train_score = _convert_instances_to_stats(train_score, "Train", print_score)
+    test_score = _convert_instances_to_stats(test_score, "Test", print_score)
     return regressor, train_score, test_score
 
 
@@ -740,23 +749,75 @@ def _select_training_and_test_data(scaled_parameters, scaled_latent_data,
 def _calculate_performance_metrics(regressor, param, data):
     metrics = []
     metrics.append(regressor.score(param, data))
-    metrics.append(regressor.nlpd(param, data))
-    metrics.append(regressor.mse(param, data))
-    metrics.append(regressor.rmse(param, data))
+    metrics.append(nlpd(regressor, param, data))
+    metrics.append(rmse(regressor, param, data))
     return metrics
+
+
+def nlpd(regressor, input_values, evals):
+    """ Negative Log Posterior Density
+        Only applicable for GPR
+    """
+    if isinstance(regressor, _modal_regressor):
+        nlpd = np.zeros(evals.shape[1])
+        for idx, reg in enumerate(regressor._mode_regressors):
+            try:
+                nlpd[idx] = _calculate_nlpd(reg, input_values, evals[:, idx])
+            except:
+                nlpd[idx] = None
+        return nlpd 
+    elif not isinstance(regressor, _modal_regressor):
+        try:
+            nlpd = _calculate_nlpd(regressor, input_values, evals)
+        except:
+            return None
+        return nlpd
+
+
+def _calculate_nlpd(gpr, input_values, y_true):
+    mu, std = gpr.predict(input_values, return_std=True)
+    var = std ** 2
+    residuals = y_true - mu
+    nlpd = 0.5 * np.mean( np.log(2 * np.pi * var) + (residuals ** 2) / var)
+    return nlpd
+
+
+def _mse(regressor, input_values, evals):
+    if isinstance(regressor, _modal_regressor):
+        mse = np.zeros(evals.shape[1])
+        for idx, reg in enumerate(regressor._mode_regressors):
+            mse[idx] = _calculate_mse(reg, input_values, evals[:, idx])
+    else:
+        mse = _calculate_mse(regressor, input_values, evals)
+    return mse
+
+
+def _calculate_mse(regressor, input_values, y_true):
+    y_pred = regressor.predict(input_values)
+    residuals = y_true - y_pred
+    mse = np.mean( residuals ** 2)
+    return mse
     
     
-def _convert_instances_to_stats(scores, score_set_name):
+def rmse(regressors, input_values, evals):
+    rmse = _mse(regressors, input_values, evals) ** 0.5
+    return rmse
+    
+    
+def _convert_instances_to_stats(scores, score_set_name, print_score):
     score_stats = OrderedDict()
     a_scores = np.array(scores)
     score_stats['score'] = a_scores[0]
     score_stats['nlpd'] = a_scores[1]
-    score_stats['mse'] = a_scores[2]
-    score_stats['rmse'] = a_scores[3]
-     
+    score_stats['rmse'] = a_scores[2]
+    print_stat = [True, False ,False]
+    if not print_score:
+        print_stat = [not item for item in print_stat]        
+    
     score_message = f"\t{score_set_name}:\n"
-    for name, value in score_stats.items():
-        score_message += f"\t {name} : {value}\n"    
+    for idx, (name, value) in enumerate(score_stats.items()):
+        if print_stat[idx]:
+            score_message += f"\t {name} : {value}\n"    
     logger.info(score_message)
     return score_stats
 
@@ -794,27 +855,6 @@ class _modal_regressor:
             mode_scores[mode_idx] = regressor.score(input_values, mode_values[:, mode_idx])
         return mode_scores
     
-    def nlpd(self, input_values, mode_values):
-        nlpd = np.zeros(self.num_modes)
-        for mode_idx, regressor in enumerate(self._mode_regressors):
-            mu, std = regressor.predict(input_values, return_std=True)
-            var = std ** 2
-            y_true = mode_values[:, mode_idx]
-            nlpd[mode_idx] = 0.5 * np.mean( np.log(2 * np.pi * var) + ((y_true - mu) ** 2) / var)
-        return nlpd
-
-    def mse(self, input_values, mode_values):
-        mse = np.zeros(self.num_modes)
-        for mode_idx, regressor in enumerate(self._mode_regressors):
-            y_pred = regressor.predict(input_values)
-            y_true = mode_values[:, mode_idx]
-            mse[mode_idx] = np.mean( (y_true - y_pred) ** 2)
-        return mse
-
-    def rmse(self, input_values, mode_values):
-        rmse = self.mse(input_values, mode_values) ** 0.5
-        return rmse
-
     def predict(self, input_values):
         n_predictions = input_values.shape[0]
         prediction = np.zeros([n_predictions, self.num_modes])
@@ -902,7 +942,7 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
 
     def _fit(parameter_fields, source_history, fields_to_log_scale, decomposition_tool,
              support_information, regressor_initializer, surrogate_class, load_key,
-             test_parameter_fields=None, test_source_history=None):
+             test_parameter_fields=None, test_source_history=None, cv_test_set=False):
         scaled_latent_test_data = None
         test_scaled_parameters = None
         parameter_scaler_set, scaled_parameters = _scale_parameters(parameter_fields, fields_to_log_scale)
@@ -920,7 +960,8 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
             
             if support_information['training_fraction'] == 1.0:
                 scaled_latent_test_data = _get_test_decomp_results(test_source_history, field,
-                                                                   data_scaler, decomposer, latent_scaler)
+                                                                   data_scaler, decomposer, latent_scaler,
+                                                                   cv_test_set=cv_test_set)
                 
             if not isinstance(decomposer, _DoNothingDataTransformer):
                 _record_variance_behaviors(decomposer, support_information['save_filename'], field)
@@ -928,7 +969,8 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                     field, scaled_latent_data, 
                     support_information['training_fraction'], support_information['regressor_type'],
                     support_information['regressor_kwargs'], regressor_initializer,
-                    test_scaled_latent_data=scaled_latent_test_data, test_scaled_parameters=test_scaled_parameters)
+                    test_scaled_latent_data=scaled_latent_test_data, test_scaled_parameters=test_scaled_parameters,
+                    cv_test_set=cv_test_set)
         
             regressor, train_scores[field], test_scores[field] = training_results
             packed_field_tools = [regressor, decomposer, data_scaler, latent_scaler]
@@ -976,13 +1018,13 @@ class MatCalMonolithicPCASurrogate(MatCalPCASurrogateBase):
     name = "PCA Monolythic Regressor"
     
     def fit(parameter_history, source_history, fields_to_log_scale, decomposition_variance,
-            support_information, test_parameter_history=None, test_source_history=None):
+            support_information, test_parameter_history=None, test_source_history=None, cv_test_set=False):
         return MatCalPCASurrogateBase._fit(parameter_history, source_history, fields_to_log_scale, 
                                            decomposition_variance, support_information,
                                            _initialize_regressor, __class__, 
                                            MatCalMonolithicPCASurrogate.name,
                                            test_parameter_fields=test_parameter_history,
-                                           test_source_history=test_source_history)
+                                           test_source_history=test_source_history, cv_test_set=cv_test_set)
 
 
 class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
@@ -996,13 +1038,15 @@ class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
     name = "PCA Multiple Regressors"
     
     def fit(parameter_history, source_history, fields_to_log_scale, decomposition_tool,
-            support_information, test_parameter_history=None, test_source_history=None):
+            support_information, test_parameter_history=None, test_source_history=None,
+            cv_test_set=False):
         return MatCalPCASurrogateBase._fit(parameter_history, source_history, 
                                            fields_to_log_scale, decomposition_tool,
                                            support_information, _modal_regressor,
                                            __class__, MatCalMultiModalPCASurrogate.name,
                                            test_parameter_fields=test_parameter_history,
-                                           test_source_history=test_source_history)
+                                           test_source_history=test_source_history,
+                                           cv_test_set=cv_test_set)
 
 
 _surrogate_selection = BasicIdentifier()
@@ -1027,7 +1071,6 @@ def _check_array_shape_and_transpose(array, constrained_dim):
     if aa_shape[constrained_dim] > aa_shape[1-constrained_dim]:
         array = array.T
     return array
-   
     
 class _MatCalSurrogateWrapper:
     
