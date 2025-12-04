@@ -1009,7 +1009,6 @@ _surrogate_selection = BasicIdentifier()
 _surrogate_selection.register(MatCalMultiModalPCASurrogate.name, MatCalMultiModalPCASurrogate)
 _surrogate_selection.register(MatCalMonolithicPCASurrogate.name, MatCalMonolithicPCASurrogate)
 
-# break transpose out into own function (after elif)
 def _ensure_2d_array(active_array, constrained_dim=0, check_relative_dims=True):
     if not isinstance(active_array, np.ndarray):
         active_array = np.array([active_array])    
@@ -1020,12 +1019,16 @@ def _ensure_2d_array(active_array, constrained_dim=0, check_relative_dims=True):
             active_array = active_array.reshape(-1, 1)
     elif active_array.ndim == 2:
         if check_relative_dims:
-            aa_shape = active_array.shape
-            if aa_shape[constrained_dim] > aa_shape[1-constrained_dim]:
-                active_array = active_array.T
+            active_array = _check_array_shape_and_transpose(active_array, constrained_dim)
     return active_array
 
-
+def _check_array_shape_and_transpose(array, constrained_dim):
+    aa_shape = array.shape
+    if aa_shape[constrained_dim] > aa_shape[1-constrained_dim]:
+        array = array.T
+    return array
+   
+    
 class _MatCalSurrogateWrapper:
     
     def __init__(self, surrogate):
