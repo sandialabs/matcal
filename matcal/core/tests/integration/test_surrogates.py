@@ -25,9 +25,8 @@ def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high,
         test_res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, 100,
                                                       test_function, rng=20, **parameter_mod)
         matcal_save("test_surrogate_test_data.joblib", test_res)
-        
     sur_gen = SurrogateGenerator(res, indep_var, training_fraction=training_fraction,
-                                 test_evaluation_information=test_res)
+                                 test_eval_info=test_res)
     
     return sur_gen
 
@@ -111,7 +110,7 @@ class TestSurrogateGenerator(MatcalUnitTest):
             
     def _confirm_good_test_scores(self, surrogate):
         for field in surrogate.scores['test']:
-            worst_scores = surrogate.scores['test'][field]['min']
+            worst_scores = surrogate.scores['test'][field]['score']
             if isinstance(worst_scores, (float, int)):
                 self.assertGreaterEqual(worst_scores, 0.99)
             else:

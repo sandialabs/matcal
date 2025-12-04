@@ -1604,7 +1604,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
                                         'nmax_folds':3,
                                         'nmax_loo':25,
                                         'nmaxbatches':1,
-                                        'cv_metric':'mse'}
+                                        'cv_metric':'nlpd'}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
