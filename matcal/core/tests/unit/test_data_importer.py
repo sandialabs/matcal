@@ -461,7 +461,7 @@ class TestCSVFileData(MatcalUnitTest):
         state_gold = {"state_param_1":1, "state_param_2":"state_string"}
         self.assertEqual(state_params, state_gold)
 
-    def test_skip_commented_disperesed_with_state(self):
+    def test_skip_commented_dispersed_with_state(self):
         filename = os.path.join(TEST_REFERENCE_DIR, "comments_dispersed_with_state.csv")
         data = self._confirm_matching_data(filename)
         state_params = data.state.params
@@ -472,6 +472,20 @@ class TestCSVFileData(MatcalUnitTest):
         self.assertEqual(data.state.name, 
                          ("state_param_1_state_string1"
                           f"_state_param_2_{1:12.6e}_state_param_3_state_string2"))
+        
+    def test_error_with_incorrect_state_dict(self):
+        file_string = """{temperature:100}
+        # a comment
+        # another
+        load, displacement
+        1.0, 0.0
+        2.0,1.0
+        """
+        with open("test_file.csv", 'w') as f:
+            f.write(file_string)
+        with self.assertRaises(NameError):
+            data = FileData("test_file.csv", comments="#")
+
     def _confirm_matching_data(self, filename):
         data = FileData(filename, comments="$")
         goal_dict = {'time': [0, 1, 2], 'temp': [100, 200, 300]}
