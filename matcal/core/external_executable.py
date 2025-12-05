@@ -107,7 +107,11 @@ class ExternalExecutableBase(ABC):
 
     def _log_errors_for_failed_commands(self):
         command_str = " ".join([str(x) for x in self._commands])
-        file_string = "\nCheck executable results and log files in:\n"+os.getcwd()
+        workdir = os.getcwd()
+        if self._working_directory is not None:
+            workdir = self._working_directory
+        file_string = ("\nCheck executable results and log files in:\n"+
+                       os.path.abspath(workdir))
         logger.error("The executable with the following commands failed:\n"+command_str+file_string)
 
     def read_popen_pipes(self):

@@ -120,6 +120,9 @@ class CommonDataUnitTests(object):
             with self.assertRaises(self._data.KeyError):
                 self._data.rename_field("asd", "X")
 
+            with self.assertRaises(ValueError):
+                self._data.rename_field("x", "y")
+
             self._data.rename_field("y", "Y")
             self.assertEqual(self._data.field_names, ["x", "Y"])
             
@@ -220,7 +223,7 @@ class DataCollectionTest(MatcalUnitTest):
         self.d_t = convert_dictionary_to_data(dT_dict) 
         self.d_t.set_state(self.example_state1)
 
-    def test_invalidName_willRaiseValueError(self):
+    def test_invalid_name_will_raise_value_error(self):
         with self.assertRaises(DataCollection.CollectionTypeError):
             dc = self.collection_type(None, [])
             cd = self.collection_type(1)
@@ -244,18 +247,18 @@ class DataCollectionTest(MatcalUnitTest):
         from matcal.core.serializer_wrapper import json_serializer
         json_serializer.dumps(dump) # make sure no error raised
 
-    def test_createDataCollectionWithOneData(self):
+    def test_create_data_collection_with_one_dData(self):
         dc = self.collection_type("ex", self.d_0)
         self.assertIn(self.example_state1, dc)
         self.assertIs(dc[self.example_state1][0], self.d_0)
 
-    def test_createDataCollectionWithSameState(self):
+    def test_create_data_collection_with_same_state(self):
         dc = self.collection_type("ex", self.d_0, self.d_1)
         self.assertIn(self.example_state1, dc)
         self.assertIs(dc[self.example_state1][0], self.d_0)
         self.assertIs(dc[self.example_state1][1], self.d_1)
 
-    def test_createDataCollectionWithTwoData(self):
+    def test_create_data_collection_with_two_data(self):
         dc = self.collection_type("ex")
         dc.add([self.d_0, self.d_2])
         self.assertIn(self.example_state1, dc)
@@ -263,7 +266,7 @@ class DataCollectionTest(MatcalUnitTest):
         self.assertIs(dc[self.example_state1][0], self.d_0)
         self.assertIs(dc[self.example_state2][0], self.d_2)
 
-    def test_createDataCollectionWithTwoDataList(self):
+    def test_create_data_collection_with_two_data_list(self):
         dc = self.collection_type("ex", self.d_0, self.d_2)
         self.assertIn(self.example_state1, dc)
         self.assertIn(self.example_state2, dc)
@@ -366,7 +369,7 @@ class DataCollectionTest(MatcalUnitTest):
         self.assertIs(dc[self.example_state1.name][0], self.d_0)
         self.assertIs(dc[self.example_state2.name][0], self.d_2)
 
-    def test_createHeterogeneousDataCollection(self):
+    def test_create_heterogeneous_data_collection(self):
         dc = self.collection_type("Mixed", self.d_0, self.d_t)
         self.assertIn("T", dc.field_names)
         self.assertIn("U", dc.field_names)
@@ -466,7 +469,6 @@ class DataCollectionTest(MatcalUnitTest):
         state1_goal = ["T", "F", "U"]
         state2_goal = ["F", "U"]
 
-
         self.assertEqual(state1_field_names_name_key, state1_field_names_state_key)
         self.assertEqual(state2_field_names_name_key, state2_field_names_state_key)
 
@@ -486,7 +488,6 @@ class DataCollectionTest(MatcalUnitTest):
 
         state1_goal = ["U", ]
         state2_goal = ["F", "U"]
-
 
         self.assertEqual(state1_field_names_name_key, state1_field_names_state_key)
         self.assertEqual(state2_field_names_name_key, state2_field_names_state_key)
