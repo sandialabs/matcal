@@ -197,6 +197,7 @@ class TestData(CommonDataUnitTests.CommonTests):
 
     _data_class = Data
 
+
 class DataCollectionTest(MatcalUnitTest):
 
     @classmethod
@@ -643,7 +644,7 @@ class DataCollectionTest(MatcalUnitTest):
             if field_name != indep_var:
                 self.assertIn(field_name, report['matcal_default_state'].keys())
             
-    def test_costant_field_has_near_zero_sd(self):
+    def test_constant_field_has_near_zero_sd(self):
         p_means = {'a': 2, 'b': 10}
         p_sd = {'a':1, 'b': 1}
         n_sets = 11

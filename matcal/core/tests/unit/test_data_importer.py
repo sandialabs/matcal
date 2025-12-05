@@ -494,6 +494,7 @@ class TestCSVFileData(MatcalUnitTest):
             self.assert_close_arrays(goal_value, data[goal_key])
         return data
 
+
 class TestMatlabFileDataMatV7(MatcalUnitTest):
     def setUp(self) -> None:
         super().setUp(__file__)
