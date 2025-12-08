@@ -88,7 +88,7 @@ class TestExodusFieldDataSeriesImporter(MatcalUnitTest):
 
     def test_get_field_value_for_block_for_all_time(self):
         block_index = 1
-        block_1_stress_yy = self.efi.get_values_for_all_time(block_index, 'stress_yy')
+        block_1_stress_yy = self.efi.get_all_element_values_for_all_time(block_index, 'stress_yy')
         goal = np.array([0.00000000e+00, 2.41062902e-05, 4.53431335e-05,
                          5.90541582e-05, 8.01294836e-05, 1.04504909e-04, 1.33823535e-04,
                          1.70007708e-04, 2.10679101e-04, 2.57641047e-04, 3.10172952e-04,

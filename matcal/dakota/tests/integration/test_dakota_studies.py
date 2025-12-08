@@ -106,6 +106,7 @@ class TestGradientCalibrationStudyNpsolSqp(DakotaIntegrationCommonTests.DakotaCo
         study.set_method("npsol_sqp")
         study.set_max_iterations(3)
         
+        
 class TestGradientCalibrationStudyDotMmfd(DakotaIntegrationCommonTests.DakotaCommonTests):
     _study_class = lcs.GradientCalibrationStudy
 

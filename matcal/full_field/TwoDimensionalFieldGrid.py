@@ -190,7 +190,7 @@ class NewToOldRemapper:
             close_y = self._find_close(old_points, new_points, point_id, 1)
             new_id = np.argwhere(np.multiply(close_x, close_y))[:,0]
             self._confirm_id(new_id)
-            new_to_old_map[point_id] = new_id
+            new_to_old_map[point_id] = new_id[0]
         return new_to_old_map
 
     def _confrim_equal_points(self, new_points, n_pts):

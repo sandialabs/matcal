@@ -4,7 +4,6 @@ import numpy as np
 import time
 
 def quad(a,b):
-    import numpy as np
     n_pts = 30
     x = np.linspace(0, 1, n_pts)
     y = b*x + a * np.power(x, 2)

@@ -1,7 +1,7 @@
 load,displacement
-1,2
-3,4
-2,3
+1.0,2
+3.0,4
+2.0,3
 inf,5
 nan,6
 &,8

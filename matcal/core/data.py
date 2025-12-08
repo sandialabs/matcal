@@ -3,7 +3,6 @@ The data module contains classes and functions for converting
 data into the structure that MatCal requires for studies.
 """
 
-from matcal.core.utilities import _time_interpolate
 from matcal.core.serializer_wrapper import _format_serial
 import numpy as np
 from itertools import count
@@ -82,8 +81,8 @@ class Data(np.ndarray):
         self._id_number = getattr(obj, '_id_number', None)
         self._name = getattr(obj, '_name', None)
 
-    def __array_wrap__(self, out_array, context=None):
-        return np.ndarray.__array_wrap__(self, out_array, context)
+    def __array_wrap__(self, out_array, context=None, return_scalar=False):
+        return np.ndarray.__array_wrap__(self, out_array, context, return_scalar)
 
     def set_state(self, state):
         """
@@ -1425,22 +1424,21 @@ def _create_array_from_dict(dict_data):
             raise UnequalTimeDimensionSizeError(key)
         data_types.append(_determine_data_type(item, key))
         row_data.append(item)
-    converted_array = np.core.records.fromarrays(row_data, dtype=data_types)
+    converted_array = np.rec.array(row_data, dtype=data_types)
     return converted_array
 
 
 def _determine_data_type(item, key):
     dtype=item.dtype
-   
-    if np.issubdtype(item.dtype, np.integer):
+    if issubclass(item.dtype.type, (numbers.Integral, numbers.Real)):
         dtype=float
     else:
         dtype=dtype
     if item.ndim <= 1:
-        dtype = (key, dtype)
-        return dtype
+        type_to_return = (key, dtype)
     else:
-        return (key, dtype, item.shape[1:])
+        type_to_return = (key, dtype, item.shape[1:])
+    return type_to_return
 
 
 class UnequalTimeDimensionSizeError(RuntimeError):

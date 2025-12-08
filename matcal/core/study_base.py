@@ -38,6 +38,7 @@ from matcal.version import __version__
 
 logger = initialize_matcal_logger(__name__)
 
+
 class StudyBase(ABC):
     """
     Base class for all MatCal Studies, not intended for users.
@@ -835,7 +836,10 @@ class StudyResults:
         self._total_objective_history = []
         self._outcome = None
         self._number_of_evaluations=0
-        
+        self._success = None
+        self._exit_message = None
+        self._exit_status = None        
+
     @property
     def should_record_parameters(self):
         should_record = (self._record_objectives or self._record_qois or 
@@ -903,16 +907,38 @@ class StudyResults:
         :rtype: int
         """
         return self._number_of_evaluations
-        
+
     @property
-    def exit_status(self):
+    def success(self)->bool:
+        """
+        Indicated whether the study completed successfully or not. 
+
+        :rtype: bool
+        """
+        return self._success
+
+    @property
+    def exit_message(self):
         """
         Stores any termination information from the study
+        Stores any termination message information from the study
 
         :return: The termination information from the study
+        :return: The termination message information from the study
         :rtype: str
         """
         return self._exit_message
+  
+    @property
+    def exit_status(self):
+        """
+        Returns error codes or exit flag status for the algorithm. Value 
+        varies by study and options used with the study.
+
+        :return: exit code from the algorithm
+        :rtype: int
+        """
+        return self._exit_status
  
     @property
     def evaluation_sets(self):
@@ -1049,11 +1075,11 @@ class StudyResults:
         eval_key = self.get_eval_set_name(model, obj)
         obj_evals = self.objective_history[eval_key].objectives
         summed_state_objs = np.zeros(len(obj_evals))
-        for idx, eval in enumerate(obj_evals):
-            for state in eval:
-                for data in eval[state]:
-                    for field in data.field_names:
-                        summed_state_objs[idx] += data[field]
+        for evaluation_number, eval_data_collection in enumerate(obj_evals):
+            for state in eval_data_collection:
+                for objective_data in eval_data_collection[state]:
+                    for field in objective_data.field_names:
+                        summed_state_objs[evaluation_number] += objective_data[field][0]
         return summed_state_objs
 
     def get_objectives_for_model(self, model):
@@ -1338,12 +1364,16 @@ class StudyResults:
             base_value = self.ResultsAttribute()
         return base_value
         
-    def _initialize_exit_status(self, success, exit_message):
+    def _set_exit_information(self, success, exit_status, exit_message):
+        self._success = success
+        self._exit_status = exit_status
         if success:
             self._exit_message = "Successful:\n"
         else:
             self._exit_message = "Failed   :\n"
         self._exit_message += exit_message
+        self._exit_message += f"\nAlgorithm returned exit status:\n{exit_status}"
+
         
     def _update_parameter_history(self, batch_parameters, eval_order):
         if len(self._parameter_history) < 1:

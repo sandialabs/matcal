@@ -38,7 +38,6 @@ def voce_model_last_point(a, b, *args, **kwargs):
 def quadratic_function(a,b,c):
     xmax = 1.0
     npts = 100
-    import numpy as np
     def f(x):
       z = a+b*x+c*x*x
       return z

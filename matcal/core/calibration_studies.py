@@ -153,9 +153,11 @@ class _ScipyCalibrationStudyBase(StudyBase):
                           jac=jac, 
                           bounds=self._get_bounds(), **self._kwargs)
         param_names = list(self._parameter_collection.get_current_value_dict().keys())
-        parameter_results = _package_calibration_results(OrderedDict(zip(param_names, scipy_results.x)))
+        parameter_results = _package_calibration_results(OrderedDict(zip(param_names, 
+                                                                         scipy_results.x)))
         self._results._set_outcome(parameter_results)
-        self._results._initialize_exit_status(scipy_results.status, scipy_results.message)
+        self._results._set_exit_information(
+            scipy_results.success, scipy_results.status, scipy_results.message)
 
         return self._results
     
@@ -216,7 +218,8 @@ class _ScipyCalibrationStudyBase(StudyBase):
             finite_diff_pts = finite_diff.compute_hessian_evaluation_points()
         else:
             three_point_finite_diff = self._three_point_finite_difference  
-            finite_diff_pts = finite_diff.compute_gradient_evaluation_points(three_point_finite_diff)
+            grad_cal_func = finite_diff.compute_gradient_evaluation_points
+            finite_diff_pts = grad_cal_func(three_point_finite_diff)
         return finite_diff, finite_diff_pts
 
     def _format_parameter_batch_eval_results(self, batch_raw_objectives, 
