@@ -5,7 +5,7 @@ import sys
 
 from matcal.core.logger import (initialize_matcal_logger, 
                                 activate_debug_output, 
-                                init_file_handler, StdStreamLogger)
+                                init_file_handler)
 from matcal.core.object_factory import IdentifierByTestFunction
 
 
@@ -27,9 +27,6 @@ def setup_and_get_input_path(argv=None):
     logger = initialize_matcal_logger("matcal", add_stream_handlers=False)
     file_handler = init_file_handler()
     logger.addHandler(file_handler)
-    sys.stdout = StdStreamLogger(logger, logging.INFO)
-    sys.stderr = StdStreamLogger(logger, logging.INFO)
-
     if args.debug:
         activate_debug_output(file_handler)
     return os.path.abspath(args.input)
