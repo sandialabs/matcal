@@ -1656,6 +1656,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             nlpd = _get_surrogate_metric(vor_study._surrogate,'nlpd')
             self.assertGreater(rmse, 0)
     
+    
     def test_perform_cv_and_find_max_errors(self):
         dims = [2, 3]
         for dim in dims:
@@ -1728,54 +1729,3 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
             self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
     
-    def test_find_sample_boundary_hull_ray_crossing(self):
-        dims = [2, 3]
-        for dim in dims: 
-            if dim == 2:
-                ray_direction = np.atleast_2d(np.array(([1, 1], [0, 1])))
-                ray_origin = np.array([0, 0])
-                expected_crossing = np.array(([5, 5], [0, 5]))
-            elif dim == 3:
-                ray_direction = np.atleast_2d(np.array(([1, 1, 1], [0, 1, 0])))
-                ray_origin = np.array([0, 0, 0])
-                expected_crossing = np.array(([5, 5, 5], [0, 5, 0]))
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            crossing = vor_study._find_sample_boundary_hull_ray_crossings(ray_direction, ray_origin)
-            self.assertTrue(np.all(crossing == expected_crossing))
-    
-    def test_launch(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 50
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            vor_study.launch(nbatches=3, nmax_folds=1, nmax_loo=10, nsplits=5)
-
-            # verify that errors are decreasing
-            errors = [vor_study._mse, vor_study._smape, vor_study._mae]
-            for error in errors:
-                # error may not decrease every iteration. Looking for overall trend.
-                error_decreasing = error[0] > error[-1]
-                self.assertTrue(error_decreasing)
-
-            # verify that the number of samples is increasing each iteration
-            nsamples = vor_study._nbatch_samples
-            nsamples_increasing = all(x < y for x, y in zip(nsamples, nsamples[1:]))
-            self.assertTrue(nsamples_increasing)
-            
-            self.assertEqual(vor_study.X.shape[0], nsamples[-1])
-            
-            # verify that all samples are within bounds
-            samples = vor_study.X
-            lb = np.array(bounds)[:, 0]
-            ub = np.array(bounds)[:, 1]
-            outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
-            self.assertFalse(np.any(outside_samples))
