@@ -1576,6 +1576,25 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
         parameter_collection =  TestVoronoiBatchStudy.setup_parameter_collection(dim)
 
         return physical_model, parameter_collection
+
+    @staticmethod
+    def format_study_params_and_output(study):
+        from matcal.core.data import convert_data_to_dictionary
+
+        params_formatted = []
+        for param in study.parameter_history:
+            params_formatted.append(study.parameter_history[param])
+        X = np.array(params_formatted).T  
+    
+        model_name = list(study.simulation_history.keys())[0]
+        state0 = study.simulation_history[model_name].states['matcal_default_state']
+        sim_history = study.simulation_history[model_name][state0]
+        nsamples = len(X)
+        data = []
+        for nn in np.arange(nsamples):
+            data.append(convert_data_to_dictionary(sim_history[nn]))
+        y = data
+        return X, y
     
     def evaluate_model(points, model):
         pass
@@ -1600,9 +1619,9 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             voronoi_sampling_options = {'voronoi_type':'full',
                                         'finite_only':False,
                                         'iterative_updates':True,
-                                        'nsplits':8,
+                                        'nsplits':0,
                                         'nmax_folds':3,
-                                        'nmax_loo':25,
+                                        'nmax_loo':'all',
                                         'nmaxbatches':1,
                                         'cv_metric':'nlpd'}
             surrogate_options = {'interpolation_field':'x',
@@ -1628,53 +1647,48 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
                                                      [5, 5, -5],
                                                      [5, 5, 5]])
             self.assertTrue(np.all(vor_study._boundary_points == expected_boundary_points))
+            
+            from matcal.core.parameter_studies import _get_surrogate_metric
+            surr_score = vor_study._current_surrogate_score
+            self.assertGreater(len(surr_score), 1)
+            self.assertGreater(surr_score[0], 0)
+            rmse = _get_surrogate_metric(vor_study._surrogate,'rmse')
+            nlpd = _get_surrogate_metric(vor_study._surrogate,'nlpd')
+            self.assertGreater(rmse, 0)
     
-    def test_calculate_errors(self):
+    def test_perform_cv_and_find_max_errors(self):
         dims = [2, 3]
         for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            vor_study._calculate_errors()
-            self.assertEqual(len(vor_study._mape), 1)
-            self.assertGreater(vor_study._mape[0], 0)
-            self.assertEqual(len(vor_study._mse), 1)
-            self.assertGreater(vor_study._mse[0], 0)
-            self.assertEqual(len(vor_study._mae), 1)
-            self.assertGreater(vor_study._mae[0], 0)
-            self.assertEqual(len(vor_study._smape), 1)
-            self.assertGreater(vor_study._smape[0], 0)
-    
-    def test_calculate_surrogate_loss(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            vor_study._calculate_surrogate_loss()
-            self.assertEqual(len(vor_study._surrogate_loss), 1)
-   
-    def test_perform_kf_cv(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            n_splits = 2
-            kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
+            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
+            vor_study = self._study_class(parameter_collection)
+            hal_test_study = self._study_test_class(parameter_collection)
+            ntest_samples = 50
+
+            test_points = np.linspace(.25, .75, 10)
+            objective = SimulationResultsSynchronizer("x", test_points, "f")
+            vor_study.add_evaluation_set(physical_model, objective)
+            hal_test_study.add_evaluation_set(physical_model, objective)
+            test_information = hal_test_study.launch(ntest_samples)
+            
+            nsplits = 2
+            nmax_loo = 3
+            voronoi_sampling_options = {'nsplits':nsplits,
+                                        'nmax_folds':1,
+                                        'nmax_loo':nmax_loo,
+                                        'nmaxbatches':1,
+                                        'cv_metric':'nlpd'}
+            surrogate_options = {'interpolation_field':'x',
+                                 'test_eval_info': test_information}
+            options = {'voronoi_sampling_options': voronoi_sampling_options,
+                       'surrogate_options': surrogate_options}
+             
+            vor_study.launch(**options)
+            max_fold_indices = vor_study._max_fold_error_indices
+            kf_results = vor_study._kf
 
             # Check that the results are in the expected format
             self.assertIsInstance(kf_results, dict)
-            self.assertEqual(len(kf_results), n_splits)
+            self.assertEqual(len(kf_results), nsplits)
 
             # Check that each result is a tuple (kfold error, indices of test samples)
             test_indices = []
@@ -1686,41 +1700,13 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             test_indices = np.vstack(test_indices)
             
             # check that each test sample is used once and only once
-            self.assertTrue(np.all(np.isin(np.arange(nsamples), test_indices)))
-            self.assertEqual(len(np.unique(test_indices)), nsamples)
+            self.assertTrue(np.all(np.isin(np.arange(vor_study._nsamples), test_indices)))
+            self.assertEqual(len(np.unique(test_indices)), vor_study._nsamples)
 
-    def test_find_kfold_max_errors(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 10 * dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            n_splits = 5
-            kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
-            nmax_folds = 1
-            max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
             max_key = max(kf_results, key=kf_results.get)
             self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
     
-    def test_perform_loo_cv(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 10 * dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            n_splits = 5
-            nmax_folds = 3
-            nmax_loo = 5
-            kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
-            max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
-            loo_errors = vor_study._perform_loo_cross_validation(None, 'sum_abs_error',
-                                                            max_fold_indices)
+            loo_errors = vor_study._loo_errors
             self.assertIsInstance(loo_errors, dict)
             self.assertEqual(len(loo_errors), len(max_fold_indices))
             for val in loo_errors.values():
@@ -1731,29 +1717,13 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             indices = [val[1] for val in loo_errors.values()]
             # check that each indice in max_fold_indices appear once and only once
             self.assertTrue(np.all(np.isin(max_fold_indices, indices)))
-         
-    def test_find_loo_max_errors(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 10 * dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, y_init, X_test, y_test, physical_model, surr_model, parameter_collection =\
-                TestVoronoiBatchStudy.initialization(dim, nsamples, bounds)
-            vor_study = self.setup_study(\
-                parameter_collection, physical_model, surr_model, X_init, y_init, X_test, y_test, rng=42)
-            n_splits = 5
-            nmax_folds = 3
-            nmax_loo = 5
-            kf_results = vor_study._perform_kfold_cross_validation(n_splits, False, None, 'sum_abs_error')
-            max_fold_indices = vor_study._find_kfold_max_errors(kf_results, nmax_folds)
-            loo_errors = vor_study._perform_loo_cross_validation(None, 'sum_abs_error',
-                                                            max_fold_indices)
+
             loo_errors_list = [value for key, value_tuple in loo_errors.items() for value in value_tuple]
             loo_errors_array = np.asarray(loo_errors_list).reshape(-1, 2)
             sorted_array = np.asarray(sorted(loo_errors_array, key=lambda x: x[0]))
 
             # verify that the training samples with the greatest LOO error are returned
-            worst_sample_locations = vor_study._find_loo_max_errors(loo_errors, nmax_loo)
+            worst_sample_locations = vor_study._find_loo_max_errors()
             max_error_indices = sorted_array[-nmax_loo:, :][:, 1][::-1] # get indices of largest errors and reverse (greatest to smallest)
             max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
             self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
@@ -1809,9 +1779,3 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             ub = np.array(bounds)[:, 1]
             outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
             self.assertFalse(np.any(outside_samples))
-
-        #params = np.array([results.parameter_history[par] for par in par_names]).T.squeeze()         
-        #state0 = results.simulation_history[model_name].states['matcal_default_state']
-        #sim_history = results.simulation_history[model_name][state0]
-    
-        
