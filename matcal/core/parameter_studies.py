@@ -1093,15 +1093,15 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._extract_bounds_from_parameter_collection()
         self._build_boundary_hull()
         self._nsamples = 10 * self.dim
-        self.voronoi_type = 'Full'
+        self.voronoi_type = 'full'
         self.finite_only = False
         self.iterative_updates = True
         self.dim = len(self._parameter_collection)
-        self.nsplits = 8
-        self.nmax_folds = 3
-        self.nmax_loo = 25
+        self.nsplits = 2
+        self.nmax_folds = 1
+        self.nmax_loo = 10
         self.cv_scale = None
-        self.cv_metric = 'mse'
+        self.cv_metric = 'rmse'
         self.group_kfold = False
         self.thin = None
         self.random_selection = None
@@ -1882,7 +1882,7 @@ class KFoldCrossValidation:
         self.nsplits = 5
         self.group_kfold = False
         self.scale = None
-        self.metric = 'sum_abs_error'
+        self.metric = 'rmse'
         self.groups = None
         self.interpolation_field = 'x'
         self.par_names = None
