@@ -1017,7 +1017,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             
             for fo in [True, False]:
-                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
+                opts = {'finite_only':fo}
+                vor = VoronoiTessellation(X_init, bounds)
+                vor.build(**opts)
             
                 # Validate that ghost points are created correctly and that _all_points
                 # includes both original and ghost points.
@@ -1063,6 +1065,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             vor = VoronoiTessellation(X_init, bounds)
+            vor.build()
             min_x, max_x = bounds[0]
             min_y, max_y = bounds[1]
             if dim == 3:
@@ -1092,6 +1095,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
         bounds = [[-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
+        vor.build()
 
         # test crossing        
         U = np.array([1, 1])  # Example ray direction
@@ -1112,6 +1116,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
         bounds = [[-5, 5], [-5, 5], [-5, 5]]
         X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
         vor = VoronoiTessellation(X_init, bounds)
+        vor.build()
 
         # test crossing        
         U = np.array([1, 1, 1])  # Example ray direction
@@ -1144,6 +1149,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             vor = VoronoiTessellation(X_init, bounds)
+            vor.build()
             
             for pt_idx in np.arange(nsamples):
                 region_idx = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
@@ -1233,6 +1239,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             vor = VoronoiTessellation(X_init, bounds)
+            vor.build()
             boundary_hull = vor.boundary_hull
             boundary_hull_points = vor.boundary_points[boundary_hull.vertices]
             #boundary_path = Path(vor.boundary_points[boundary_hull_points]) # only works for 2D
@@ -1275,6 +1282,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             vor = VoronoiTessellation(X_init, bounds)
+            vor.build()
             
             # point close to seed: should return seed
             for i in np.arange(nsamples):
@@ -1307,6 +1315,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             vor = VoronoiTessellation(X_init, bounds)
+            vor.build()
 
             # loop through all regions
             for region_idx, region in enumerate(vor.vor.regions):
@@ -1344,6 +1353,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             vor = VoronoiTessellation(X_init, bounds)
+            vor.build()
             for pt_idx in np.arange(nsamples):
                 region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
                 seed = vor.get_region_seed(region_index)
@@ -1358,6 +1368,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             bounds = [[-5, 5] for d in np.arange(dim)]
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             vor = VoronoiTessellation(X_init, bounds)
+            vor.build()
             
             for pt_idx in np.arange(nsamples):
                 seed = vor.points[pt_idx]
