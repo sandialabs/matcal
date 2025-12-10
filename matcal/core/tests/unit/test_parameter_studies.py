@@ -45,7 +45,7 @@ def linear_model_with_length(a, *args, **kwargs):
 def oneD_model(**param_dict):
     x = param_dict['theta']
     y = x ** 2
-    return {"x":x, "y":y}
+    return {"x":x, "f":y}
 
 def quadratic_model_2d(**parameters):
     """Quadratic curve: f = a + bx. x independent variable."""
@@ -517,7 +517,7 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         model.set_name(model_name)
         parameter_collection = TestHaltonStudy.setup_1d_parameter_collection()
         test_points = np.linspace(-2, 2, 5) 
-        objective = SimulationResultsSynchronizer("x", test_points, "y")
+        objective = SimulationResultsSynchronizer("x", test_points, "f")
 
         # run initial study
         study = self.setup_study(parameter_collection, model, objective)
@@ -525,7 +525,7 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         print(params.shape)
         self.assertEqual(len(params), nsamples)
         
-        data = [sim_history[i]['y'][0] for i in range(nsamples)]
+        data = [sim_history[i]['f'][0] for i in range(nsamples)]
 
         # evaluate model at test points
         test_points = np.linspace(-2, 2)
@@ -535,7 +535,7 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
             th = Parameter("theta", -2, 2, distribution="uniform_uncertain", current_value=val)
             pc = ParameterCollection("predictions", th)
             res = model.run(state0, pc)
-            test_data.append(res.results_data['y'][0])
+            test_data.append(res.results_data['f'][0])
             time.sleep(0.1)
         test_data = np.array(test_data)
          
@@ -550,7 +550,7 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         new_params, sim_history, state0 = TestHaltonStudy.run_study(study, nsamples+nnew_samples, model_name, par_names)
         self.assertEqual(len(new_params), nsamples + nnew_samples)
 
-        new_data = [sim_history[i]['y'][0] for i in range(nsamples+nnew_samples)]
+        new_data = [sim_history[i]['f'][0] for i in range(nsamples+nnew_samples)]
 
         # interpolate and calculate prediction error of test points
         new_pred_error, y_pred = TestHaltonStudy.calculate_interpolated_pred_error(\
@@ -1393,95 +1393,88 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
 
 class TestKFoldCrossValidation(MatcalUnitTest):
+    _study_class = HaltonStudy
+    
+    @staticmethod
+    def format_study_params_and_output(study):
+        from matcal.core.data import convert_data_to_dictionary
+
+        params_formatted = []
+        for param in study.parameter_history:
+            params_formatted.append(study.parameter_history[param])
+        X = np.array(params_formatted).T  
+    
+        model_name = list(study.simulation_history.keys())[0]
+        state0 = study.simulation_history[model_name].states['matcal_default_state']
+        sim_history = study.simulation_history[model_name][state0]
+        nsamples = len(X)
+        data = []
+        for nn in np.arange(nsamples):
+            data.append(convert_data_to_dictionary(sim_history[nn]))
+        y = data
+        return X, y
     
     def setUp(self):
         super().setUp(__file__)
 
         from sklearn.linear_model import LinearRegression
         # Sample data for testing
-        self.X = np.array([[1], [2], [3], [4], [5]])
-        self.y = np.array([1, 2, 3, 4, 5])
-        self.nsamples = len(self.X)
-        self.model = LinearRegression()
+        self.model = PythonModel(quadratic_model_2d)
+        self.model.set_name('quadratic_2d')
+        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
+        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
+        pc = ParameterCollection("two_parameter", theta1, theta2)
         self.kfold = KFoldCrossValidation()
-
+        study = self._study_class(pc)
+        self.nsamples = 20
+        test_points = np.linspace(.25, .75, 10)
+        objective = SimulationResultsSynchronizer("x", test_points, "f")
+        study.add_evaluation_set(self.model, objective)
+        study_info = study.launch(self.nsamples)
+        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
+        
     def test_initialization(self):
         from sklearn.linear_model import LinearRegression
         self.assertEqual(self.kfold.nsplits, 5)
         self.assertFalse(self.kfold.group_kfold)
         self.assertIsNone(self.kfold.scale)
-        self.assertEqual(self.kfold.metric, 'sum_abs_error')
+        self.assertEqual(self.kfold.metric, 'rmse')
         self.assertIsNone(self.kfold.groups)
         self.assertEqual(self.kfold.interpolation_field, 'x')
+        self.assertIsNone(self.kfold.par_names)
 
     def test_set_kfcv_options(self):
         from sklearn.linear_model import LinearRegression
         kfcv_options = {'nsplits':4, 'group_kfold':True,
-                        'scale': 'cbrt', 'metric':'mse',
+                        'scale': 'cbrt', 'metric':'nlpd',
                         'groups': None,
                         'interpolation_field': 'x',
+                        'par_names': ['a', 'b']
                         }
         self.kfold.X = self.X
         self.kfold._set_kfcv_options(**kfcv_options)
         self.assertEqual(self.kfold.nsplits, 4)
         self.assertTrue(self.kfold.group_kfold)
         self.assertEqual(self.kfold.scale, 'cbrt')
-        self.assertEqual(self.kfold.metric, 'mse')
+        self.assertEqual(self.kfold.metric, 'nlpd')
         self.assertIsNone(self.kfold.groups)
         self.assertEqual(self.kfold.interpolation_field, 'x')
         
         # Test setting splits > number of samples. Should revert to length of X
         kfcv_options = {'nsplits': 10}
         self.kfold._set_kfcv_options(**kfcv_options)
-        self.assertEqual(self.kfold.nsplits, 5)
-
-    def test_calculate_sum_abs_error(self):
-        from matcal.core.parameter_studies import calculate_sum_abs_error
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        error = calculate_sum_abs_error(y_true, y_pred)
-        self.assertEqual(error, 1)
-
-    def test_calculate_mean_abs_perc_error(self):
-        from matcal.core.parameter_studies import calculate_mean_abs_perc_error
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        error = calculate_mean_abs_perc_error(y_true, y_pred)
-        self.assertAlmostEqual(error, 11.11, places=2)
-
-    def test_calculate_sum_abs_perc_error(self):
-        from matcal.core.parameter_studies import calculate_sum_abs_perc_error
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        error = calculate_sum_abs_perc_error(y_true, y_pred)
-        self.assertAlmostEqual(error, 33.33, places=2)
-
-    def test_calculate_mse(self):
-        from matcal.core.parameter_studies import calculate_mse
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        error = calculate_mse(y_true, y_pred)
-        self.assertAlmostEqual(error, 0.33, places=2)
-
-    def test_calculate_rmse(self):
-        from matcal.core.parameter_studies import calculate_rmse
-        y_true = np.array([1, 2, 3])
-        y_pred = np.array([1, 2, 4])
-        error = calculate_rmse(y_true, y_pred)
-        self.assertAlmostEqual(error, 0.57735, places=5)
+        self.assertEqual(self.kfold.nsplits, 10)
 
     def test_perform_kfold_cv(self):
-        kfcv_options = {'metric': 'mse',
+        kfcv_options = {'metric': 'rmse',
                         'interpolation_field':'x',
-                        'par_names':['a']}
+                        'par_names':['a', 'b']}
         kf_results = self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
        
         # Check that the results are in the expected format
         self.assertIsInstance(kf_results, dict)
         self.assertEqual(len(kf_results), self.kfold.nsplits)
 
-        import pdb
-        pdb.set_trace()
         # Check that each result is a tuple (kfold error, indices of test samples)
         test_indices = []
         for result in kf_results.values():
@@ -1497,6 +1490,9 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assertEqual(len(np.unique(test_indices)), self.nsamples)
             
     def test_cross_val_fold(self):
+        self.kfold.X = self.X
+        self.kfold.y = self.y
+        self.kfold.par_names = ['a', 'b']
         train_index = [0, 1, 2]
         test_index = [3, 4]
         error, test_idx_returned = self.kfold.evaluate_fold(train_index, test_index, self.X, self.y)
@@ -1588,25 +1584,6 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
 
         return physical_model, parameter_collection
 
-    @staticmethod
-    def format_study_params_and_output(study):
-        from matcal.core.data import convert_data_to_dictionary
-
-        params_formatted = []
-        for param in study.parameter_history:
-            params_formatted.append(study.parameter_history[param])
-        X = np.array(params_formatted).T  
-    
-        model_name = list(study.simulation_history.keys())[0]
-        state0 = study.simulation_history[model_name].states['matcal_default_state']
-        sim_history = study.simulation_history[model_name][state0]
-        nsamples = len(X)
-        data = []
-        for nn in np.arange(nsamples):
-            data.append(convert_data_to_dictionary(sim_history[nn]))
-        y = data
-        return X, y
-    
     def evaluate_model(points, model):
         pass
     
