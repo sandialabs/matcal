@@ -1434,7 +1434,6 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
         
     def test_initialization(self):
-        from sklearn.linear_model import LinearRegression
         self.assertEqual(self.kfold.nsplits, 5)
         self.assertFalse(self.kfold.group_kfold)
         self.assertIsNone(self.kfold.scale)
@@ -1459,7 +1458,8 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assertEqual(self.kfold.metric, 'nlpd')
         self.assertIsNone(self.kfold.groups)
         self.assertEqual(self.kfold.interpolation_field, 'x')
-        
+        self.assertEqual(self.kfold.par_names, ['a', 'b'])
+         
         # Test setting splits > number of samples. Should revert to length of X
         kfcv_options = {'nsplits': 10}
         self.kfold._set_kfcv_options(**kfcv_options)
@@ -1501,59 +1501,68 @@ class TestKFoldCrossValidation(MatcalUnitTest):
        
         
 class TestLeaveOneOutCrossValidation(MatcalUnitTest):
+    _study_class = HaltonStudy
     
     def setUp(self):
         super().setUp(__file__)
 
-        from sklearn.linear_model import LinearRegression
         # Sample data for testing
-        self.X = np.array([[1], [2], [3], [4], [5]])
-        self.y = np.array([1, 2, 3, 4, 5])
-        self.nsamples = len(self.X)
-        self.model = LinearRegression()
+        self.model = PythonModel(quadratic_model_2d)
+        self.model.set_name('quadratic_2d')
+        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
+        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
+        pc = ParameterCollection("two_parameter", theta1, theta2)
         self.loocv = LeaveOneOutCrossValidation()
+        study = self._study_class(pc)
+        self.nsamples = 10
+        test_points = np.linspace(.25, .75, 10)
+        objective = SimulationResultsSynchronizer("x", test_points, "f")
+        study.add_evaluation_set(self.model, objective)
+        study_info = study.launch(self.nsamples)
+        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
 
     def test_initialization(self):
-        from sklearn.linear_model import LinearRegression
         self.assertIsNone(self.loocv.scale)
-        self.assertEqual(self.loocv.metric, 'sum_abs_error')
+        self.assertEqual(self.loocv.metric, 'rmse')
+        self.assertEqual(self.loocv.interpolation_field, 'x')
+        self.assertIsNone(self.loocv.par_names)
 
-    def test_evaluate_sample(self):
-        metrics = ['sum_abs_error', 'mape', 'mse', 'rmse', 'sum_abs_perc_error']
-        for metric in metrics:
-            loo_options = {'metric' : metric}
-            for i in np.arange(self.nsamples):
-                self.loocv._set_loocv_options(**loo_options)
-                self.assertEqual(self.loocv.metric, metric)
-                error, index = self.loocv.evaluate_sample(self.X, self.y, i)
-                self.assertEqual(index, i)
-                self.assertIsInstance(error, float)
-        
+    def test_set_loo_options(self):
+        loocv_options = {'scale': 'cbrt', 'metric':'nlpd',
+                        'interpolation_field': 'x',
+                        'par_names': ['a', 'b']
+                        }
+        self.loocv.X = self.X
+        self.loocv._set_loocv_options(**loocv_options)
+        self.assertEqual(self.loocv.scale, 'cbrt')
+        self.assertEqual(self.loocv.metric, 'nlpd')
+        self.assertEqual(self.loocv.interpolation_field, 'x')
+        self.assertEqual(self.loocv.par_names, ['a', 'b'])
+         
     def test_perform_loocv(self):
         indices = range(self.nsamples)
-        metrics = ['sum_abs_error', 'mape', 'mse', 'rmse', 'sum_abs_perc_error']
-        for metric in metrics:
-            loo_options = {'metric' : metric}
-            loo_results = self.loocv.perform_loocv(self.X, self.y, indices, **loo_options)
+        loocv_options = {'metric': 'rmse',
+                        'interpolation_field':'x',
+                        'par_names':['a', 'b']}
+        loo_results = self.loocv.perform_loocv(self.X, self.y, indices, **loocv_options)
             
-            self.assertEqual(self.loocv.metric, metric)
-            self.assertIsInstance(loo_results, dict)
-            self.assertEqual(len(loo_results), self.nsamples)
-            self.assertIn(0, loo_results)  # Check if the first index is present in results
-            
-            # Check that each result is a tuple (r, indices of test samples)
-            test_indices = []
-            for result in loo_results.values():
-                self.assertIsInstance(result, tuple)
-                self.assertEqual(len(result), 2)
-                self.assertIsInstance(result[0], float)  # error
-                self.assertIsInstance(result[1], int)  # test indices
-                test_indices.append(result[1])
-            test_indices = np.vstack(test_indices)
-            
-            # check that each test sample is used once and only once
-            self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
-            self.assertEqual(len(np.unique(test_indices)), self.nsamples)
+        self.assertIsInstance(loo_results, dict)
+        self.assertEqual(len(loo_results), self.nsamples)
+        self.assertIn(0, loo_results)  # Check if the first index is present in results
+        
+        # Check that each result is a tuple (r, indices of test samples)
+        test_indices = []
+        for result in loo_results.values():
+            self.assertIsInstance(result, tuple)
+            self.assertEqual(len(result), 2)
+            self.assertIsInstance(result[0], float)  # error
+            self.assertIsInstance(result[1], int)  # test indices
+            test_indices.append(result[1])
+        test_indices = np.vstack(test_indices)
+        
+        # check that each test sample is used once and only once
+        self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
+        self.assertEqual(len(np.unique(test_indices)), self.nsamples)
 
 
 class TestVoronoiBatchStudy(MatcalUnitTest):
