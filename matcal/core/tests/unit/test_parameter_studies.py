@@ -1593,9 +1593,6 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
 
         return physical_model, parameter_collection
 
-    def evaluate_model(points, model):
-        pass
-    
     def setUp(self):
         super().setUp(__file__)
     
@@ -1646,12 +1643,12 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             self.assertTrue(np.all(vor_study._boundary_points == expected_boundary_points))
             
             from matcal.core.parameter_studies import _get_surrogate_metric
-            surr_score = vor_study._current_surrogate_score
+            surr_score = vor_study._current_surrogate_score['score']
+            rmse = vor_study._current_surrogate_score['rmse']
+            nlpd = vor_study._current_surrogate_score['nlpd']
             self.assertGreater(len(surr_score), 1)
-            self.assertGreater(surr_score[0], 0)
-            rmse = _get_surrogate_metric(vor_study._surrogate,'rmse')
-            nlpd = _get_surrogate_metric(vor_study._surrogate,'nlpd')
-            self.assertGreater(rmse, 0)
+            self.assertTrue(np.all([i > 0 for i in surr_score]))
+            self.assertTrue(np.all([i > 0 for i in rmse]))
     
     
     def test_perform_cv_and_find_max_errors(self):
@@ -1698,8 +1695,8 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             test_indices = np.vstack(test_indices)
             
             # check that each test sample is used once and only once
-            self.assertTrue(np.all(np.isin(np.arange(vor_study._nsamples), test_indices)))
-            self.assertEqual(len(np.unique(test_indices)), vor_study._nsamples)
+            self.assertTrue(np.all(np.isin(np.arange(vor_study.nsamples), test_indices)))
+            self.assertEqual(len(np.unique(test_indices)), vor_study.nsamples)
 
             max_key = max(kf_results, key=kf_results.get)
             self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
@@ -1725,4 +1722,60 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             max_error_indices = sorted_array[-nmax_loo:, :][:, 1][::-1] # get indices of largest errors and reverse (greatest to smallest)
             max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
             self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
+
+    def test_adaptive_voronoi_surrogate_generation(self):
+        dims = [2, 3]
+        for dim in dims:
+            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
+            vor_study = self._study_class(parameter_collection)
+            hal_test_study = self._study_test_class(parameter_collection)
+            ntest_samples = 50
+
+            test_points = np.linspace(.25, .75, 10)
+            objective = SimulationResultsSynchronizer("x", test_points, "f")
+            vor_study.add_evaluation_set(physical_model, objective)
+            hal_test_study.add_evaluation_set(physical_model, objective)
+            test_information = hal_test_study.launch(ntest_samples)
+            
+            voronoi_sampling_options = {'voronoi_type':'full',
+                                        'finite_only':False,
+                                        'iterative_updates':True,
+                                        'nsplits':2,
+                                        'nmax_folds':1,
+                                        'nmax_loo':5,
+                                        'nmaxbatches':3,
+                                        'cv_metric':'nlpd',
+                                        'nsamples':10,
+                                        'convergence_metric':'score'}
+            surrogate_options = {'interpolation_field':'x',
+                                 'test_eval_info': test_information}
+            options = {'voronoi_sampling_options': voronoi_sampling_options,
+                       'surrogate_options': surrogate_options}
+             
+            vor_study.launch(**options)
+            # verify that errors are decreasing
+            metrics = [vor_study._current_surrogate_score['score'],
+                      vor_study._current_surrogate_score['nlpd'],
+                      vor_study._current_surrogate_score['rmse']]
+            for idx, metric in enumerate(metrics):
+                # error metric may not decrease every iteration. Looking for overall trend.
+                metric_decreasing = metric[0] > metric[-1]
+                if idx == 0:
+                    self.assertFalse(metric_decreasing)
+                else:
+                    self.assertTrue(metric_decreasing)
+
+            # verify that the number of samples is increasing each iteration
+            nsamples = vor_study._nbatch_samples
+            nsamples_increasing = all(x < y for x, y in zip(nsamples, nsamples[1:]))
+            self.assertTrue(nsamples_increasing)
+            
+            self.assertEqual(vor_study.X.shape[0], vor_study._nbatch_samples[-1])
+            
+            # verify that all samples are within bounds
+            samples = vor_study.X
+            lb = vor_study._l_bounds
+            ub = vor_study._u_bounds
+            outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
+            self.assertFalse(np.any(outside_samples))
     

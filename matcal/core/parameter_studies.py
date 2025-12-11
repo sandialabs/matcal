@@ -1073,7 +1073,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def launch(self, **options):
         """ Launch adaptive surrogate build using Voronoi batch sampling        
         """
-        super().launch(self._nsamples)
+        super().launch(self.nsamples)
         self._format_params()
         self._format_output()
        
@@ -1086,13 +1086,15 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         
         # build/train surrogate with initial training set and calculate initial error
         self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
-        self._current_surrogate_score.append(_get_surrogate_metric(self._surrogate, 'score'))
+        self._current_surrogate_score['score'].append(_get_surrogate_metric(self._surrogate, 'score'))
+        self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(self._surrogate, 'nlpd'))
+        self._current_surrogate_score['rmse'].append(_get_surrogate_metric(self._surrogate, 'rmse'))
         self._perform_voronoi_batch_sampling()
         
     def _initialize_attributes(self):
         self._extract_bounds_from_parameter_collection()
         self._build_boundary_hull()
-        self._nsamples = 10 * self.dim
+        self.nsamples = 10 * self.dim
         self.voronoi_type = 'full'
         self.finite_only = False
         self.iterative_updates = True
@@ -1106,12 +1108,15 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.thin = None
         self.random_selection = None
         self.nmaxbatches = 20
-        self._current_surrogate_score = []
+        self._current_surrogate_score = {}
+        self._current_surrogate_score['score'] = []
+        self._current_surrogate_score['nlpd'] = []
+        self._current_surrogate_score['rmse'] = []
         self._nbatch_samples = []
         self.test_eval_info = None
         self.par_names = self._parameter_collection.get_item_names()
         self._eps = 1e-4
-        self._convergence_metric = 'nlpd'
+        self.convergence_metric = 'nlpd'
          
     def _extract_bounds_from_parameter_collection(self):
         self._l_bounds = []
@@ -1151,7 +1156,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             raise ValueError("cv_metric not implemented. 'cv_metric' must one of 'rmse', 'nlpd'")
     
     def _set_surrogate_options(self, **surrogate_options):
-        # this should not be hard-coded
         self.interpolation_field = 'x'
         self._training_fraction = 1.0
         self._cv_test_set = False
@@ -1198,19 +1202,22 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
             self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
-            self._current_surrogate_score.append(_get_surrogate_metric(self._surrogate, self._convergence_metric))
+            self._current_surrogate_score['score'].append(_get_surrogate_metric(self._surrogate, 'score'))
+            self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(self._surrogate, 'nlpd'))
+            self._current_surrogate_score['rmse'].append(_get_surrogate_metric(self._surrogate, 'rmse'))
             self._nbatch_samples.append(self.results.number_of_evaluations)
             self._format_params()
             self._format_output()
             
             # convergence check
-            if np.abs(self._current_surrogate_score[batch_number+1] - self._current_surrogate_score[batch_number]) <= self._eps:
+            if np.abs(self._current_surrogate_score[self.convergence_metric][batch_number+1] - \
+                self._current_surrogate_score[self.convergence_metric][batch_number]) <= self._eps:
                 print(f"BREAKING: Convergence from surrogate score.")
-                print(f"{self._convergence_metric}: {self._current_surrogate_score}")
+                print(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
                 break
             else:
                 print("Surrogate not converged yet.")
-                print(f"{self._convergence_metric}: {self._current_surrogate_score}")
+                print(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
             batch_number += 1
 
     def _populate_parameter_evaluations(self, samples):
@@ -1920,7 +1927,6 @@ class KFoldCrossValidation:
         self.X = X
         self.y = y
         self._set_kfcv_options(**kfcv_options)
-       
         if self.group_kfold:
             assert self.groups is not None
             cv = GroupKFold(nsplits=self.nsplits)
@@ -1972,7 +1978,7 @@ class LeaveOneOutCrossValidation:
         
     def _initialize_attributes(self):
         self.scale = None
-        self.metric = 'mse'
+        self.metric = 'rmse'
         self.interpolation_field = 'x'
         self.par_names = None
         
@@ -2107,4 +2113,7 @@ def _get_surrogate_metric(surrogate, metric):
     for field_idx, field_name in enumerate(test_score):
         if isinstance(test_score[field_name], (dict, OrderedDict)):
             combined_score += list(test_score[field_name][metric])
-    return np.linalg.norm(combined_score)
+    if metric == 'nlpd':
+        return np.sum(combined_score)
+    else:
+        return np.mean(combined_score)
