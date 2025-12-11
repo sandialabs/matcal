@@ -755,7 +755,7 @@ def _calculate_performance_metrics(regressor, param, data):
 
 
 def nlpd(regressor, input_values, evals):
-    """ Negative Log Posterior Density
+    """ Negative Log Predictive Density
         Only applicable for GPR
     """
     if isinstance(regressor, _modal_regressor):
@@ -776,9 +776,14 @@ def nlpd(regressor, input_values, evals):
 
 def _calculate_nlpd(gpr, input_values, y_true):
     mu, std = gpr.predict(input_values, return_std=True)
+
+    y_true = y_true.ravel()
+    mu = mu.ravel()
+
     var = std ** 2
     residuals = y_true - mu
     nlpd = 0.5 * np.mean( np.log(2 * np.pi * var) + (residuals ** 2) / var)
+    
     return nlpd
 
 
