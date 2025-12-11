@@ -1638,7 +1638,7 @@ class VoronoiTessellation:
         try:
             region_point_index, = np.argwhere(self.vor.point_region == region_index)
         except:
-            raise ValueError("No region point index found in VoronoiTessesllation for Adaptive Surrogate Generation.")
+            raise ValueError("No region point index found in VoronoiTessesllation for Adaptive Surrogate Generation. Try a different random seed.")
         
         region_vertices = []
         if -2 in region:
