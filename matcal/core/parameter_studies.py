@@ -1635,7 +1635,11 @@ class VoronoiTessellation:
         Returns:
         list: A new list of voronoi regions with infinite vertices replaced.
         """
-        region_point_index, = np.argwhere(self.vor.point_region == region_index)
+        try:
+            region_point_index, = np.argwhere(self.vor.point_region == region_index)
+        except:
+            raise ValueError("No region point index found in VoronoiTessesllation for Adaptive Surrogate Generation.")
+        
         region_vertices = []
         if -2 in region:
             finite_indices = [v for v in region if v >= 0]
