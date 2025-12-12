@@ -266,7 +266,8 @@ class CSVDataImporter(DataImporterBase):
             data = np.genfromtxt(self._filename, **csv_options)
         except Exception as err:
             error_msg = f"Error occurred while reading data file {self._filename}:\n {repr(err)}"
-            raise RuntimeError(error_msg)       
+            logger.error(error_msg)
+            raise err       
         return data, state_dict
 
     def _create_import_options(self, nskip):
@@ -306,14 +307,14 @@ class CSVDataImporter(DataImporterBase):
     def _skip_leading_comments(self, nskip):
         if self._does_not_have_comments():
             return nskip
-        found_not_comment = False
+        found_no_comment = False
         with open(self._filename) as fh:
             for i in range(nskip):
                 line = fh.readline().strip()
-            while not found_not_comment:
+            while not found_no_comment:
                 line = fh.readline().strip()
                 if self._line_is_not_comment(line):
-                    found_not_comment = True
+                    found_no_comment = True
                 else:
                     nskip += 1
         return nskip
@@ -329,16 +330,28 @@ class CSVDataImporter(DataImporterBase):
     def _get_state_variables_from_file_header(self, line):
         state_dict = {}
         if self._has_state_information(line):
-            for name, value in eval(line).items():
-                state_dict[name] = self._process_value(value)
+            try:
+                for name, value in eval(line).items():
+                    state_dict[name] = self._process_value(value)
+            except Exception as e:
+                self._throw_state_dict_format_error(line, str(repr(e)))
+                raise e
         if len(state_dict) == 0:
             state_dict = None
         return state_dict
 
     def _has_state_information(self, line):
-        has_state_information = "{" in line and "}" in line and ":" in line
+        has_state_information = "{" in line and "}" in line
         return has_state_information
 
+    def _throw_state_dict_format_error(self, line, exception=None):
+        err_str = ("A dict-like line was detected on the first line of the file."+
+                   " However it could not be processed as a dictionary." +
+                   f" The provided line is:\n{line}\n\n")
+        if exception is not None:
+            err_str += (f"The following exception was thrown parsing the line:\n{exception}\n\n")
+        logger.error(err_str)
+    
     def _process_value(self, value):
         if isinstance(value, (numbers.Real, numbers.Integral)):
             return float(value)

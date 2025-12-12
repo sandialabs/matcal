@@ -225,11 +225,18 @@ class Data(np.ndarray):
         self._check_type(old_name, str, "old field name")
         self._check_type(new_name, str, "new field name")
         self._check_field_in_data(old_name)
-        old_field_names = self.field_names
-        old_name_index = old_field_names.index(old_name)
-        new_field_names = old_field_names
-        new_field_names[old_name_index] = new_name
-        self.dtype.names = new_field_names
+        field_names = self.field_names
+        name_to_change_index = field_names.index(old_name)
+        field_names[name_to_change_index] = new_name
+        try:
+            self.dtype.names = field_names
+        except ValueError as e:
+            logger.error("Cannot rename the field as given. "+
+                         "Likely repeated name or some issue with the name. "+
+                         f"The old field name is '{old_name}' and "+
+                         f"the new field name is '{new_name}'. The existing field names are:\n"+
+                         f"{self.field_names}")
+            raise e
         return self
 
     def __eq__(self, value) -> bool:
@@ -502,7 +509,8 @@ class DataCollection(ContainerCollectionBase):
         :param state: specify a specific state to plot using the state name or state object
         :type state: :class:`~matcal.core.state.State` or str
 
-        :param block: stops Python from executing code after the plot figure is created. Follow-on code
+        :param block: stops Python from executing code after the plot figure is created.
+            Follow-on code
             will not execute until the figure is closed.
             Default is to block (e.g. block=True).
         :type block: bool
