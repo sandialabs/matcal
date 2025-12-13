@@ -355,7 +355,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
         self._input_file = self._input_file_class(self._material, self._death_blocks)
         super().__init__(executable=executable)
         self._assign_material_parameters()
-        self._base_geo_params = self._geometry_creator_class.Parameters(**geo_params)
+        self._base_geo_params = OrderedDict(**geo_params)
         self._current_state_geo_params = None
         self._input_file._set_fixed_boundary_conditions(self._fixed_bc_node_sets, 
             self._fixed_bc_directions)
