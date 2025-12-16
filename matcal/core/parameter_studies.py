@@ -1065,7 +1065,7 @@ def _fit_surrogate_model(eval_info, save_filename='voronoi_surrogate', **surroga
 
 class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def __init__(self, *parameters):
-        """Initialize the VoronoiBatchSamplingStudy
+        """Initialize the VoronoiAdaptiveSurrogateStudy
         """
         super().__init__(*parameters)
         self._initialize_attributes()
@@ -1086,11 +1086,14 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         
         # build/train surrogate with initial training set and calculate initial error
         self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
+        self._update_surrogate_score()
+        self._perform_voronoi_batch_sampling()
+        
+    def _update_surrogate_score(self):
         self._current_surrogate_score['score'].append(_get_surrogate_metric(self._surrogate, 'score'))
         self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(self._surrogate, 'nlpd'))
         self._current_surrogate_score['rmse'].append(_get_surrogate_metric(self._surrogate, 'rmse'))
-        self._perform_voronoi_batch_sampling()
-        
+
     def _initialize_attributes(self):
         self._extract_bounds_from_parameter_collection()
         self._build_boundary_hull()
@@ -1143,7 +1146,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         return np.vstack(tuple(coords_ravel)).T
 
     def _set_voronoi_sampling_options(self, **voronoi_sampling_kwargs):
-        """Set voronoi properties. See documentation for properties that an be altered and their options."""
+        """Set voronoi options. See documentation for properties that an be altered and their options."""
         for key, value in voronoi_sampling_kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
@@ -1156,6 +1159,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             raise ValueError("cv_metric not implemented. 'cv_metric' must one of 'rmse', 'nlpd'")
     
     def _set_surrogate_options(self, **surrogate_options):
+        """Set voronoi options. See documentation for properties that an be altered and their options."""
         self.interpolation_field = 'x'
         self._training_fraction = 1.0
         self._cv_test_set = False
@@ -1202,9 +1206,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
             self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
-            self._current_surrogate_score['score'].append(_get_surrogate_metric(self._surrogate, 'score'))
-            self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(self._surrogate, 'nlpd'))
-            self._current_surrogate_score['rmse'].append(_get_surrogate_metric(self._surrogate, 'rmse'))
+            self._update_surrogate_score()
             self._nbatch_samples.append(self.results.number_of_evaluations)
             self._format_params()
             self._format_output()
