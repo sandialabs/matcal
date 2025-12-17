@@ -1936,13 +1936,13 @@ class KFoldCrossValidation:
         if self.group_kfold:
             assert self.groups is not None
             cv = GroupKFold(nsplits=self.nsplits)
-            kf_results = Parallel(n_jobs=-1)(
+            kf_results = Parallel(n_jobs=1)(
                 delayed(self.cross_val_fold)(train_index, test_index, self.X, self.y, self.metric)
                 for train_index, test_index in cv.split(X, y, self.groups)
             )
         else:
             cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
-            kf_results = Parallel(n_jobs=-1)(
+            kf_results = Parallel(n_jobs=1)(
                 delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
                 for train_index, test_index in cv.split(self.X)
             )
@@ -2016,7 +2016,7 @@ class LeaveOneOutCrossValidation:
         from joblib import Parallel, delayed
         self._set_loocv_options(**loocv_options)
         
-        loo_results = Parallel(n_jobs=-1)(
+        loo_results = Parallel(n_jobs=1)(
             delayed(self.evaluate_loo_sample)(X, y, i)
             for i in indices
         )
