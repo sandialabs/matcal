@@ -968,8 +968,8 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                                                                    data_scaler, decomposer, latent_scaler,
                                                                    cv_test_set=cv_test_set)
                 
-            if not isinstance(decomposer, _DoNothingDataTransformer):
-                _record_variance_behaviors(decomposer, support_information['save_filename'], field)
+#            if not isinstance(decomposer, _DoNothingDataTransformer):
+#                _record_variance_behaviors(decomposer, support_information['save_filename'], field)
             training_results = _train_parameter_to_pca_weight_regressor(scaled_parameters, 
                     field, scaled_latent_data, 
                     support_information['training_fraction'], support_information['regressor_type'],
