@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+cd ../../site_matcal/sandia/tests/unit
+source ../../setup_env.sh
+setup_env
+cd ../../../../external_matcal/documentation
+
 make clean
 make html -j 8 
 
