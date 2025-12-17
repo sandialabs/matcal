@@ -14,8 +14,25 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
 def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
-                                       indep_var, test_function, **parameter_mod):
-    p_hist = _generate_parameter_hist_lhs(p_names, p_low, p_high, n_samples)
+                                       indep_var, test_function, training_fraction=0.8,
+                                       **parameter_mod):
+    test_res = None
+    res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, n_samples,
+                                             test_function, **parameter_mod)
+    matcal_save("test_surrogate_source_data.joblib", res)
+    
+    if training_fraction == 1.0:
+        test_res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, 100,
+                                                      test_function, rng=20, **parameter_mod)
+        matcal_save("test_surrogate_test_data.joblib", test_res)
+    sur_gen = SurrogateGenerator(res, indep_var, training_fraction=training_fraction,
+                                 test_eval_info=test_res)
+    
+    return sur_gen
+
+def _get_parameter_and_simulation_hist(p_names, p_low, p_high, n_samples, test_function,
+                                       rng=10, **parameter_mod):
+    p_hist = _generate_parameter_hist_lhs(p_names, p_low, p_high, n_samples, rng=rng)
     for param_name, mod_func in parameter_mod.items():
         if param_name in p_hist.keys():
             p_hist[param_name] = mod_func(p_hist[param_name])
@@ -24,16 +41,12 @@ def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high,
     res._update_parameter_history(p_hist, list(p_hist.keys()))
 
     res._update_simulation_history(res_hist, model_name)
-    matcal_save("test_surrogate_source_data.joblib", res)
-    sur_gen = SurrogateGenerator(res, indep_var)
-    
-    return sur_gen
+    return res
 
-
-def _generate_parameter_hist_lhs(names, low, high, n_samples):
+def _generate_parameter_hist_lhs(names, low, high, n_samples, rng=10):
         params = OrderedDict()
         pc = ParameterCollection('test')
-        lhs = qmc.LatinHypercube(d=len(names), seed=10)
+        lhs = qmc.LatinHypercube(d=len(names), seed=rng)
         unit_samples = lhs.random(n_samples)
         samples = qmc.scale(unit_samples, low, high)
         for idx in range(n_samples):
@@ -97,7 +110,7 @@ class TestSurrogateGenerator(MatcalUnitTest):
             
     def _confirm_good_test_scores(self, surrogate):
         for field in surrogate.scores['test']:
-            worst_scores = surrogate.scores['test'][field]['min']
+            worst_scores = surrogate.scores['test'][field]['score']
             if isinstance(worst_scores, (float, int)):
                 self.assertGreaterEqual(worst_scores, 0.99)
             else:
@@ -134,6 +147,34 @@ class TestSurrogateGenerator(MatcalUnitTest):
         sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
                                                      indep_var, test_function)
         sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        surrogate = sur_gen.generate('my_surrogate')
+
+        self._confirm_alignment_to_function(p_low, p_high, show_array, probes, err_tol, n_interp, 
+                                            test_function, surrogate)
+        self._confirm_good_test_scores(surrogate)
+
+    def test_surrogate_for_line_training_fraction_1(self):
+        def test_function(m, b, n_features=None):
+            if n_features == None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x':x, 'y':y}
+
+        n_samples = 500
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        res_file = "test_results"
+        err_tol = 1e-2
+        n_interp = 200
+
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
+                                                     indep_var, test_function, training_fraction=1.0)
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process", 1.0)
         surrogate = sur_gen.generate('my_surrogate')
 
         self._confirm_alignment_to_function(p_low, p_high, show_array, probes, err_tol, n_interp, 
