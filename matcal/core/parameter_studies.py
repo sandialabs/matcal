@@ -1199,8 +1199,8 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._nbatch_samples.append(self.results.number_of_evaluations)
         batch_number = 0
         while batch_number < self.nmaxbatches:
-            print(f"Active Learning Batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
-            print("................................................................")
+            logger.info(f"Active Learning Batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
+            logger.info("................................................................")
             self._create_voronoi_tess_and_choose_new_samples(iter_=batch_number)
             self._populate_parameter_evaluations(self._new_points)
             param_sets = self._parameter_sets_to_evaluate
@@ -1214,12 +1214,12 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             # convergence check
             if np.abs(self._current_surrogate_score[self.convergence_metric][batch_number+1] - \
                 self._current_surrogate_score[self.convergence_metric][batch_number]) <= self._eps:
-                print(f"BREAKING: Convergence from surrogate score.")
-                print(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
+                logger.info(f"BREAKING: Convergence from surrogate score.")
+                logger.info(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
                 break
             else:
-                print("Surrogate not converged yet.")
-                print(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
+                logger.info("Surrogate not converged yet.")
+                logger.info(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
             batch_number += 1
 
     def _populate_parameter_evaluations(self, samples):
@@ -1268,7 +1268,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             worst_sample_locations = worst_sample_locations[random_rows, ...]
 
         self._worst_sample_locations = worst_sample_locations
-        print(f"Initializing voronoi/tree for batch {iter_}")
+        logger.info(f"Initializing voronoi/tree for batch {iter_}")
         self._create_voronoi_tess()
         self._find_new_sample_locations()
         
@@ -1288,10 +1288,10 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def _find_new_sample_locations(self):
 
         self._new_points = []
-        print("Finding new sample locations")
+        logger.info("Finding new sample locations")
         for loc_idx, location in enumerate(self._worst_sample_locations):
             if np.mod(loc_idx, 100) == 0:
-                print(f"Drawing new sample from region index {loc_idx} of {len(self._worst_sample_locations)}.")
+                logger.info(f"Drawing new sample from region index {loc_idx} of {len(self._worst_sample_locations)}.")
 
             if self.voronoi_type == 'full':
                 # Identify corresponding voronoi cell
@@ -1336,7 +1336,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
 
     def _perform_kfold_cross_validation(self):
         self._kf = None
-        print("Performing kfold cross-validation")
+        logger.info("Performing kfold cross-validation")
         kfcv = KFoldCrossValidation()
         groups = None
 
@@ -1353,13 +1353,13 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     
     def _find_kfold_max_errors(self):
         self._max_fold_error_indices = None
-        print("Finding max kfold error")
+        logger.info("Finding max kfold error")
         max_folds = self._find_indices_of_n_largest_kf_errors()
         self._max_fold_error_indices = np.concatenate(list(max_folds.values())) 
     
     def _perform_loo_cross_validation(self):
         self._loo_errors = None
-        print("Finding worst sample locations")
+        logger.info("Finding worst sample locations")
         loocv = LeaveOneOutCrossValidation()
         loo_options = {'scale':self.cv_scale,
                        'metric':self.cv_metric,
@@ -1524,7 +1524,7 @@ class VoronoiTessellation:
         """Return the vertices of the Voronoi region."""
         region = self.vor.regions[region_index].copy()
         if -1 in region:
-            print(f"WARNING: infinite vertice in Region {region_index}")
+            logger.warning(f"Infinite vertice in Region {region_index}")
         
         if identify_outside_vertices:
             updated_region = self.identify_vertices_outside_bounds(region)
@@ -1568,7 +1568,7 @@ class VoronoiTessellation:
                 # region belongs to a ghost point
                 continue
             elif -1 in region:
-                print(f"WARNING: infinite vertice in Region {i}")
+                logger.warning(f"Infinite vertice in Region {i}")
 
             if identify_outside_vertices:
                 updated_region = self.identify_vertices_outside_bounds(region)
@@ -1827,6 +1827,8 @@ class VoronoiTessellation:
         """ process a set of additional points"""
         from scipy.spatial import Voronoi 
         points = np.atleast_2d(points)
+        ### TODO: consider identifying unique new pts and adding them instead of just skipping 
+        ### the entire batch if it contains pre-existing pts.
         try:
             # Qhull error in dim>2 with incremental=True and restart=False
             # Must set Incremental=True to use add_points(), but very slow
@@ -1838,10 +1840,11 @@ class VoronoiTessellation:
             #self.vor.updated_ridge_vertices= [inner_list[:] for inner_list in self.vor.ridge_vertices]
         except:
             if np.any(np.all(self.vor.points == points, axis=1)):
-                print(f'Point {point} already a seed')
+                logger.debug('Some new points trying to be added for the voronoi tessealation are'
+                              'already in the point collection.')
             if np.any(np.isnan(points)) or np.any(np.isinf(points)):
                 raise ValueError("Input points contain NaN or Inf.")
-            print("exception raised in add_points()")
+            logger.debug("Exception caught in add_points(), attemptiung to continue...")
 
 
     def raise_if_invalid_region_index(self, region_index):
@@ -1909,9 +1912,10 @@ class KFoldCrossValidation:
             else:
                 raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
         if self.nsplits > self.X.shape[0]:
-            self.nsplits = self.X.shape[0]
-            print("nsplits can't be greater than the number of samples in KFoldCrosValidation. Reducing\
-                  number of splits to the number of samples.")
+            self.nsplits = int(self.X.shape[0]/2.0)
+            logger.warning("Input parameter \"nsplits\" can't be greater than " +
+                           "the number of samples in KFoldCrosValidation. Reducing " +
+                           "number of splits to approximately half the number of samples.")
         
     def perform_kfold_cv(self, X, y, **kfcv_options):
         """
