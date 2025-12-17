@@ -1191,7 +1191,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
                     ax.plot(region_vertices[:, 0], region_vertices[:, 1], '.', markersize=15, color='g', label='R1 Vertices')
                     plt.legend(fontsize=20)
-                    plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_r{region_idx}_vertices.png")
+                    plt.savefig(f"voronoi_tessellation_r{region_idx}_vertices.png")
                     plt.close()
                 
                     _, ax = plt.subplots(figsize=(12,8))
@@ -1202,7 +1202,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
                     for simplex in vor.boundary_hull.simplices:
                         plt.plot(vor.boundary_points[simplex, 0], vor.boundary_points[simplex, 1], 'k-', lw=2)
                     plt.legend(fontsize=20)
-                    plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_r{region_idx}_bounded_vertices.png")
+                    plt.savefig(f"voronoi_tessellation_r{region_idx}_bounded_vertices.png")
                     plt.close()
 
                     # Fig of voronoi tessellation with boundary hull
@@ -1227,7 +1227,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
                     ax.set_title('Convex Hull Containment Test')
                     ax.set_aspect('equal')
                     plt.grid(True)
-                    plt.savefig(f"/ascldap/users/dericci/inner_outer_hull_r{region_idx}.png")
+                    plt.savefig(f"inner_outer_hull_r{region_idx}.png")
                     plt.close("all")       
          
     def test_get_voronoi_vertices(self):
