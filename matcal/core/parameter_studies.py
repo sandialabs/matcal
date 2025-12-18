@@ -183,10 +183,7 @@ class HaltonStudy(ParameterStudy):
         """
 
         if not isinstance(var, var_types):
-            if len(var_types) == 1:
-                message = f"'{var_name}' must be of type {var_types[0].__name__}"
-            else:
-                message = f"'{var_name}' must be one of the types: {', '.join(t.__name__ for t in var_types)}"
+            message = f"'{var_name}' must be of type {var_types[0].__name__}"
             raise TypeError(message)
 
     def launch(self, nsamples=20, skip=None):

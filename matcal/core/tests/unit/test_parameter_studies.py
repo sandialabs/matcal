@@ -481,13 +481,22 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         y_pred = f(test_points)
         return np.linalg.norm(y_pred - test_data), y_pred
             
-    def setup_study(self, parameter_collection, model, objective): 
-        study = self._study_class(parameter_collection, scramble=False, rng=42)
-        study.add_evaluation_set(model, objective)
-        return study
+    def setup_study(self, scramble=False): 
+        self.model_name = 'oneD'
+        self.par_names = ['theta']
+        
+        # set up model, objective, parameter collection
+        self.model = PythonModel(oneD_model)
+        self.model.set_name(self.model_name)
+        parameter_collection = TestHaltonStudy.setup_1d_parameter_collection()
+        test_points = np.linspace(-2, 2, 5) 
+        objective = SimulationResultsSynchronizer("x", test_points, "f")
+        self.study = self._study_class(parameter_collection, scramble=scramble, rng=42)
+        self.study.add_evaluation_set(self.model, objective)
     
     def setUp(self):
         super().setUp(__file__)
+
 
     def test_check_variable_type(self):
         pass
@@ -508,20 +517,10 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         pass
     
     def test_1d_launch(self):
-        nsamples = 10
-        model_name = 'oneD'
-        par_names = ['theta']
-        
-        # set up model, objective, parameter collection
-        model = PythonModel(oneD_model)
-        model.set_name(model_name)
-        parameter_collection = TestHaltonStudy.setup_1d_parameter_collection()
-        test_points = np.linspace(-2, 2, 5) 
-        objective = SimulationResultsSynchronizer("x", test_points, "f")
-
         # run initial study
-        study = self.setup_study(parameter_collection, model, objective)
-        params, sim_history, state0 = TestHaltonStudy.run_study(study, nsamples, model_name, par_names)
+        nsamples = 10
+        self.setup_study()
+        params, sim_history, state0 = TestHaltonStudy.run_study(self.study, nsamples, self.model_name, self.par_names)
         print(params.shape)
         self.assertEqual(len(params), nsamples)
         
@@ -534,32 +533,49 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         for val in test_points: 
             th = Parameter("theta", -2, 2, distribution="uniform_uncertain", current_value=val)
             pc = ParameterCollection("predictions", th)
-            res = model.run(state0, pc)
+            res = self.model.run(state0, pc)
             test_data.append(res.results_data['f'][0])
             time.sleep(0.1)
         test_data = np.array(test_data)
          
         # interpolate and calculate prediction error of test points
-        pred_error, y_pred = TestHaltonStudy.calculate_interpolated_pred_error(\
+        pred_error, _ = TestHaltonStudy.calculate_interpolated_pred_error(\
             params, data, test_points, test_data)
 
         # continue study with additional Halton samples
         nnew_samples = 12
-        study = self.setup_study(parameter_collection, model, objective)
-        study.restart()
-        new_params, sim_history, state0 = TestHaltonStudy.run_study(study, nsamples+nnew_samples, model_name, par_names)
+        self.setup_study()
+        self.study.restart()
+        new_params, sim_history, state0 = TestHaltonStudy.run_study(self.study, nsamples+nnew_samples, self.model_name, self.par_names)
         self.assertEqual(len(new_params), nsamples + nnew_samples)
 
         new_data = [sim_history[i]['f'][0] for i in range(nsamples+nnew_samples)]
 
         # interpolate and calculate prediction error of test points
-        new_pred_error, y_pred = TestHaltonStudy.calculate_interpolated_pred_error(\
+        new_pred_error, _ = TestHaltonStudy.calculate_interpolated_pred_error(\
             new_params, new_data, test_points, test_data)
         
         # prediction error should be less with more Halton samples
         self.assertGreater(pred_error, new_pred_error)
-    
 
+    def test_error_handling(self):    
+        # check variable type error handling
+        nsamples = 10
+        self.setup_study()
+        with self.assertRaises(TypeError):
+            TestHaltonStudy.run_study(self.study, nsamples, self.model_name, self.par_names, skip=True)
+        
+        with self.assertRaises(self.study.StudyInputError):
+            self.study.add_parameter_evaluation(a=5)
+        
+    def test_skipping(self):
+        # skip not None
+        nsamples = 10
+        self.setup_study()
+        params, _, _= TestHaltonStudy.run_study(self.study, nsamples, self.model_name, self.par_names, skip=10)
+        self.assertEqual(len(params), nsamples)
+       
+        
 def model_linear(a):
     disp = np.linspace(0,1, 10)
     load = a*disp
