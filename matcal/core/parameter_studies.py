@@ -1070,10 +1070,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def launch(self, **options):
         """ Launch adaptive surrogate build using Voronoi batch sampling        
         """
-        super().launch(self.nsamples)
-        self._format_params()
-        self._format_output()
-       
         # set voronoi and surrogate options if provided
         voronoi_sampling_options = options.get('voronoi_sampling_options', {})
         surrogate_options = options.get('surrogate_options', {})
@@ -1081,6 +1077,14 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._set_surrogate_options(**surrogate_options)
         self._voronoi_options = {'finite_only' : self.finite_only} 
         
+        super().launch(self.ninitsamples)
+        self._extract_bounds_from_parameter_collection()
+        self._build_boundary_hull()
+        self.dim = len(self._parameter_collection)
+        self.par_names = self._parameter_collection.get_item_names()
+        self._format_params()
+        self._format_output()
+       
         # build/train surrogate with initial training set and calculate initial error
         self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
         self._update_surrogate_score()
@@ -1092,13 +1096,10 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._current_surrogate_score['rmse'].append(_get_surrogate_metric(self._surrogate, 'rmse'))
 
     def _initialize_attributes(self):
-        self._extract_bounds_from_parameter_collection()
-        self._build_boundary_hull()
-        self.nsamples = 10 * self.dim
+        self.ninitsamples = 10 * self.dim
         self.voronoi_type = 'full'
         self.finite_only = False
         self.iterative_updates = True
-        self.dim = len(self._parameter_collection)
         self.nsplits = 2
         self.nmax_folds = 1
         self.nmax_loo = 10
@@ -1114,7 +1115,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._current_surrogate_score['rmse'] = []
         self._nbatch_samples = []
         self.test_eval_info = None
-        self.par_names = self._parameter_collection.get_item_names()
         self._eps = 1e-4
         self.convergence_metric = 'nlpd'
          
@@ -1162,7 +1162,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._cv_test_set = False
         for key, value in surrogate_options.items():
             if hasattr(self, key):
-                if key == 'training_fraction':
+                if key == '_training_fraction':
                     raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.0")
                 setattr(self, key, value)
             else:
@@ -1235,7 +1235,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         Returns:
         list: New samples selected.
         """
-        
         if self.nsplits > 0:
             # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
             self._perform_kfold_cross_validation()
@@ -1279,8 +1278,8 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             # Make a local voronoi tesselation for each new sample by using knearest neighbors
             # to determine the closest points
             from scipy.spatial import KDTree
-            all_points = self.X.copy()
-            self._tree = KDTree(all_points)
+            self._all_tree_points = self.X.copy()
+            self._tree = KDTree(self._all_tree_points)
                 
     def _find_new_sample_locations(self):
 
@@ -1308,11 +1307,12 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                 self._new_points.append(furthest_vertex)
 
             elif self.voronoi_type == 'local':
-                nearest_neighbors = tree.query(location, k=10*self.dim)
-                nn_points = all_points[nearest_neighbors[1].squeeze()]
+                nneighbors = int(self._all_tree_points.shape[0] * 0.25)
+                nearest_neighbors = self._tree.query(location, k=nneighbors)
+                nn_points = self._all_tree_points[nearest_neighbors[1].squeeze()]
                 nn_vor = VoronoiTessellation(nn_points, self._bounds)
                 nn_vor.build(**self._voronoi_options)
-                nn_region = nn_vor.get_voronoi_region(location)[0]
+                nn_region = nn_vor.get_voronoi_region(location)[0][0]
                 try:
                     nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
                 except:
@@ -1323,8 +1323,9 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                 furthest_vertex = nn_vert[nn_fvi]
                 self._new_points.append(furthest_vertex)
                 if self.iterative_updates:
-                    all_points = np.vstack((all_points, furthest_vertex))
-                    tree = KDTree(all_points)
+                    from scipy.spatial import KDTree
+                    self._all_tree_points = np.vstack((self._all_tree_points, furthest_vertex))
+                    self._tree = KDTree(self._all_tree_points)
 
         self._new_points = np.asarray(self._new_points)
         # Make sure all new points are unique
@@ -1399,11 +1400,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         np.ndarray: An array of indices corresponding to the n largest values.
         """
 
-        if self.nmax_loo < 1:
-            # treat as ratio of indices to keep
-            nkeep = int(self.nmax_loo * len(self._loo_errors))
-        else:
-            nkeep = int(self.nmax_loo)
+        nkeep = int(self.nmax_loo)
 
         # Create a list of (key, error, sample_index) tuples
         items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
@@ -1635,7 +1632,7 @@ class VoronoiTessellation:
         list: A new list of voronoi regions with infinite vertices replaced.
         """
         try:
-            region_point_index, = np.argwhere(self.vor.point_region == region_index)
+            region_point_index, = np.argwhere(self.vor.point_region == region_index)[0]
         except:
             raise ValueError("No region point index found in VoronoiTessesllation for Adaptive Surrogate Generation. Try a different random seed.")
         
@@ -1936,9 +1933,9 @@ class KFoldCrossValidation:
         self._set_kfcv_options(**kfcv_options)
         if self.group_kfold:
             assert self.groups is not None
-            cv = GroupKFold(nsplits=self.nsplits)
+            cv = GroupKFold(n_splits=self.nsplits)
             kf_results = Parallel(n_jobs=1)(
-                delayed(self.cross_val_fold)(train_index, test_index, self.X, self.y, self.metric)
+                delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
                 for train_index, test_index in cv.split(X, y, self.groups)
             )
         else:

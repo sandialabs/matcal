@@ -1581,7 +1581,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         self.assertEqual(len(np.unique(test_indices)), self.nsamples)
 
 
-class TestVoronoiBatchStudy(MatcalUnitTest):
+class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
     
     _study_class = VoronoiAdaptiveSurrogateStudy
     _study_test_class = HaltonStudy
@@ -1605,27 +1605,39 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             physical_model = PythonModel(quadratic_model_3d)
             model_name = 'quadratic_3d'
         physical_model.set_name(model_name)
-        parameter_collection =  TestVoronoiBatchStudy.setup_parameter_collection(dim)
+        parameter_collection =  TestVoronoiAdaptiveSurrogateStudy.setup_parameter_collection(dim)
 
         return physical_model, parameter_collection
 
     def setUp(self):
         super().setUp(__file__)
     
+    def setup_test_study(self, dim):
+        physical_model, parameter_collection = TestVoronoiAdaptiveSurrogateStudy.setup_model(dim)
+        hal_test_study = self._study_test_class(parameter_collection)
+        ntest_samples = 20
+
+        test_points = np.linspace(.25, .75, 10)
+        objective = SimulationResultsSynchronizer("x", test_points, "f")
+        hal_test_study.add_evaluation_set(physical_model, objective)
+        test_information = hal_test_study.launch(ntest_samples)
+        return test_information
+        
+        
+    def setup_study(self, dim):
+        physical_model, parameter_collection = TestVoronoiAdaptiveSurrogateStudy.setup_model(dim)
+        vor_study = self._study_class(parameter_collection)
+
+        test_points = np.linspace(.25, .75, 10)
+        objective = SimulationResultsSynchronizer("x", test_points, "f")
+        vor_study.add_evaluation_set(physical_model, objective)
+        return vor_study
+
     def test_initialization(self):
         dims = [2, 3]
         for dim in dims:
-            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self._study_class(parameter_collection)
-            hal_test_study = self._study_test_class(parameter_collection)
-            ntest_samples = 50
-
-            test_points = np.linspace(.25, .75, 10)
-            objective = SimulationResultsSynchronizer("x", test_points, "f")
-            vor_study.add_evaluation_set(physical_model, objective)
-            hal_test_study.add_evaluation_set(physical_model, objective)
-            test_information = hal_test_study.launch(ntest_samples)
-            
+            vor_study = self.setup_study(dim)
+            test_information = self.setup_test_study(dim)
             voronoi_sampling_options = {'voronoi_type':'full',
                                         'finite_only':False,
                                         'iterative_updates':True,
@@ -1633,7 +1645,8 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
                                         'nmax_folds':3,
                                         'nmax_loo':'all',
                                         'nmaxbatches':1,
-                                        'cv_metric':'nlpd'}
+                                        'cv_metric':'nlpd',
+                                        'ninitsamples':20}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1665,21 +1678,136 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             self.assertGreater(len(surr_score), 1)
             self.assertTrue(np.all([i > 0 for i in surr_score]))
             self.assertTrue(np.all([i > 0 for i in rmse]))
-    
-    
+   
+    def test_error_handling(self):
+        with self.assertRaises(AttributeError):
+            vor_study = self.setup_study(2)
+            voronoi_sampling_options = {'_voronoi_type':'full',
+                                        'ninitsamples':10}
+            options = {'voronoi_sampling_options': voronoi_sampling_options}
+            vor_study.launch(**options)
+        with self.assertRaises(ValueError):
+            vor_study = self.setup_study(2)
+            voronoi_sampling_options = {'thin': 10,
+                                        'random_selection': 10,
+                                        'ninitsamples':10}
+            options = {'voronoi_sampling_options': voronoi_sampling_options}
+            vor_study.launch(**options)
+        with self.assertRaises(ValueError):
+            vor_study = self.setup_study(2)
+            voronoi_sampling_options = {'cv_metric': 'mse',
+                                        'ninitsamples':10}
+            options = {'voronoi_sampling_options': voronoi_sampling_options}
+            vor_study.launch(**options)
+        with self.assertRaises(ValueError):
+            vor_study = self.setup_study(2)
+            surrogate_options = {'_training_fraction': 0.5}
+            options = {'surrogate_options': surrogate_options}             
+            vor_study.launch(**options)
+        with self.assertRaises(AttributeError):
+            vor_study = self.setup_study(2)
+            surrogate_options = {'training_fraction': 0.5}
+            options = {'surrogate_options': surrogate_options}             
+            vor_study.launch(**options)
+        with self.assertRaises(AttributeError):
+            vor_study = self.setup_study(2)
+            vor_study.launch()
+        with self.assertRaises(vor_study.StudyInputError):
+            vor_study.add_parameter_evaluation(a=5)
+            
+    def test_convergence(self):
+        vor_study = self.setup_study(2)
+        test_information = self.setup_test_study(2)
+        voronoi_sampling_options = {'_eps':10.0,
+                                    'nmaxbatches': 10,
+                                    'nsplits':0,
+                                    'ninitsamples':20}
+        surrogate_options = {'interpolation_field':'x',
+                             'test_eval_info': test_information}
+        options = {'voronoi_sampling_options': voronoi_sampling_options,
+                    'surrogate_options': surrogate_options}
+        vor_study.launch(**options)
+        converged = np.abs(vor_study._current_surrogate_score[vor_study.convergence_metric][-1] - \
+                vor_study._current_surrogate_score[vor_study.convergence_metric][-2]) <= vor_study._eps
+        self.assertTrue(converged)
+        
+    def test_nmax_loo_all(self):
+        vor_study = self.setup_study(2)
+        test_information = self.setup_test_study(2)
+        voronoi_sampling_options = {'nmax_loo': 'all',
+                                    'nsplits':2,
+                                    'ninitsamples':5,
+                                    'nmaxbatches':1}
+        surrogate_options = {'interpolation_field':'x',
+                             'test_eval_info': test_information}
+        options = {'voronoi_sampling_options': voronoi_sampling_options,
+                    'surrogate_options': surrogate_options}
+        vor_study.launch(**options)
+        self.assertTrue(vor_study._nbatch_samples[-1] > vor_study.ninitsamples)
+            
+    def test_thin(self):
+        vor_study = self.setup_study(2)
+        test_information = self.setup_test_study(2)
+        voronoi_sampling_options = {'nsplits':0,
+                                    'ninitsamples':6,
+                                    'nmaxbatches':1,
+                                    'thin':2}
+        surrogate_options = {'interpolation_field':'x',
+                             'test_eval_info': test_information}
+        options = {'voronoi_sampling_options': voronoi_sampling_options,
+                    'surrogate_options': surrogate_options}
+        vor_study.launch(**options)
+        self.assertTrue(vor_study._nbatch_samples[-1] == vor_study.ninitsamples*1.5)
+
+    def test_random_selection(self):
+        vor_study = self.setup_study(2)
+        test_information = self.setup_test_study(2)
+        voronoi_sampling_options = {'nsplits':0,
+                                    'ninitsamples':6,
+                                    'nmaxbatches':1,
+                                    'random_selection':3}
+        surrogate_options = {'interpolation_field':'x',
+                             'test_eval_info': test_information}
+        options = {'voronoi_sampling_options': voronoi_sampling_options,
+                    'surrogate_options': surrogate_options}
+        vor_study.launch(**options)
+        self.assertTrue(vor_study._nbatch_samples[-1] == vor_study.ninitsamples*1.5)
+
+    def test_local_tess(self):
+        vor_study = self.setup_study(2)
+        test_information = self.setup_test_study(2)
+        voronoi_sampling_options = {'nsplits':0,
+                                    'ninitsamples':20,
+                                    'nmaxbatches':1,
+                                    'random_selection':3,
+                                    'voronoi_type':'local'}
+        surrogate_options = {'interpolation_field':'x',
+                             'test_eval_info': test_information}
+        options = {'voronoi_sampling_options': voronoi_sampling_options,
+                    'surrogate_options': surrogate_options}
+        vor_study.launch(**options)
+        self.assertIsNotNone(vor_study._tree)
+        
+    def test_group_kfold(self):
+        vor_study = self.setup_study(2)
+        test_information = self.setup_test_study(2)
+        voronoi_sampling_options = {'nsplits':2,
+                                    'ninitsamples':20,
+                                    'nmaxbatches':1,
+                                    'random_selection':10,
+                                    'group_kfold':True}
+        surrogate_options = {'interpolation_field':'x',
+                             'test_eval_info': test_information}
+        options = {'voronoi_sampling_options': voronoi_sampling_options,
+                    'surrogate_options': surrogate_options}
+        vor_study.launch(**options)
+        self.assertTrue(vor_study._nbatch_samples[-1] > vor_study.ninitsamples)
+
     def test_perform_cv_and_find_max_errors(self):
         dims = [2, 3]
         for dim in dims:
-            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self._study_class(parameter_collection)
-            hal_test_study = self._study_test_class(parameter_collection)
-            ntest_samples = 50
-
-            test_points = np.linspace(.25, .75, 10)
-            objective = SimulationResultsSynchronizer("x", test_points, "f")
-            vor_study.add_evaluation_set(physical_model, objective)
-            hal_test_study.add_evaluation_set(physical_model, objective)
-            test_information = hal_test_study.launch(ntest_samples)
+            vor_study = self.setup_study(dim)
+            test_information = self.setup_test_study(dim)
             
             nsplits = 2
             nmax_loo = 3
@@ -1711,8 +1839,8 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
             test_indices = np.vstack(test_indices)
             
             # check that each test sample is used once and only once
-            self.assertTrue(np.all(np.isin(np.arange(vor_study.nsamples), test_indices)))
-            self.assertEqual(len(np.unique(test_indices)), vor_study.nsamples)
+            self.assertTrue(np.all(np.isin(np.arange(vor_study.ninitsamples), test_indices)))
+            self.assertEqual(len(np.unique(test_indices)), vor_study.ninitsamples)
 
             max_key = max(kf_results, key=kf_results.get)
             self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
@@ -1742,16 +1870,8 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
     def test_adaptive_voronoi_surrogate_generation(self):
         dims = [2, 3]
         for dim in dims:
-            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self._study_class(parameter_collection)
-            hal_test_study = self._study_test_class(parameter_collection)
-            ntest_samples = 50
-
-            test_points = np.linspace(.25, .75, 10)
-            objective = SimulationResultsSynchronizer("x", test_points, "f")
-            vor_study.add_evaluation_set(physical_model, objective)
-            hal_test_study.add_evaluation_set(physical_model, objective)
-            test_information = hal_test_study.launch(ntest_samples)
+            vor_study = self.setup_study(dim)
+            test_information = self.setup_test_study(dim)
             
             voronoi_sampling_options = {'voronoi_type':'full',
                                         'finite_only':False,
@@ -1761,7 +1881,7 @@ class TestVoronoiBatchStudy(MatcalUnitTest):
                                         'nmax_loo':5,
                                         'nmaxbatches':3,
                                         'cv_metric':'nlpd',
-                                        'nsamples':10,
+                                        'ninitsamples':10,
                                         'convergence_metric':'score'}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
