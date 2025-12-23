@@ -1541,10 +1541,7 @@ class VoronoiTessellation:
                         region_vertices = np.concatenate((region_vertices, boundary_vertices))
                         unique_vertices = set(tuple(row) for row in region_vertices)
                         return np.asarray([list(row) for row in unique_vertices])
-                    else:
-                        return region_vertices
-            else:
-                return region_vertices
+            return region_vertices
 
         elif not identify_outside_vertices:
             return self.vor.vertices[region]
@@ -1756,11 +1753,6 @@ class VoronoiTessellation:
             furthest_vertex_index = None
         return vertices, furthest_vertex_index
 
-    def recalculate_with_new_seed(self, new_seed):
-        """Recalculate the Voronoi tessellation with the addition of a new seed."""
-        self.points = np.vstack([self.points, new_seed])
-        self.vor = Voronoi(self.points)
-
     def get_region_seed(self, region_index):
         """
         Given a region_index, return the seed of the Voronoi tesselation that
@@ -1817,63 +1809,46 @@ class VoronoiTessellation:
         closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-10))
         return closest_candidate_index        
 
+    def remove_invalid_rows(self, arr):
+        """ Remove points from NumPy array that contain NaN or infinite values."""
+        if not isinstance(arr, np.ndarray):
+            raise TypeError("Input to remove_invalid_rows must be a NumPy array.")
+        arr = np.atleast_2d(arr)
+        
+        # Create a boolean mask for valid rows (no NaN, no inf, no -inf)
+        mask = np.isfinite(arr).all(axis=1)
+        return arr[mask]
+    
     def add_points(self, points):
-        """ process a set of additional points"""
+        """ process a set of additional points.
+        
+        Voronoi has a built in function to add points -- self.vor.add_points(points, restart=True).
+        However, 'incremental` must be set to True to use the build in add_points() method and is very slow.
+        Qhull throws an error for dim>2 when incremental=True and restart=False.
+        This class method, which rebuilds 'manually` is faster.
+        """
         from scipy.spatial import Voronoi 
+        if not isinstance(points, np.ndarray):
+            raise TypeError("Input to add_points must be a NumPy array.")
         points = np.atleast_2d(points)
-        ### TODO: consider identifying unique new pts and adding them instead of just skipping 
-        ### the entire batch if it contains pre-existing pts.
-        try:
-            # Qhull error in dim>2 with incremental=True and restart=False
-            # Must set Incremental=True to use add_points(), but very slow
-            # May be faster to rebuild manually
+        
+        if not points.shape[-1] == self._all_points.shape[-1]:
+            raise ValueError(f"Points in add_points have a different dimension ({points.shape[-1]}) than points in voronoi tessellation ({self._all_points.shape[-1]})")
+        
+        points = self.remove_invalid_rows(points)
+        if points.size == 0:
+            logger.warning("All input points were NaN or Inf. No new points added to voronoi tessellation.")
+            return
 
-            #self.vor.add_points(points, restart=True)
-            self._all_points = np.vstack((self._all_points, points))
-            self.vor = Voronoi(self._all_points)
-            #self.vor.updated_ridge_vertices= [inner_list[:] for inner_list in self.vor.ridge_vertices]
-        except:
-            if np.any(np.all(self.vor.points == points, axis=1)):
-                logger.debug('Some new points trying to be added for the voronoi tessealation are'
-                              'already in the point collection.')
-            if np.any(np.isnan(points)) or np.any(np.isinf(points)):
-                raise ValueError("Input points contain NaN or Inf.")
-            logger.debug("Exception caught in add_points(), attemptiung to continue...")
-
+        # make sure all new points are unique
+        all_points = np.vstack((self._all_points, points))
+        unique_points = set(tuple(row) for row in all_points)
+        self._all_points = np.asarray([list(row) for row in unique_points])
+        self.vor = Voronoi(self._all_points)
 
     def raise_if_invalid_region_index(self, region_index):
-        if region_index > len(self.vor.regions):
+        if region_index > len(self.vor.regions) or region_index < 0:
             raise ValueError('Invalid region index. Index must be in (0, nregions]')
-
-    def raise_if_no_finite_vertices(self, finite_indices, region_index):
-        if len(finite_indices) == 0:
-            point = self.get_region_seed(region_index)
-            raise ValueError(f"0 finite indices for region {region_index}, with seed {point}")
-
-    def plot_voronoi_3d(self):
-
-        fig, ax = plt.subplots(111, projection='3d')
-        # Plot the Voronoi vertices
-        ax.scatter(self.vor.vertices[:, 0], self.vor.vertices[:, 1], self.vor.vertices[:, 2], color='orange')
-
-        # Plot the Voronoi ridges
-        for ridge in vor.ridge_vertices:
-            if -1 in ridge:
-                continue  # Skip infinite ridges
-            ax.plot3D(*zip(vor.vertices[ridge[0]], vor.vertices[ridge[1]]), color='blue')
-        plt.savefig("voronoi_3d.png")
-
-    def plot_voronoi_2d(self):
-        import matplotlib.pyplot as plt
-        from scipy.spatial import voronoi_plot_2d
-        
-        fig, ax = plt.subplots(figsize=(12,8))
-        voronoi_plot_2d(self.vor, ax=ax, show_vertices=True,
-            line_width=2, point_size=20)
-        for simplex in self.boundary_hull.simplices:
-            plt.plot(self.boundary_points[simplex, 0], self.boundary_points[simplex, 1], 'k-', lw=2)
-        plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_viz.png")
-        plt.close()
 
 
 class KFoldCrossValidation:
