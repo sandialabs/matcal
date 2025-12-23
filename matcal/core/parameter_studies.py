@@ -1076,6 +1076,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._set_voronoi_sampling_options(**voronoi_sampling_options)
         self._set_surrogate_options(**surrogate_options)
         self._voronoi_options = {'finite_only' : self.finite_only} 
+        self._set_seed()
         
         super().launch(self.ninitsamples)
         self._extract_bounds_from_parameter_collection()
@@ -1089,7 +1090,12 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
         self._update_surrogate_score()
         self._perform_voronoi_batch_sampling()
-        
+    
+    def _set_seed(self):
+        import random
+        if self.seed is not None:
+            random.seed(self.seed)
+            
     def _update_surrogate_score(self):
         self._current_surrogate_score['score'].append(_get_surrogate_metric(self._surrogate, 'score'))
         self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(self._surrogate, 'nlpd'))
@@ -1117,6 +1123,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.test_eval_info = None
         self._eps = 1e-4
         self.convergence_metric = 'nlpd'
+        self.seed = None
          
     def _extract_bounds_from_parameter_collection(self):
         self._l_bounds = []
@@ -1331,7 +1338,15 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         # Make sure all new points are unique
         unique_points = set(tuple(row) for row in self._new_points)
         self._new_points = np.asarray([list(row) for row in unique_points])
+        self._new_points = self._check_points_within_bounds(self._new_points)
 
+    def _check_points_within_bounds(self, points):
+        # verify that all samples are within bounds
+        lb = self._l_bounds
+        ub = self._u_bounds
+        mask = (points > lb).all(axis=1) | (points < ub).all(axis=1)
+        return points[mask]
+        
     def _perform_kfold_cross_validation(self):
         self._kf = None
         logger.info("Performing kfold cross-validation")

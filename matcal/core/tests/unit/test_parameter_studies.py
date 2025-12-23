@@ -1789,7 +1789,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
                                         'nmax_loo':'all',
                                         'nmaxbatches':1,
                                         'cv_metric':'nlpd',
-                                        'ninitsamples':20}
+                                        'ninitsamples':20,
+                                        'seed':42}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1826,20 +1827,23 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         with self.assertRaises(AttributeError):
             vor_study = self.setup_study(2)
             voronoi_sampling_options = {'_voronoi_type':'full',
-                                        'ninitsamples':10}
+                                        'ninitsamples':10,
+                                        'seed':42}
             options = {'voronoi_sampling_options': voronoi_sampling_options}
             vor_study.launch(**options)
         with self.assertRaises(ValueError):
             vor_study = self.setup_study(2)
             voronoi_sampling_options = {'thin': 10,
                                         'random_selection': 10,
-                                        'ninitsamples':10}
+                                        'ninitsamples':10,
+                                        'seed':42}
             options = {'voronoi_sampling_options': voronoi_sampling_options}
             vor_study.launch(**options)
         with self.assertRaises(ValueError):
             vor_study = self.setup_study(2)
             voronoi_sampling_options = {'cv_metric': 'mse',
-                                        'ninitsamples':10}
+                                        'ninitsamples':10,
+                                        'seed':42}
             options = {'voronoi_sampling_options': voronoi_sampling_options}
             vor_study.launch(**options)
         with self.assertRaises(ValueError):
@@ -1864,7 +1868,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         voronoi_sampling_options = {'_eps':10.0,
                                     'nmaxbatches': 10,
                                     'nsplits':0,
-                                    'ninitsamples':20}
+                                    'ninitsamples':20,
+                                    'seed':42}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1880,7 +1885,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         voronoi_sampling_options = {'nmax_loo': 'all',
                                     'nsplits':2,
                                     'ninitsamples':5,
-                                    'nmaxbatches':1}
+                                    'nmaxbatches':1,
+                                    'seed':42}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1894,7 +1900,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         voronoi_sampling_options = {'nsplits':0,
                                     'ninitsamples':6,
                                     'nmaxbatches':1,
-                                    'thin':2}
+                                    'thin':2,
+                                    'seed':42}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1908,7 +1915,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         voronoi_sampling_options = {'nsplits':0,
                                     'ninitsamples':6,
                                     'nmaxbatches':1,
-                                    'random_selection':3}
+                                    'random_selection':3,
+                                    'seed':42}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1923,7 +1931,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
                                     'ninitsamples':20,
                                     'nmaxbatches':1,
                                     'random_selection':3,
-                                    'voronoi_type':'local'}
+                                    'voronoi_type':'local',
+                                    'seed':42}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1938,7 +1947,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
                                     'ninitsamples':20,
                                     'nmaxbatches':1,
                                     'random_selection':10,
-                                    'group_kfold':True}
+                                    'group_kfold':True,
+                                    'seed':42}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -1958,7 +1968,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
                                         'nmax_folds':1,
                                         'nmax_loo':nmax_loo,
                                         'nmaxbatches':1,
-                                        'cv_metric':'nlpd'}
+                                        'cv_metric':'nlpd',
+                                        'seed':42}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
@@ -2025,7 +2036,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
                                         'nmaxbatches':3,
                                         'cv_metric':'nlpd',
                                         'ninitsamples':10,
-                                        'convergence_metric':'score'}
+                                        'convergence_metric':'score',
+                                        'seed':42}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
