@@ -1549,7 +1549,6 @@ class TestKFoldCrossValidation(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
 
-        from sklearn.linear_model import LinearRegression
         # Sample data for testing
         self.model = PythonModel(quadratic_model_2d)
         self.model.set_name('quadratic_2d')
@@ -1597,6 +1596,29 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.kfold._set_kfcv_options(**kfcv_options)
         self.assertEqual(self.kfold.nsplits, 10)
 
+    def test_set_kfcv_options_error_handling(self):
+        kfcv_options = {'mmetric':'mse'}
+        with self.assertRaises(AttributeError):
+            self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
+        kfcv_options = {'nsplits':50}
+        kf_results = self.kfold._set_kfcv_options(**kfcv_options)
+        self.assertTrue(self.kfold.nsplits == int(self.nsamples/2.0))
+    
+    def test_group_kfold_cv(self):
+        nsplits = 4
+        from sklearn.cluster import KMeans
+        kmeans = KMeans(n_clusters=nsplits, random_state=42)
+        groups = kmeans.fit_predict(self.X)
+        
+        kfcv_options = {'group_kfold': True,
+                        'groups': groups,
+                        'nsplits': nsplits,
+                        'interpolation_field': 'x',
+                        'par_names': ['a', 'b']}  
+        
+        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
+        self.assertTrue(len(kf_results) == nsplits)
+        
     def test_perform_kfold_cv(self):
         kfcv_options = {'metric': 'rmse',
                         'interpolation_field':'x',
