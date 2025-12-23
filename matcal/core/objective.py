@@ -732,13 +732,11 @@ class SimulationResultsSynchronizer(DirectCurveBasedInterpolatedObjective):
                  *dependent_fields, 
                   left=None, right=None, period=None):
         """
-        This objective will the simulation values 
-        for the dependent fields at the user specified
+        This objective will interpolate the simulation values 
+        for the dependent fields to the user specified
         independent field values. It is not used to compare 
         data to other data sources and can be useful for 
         sensitivity and parameter studies.
-        It will interpolate the simulation data to the user specified 
-        independent field values. 
         It does not extrapolate in either direction (independent variable 
         values less than the least simulation output or greater 
         than the greatest simulation output) and handles values outside the 

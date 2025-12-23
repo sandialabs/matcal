@@ -524,6 +524,7 @@ class StudyBase(ABC):
             "Please do not invoke 'set_use_threads' with restarts.")
 
     def _initialize_results(self):
+        print("Results:", self._results)
         if self._results is None:
             self._results = StudyResults(**self._results_reporting)
 
@@ -748,7 +749,6 @@ class StudyBase(ABC):
         for parameter_set in parameter_sets:
             eval_dir_name, param_dict  = self._get_eval_dir_and_parameter_dict(parameter_set)
             prepared_parameter_sets[eval_dir_name] = param_dict
-
         return prepared_parameter_sets
 
     def _get_eval_dir_and_parameter_dict(self, param_set):
@@ -1620,13 +1620,15 @@ class QoiInformation:
             self.simulation_weighted_conditioned_qois.append(sim_wc_qois)
         
         
-def _record_results(results:StudyResults, formatted_parameters, raw_obj, total_obj, qois, skip):
+def _record_results(results:StudyResults, formatted_parameters, raw_obj, total_obj, qois, skip,
+                    in_progress_save=True):
     if not skip:
         ordered_evaluation_keys = _sort_workdirs(list(formatted_parameters.keys()))
         results._initialize_evaluation_sets(qois, ordered_evaluation_keys)
         results._update_parameter_history(formatted_parameters, ordered_evaluation_keys)
         results._update_results_history(raw_obj, total_obj, qois, ordered_evaluation_keys)
-        results.save(IN_PROGRESS_RESULTS_FILENAME+".joblib")   
+        if in_progress_save:
+            results.save(IN_PROGRESS_RESULTS_FILENAME+".joblib")   
         
 
 def _unpack_evaluation(batch_results):

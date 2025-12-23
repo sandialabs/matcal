@@ -1,25 +1,27 @@
 # This is a wrapper class to the unittest TestCase class Such that it contains 
 # many of the common desired features in the class.
-import mmap
+from contextlib import redirect_stdout
 from filecmp import cmp, clear_cache
-from shutil import rmtree
-from unittest import TestCase
-from itertools import count
-from matcal.core.logger import matcal_print_message
-from numpy.random import randint
 import glob
-import os
+import io
+from itertools import count
+import mmap
 import numpy as np
+from numpy.random import randint
+import os
+from shutil import rmtree
 import sys
 import time
-import io
-from contextlib import redirect_stdout
+from unittest import TestCase
 
 from matcal.core.constants import MATCAL_WORKDIR_STR
+from matcal.core.logger import matcal_print_message
 from matcal.core.utilities import remove_directory
+
 
 TIME_FILENAME = "test_timings.txt"
 OLD_TIME_FILENAME = "test_timings_old.txt"
+
 
 def setUpTiming():
     if os.path.exists(OLD_TIME_FILENAME):
@@ -28,6 +30,7 @@ def setUpTiming():
     if os.path.exists(TIME_FILENAME):
         matcal_print_message(f"Copying {TIME_FILENAME} to {OLD_TIME_FILENAME}")
         os.rename(TIME_FILENAME, OLD_TIME_FILENAME)
+
 
 class MatcalUnitTest(TestCase):
     _build_dir_count = count(0)
@@ -361,8 +364,11 @@ def is_linux():
 def is_mac():
     return sys.platform == "darwin"
 
+
 import argparse
 import sys
+
+
 def _set_up_arg_parser():
     parser = argparse.ArgumentParser(description="Postprocessing tool for MatCal tests", 
                                         conflict_handler='resolve')
@@ -387,6 +393,7 @@ def _sort_by_time(test_names, test_times):
     test_names = test_names[ascending_indices]
     return test_names,test_times
 
+
 def _parse_file(time_filename):
     test_names = []
     test_times = []
@@ -398,6 +405,7 @@ def _parse_file(time_filename):
             test_times.append(float(time))
     return test_names,test_times   
     
+
 def _print_longest_times(test_names, test_times, n_report):
     message = "Longest Running Tests:\n"
     for i_report in range(n_report):
@@ -405,9 +413,11 @@ def _print_longest_times(test_names, test_times, n_report):
         message += f"  {test_names[i_test]}\n    {test_times[i_test]}\n"
     matcal_print_message(message)
         
+
 def _clean_tests():
     command = "rm -rf test_*_test_*"
     os.system(command)
+
 
 if __name__=="__main__":
     arg_parser = _set_up_arg_parser()
@@ -416,7 +426,6 @@ if __name__=="__main__":
         _process_timing_file(passed_args.timing)
     if passed_args.clean:
         _clean_tests()
-        
         
 
 def capture_print(func):

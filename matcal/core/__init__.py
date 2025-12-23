@@ -1,6 +1,7 @@
 
 __all__ = []
 
+from .adaptive_surrogates import SparseGridAdaptiveSurrogateStudy
 from .calibration_studies import ScipyLeastSquaresStudy, ScipyMinimizeStudy
 from .data import (Data, DataCollection, scale_data_collection, Scaling,
     convert_data_to_dictionary, convert_dictionary_to_data, MaxAbsDataConditioner, 
@@ -29,6 +30,7 @@ from .residuals import UserFunctionWeighting, NoiseWeightingFromFile, \
 from .surrogates import SurrogateGenerator, load_matcal_surrogate
 from .serializer_wrapper import matcal_save, matcal_load
 
+__all__ += ["SparseGridAdaptiveSurrogateStudy"]
 __all__ += ["ScipyLeastSquaresStudy", "ScipyMinimizeStudy"]
 __all__ += ["use_jinja_preprocessor"]
 __all__ += ["Data", "FileData", "determine_pt2_offset_yield"]
