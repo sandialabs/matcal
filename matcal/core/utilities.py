@@ -375,7 +375,7 @@ def check_item_is_correct_type(item, desired_type, parent_call_name,
 
 
 def check_value_is_positive(value, value_name, parent_call_name):
-    if value < 0:
+    if value <= 0:
         raise ValueError(f"A positive value must be input for \"{value_name}\" in " +
                          f" \"{parent_call_name}\". Received a " +
                           f"value of {value}.")
@@ -426,7 +426,7 @@ def check_value_is_array_like_of_reals(values, values_name, parent_call_name,
                                     values_name)
     elif top_level and not isinstance(values, valid_array_like):
         raise TypeError(f"\"{parent_call_name}\" expected an array-like "
-                         f"object for \"{values_name}\". Recieved objective of "
+                         f"object for \"{values_name}\". Received objective of "
                          f" type \"{type(values)}\"")
     
 

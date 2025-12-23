@@ -308,7 +308,7 @@ class PythonSimulator(Simulator):
         self._save_dir = "matcal_python_results_archive"
         if not os.path.exists(self._save_dir):
             os.mkdir(self._save_dir)
-
+            
     def get_results(self):
         pass
 

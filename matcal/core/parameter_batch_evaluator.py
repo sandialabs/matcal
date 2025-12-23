@@ -168,21 +168,30 @@ class BatchRestartCSV(BatchRestartBase):
     def __init__(self, save_only):
         super().__init__(save_only)
         current_dir = os.getcwd()
-        full_path_batch_restart_filename = os.path.join(current_dir, BATCH_RESTART_FILENAME+self.file_extension())
+        full_path_restart_filename = os.path.join(current_dir, 
+                                                  BATCH_RESTART_FILENAME+self.file_extension())
         self._finished_jobs = {}
         if save_only:
             write_or_append = "w"
         else:
             write_or_append = "a" 
-            self._finished_jobs = self._get_finished_jobs_info(full_path_batch_restart_filename)
-        self._restart_file = open(full_path_batch_restart_filename, write_or_append)
+            self._finished_jobs = self._get_finished_jobs_info(full_path_restart_filename)
+        try:
+            self._restart_file = open(full_path_restart_filename, write_or_append)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"The restart file \"{full_path_restart_filename}\" "+
+                                    "does not exist. Check input.")
 
-    def _get_finished_jobs_info(self, full_path_batch_restart_filename):
+    def _get_finished_jobs_info(self, full_path_restart_filename):
         finished_jobs = {}
-        with open(full_path_batch_restart_filename, "r") as f:
-            for line in f.readlines():
-                job_key, results_filename = line.split(",")
-                finished_jobs[job_key] = results_filename.strip()
+        try:
+            with open(full_path_restart_filename, "r") as f:
+                for line in f.readlines():
+                    job_key, results_filename = line.split(",")
+                    finished_jobs[job_key] = results_filename.strip()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"The restart file \"{full_path_restart_filename}\" "+
+                                    "does not exist. Check input.")          
         return finished_jobs
     
     def record(self, job_keys:list, results_filename:str)->None:
