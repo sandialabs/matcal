@@ -1692,6 +1692,11 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         self.assertEqual(self.loocv.metric, 'nlpd')
         self.assertEqual(self.loocv.interpolation_field, 'x')
         self.assertEqual(self.loocv.par_names, ['a', 'b'])
+
+    def test_set_loocv_options_error_handling(self):
+        loocv_options = {'mmetric':'mse'}
+        with self.assertRaises(AttributeError):
+            self.loocv._set_loocv_options(**loocv_options)
          
     def test_perform_loocv(self):
         indices = range(self.nsamples)

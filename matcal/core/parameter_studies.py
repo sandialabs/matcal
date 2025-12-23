@@ -2030,25 +2030,6 @@ def get_cv_surrogate_options(test_eval_info, interpolation_field):
     return surrogate_options
 
 
-def perform_cbrt_transform(y):
-    return np.sign(y) * np.abs(y) ** (1/3)
-
-
-def transform_output(scale, y_test, y_pred):
-    y_test = transform_y(scale, y_test)
-    y_pred = transform_y(scale, y_pred)
-    return y_test, y_pred
-
-
-def transform_y(scale, y):
-    if scale == 'cbrt':
-        return perform_cbrt_transform(y)
-    elif scale == 'log':
-        return np.log(y)
-    elif scale is None:
-        return y
-
-
 def _setup_studies_for_cv(p_names, train_samples, test_samples,
                                train_evals, test_evals):
     res = _get_parameter_and_simulation_hist(p_names, train_samples, train_evals)
