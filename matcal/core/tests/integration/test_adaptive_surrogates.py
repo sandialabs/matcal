@@ -3,7 +3,7 @@ import numpy as np
 import unittest
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
-from matcal.core.tests.unit.test_adaptive_surrogates import has_pyapprox
+from matcal.core.tests.unit.test_adaptive_surrogates import HAS_PYAPPROX
 
 
 def model(a,b,c, **kwargs):
@@ -25,7 +25,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)           
 
-    @unittest.skipIf(not has_pyapprox(),
+    @unittest.skipIf(not HAS_PYAPPROX,
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
     def test_simple_function_fit(self):
         sg_study = mc.SparseGridAdaptiveSurrogateStudy(a,b,c)

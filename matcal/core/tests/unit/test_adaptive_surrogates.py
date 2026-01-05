@@ -16,13 +16,12 @@ from matcal.core.models import PythonModel
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
-def has_pyapprox():
-    try:
-        import pyapprox  
-        HAS_PYAPPROX = True
-    except Exception:    
-        HAS_PYAPPROX = False
-    return HAS_PYAPPROX
+try:
+    import pyapprox  
+    HAS_PYAPPROX = True
+except Exception:    
+    HAS_PYAPPROX = False
+
 
 
 def return_data(*args, **kwargs):
@@ -169,7 +168,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         expected = os.path.abspath("work" + "_test_samples")
         self.assertEqual(os.path.abspath(self.study._working_directory), expected)
 
-    @unittest.skipIf(not has_pyapprox(),
+    @unittest.skipIf(not HAS_PYAPPROX,
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
     def test_launch_creates_test_directory_and_restores(self):
         self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
