@@ -1,7 +1,9 @@
 import matcal as mc
 import numpy as np
+import unittest
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
+from matcal.core.tests.unit.test_adaptive_surrogates import HAS_PYAPPROX
 
 
 def model(a,b,c, **kwargs):
@@ -9,7 +11,9 @@ def model(a,b,c, **kwargs):
     y = a+b*x+np.exp(1/(c)*x)
     return {"x":x, "y":y}
 
+
 py_model = mc.PythonModel(model)
+
 
 a = mc.Parameter("a", 0, 10)
 b = mc.Parameter("b", 0, 10)
@@ -21,6 +25,8 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)           
 
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
     def test_simple_function_fit(self):
         sg_study = mc.SparseGridAdaptiveSurrogateStudy(a,b,c)
         sg_study.set_independent_variable("x", np.linspace(0,3,100))
