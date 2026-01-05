@@ -5,7 +5,7 @@ from numbers import Real
 
 from matcal.core.object_factory import BasicIdentifier
 from matcal.core.utilities import (check_value_is_positive_integer, 
-                                   check_value_is_positive_real)       
+                                   check_value_is_nonnegative_real)       
 
 from matcal.dakota.dakota_constants import DAKOTA_MCMC_CHAIN_FILE
 from matcal.dakota.dakota_studies import DakotaStudyBase
@@ -154,7 +154,7 @@ class DakotaBayesFileBase(DakotaFileWithSeed):
             if isinstance(proposal_covariance, str):  # custom format compatible with dakotas
                 proposal_covariance = proposal_covariance
             elif isinstance(proposal_covariance, Real):
-                check_value_is_positive_real(proposal_covariance, "proposal covariance", 
+                check_value_is_nonnegative_real(proposal_covariance, "proposal covariance", 
                                      "set_proposal_covariance")
                 proposal_covariance = self._get_uniform_diagonals(proposal_covariance)
         else:
@@ -164,7 +164,7 @@ class DakotaBayesFileBase(DakotaFileWithSeed):
 
     def _get_general_diagonals(self, proposal_covariances):
         for proposal_covariance in proposal_covariances:
-            check_value_is_positive_real(proposal_covariance, "proposal covariance", 
+            check_value_is_nonnegative_real(proposal_covariance, "proposal covariance", 
                                          "set_proposal_covariance")
         return "diagonal values " + " ".join(map(str, proposal_covariances))
 

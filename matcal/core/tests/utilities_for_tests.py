@@ -12,7 +12,8 @@ from matcal.core.utilities import (matcal_name_format, check_valid_matcal_name_s
   make_clean_dir, get_current_time_string, check_item_is_correct_type, 
   check_value_is_positive, check_value_is_positive_integer, 
   check_value_is_positive_real, check_value_is_real_between_values, 
-  check_value_is_nonempty_str)
+  check_value_is_nonempty_str, check_value_is_nonnegative_integer, 
+  check_value_is_nonnegative_real)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -347,10 +348,39 @@ class TestBasicUtilities(MatcalUnitTest):
       check_value_is_positive_integer(-0.5, "test", "test")
     with self.assertRaises(ValueError):
       check_value_is_positive_integer(-5, "test", "test")
+    with self.assertRaises(ValueError):
+      check_value_is_positive_integer(0, "test", "test")
+    self.assertTrue(check_value_is_positive_integer(1, "test", "test"))
 
   def test_check_value_is_positive_real(self):
     with self.assertRaises(ValueError):
       check_value_is_positive_real(-0.5, "test", "test")
+    with self.assertRaises(ValueError):
+      check_value_is_positive_real(0.0, "test", "test")
+    self.assertTrue(check_value_is_positive_real(1.0, "test", "test"))
+
+  def test_check_value_is_positive_integer(self):
+    with self.assertRaises(TypeError):
+      check_value_is_positive_integer(-0.5, "test", "test")
+    with self.assertRaises(ValueError):
+      check_value_is_positive_integer(-5, "test", "test")
+    with self.assertRaises(ValueError):
+      check_value_is_positive_integer(0, "test", "test")
+    self.assertTrue(check_value_is_positive_integer(1, "test", "test"))
+
+  def test_check_value_is_nonnegative_real(self):
+    with self.assertRaises(ValueError):
+      check_value_is_nonnegative_real(-0.5, "test", "test")
+    self.assertTrue(check_value_is_nonnegative_real(0.0, "test", "test"))
+    self.assertTrue(check_value_is_nonnegative_real(1.0, "test", "test"))
+
+  def test_check_value_is_nonnegative_integer(self):
+    with self.assertRaises(TypeError):
+      check_value_is_nonnegative_integer(-0.5, "test", "test")
+    with self.assertRaises(ValueError):
+      check_value_is_nonnegative_integer(-5, "test", "test")
+    self.assertTrue(check_value_is_nonnegative_integer(0, "test", "test"))
+    self.assertTrue(check_value_is_nonnegative_integer(1, "test", "test"))
 
   def test_check_value_is_real_between_values(self):
     with self.assertRaises(ValueError):

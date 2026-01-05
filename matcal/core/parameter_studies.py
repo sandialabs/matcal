@@ -13,7 +13,7 @@ from matcal.core.parameter_batch_evaluator import ParameterBatchEvaluator
 from matcal.core.study_base import StudyBase
 from matcal.core.utilities import (check_value_is_real_between_values, 
                                    check_value_is_positive_integer, 
-                                   check_value_is_positive_real, 
+                                   check_value_is_nonnegative_real, 
                                    check_value_is_array_like_of_reals)
 
 
@@ -732,10 +732,10 @@ class LaplaceStudy(_LaplaceStudyBase):
         Currently only a single value is accepted for all data.
         This is the expected standard deviation of the noise.
 
-        :param noise_estimate: value for the noise estimate
+        :param noise_estimate: value for the noise estimate, must be non-negative
         :type noise_estimate: float
         """
-        check_value_is_positive_real(noise_estimate, "noise_estimate", 
+        check_value_is_nonnegative_real(noise_estimate, "noise_estimate", 
                                      f"{self.study_class}.set_noise_estimate")
         self._noise_variance=noise_estimate**2
 

@@ -381,6 +381,13 @@ def check_value_is_positive(value, value_name, parent_call_name):
                           f"value of {value}.")
 
 
+def check_value_is_nonnegative(value, value_name, parent_call_name):
+    if value < 0:
+        raise ValueError(f"A non-negative value must be input for \"{value_name}\" in " +
+                         f" \"{parent_call_name}\". Received a " +
+                          f"value of {value}.")
+
+
 def check_value_is_between_values(value, lower_bound, upper_bound, value_name, 
                                   parent_call_name, closed=False):
     if closed:
@@ -409,6 +416,19 @@ def check_value_is_positive_real(value, value_name, parent_call_name):
     check_item_is_correct_type(value, Real, parent_call_name, 
                                value_name)
     check_value_is_positive(value, value_name, parent_call_name)
+
+
+def check_value_is_nonnegative_integer(value, value_name, parent_call_name):
+    check_item_is_correct_type(value, Integral, parent_call_name, 
+                               value_name)
+    check_value_is_nonnegative(value, value_name, parent_call_name)
+
+
+def check_value_is_nonnegative_real(value, value_name, parent_call_name):
+    check_item_is_correct_type(value, Real, parent_call_name, 
+                               value_name)
+    check_value_is_nonnegative(value, value_name, parent_call_name)
+
 
 def check_value_is_array_like_of_reals(values, values_name, parent_call_name, 
                                        top_level=True):
