@@ -33,7 +33,8 @@ from matcal.core.pruner import DirectoryPrunerKeepAll, DirectoryPrunerBase, Elim
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.state import StateCollection, SolitaryState
 from matcal.core.utilities import (_sort_workdirs, check_item_is_correct_type, 
-                                   check_value_is_positive_integer) 
+                                   check_value_is_positive_integer, 
+                                   check_value_is_nonnegative_integer) 
 from matcal.version import __version__
 
 logger = initialize_matcal_logger(__name__)
@@ -1505,7 +1506,7 @@ def _get_return_data_list_history(data_list, repeat_index=None,
                                   err_msg="study_results.get_*_qois/data"):
     return_val = data_list
     if repeat_index is not None:
-        check_value_is_positive_integer(repeat_index, "index", err_msg)
+        check_value_is_nonnegative_integer(repeat_index, "index", err_msg)
         if repeat_index >= len(return_val):
             index_error_msg = (f"The index {repeat_index} is too large for the results"
                            f" list being returned from {err_msg}")
