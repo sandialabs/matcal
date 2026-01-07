@@ -13,7 +13,7 @@ from matcal.core.parameter_batch_evaluator import ParameterBatchEvaluator
 from matcal.core.study_base import StudyBase
 from matcal.core.utilities import (check_value_is_real_between_values, 
                                    check_value_is_positive_integer, 
-                                   check_value_is_positive_real, 
+                                   check_value_is_nonnegative_real, 
                                    check_value_is_array_like_of_reals)
 
 
@@ -83,13 +83,15 @@ class ParameterStudy(StudyBase):
         param_sets = self._parameter_sets_to_evaluate
         success = True
         exit_status = 0
-        e=""
+        err_msg=""
         try:
             self._batch_results = self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
         except Exception as e:
             success = False
             exit_status = -1
-        self._results._set_exit_information(success, exit_status, f"{e}")
+            err_msg = str(repr(e))
+            logger.error(f"Error evaluating current parameter batch.\n{err_msg}")
+        self._results._set_exit_information(success, exit_status, f"{err_msg}")
         return self._results
 
     def _check_parameter_sets_populated(self):
@@ -200,8 +202,8 @@ class HaltonStudy(ParameterStudy):
                      Halton sequence by an amount determined by 'skip'.
         :type skip: int
         """
-        self._set_number_of_samples_and_generate(nsamples, skip)
-        
+        if nsamples is not None:
+            self._set_number_of_samples_and_generate(nsamples, skip)
         return super().launch()
 
     def _set_number_of_samples_and_generate(self, nsamples, skip):
@@ -730,10 +732,10 @@ class LaplaceStudy(_LaplaceStudyBase):
         Currently only a single value is accepted for all data.
         This is the expected standard deviation of the noise.
 
-        :param noise_estimate: value for the noise estimate
+        :param noise_estimate: value for the noise estimate, must be non-negative
         :type noise_estimate: float
         """
-        check_value_is_positive_real(noise_estimate, "noise_estimate", 
+        check_value_is_nonnegative_real(noise_estimate, "noise_estimate", 
                                      f"{self.study_class}.set_noise_estimate")
         self._noise_variance=noise_estimate**2
 

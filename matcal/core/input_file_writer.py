@@ -5,7 +5,7 @@ from io import TextIOWrapper
 
 from matcal.core.utilities import (check_item_is_correct_type, 
                                    check_value_is_nonempty_str, 
-                                   check_value_is_positive_integer,
+                                   check_value_is_nonnegative_integer,
                                    check_value_is_bool)
 
 
@@ -121,7 +121,7 @@ class InputFileLine():
             will appear. The default values is {self.default_symbol_index}.
         :type index: int
         """
-        check_value_is_positive_integer(index, "set_symbol_location", "index")
+        check_value_is_nonnegative_integer(index, "set_symbol_location", "index")
         self._symbol_location = index
 
     def set_at_end(self, value):
@@ -151,7 +151,7 @@ class InputFileLine():
         :param index: the location of the value place in the line list.
         :type index: int
         """
-        check_value_is_positive_integer(index, "index", "set")
+        check_value_is_nonnegative_integer(index, "index", "set")
         if len(self._my_values) <= index:
             for i in range(index - len(self._my_values) + 1):
                 self._my_values.append(None)

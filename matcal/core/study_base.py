@@ -33,7 +33,8 @@ from matcal.core.pruner import DirectoryPrunerKeepAll, DirectoryPrunerBase, Elim
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.state import StateCollection, SolitaryState
 from matcal.core.utilities import (_sort_workdirs, check_item_is_correct_type, 
-                                   check_value_is_positive_integer) 
+                                   check_value_is_positive_integer, 
+                                   check_value_is_nonnegative_integer) 
 from matcal.version import __version__
 
 logger = initialize_matcal_logger(__name__)
@@ -524,6 +525,7 @@ class StudyBase(ABC):
             "Please do not invoke 'set_use_threads' with restarts.")
 
     def _initialize_results(self):
+        print("Results:", self._results)
         if self._results is None:
             self._results = StudyResults(**self._results_reporting)
 
@@ -748,7 +750,6 @@ class StudyBase(ABC):
         for parameter_set in parameter_sets:
             eval_dir_name, param_dict  = self._get_eval_dir_and_parameter_dict(parameter_set)
             prepared_parameter_sets[eval_dir_name] = param_dict
-
         return prepared_parameter_sets
 
     def _get_eval_dir_and_parameter_dict(self, param_set):
@@ -1505,7 +1506,7 @@ def _get_return_data_list_history(data_list, repeat_index=None,
                                   err_msg="study_results.get_*_qois/data"):
     return_val = data_list
     if repeat_index is not None:
-        check_value_is_positive_integer(repeat_index, "index", err_msg)
+        check_value_is_nonnegative_integer(repeat_index, "index", err_msg)
         if repeat_index >= len(return_val):
             index_error_msg = (f"The index {repeat_index} is too large for the results"
                            f" list being returned from {err_msg}")
@@ -1620,13 +1621,15 @@ class QoiInformation:
             self.simulation_weighted_conditioned_qois.append(sim_wc_qois)
         
         
-def _record_results(results:StudyResults, formatted_parameters, raw_obj, total_obj, qois, skip):
+def _record_results(results:StudyResults, formatted_parameters, raw_obj, total_obj, qois, skip,
+                    in_progress_save=True):
     if not skip:
         ordered_evaluation_keys = _sort_workdirs(list(formatted_parameters.keys()))
         results._initialize_evaluation_sets(qois, ordered_evaluation_keys)
         results._update_parameter_history(formatted_parameters, ordered_evaluation_keys)
         results._update_results_history(raw_obj, total_obj, qois, ordered_evaluation_keys)
-        results.save(IN_PROGRESS_RESULTS_FILENAME+".joblib")   
+        if in_progress_save:
+            results.save(IN_PROGRESS_RESULTS_FILENAME+".joblib")   
         
 
 def _unpack_evaluation(batch_results):

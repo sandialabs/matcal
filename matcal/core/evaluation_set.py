@@ -98,9 +98,8 @@ class StudyEvaluationSet:
         for state in self._state_collection.values():
             if not restart:
                 self._model.preprocess(state, template_dir)
-            if state not in self._simulators.keys():
-                state_sim = self._model.build_simulator(state)
-                self._simulators[state] = state_sim
+            state_sim = self._model.build_simulator(state)
+            self._simulators[state] = state_sim
 
     def get_objective_names(self):
         names = []

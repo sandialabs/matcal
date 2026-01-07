@@ -31,7 +31,8 @@ from matcal.core.parameters import (_get_parameters_according_to_precedence,
 
 from matcal.core.utilities import (matcal_name_format, check_value_is_nonempty_str, 
     check_value_is_real_between_values, check_item_is_correct_type, check_value_is_positive_integer, 
-    check_value_is_positive_real, _convert_list_of_files_to_abs_path_list,)
+    check_value_is_positive_real, _convert_list_of_files_to_abs_path_list, 
+    check_value_is_nonnegative_real)
 
 from matcal.cubit.geometry import (MaterialPointGeometry, RectangularUniaxialTensionGeometry, 
     RoundUniaxialTensionGeometry, RoundNotchedTensionGeometry, SolidBarTorsionGeometry, 
@@ -928,7 +929,7 @@ class _CoupledStandardSierraModel(_StandardSierraModelWithDeath):
         self._verify_temperature_not_read_from_boundary_data()
         if (thermal_conductivity is not None and density is not None
         and specific_heat is not None  and plastic_work_variable is not None):
-            check_value_is_positive_real(thermal_conductivity, "thermal_conductivity", 
+            check_value_is_nonnegative_real(thermal_conductivity, "thermal_conductivity", 
                                              "SierraModel.activate_thermal_coupling")
             check_value_is_positive_real(density, "density", 
                                              "SierraModel.activate_thermal_coupling")
@@ -1476,7 +1477,7 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
         :param friction_coefficient: the desired friction coefficient for self-contact
         :type friction_coefficient: float
         """
-        check_value_is_positive_real(friction_coefficient, "friction_coefficient", 
+        check_value_is_nonnegative_real(friction_coefficient, "friction_coefficient", 
             "SierraModel.activate_self_contact")
         logger.warning(f"Use of self contact with the MatCal generated "
                        f"SIERRA/SM model \"{self.name}\" may be unreliable "
