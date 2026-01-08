@@ -17,7 +17,7 @@ from matcal.core.utilities import (check_value_is_positive_integer,
                                    check_value_is_array_like_of_reals, 
                                    check_value_is_bool, 
                                    check_value_is_positive_real)
-from matcal.core.serializer_wrapper import matcal_load, matcal_save
+from matcal.core.serializer_wrapper import matcal_save
 
 logger = initialize_matcal_logger(__name__)
 
@@ -31,10 +31,6 @@ def _get_parameter_bounds(parameters):
     return bounds
 
 
-def _get_canonical_bounds(nvars):
-    return np.r_[[[-1., 1.]] * nvars]
-
-
 def _get_variable_from_bounds(bounds):
     from pyapprox.variables import IndependentMarginalsVariable
 
@@ -46,8 +42,6 @@ def _get_variable_from_bounds(bounds):
 
 def _get_pyapprox_variable_transformer(n_parameters, bounds):
     from pyapprox.variables.transforms import AffineTransform
-    canonical_bounds = _get_canonical_bounds(n_parameters)
-    canonical_variable = _get_variable_from_bounds(canonical_bounds)
     variable = _get_variable_from_bounds(bounds)
     return AffineTransform(variable)
 
@@ -77,11 +71,12 @@ def _setup_sparse_grid_surrogate(n_parameters, n_qois):
 
 class AdaptiveSurrogate:
     """
-    Keeps a history of surrogate objects together with the validation
-    errors and the number of training samples used for each iteration.
+    Stores the surrogate and training and test information regarding the surrogate
+    and the progress of training for the surrogate.
 
     Can also be used to call the surrogate objects for predictions 
-    using the surrogate models.
+    using the surrogate models. Since all iterations of the surrogate are 
+    stored, any version of the surrogate can be called.
     """
 
     def __init__(self, target_field_name, indep_variable_name, 
@@ -93,13 +88,13 @@ class AdaptiveSurrogate:
         self._sample_counts: list[int] = []    
         self._target_field_name: str = target_field_name
         self._indep_variable_name = indep_variable_name
-        self._indep_variable_values = indep_variable_values
+        self._indep_variable_values = np.asarray(indep_variable_values)
         self._variable_transformer = variable_transformer
         self._test_params = test_params
         self._test_responses = test_responses
         self._param_names = param_names
 
-    def add_iteration(
+    def _add_iteration(
         self,
         surrogate, 
         nsamples 
@@ -115,6 +110,7 @@ class AdaptiveSurrogate:
         self._average_errors.append(average_l2_error)
         self._max_errors.append(max_abs_error)
         self._sample_counts.append(nsamples)
+
     @property
     def current_surrogate(self):
         """Return the most recent surrogate (or ``None`` if no iteration yet)."""
@@ -122,23 +118,105 @@ class AdaptiveSurrogate:
 
     @property
     def average_error_history(self):
+        """Returns the list of errors for the average error history. The average
+        error is calculated using
+       
+        .. math::
+            E_{avg}
+            = \frac{\lVert \mathbf{R}_{\text{test}} - \hat{\mathbf{R}} \rVert_{2}}
+               {N}
+
+        where :math:`{N`} is the number of test samples, :math:`{R}_{\text{test}}` is the 
+        test responses and :math:`{\hat{R}}` is the surrogate responses. 
+        """
         return self._average_errors
 
     @property
     def max_error_history(self):
+        """Returns the list of errors for the max error history. The max
+        error is calculated using
+       
+        .. math::
+            E_{max}
+            = \frac{\lVert \mathbf{R}_{\text{test}} - \hat{\mathbf{R}} \rVert_{\infty}}
+               {N}
+
+        where :math:`{N`} is the number of test samples, :math:`{R}_{\text{test}}` is the 
+        test responses and :math:`{\hat{R}}` is the surrogate responses. 
+        """
         return self._max_errors
 
     @property
     def sample_count_history(self):
+        """Returns a list containing the number of samples used by each surrogate
+           training step."""
         return self._sample_counts
 
     def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, **kwargs):
+        """
+        Evaluate a stored surrogate model. This is represented in mathematical notation by 
+
+        .. math::
+            \\hat{\\mathbf{R}} = S_i\\bigl(\\mathbf{p}\\bigr),
+
+        where :math:`\\mathbf{R}` is the vector (or matrix) of output responses,
+        :math:`\\mathbf{p}` is the vector (or matrix) of input
+        parameters and :math:`S_i` denotes the selected surrogate model.
+
+        The surrogate objects includes all the
+        models generated during the adaptive training process.  This method
+        provides an interface for retrieving predictions from any
+        version of the surrogate during training using the ``surrogate_index``
+        keyword argument.
+
+        :param *args: Positional arguments representing the model parameters.
+            The accepted calling patterns are:
+
+            * **Single‑sample evaluation** (``batch_evaluate=False``) – a
+            tuple whose length equals the number of model parameters.
+            The values are interpreted in the order defined by the 
+            :class:`matcal.core.parameters.ParameterCollection` or order of parameters
+            passed to the adaptive surrogate training study.
+
+            * **Batch evaluation** (``batch_evaluate=True``) – a single argument
+            that must be a two‑dimensional ``np.ndarray`` of shape
+            ``(n_parameters, n_samples)``.  The array is forwarded unchanged
+            to the surrogate.
+
+        :type *args: tuple or np.ndarray
+
+        :param surrogate_index: Index of the surrogate to use. ``-1`` selects the
+            most recent surrogate. Any valid list index is accepted.
+        :type surrogate_index: int, optional
+
+        :param batch_evaluate: When ``True`` the call is interpreted as a *batch*
+            evaluation; otherwise it is a *single‑sample* evaluation.
+        :type batch_evaluate: bool, optional
+
+        :param **kwargs: Keyword arguments that map each parameter name to the desired
+            evaluation value. This calling style is mutually exclusive 
+            with the positional ``*args`` form.
+        :type **kwargs: dict
+
+        :return: The surrogate prediction ``\\hat{\\mathbf{R}}``.  For a single
+            sample, this is a dictionary 
+            containing two one‑dimensional arrays of length ``n_qois`` 
+            with the independent variable and the corresponding target variable
+            response. For a batch evaluation,  it is a two‑dimensional array of shape
+            ``(n_samples, n_qois)``.
+        :rtype: np.ndarray or dict(str, np.ndarray)
+
+        :raises RuntimeError: If the supplied arguments do not match any of the
+            supported calling conventions (wrong number of positional arguments,
+            missing or extra keyword arguments, etc.).
+        """
         surrogate = self._surrogates[surrogate_index]
         if batch_evaluate:
+            response = surrogate(*args)
             return surrogate(*args)
         elif len(args) == len(self._param_names) and len(kwargs) == 0:
             params_array = np.array([args]).T
-            return surrogate(params_array)
+            response = surrogate(params_array)[0]
         elif len(args) == 0 and len(kwargs) == len(self._param_names):
             param_ordered_list = []
             for param_name in self._param_names:
@@ -148,10 +226,14 @@ class AdaptiveSurrogate:
                         f"Received parameters:\n{kwargs.keys()}")
                     raise RuntimeError(error_message)
                 param_ordered_list.append(kwargs[param_name])
+            
             return self(*param_ordered_list, surrogate_index=surrogate_index)
         else:
             raise RuntimeError("Surrogate model was not called correctly. The input parameters "+
                                "are likely of the incorrect format. Check input")
+
+        return {self._target_field_name:response, 
+                self._indep_variable_name:self._indep_variable_values}
 
 
 class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
@@ -538,7 +620,7 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
             with open(BATCH_RESTART_FILENAME+'.csv', 'w'):
                 pass
         while sg.step(canonical_model):
-            self._surrogate.add_iteration(sg, self._results.number_of_evaluations)
+            self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
             logger.info(f"Training samples: {self._surrogate.sample_count_history[-1]}")
             training_batch_number = len(self._surrogate.sample_count_history)
             if self._stopping_criterion_met(training_batch_number):
@@ -608,24 +690,8 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
                                    "an adaptive surrogate study.")
 
     @property
-    def number_of_training_samples_history(self):
-        return self._number_of_test_samples
-
-    @property
-    def surrogate_history(self):
-        return self._surrogates_history
-    
-    @property
-    def current_surrogate(self):
-        return self._surrogates_history[-1]
-    
-    @property
-    def average_error_history(self):
-        return self._average_l2_errors
-
-    @property
-    def max_error_history(self):
-        return self._max_abs_errors
+    def surrogate(self):
+        return self._surrogate
     
     def set_save_filename(self, filename):
         check_value_is_nonempty_str(filename, "filename", 

@@ -36,8 +36,8 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         sg_study.add_evaluation_set(py_model)
         sg_study.launch()
 
-        self.assertLess(sg_study._average_l2_errors[-1], 1e-2)
-        self.assertLess(sg_study._max_abs_errors[-1], 1e-1)
+        self.assertLess(sg_study.surrogate.average_error_history[-1], 1e-2)
+        self.assertLess(sg_study.surrogate.max_error_history[-1], 1e-1)
 
 
 
