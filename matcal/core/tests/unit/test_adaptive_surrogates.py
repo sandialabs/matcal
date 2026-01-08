@@ -3,16 +3,12 @@ import types
 import numpy as np
 import unittest
 
-
 from matcal.core.adaptive_surrogates import (
     SparseGridAdaptiveSurrogateStudy,
-    _get_parameter_bounds, _get_canonical_bounds
-)
-from matcal.core.parameters import Parameter
+    _get_parameter_bounds, AdaptiveSurrogate)
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.models import PythonModel
-
-# Import the MatcalUnitTest base class
+from matcal.core.parameters import Parameter
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -36,11 +32,6 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     """
 
     def setUp(self):
-        """
-        MatcalUnitTest expects a *filename* argument – we simply pass the
-        current file's path.  After the base‑class set‑up we create a fresh
-        study instance that uses a temporary working directory.
-        """
         super().setUp(__file__)           
         p1 = Parameter("p1", 0.0, 1.0, 0.5)
         p2 = Parameter("p2", -1.0, 1.0, 0.0)
@@ -185,7 +176,6 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         test_dir = os.path.abspath("work_test_samples")
         self.study.launch()
         self.assertTrue(os.path.isdir(test_dir))
-        print(os.getcwd())
         self.assertTrue(os.path.isdir("work"))
     
     def test_format_params_and_output(self):
@@ -343,20 +333,25 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.study._test_params = np.array([[0.0, 1.0], [0.5, 0.5]])
         self.study._test_responses = np.array([[1.0, 2.0], [1.5, 2.5]])
 
-        class DummySurrogate:
+        class DoubleParamSurrogate:
             def __call__(self, params):
                 return params * 2.0
-        surrogate = DummySurrogate()
-
-        self.study._update_surrogate_score(surrogate)
-
-        self.assertEqual(len(self.study._average_l2_errors), 1)
-        self.assertEqual(len(self.study._max_abs_errors), 1)
+        self.study._surrogate = AdaptiveSurrogate("target", "independent", 
+                                                   np.array([0.0, 1.0]), 
+                                                   DummyTransform(), 
+                                                   self.study._test_params, 
+                                                   self.study._test_responses, 
+                                                   ["p1", "p2"]   
+                                                   )        
+        self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)        
+        
+        self.assertEqual(len(self.study.surrogate.average_error_history), 1)
+        self.assertEqual(len(self.study.surrogate.max_error_history), 1)
 
         expected_l2 = np.linalg.norm(self.study._test_responses -
-                                    surrogate(self.study._test_params))
+                                    DoubleParamSurrogate()(self.study._test_params))
         expected_l2 /= self.study._test_responses.shape[1]
-        self.assertAlmostEqual(self.study._average_l2_errors[0], expected_l2)
+        self.assertAlmostEqual(self.study.surrogate.average_error_history[0], expected_l2)
 
     @unittest.skipIf(not HAS_PYAPPROX,
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
@@ -375,47 +370,6 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.fake_results = types.SimpleNamespace(number_of_evaluations=0)
         self.study._results = self.fake_results
         self.fake_results.number_of_evaluations = n
-
-    def test_no_stop_when_first_batch(self):
-        self.study._average_l2_errors.append(1e-5)
-        self.study._max_abs_errors.append(1e-5)
-
-        self._set_number_of_evaluations(10)   # below max_training_samples
-        stop = self.study._stopping_criterion_met(training_batch_number=1)
-        self.assertFalse(stop, "First batch should never trigger stopping")
-
-    def test_stop_on_average_l2_error(self):
-        self.study._average_l2_errors.append(self.study._average_l2_error_goal * 0.5)   
-        self.study._max_abs_errors.append(0.1)                      # irrelevant
-
-        self._set_number_of_evaluations(20)   # still below max_training_samples
-        stop = self.study._stopping_criterion_met(training_batch_number=2)
-        self.assertTrue(stop, "Average L2 error below criteria should stop")
-
-    def test_stop_on_max_abs_error(self):
-        self.study._average_l2_errors.append(0.5)               
-        self.study._max_abs_errors.append(self.study._max_abs_error_goal * 0.8)  
-
-        self._set_number_of_evaluations(30)
-        stop = self.study._stopping_criterion_met(training_batch_number=3)
-        self.assertTrue(stop, "Max‑abs error below criteria should stop")
-
-    def test_stop_when_exceeds_max_training_samples(self):
-        self.study._average_l2_errors.append(0.5)
-        self.study._max_abs_errors.append(0.5)
-
-        self._set_number_of_evaluations(self.study._max_training_samples + 1)
-
-        stop = self.study._stopping_criterion_met(training_batch_number=2)
-        self.assertTrue(stop, "Exceeding max_training_samples should stop")
-
-    def test_no_stop_when_all_criteria_fail(self):
-        self.study._average_l2_errors.append(0.5)  
-        self.study._max_abs_errors.append(0.5)     
-
-        self._set_number_of_evaluations(10)        # below max_training_samples
-        stop = self.study._stopping_criterion_met(training_batch_number=4)
-        self.assertFalse(stop, "No criteria met – should continue")
 
     def test_default_goals(self):
         self.assertAlmostEqual(
@@ -471,61 +425,369 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         with self.assertRaises(ValueError):
             self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
 
-    def test_stopping_criterion_uses_new_goals(self):
-        stricter_avg = 1e-4
-        stricter_max = 1e-4
-        self.study.set_error_stopping_criteria(
-            average_l2_error_goal=stricter_avg,
-            max_abs_error_goal=stricter_max,
-        )
 
-        self.study._average_l2_errors.append(0.5)   # > stricter goal
-        self.study._max_abs_errors.append(0.5)     # > stricter goal
-        class FakeResults:
-            def __init__(self, number_of_evaluations: int = 0):
-                self.number_of_evaluations = number_of_evaluations
-        self.study._results = FakeResults(10)
+class IdentityTransformer:
+    """
+    Minimal transformer that implements the two methods used by AdaptiveSurrogate.
+    Both methods simply return the argument unchanged.
+    """
+    def map_to_canonical(self, arr):
+        # In the real code this would map to [-1, 1] space – we keep it identity.
+        return arr
 
-        stop = self.study._stopping_criterion_met(training_batch_number=2)
-        self.assertFalse(stop, "Stopping criterion should not be triggered")
-
-        self.study._average_l2_errors.append(stricter_avg * 0.5)
-        self.study._max_abs_errors.append(0.8)     # irrelevant for this case
-
-        stop = self.study._stopping_criterion_met(training_batch_number=2)
-        self.assertTrue(stop, "Stopping criterion should trigger with the new stricter goal")
+    def map_from_canonical(self, arr):
+        return arr
 
 
-class TestGetCanonicalBounds(MatcalUnitTest):
+class ConstantSurrogate:
+    """
+    Callable surrogate model used in the tests.
+
+    It expects a NumPy array with shape (n_parameters, n_samples) and
+    returns an array of shape (n_samples, n_qois).  For simplicity we set
+    n_qois == 1 and return a constant value equal to the sum of the
+    input parameters (broadcast to the output shape).  This deterministic
+    behavior makes it easy to compute expected errors.
+    """
+    def __init__(self, n_parameters: int, constant: float = 0.0):
+        self.n_parameters = n_parameters
+        self.constant = constant
+        
+    def __call__(self, param_array: np.ndarray) -> np.ndarray:
+        n_samples = param_array.shape[1]
+        out = np.full((n_samples, 1), self.constant, dtype=float)
+        return out
+
+
+class TestAdaptiveSurrogate(MatcalUnitTest):
     def setUp(self):
-        super().setUp(__file__)   # MatcalUnitTest expects a filename
+        super().setUp(__file__)   
 
-    def test_single_variable(self):
-        """For ``nvars == 1`` the function should return a 1×2 array ``[[-1., 1.]]``."""
-        bounds = _get_canonical_bounds(1)
-        expected = np.array([[-1.0, 1.0]])
-        self.assertIsInstance(bounds, np.ndarray, "Result should be a NumPy array")
-        np.testing.assert_array_equal(bounds, expected,
-                                      err_msg="Canonical bounds for a single variable are incorrect")
-        self.assertEqual(bounds.shape, (1, 2), "Shape must be (1, 2) for a single variable")
+    def _make_surrogate(self):
+        # 2 parameters → simple 2‑D problem
+        param_names = ["p1", "p2"]
+        n_params = len(param_names)
 
-    def test_multiple_variables(self):
+        # Test parameters – shape (n_params, n_test_samples)
+        test_params = np.array([[0.0, 1.0],   # p1 values
+                                [0.0, 1.0]])  # p2 values
+
+        # Test responses – shape (n_test_samples, n_qois)
+        # We deliberately set them to something different from the surrogate
+        # constant so we can validate error calculation.
+        test_responses = np.array([[1.0], [2.0]])
+
+        transformer = IdentityTransformer()
+        surrogate = AdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="independent",
+            indep_variable_values=np.array([0.0]),
+            variable_transformer=transformer,
+            test_params=test_params,
+            test_responses=test_responses,
+            param_names=param_names,
+        )
+        return surrogate
+
+    def test_initialization(self):
+        surrogate = self._make_surrogate()
+        self.assertEqual(surrogate._surrogates, [])
+        self.assertEqual(surrogate._average_errors, [])
+        self.assertEqual(surrogate._max_errors, [])
+        self.assertEqual(surrogate._sample_counts, [])
+        self.assertIsNone(surrogate.current_surrogate)
+
+    def test_add_iteration_computes_errors(self):
         """
-        For ``nvars > 1`` each row must be ``[-1., 1.]`` and the shape must be
-        ``(nvars, 2)``.
+        Verify that _add_iteration:
+        * stores a deep‑copied surrogate,
+        * computes average L2 and max ∞ errors correctly,
+        * records the supplied sample count.
         """
-        for nvars in (2, 3, 5, 10):
-            with self.subTest(nvars=nvars):
-                bounds = _get_canonical_bounds(nvars)
-                self.assertEqual(bounds.shape, (nvars, 2),
-                                 f"Expected shape {(nvars, 2)} but got {bounds.shape}")
+        surrogate = self._make_surrogate()
 
-                expected_row = np.array([-1.0, 1.0])
-                for i in range(nvars):
-                    np.testing.assert_array_equal(bounds[i], expected_row,
-                                err_msg=f"Row {i} differs from expected canonical bounds")
+        # Constants surrogate object to be added during the iteration
+        sur = ConstantSurrogate(n_parameters=2, constant=0.0)
 
-                expected = np.tile(expected_row, (nvars, 1))
-                np.testing.assert_array_equal(bounds, expected,
-                            err_msg="Whole array does not match the expected canonical bounds")
+        # Number of samples that the iteration pretends to have used
+        nsamples = 42
 
+        # Run the private method
+        surrogate._add_iteration(sur, nsamples)
+
+        # ---- Checks ----------------------------------------------------
+        # 1. Surrogate list length increased
+        self.assertEqual(len(surrogate._surrogates), 1)
+
+        # 2. The stored surrogate is a *deep* copy (i.e. not the same object)
+        self.assertIsNot(surrogate._surrogates[0], sur)
+
+        # 3. Average L2 error = ||R_test - 0||_2 / N
+        # R_test shape (2, 1) → norm = sqrt(1^2 + 2^2) = sqrt(5)
+        expected_l2 = np.linalg.norm(np.array([[1.0], [2.0]]) - np.array([[0], [0]])) / 1
+        self.assertAlmostEqual(surrogate._average_errors[0], expected_l2)
+
+        # 4. Max ∞ error = max(|R_test - 0|) = 2.0
+        self.assertAlmostEqual(surrogate._max_errors[0], 2.0)
+
+        # 5. Sample‑count history
+        self.assertEqual(surrogate._sample_counts[0], nsamples)
+
+    def test_property_getters(self):
+        """current_surrogate, average_error_history, max_error_history, sample_count_history."""
+        surrogate = self._make_surrogate()
+
+        sur = ConstantSurrogate(n_parameters=2, constant=0.0)
+        surrogate._add_iteration(sur, nsamples=5)
+
+        # current_surrogate should return the stored copy
+        self.assertIsInstance(surrogate.current_surrogate, ConstantSurrogate)
+
+        # History properties should match the internal lists
+        self.assertEqual(surrogate.average_error_history, surrogate._average_errors)
+        self.assertEqual(surrogate.max_error_history, surrogate._max_errors)
+        self.assertEqual(surrogate.sample_count_history, surrogate._sample_counts)
+
+    def test_call_with_positional_args(self):
+        """
+        Call the surrogate with a tuple of positional arguments.
+        The surrogate returns a constant value; we verify the output shape
+        and that the correct surrogate (index –1) is used.
+        """
+        # Surrogate constant = 7.5 → expected output array = [[7.5]]
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(n_parameters=2, constant=7.5), 10)
+
+        # The underlying stored surrogate is the one we just added 
+        out = surrogate(0.2, 0.8)  
+
+        # Expected shape (n_qois=1, n_samples=1)
+        self.assertIsInstance(out, dict)
+        self.assertEqual(out["target"].shape, (1, ))
+        self.assertAlmostEqual(out["target"][0], 7.5)
+        self.assert_close_arrays(out["independent"], np.array([0.0]))
+
+    def test_call_with_keyword_args(self):
+        """Same as the positional test but using **kwargs."""
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(n_parameters=2, constant=-3), 10)
+
+        out = surrogate(p2=0.5, p1=0.5)  
+
+        self.assertIsInstance(out, dict)
+        self.assertEqual(out["target"].shape, (1, ))
+        self.assertAlmostEqual(out["target"][0], -3.0)
+
+    def test_call_batch_evaluate(self):
+        """
+        When batch_evaluate=True the surrogate receives the raw argument list.
+        We pass a (n_parameters, n_samples) array and check the returned
+        shape matches (n_qois, n_samples).
+        """
+        surrogate = self._make_surrogate()
+        sur = ConstantSurrogate(2, 2.0)
+        surrogate._add_iteration(sur, 1)
+        # Create a batch of three samples, each with 2 parameters
+        batch = np.array([[0.0, 1.0, 2.0],   # p1 values
+                          [0.0, 1.0, 2.0]])  # p2 values
+
+        out = surrogate(batch, batch_evaluate=True)
+
+        self.assertEqual(out.shape, (3, 1))
+        self.assertTrue(np.allclose(out, 2.0))
+
+    def test_call_error_on_invalid_input(self):
+        """
+        Supplying a mismatched number of positional arguments (or an
+        incomplete keyword dict) must raise RuntimeError.
+        """
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(2, 3), 1)
+
+        # Wrong number of positional arguments (only one while two are required)
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1)  # missing second parameter
+
+        # Incomplete keyword dict (missing 'p2')
+        with self.assertRaises(RuntimeError):
+            surrogate(p1=0.2)
+
+        # Both positional and keyword arguments together – also invalid
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1, p2=0.3)
+
+    def test_call_with_explicit_surrogate_index(self):
+        """
+        Verify that the `surrogate_index` argument correctly selects a
+        surrogate from the internal list.
+        """
+        # Create two distinct ConstantSurrogates with different constant outputs
+        surrogate = self._make_surrogate()
+        first = ConstantSurrogate(n_parameters=2, constant=0)
+        surrogate._add_iteration(first, 1)
+
+        # Append a second surrogate (constant = 9.9) manually
+        second = ConstantSurrogate(n_parameters=2, constant=9.9)
+        surrogate._add_iteration(second, 2)
+
+        # Index 0 should return the first surrogate (constant 0.0)
+        out0 = surrogate(0.0, 0.0, surrogate_index=0)
+        self.assertAlmostEqual(out0["target"][0], 0.0)
+
+        # Index -1 (default) should return the second surrogate (constant 9.9)
+        out_last = surrogate(0.0, 0.0)   # default = -1
+        self.assertAlmostEqual(out_last["target"][0], 9.9)
+
+    # ------------------------------------------------------------------
+    # 9. Full workflow: add several iterations and query histories -----
+    # ------------------------------------------------------------------
+    def test_multiple_iterations_history(self):
+        """
+        Run three iterations with different dummy surrogates and verify that
+        the histories grow as expected and store the correct error values.
+        """
+        surrogate = self._make_surrogate()
+
+        # First iteration – constant 0 → error = test_responses
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=10)
+
+        # Second iteration – constant 1 → error = test_responses - 1
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.0), nsamples=20)
+
+        # Third iteration – constant 2 → error = test_responses - 2
+        surrogate._add_iteration(ConstantSurrogate(2, constant=2.0), nsamples=30)
+
+        # Histories should have length 3
+        self.assertEqual(len(surrogate.average_error_history), 3)
+        self.assertEqual(len(surrogate.max_error_history), 3)
+        self.assertEqual(len(surrogate.sample_count_history), 3)
+
+        # Verify sample‑count history matches the values we passed
+        self.assertEqual(surrogate.sample_count_history, [10, 20, 30])
+
+        # Compute expected average L2 errors manually for sanity check
+        R_test = surrogate._test_responses  # shape (2, 1)
+        # Helper to compute error for a given constant
+        def expected_avg(const):
+            diff = R_test - const
+            return np.linalg.norm(diff) / 1
+
+        # Expected values
+        exp0 = expected_avg(0.0)
+        exp1 = expected_avg(1.0)
+        exp2 = expected_avg(2.0)
+
+        self.assertAlmostEqual(surrogate.average_error_history[0], exp0)
+        self.assertAlmostEqual(surrogate.average_error_history[1], exp1)
+        self.assertAlmostEqual(surrogate.average_error_history[2], exp2)
+
+        # Max errors should be max absolute difference
+        self.assertAlmostEqual(surrogate.max_error_history[0], np.max(np.abs(R_test - 0.0)))
+        self.assertAlmostEqual(surrogate.max_error_history[1], np.max(np.abs(R_test - 1.0)))
+        self.assertAlmostEqual(surrogate.max_error_history[2], np.max(np.abs(R_test - 2.0)))
+
+
+class _FakeSurrogate:
+    """
+    Minimal surrogate object that mimics the public attributes used by the
+    stopping‑criterion method.
+    """
+    def __init__(self):
+        self._average_errors = []   # filled by the test
+        self._max_errors = []       # filled by the test
+
+    @property
+    def average_error_history(self):
+        return self._average_errors
+
+    @property
+    def max_error_history(self):
+        return self._max_errors
+
+
+class _FakeResults:
+    """
+    Simple container that only needs the attribute `number_of_evaluations`.
+    """
+    def __init__(self, n_evals: int = 0):
+        self.number_of_evaluations = n_evals
+
+
+class _TestStudyStoppingCriteria(SparseGridAdaptiveSurrogateStudy):
+    """
+    Sub‑class that bypasses the heavy initialization performed by the real
+    `SparseGridAdaptiveSurrogateStudy`.  All attributes required by the
+    `_stopping_criterion_met` method are injected manually in the test
+    cases.
+    """
+    def __init__(self):
+        # Do **not** call the parent __init__ (it expects a full ParameterCollection)
+        # Initialise only the fields that the stopping‑criterion method inspects.
+        self._average_l2_error_goal = 1e-2   # default in the parent class
+        self._max_abs_error_goal = 1e-1
+        self._surrogate = _FakeSurrogate()
+        self._results = _FakeResults()
+        self._number_of_test_samples = 10
+        self.set_max_training_samples()
+
+class TestSparseGridStoppingCriteria(MatcalUnitTest):
+    """
+    Test suite for `_stopping_criterion_met`.
+    """
+
+    def setUp(self):   # pragma: no cover – required by MatcalUnitTest
+        super().setUp(__file__)
+        self.study = _TestStudyStoppingCriteria()
+
+    def test_no_stop_on_first_batch(self):
+        # populate error histories with values *below* the goals – they must be ignored
+        self.study._surrogate._average_errors = [0.0]   # below 1e‑2
+        self.study._surrogate._max_errors = [0.0]       # below 1e‑1
+        self.study._results.number_of_evaluations = 0   # far below max_training_samples
+
+        should_stop = self.study._stopping_criterion_met(training_batch_number=1)
+        self.assertFalse(should_stop, "Stopping should NOT be triggered on the first batch")
+
+    def test_stop_on_average_l2_error(self):
+        self.study._surrogate._average_errors = [5e-3]   # < 1e‑2 goal
+        self.study._surrogate._max_errors = [0.5]       # > goal (irrelevant)
+        self.study._results.number_of_evaluations = 0
+
+        should_stop = self.study._stopping_criterion_met(training_batch_number=2)
+        self.assertTrue(should_stop,
+                        "Stopping should be triggered when avg L2 error ≤ goal after >1 batch")
+
+    def test_stop_on_max_absolute_error(self):
+        self.study._surrogate._average_errors = [0.5]   # > goal (doesn't matter)
+        self.study._surrogate._max_errors = [5e-2]      # < 1e‑1 goal
+        self.study._results.number_of_evaluations = 0
+
+        should_stop = self.study._stopping_criterion_met(training_batch_number=3)
+        self.assertTrue(should_stop,
+                        "Stopping should be triggered when max absolute error ≤ goal after >1 batch")
+
+    def test_stop_on_max_training_samples(self):
+        # Set error histories to values that would *not* normally trigger a stop
+        self.study._surrogate._average_errors = [1.0]   # > goal
+        self.study._surrogate._max_errors = [1.0]      # > goal
+
+        # Simulate that the study has already used more samples than allowed.
+        # The parent class stores the limit in `_max_training_samples`; we set it
+        # directly on our test instance.
+        self.study._max_training_samples = 100
+        self.study._results.number_of_evaluations = 101  # exceed the limit
+
+        should_stop = self.study._stopping_criterion_met(training_batch_number=5)
+        self.assertTrue(should_stop,
+                        "Stopping should be triggered when number_of_evaluations > max_training_samples")
+
+
+    def test_no_stop_when_all_conditions_fail(self):
+        self.study._surrogate._average_errors = [0.2]   # > 1e‑2
+        self.study._surrogate._max_errors = [0.3]      # > 1e‑1
+        self.study._max_training_samples = 1000
+        self.study._results.number_of_evaluations = 500   # below limit
+
+        should_stop = self.study._stopping_criterion_met(training_batch_number=4)
+        self.assertFalse(should_stop,
+                         "Stopping should NOT be triggered when no criteria are met")
