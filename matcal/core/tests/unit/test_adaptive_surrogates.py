@@ -361,7 +361,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.study.set_independent_variable("x", np.linspace(0,1,3))
         self.study.set_target_field_name("y")
         self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(1)
+        self.study.set_max_training_samples(20)
         self.study.set_number_of_test_samples(1)
         self.study.launch()
         self.assertIsNotNone(self.study.results)
@@ -425,6 +425,17 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         with self.assertRaises(ValueError):
             self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
 
+    def test_set_save_filename(self):
+        self.assertEqual(self.study._save_filename, None)
+        with self.assertRaises(ValueError):
+            self.study.set_save_filename("my_surrogate_name")
+        with self.assertRaises(TypeError):
+            self.study.set_save_filename(0)
+        with self.assertRaises(ValueError):
+            self.study.set_save_filename("")
+        self.study.set_save_filename("my_surrogate_name.joblib")
+        self.assertEqual(self.study._save_filename, "my_surrogate_name.joblib")
+        
 
 class IdentityTransformer:
     """
@@ -612,6 +623,11 @@ class TestAdaptiveSurrogate(MatcalUnitTest):
         with self.assertRaises(RuntimeError):
             surrogate(p1=0.2)
 
+        # Incorrect keyword dict 'q2' != 'p2')
+        with self.assertRaises(RuntimeError):
+            surrogate(p1=0.2, q2=0.1)
+
+
         # Both positional and keyword arguments together – also invalid
         with self.assertRaises(RuntimeError):
             surrogate(0.1, p2=0.3)
@@ -791,3 +807,4 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         should_stop = self.study._stopping_criterion_met(training_batch_number=4)
         self.assertFalse(should_stop,
                          "Stopping should NOT be triggered when no criteria are met")
+        

@@ -6,7 +6,6 @@ import numpy as np
 import os
 from scipy import stats
 
-from matcal.core.constants import BATCH_RESTART_FILENAME
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.parameter_studies import HaltonStudy
@@ -40,7 +39,7 @@ def _get_variable_from_bounds(bounds):
     return IndependentMarginalsVariable(marginals)
 
 
-def _get_pyapprox_variable_transformer(n_parameters, bounds):
+def _get_pyapprox_variable_transformer(bounds):
     from pyapprox.variables.transforms import AffineTransform
     variable = _get_variable_from_bounds(bounds)
     return AffineTransform(variable)
@@ -212,10 +211,10 @@ class AdaptiveSurrogate:
         """
         surrogate = self._surrogates[surrogate_index]
         if batch_evaluate:
-            response = surrogate(*args)
-            return surrogate(*args)
+            response = surrogate(np.asarray(*args))
+            return response
         elif len(args) == len(self._param_names) and len(kwargs) == 0:
-            params_array = np.array([args]).T
+            params_array = np.asarray([args]).T
             response = surrogate(params_array)[0]
         elif len(args) == 0 and len(kwargs) == len(self._param_names):
             param_ordered_list = []
@@ -440,8 +439,7 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
         """
         test_params, test_responses = self._run_test_sampling()
         param_names = self._parameter_collection.get_item_names()
-        self._variable_transformer = _get_pyapprox_variable_transformer(len(param_names),
-                                                                        self._bounds)
+        self._variable_transformer = _get_pyapprox_variable_transformer(self._bounds)
         self._surrogate = AdaptiveSurrogate(self._target_field_name, self._independent_variable, 
                                             self._independent_variable_values, 
                                             self._variable_transformer, 
@@ -616,9 +614,6 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
         if self._save_filename is None:
             self._save_filename = f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib"
         sg = _setup_sparse_grid_surrogate(n_parameters, n_qois)    
-        if self._restart and not os.path.exists(BATCH_RESTART_FILENAME+".csv"):
-            with open(BATCH_RESTART_FILENAME+'.csv', 'w'):
-                pass
         while sg.step(canonical_model):
             self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
             logger.info(f"Training samples: {self._surrogate.sample_count_history[-1]}")
@@ -658,7 +653,8 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
                         f"{self._surrogate.sample_count_history[-1]} samples.")
         logger.info("................................................................")
         eval_meth = super()._matcal_evaluate_parameter_sets_batch
-        batch_results = eval_meth(self._parameter_sets_to_evaluate, is_restart=self._restart)
+        batch_results = eval_meth(self._parameter_sets_to_evaluate, 
+                                  is_restart=self._restart, ignore_missing_restart_file=True)
         return self._format_batch_results(batch_results, parameter_sets_from_pyapprox)
 
     def _populate_parameter_evaluations_adaptive(self, samples):
