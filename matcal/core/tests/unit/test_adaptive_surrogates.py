@@ -9,6 +9,8 @@ from matcal.core.adaptive_surrogates import (
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.models import PythonModel
 from matcal.core.parameters import Parameter
+from matcal.core.serializer_wrapper import matcal_load
+from matcal.core.study_base import StudyBase
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -61,7 +63,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
             self.study.set_independent_variable("1", "")
     
     def test_error_with_add_parameter_set(self):
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(StudyBase.StudyInputError):
             self.study.add_parameter_evaluation(p1=1, p2=2)
 
     def test_set_target_field(self):
@@ -361,10 +363,22 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.study.set_independent_variable("x", np.linspace(0,1,3))
         self.study.set_target_field_name("y")
         self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(20)
+        self.study.set_max_training_samples(30)
         self.study.set_number_of_test_samples(1)
         self.study.launch()
         self.assertIsNotNone(self.study.results)
+        sur_file = self.study.save_filename
+        sur_results = matcal_load(sur_file)
+        self.assertEqual(self.study.surrogate.average_error_history, 
+                         sur_results.average_error_history)
+        self.assertEqual(self.study.surrogate.sample_count_history, 
+                         sur_results.sample_count_history)
+        self.assertEqual(self.study.surrogate.max_error_history, 
+                         sur_results.max_error_history) 
+        self.assertEqual(len(self.study.surrogate._surrogates), 
+                         len(sur_results._surrogates))
+        self.assert_close_dicts_or_data(sur_results(p1=0, p2=0), 
+                                        self.study.surrogate(p1=0, p2=0))
 
     def _set_number_of_evaluations(self, n):
         self.fake_results = types.SimpleNamespace(number_of_evaluations=0)
@@ -435,7 +449,8 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
             self.study.set_save_filename("")
         self.study.set_save_filename("my_surrogate_name.joblib")
         self.assertEqual(self.study._save_filename, "my_surrogate_name.joblib")
-        
+        self.assertEqual(self.study.save_filename, "my_surrogate_name.joblib")
+
 
 class IdentityTransformer:
     """

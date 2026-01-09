@@ -19,6 +19,18 @@ def py_sim_function(**variables):
     return {'time': time, 'values': value}
 
 
+def py_sim_function_with_evaluation_number(**variables):
+    if 'evaluation_number' not in variables.keys():
+        raise RuntimeError("no evaluation number")
+    else:
+        if variables['evaluation_number'] != 14:
+            raise ValueError("Evaluation number is incorrect")
+    time = np.linspace(0, 1, 10)
+    value = np.ones(10) * variables['m']*variables['evaluation_number']
+
+    return {'time': time, 'values': value}
+
+
 def _set_directory_structure(model_name):
     sys.path.append(os.getcwd())
     path_to_copy = os.path.join(os.path.dirname(__file__), 
@@ -87,7 +99,7 @@ class TestPythonSimulator(MatcalUnitTest):
         super().setUp(__file__)
         self.py_model = self.PythonModelSpy(py_sim_function)
         self.py_sim = PythonSimulator(self.py_model.name, 
-                                      self.py_model.simulation_information, 
+                                      self.py_model.simulation_information(), 
                                       self.py_model._results_information,
                                       SolitaryState(),  self.py_model)
 
@@ -101,6 +113,23 @@ class TestPythonSimulator(MatcalUnitTest):
         py_sim_results = self.py_sim.run({"m":50})
         results = py_sim_results.results_data
         results_goal = py_sim_function(m=50)
+        results_delta = results['values'] - results_goal['values']
+        self.assertEqual(py_sim_results.return_code, None)
+        self.assertAlmostEqual(np.linalg.norm(results_delta), 0, delta=1e-10)
+
+    def test_run_with_evaluation_number(self):
+        py_model = self.PythonModelSpy(py_sim_function_with_evaluation_number)
+        py_sim = PythonSimulator(py_model.name, 
+                                py_model.simulation_information(), 
+                                py_model._results_information,
+                                SolitaryState(),  py_model)
+        working_dir = MATCAL_WORKDIR_STR+".14"
+        os.mkdir(working_dir)
+        with self.assertRaises(RuntimeError):
+            py_sim_results = py_sim.run({"m":50})
+        py_sim_results = py_sim.run({"m":50}, working_dir=working_dir)
+        results = py_sim_results.results_data
+        results_goal = py_sim_function(m=50*14)
         results_delta = results['values'] - results_goal['values']
         self.assertEqual(py_sim_results.return_code, None)
         self.assertAlmostEqual(np.linalg.norm(results_delta), 0, delta=1e-10)

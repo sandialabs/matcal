@@ -7,7 +7,7 @@ The only user facing class is the SimulatorResults class.
 import os
 from abc import ABC, abstractmethod
 
-from matcal.core.constants import DESIGN_PARAMETER_FILE, STATE_PARAMETER_FILE
+from matcal.core.constants import DESIGN_PARAMETER_FILE, STATE_PARAMETER_FILE, MATCAL_WORKDIR_STR
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.external_executable import matcal_external_executable_factory
 from matcal.core.file_modifications import process_template_file
@@ -329,7 +329,6 @@ class PythonSimulator(Simulator):
                                                                                  repr(e)))
                 stdout, stderr = self._extract_out_and_err(out)
                 output = SimulatorFailureResults(stdout, stderr, None, self._state)
-
         if output == None:
             stdout, stderr = self._extract_out_and_err(out)
             output = SimulatorResults(results, stdout, stderr, None, self._archive_name)
@@ -354,6 +353,12 @@ class PythonSimulator(Simulator):
         run_variables = {**self._state.params}
         run_variables.update(self._model.get_model_constants(self._state))
         run_variables.update(parameters)
+        if working_dir is not None:
+            if MATCAL_WORKDIR_STR in working_dir:
+                run_variables["evaluation_number"] = int(working_dir.split(MATCAL_WORKDIR_STR
+                                                                           +".")[-1])
+        else:
+            logger.debug(f"No  \"{MATCAL_WORKDIR_STR}\". Evaluation number not identified.")
         logger.debug("{}".format(run_variables))
 
         results = self._python_function(**run_variables)
