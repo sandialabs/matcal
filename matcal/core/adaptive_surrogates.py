@@ -81,6 +81,36 @@ class AdaptiveSurrogate:
     def __init__(self, target_field_name, indep_variable_name, 
                  indep_variable_values, variable_transformer, 
                  test_params, test_responses, param_names):
+        """
+        Create an :class:`AdaptiveSurrogate` instance.
+
+        :param str target_field_name: Name of the model field that the surrogate
+            will approximate (e.g., ``"temperature"``).
+        :param str indep_variable_name: Name of the auxiliary independent variable
+            (e.g., ``"time"`` or ``"x_position"``) that will be attached to the
+            surrogate output.
+        :param indep_variable_values: The values of the independent variable at
+            which the surrogate should be evaluated.
+        :type indep_variable_values: array‑like of real numbers
+        :param variable_transformer: Object that maps model parameters to the
+            canonical space required by the surrogate library.
+        :type variable_transformer: object with ``map_to_canonical`` and
+            ``map_from_canonical`` methods
+        :param test_params: Parameter samples used for testing the surrogate.
+        :type test_params: :class:`numpy.ndarray` of shape ``(n_parameters, n_test)``  
+        :param test_responses: Corresponding model responses for the test
+            parameter samples.
+        :type test_responses: :class:`numpy.ndarray` of shape
+            ``(n_test, n_qois)``  
+        :param param_names: Ordered list of parameter names that define the
+            mapping between positional arguments and model parameters.
+        :type param_names: list[str]
+
+        The constructor stores the supplied information and prepares internal
+        containers that will hold the surrogate objects, error histories and
+        sample counts as the adaptive training proceeds.
+        """
+
         self._surrogates: list = []         
         self._average_errors: list[float] = [] 
         self._max_errors: list[float] = []     
@@ -122,10 +152,10 @@ class AdaptiveSurrogate:
        
         .. math::
             E_{avg}
-            = \frac{\lVert \mathbf{R}_{\text{test}} - \hat{\mathbf{R}} \rVert_{2}}
+            = \\frac{\\lVert \\mathbf{R}_{\\text{test}} - \\hat{\\mathbf{R}} \\rVert_{2}}
                {N}
 
-        where :math:`{N`} is the number of test samples, :math:`{R}_{\text{test}}` is the 
+        where :math:`{N`} is the number of QoIs in the response, :math:`{R}_{\\text{test}}` is the 
         test responses and :math:`{\hat{R}}` is the surrogate responses. 
         """
         return self._average_errors
@@ -137,10 +167,10 @@ class AdaptiveSurrogate:
        
         .. math::
             E_{max}
-            = \frac{\lVert \mathbf{R}_{\text{test}} - \hat{\mathbf{R}} \rVert_{\infty}}
-               {N}
+            = \\lVert \\mathbf{R}_{\\text{test}} - \\hat{\\mathbf{R}} \\rVert_{\\infty}
+              
 
-        where :math:`{N`} is the number of test samples, :math:`{R}_{\text{test}}` is the 
+        where :math:`{R}_{\text{test}}` is the 
         test responses and :math:`{\hat{R}}` is the surrogate responses. 
         """
         return self._max_errors
@@ -612,18 +642,18 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
                                     self._matcal_evaluate_parameter_sets_batch_adaptive_training)
 
         if self._save_filename is None:
-            self._save_filename = f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib"
+            self.set_save_filename(f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib")
         sg = _setup_sparse_grid_surrogate(n_parameters, n_qois)    
         while sg.step(canonical_model):
             self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
             logger.info(f"Training samples: {self._surrogate.sample_count_history[-1]}")
             training_batch_number = len(self._surrogate.sample_count_history)
+            matcal_save(self._save_filename, self._surrogate)
             if self._stopping_criterion_met(training_batch_number):
                 break
             logger.info("Surrogate not converged yet.")
             logger.info(f"Average L2 norm error score: {self._surrogate.average_error_history[-1]}")
             logger.info(f"Max absolute error score: {self._surrogate.max_error_history[-1]}")
-            matcal_save(self._save_filename, self._surrogate)
 
         return self._results
 
@@ -680,19 +710,55 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
     def _add_parameter_evaluation(self, **p):
       super()._add_parameter_evaluation(**p)
 
-    def add_parameter_evaluation(self, **parameters):
-        """"""
-        raise RuntimeError("Users cannot add parameter evaluations to "+
-                                   "an adaptive surrogate study.")
-
     @property
     def surrogate(self):
+        """
+        Return the :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` 
+        instance that holds the
+        surrogate models and their training history.
+
+        :return: The surrogate object, or ``None`` if the study has not yet
+            created one (i.e., before :meth:`launch` is called).
+        :rtype: :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` | None
+        """
         return self._surrogate
     
     def set_save_filename(self, filename):
+        """
+        Set the path used to save the surrogate object after each training batch.
+
+        The surrogate (an :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` 
+        instance) is periodically saved to
+        disk with :func:`matcal.core.serializer_wrapper.matcal_save`.  The filename
+        must be a non‑empty string that ends with the ``.joblib`` extension.
+        The directory
+        component of the path is not created automatically; it must already exist
+        or be created by the user prior to calling this method.
+
+        :param str filename: Full path (absolute or relative) to the file that will
+            store the surrogate.  The filename **must** end with ``.joblib``.
+            Example: ``"my_model_sparse_grid_surrogate.joblib"`` or
+            ``"/tmp/surrogate.joblib"``.
+
+        :raises ValueError: If *filename* does not contain the required ``.joblib``
+            suffix or is empty.
+        :raises TypeError: If *filename* is not a string.
+        """
         check_value_is_nonempty_str(filename, "filename", 
                                     "SparseGridAdaptiveSurrogateStudy.set_save_filename")
         if ".joblib" not in filename:
             raise ValueError("The save filename for the SparseGridAdaptiveSurrogateStudy " +
                 f"must end with \".joblib\". Passed filename is \"{filename}\".")
         self._save_filename = filename
+
+    @property
+    def save_filename(self):
+        """
+        Retrieve the filename (including the ``.joblib`` extension) that will be
+        used to save the surrogate object after each training batch.
+
+        :return: The absolute or relative path supplied via
+            :meth:`set_save_filename`, or ``None`` if no filename has been set.
+        :rtype: str | None
+        """
+        return self._save_filename

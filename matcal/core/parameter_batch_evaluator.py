@@ -221,6 +221,7 @@ class BatchRestartCSV(BatchRestartBase):
     def file_extension():
         return ".csv"
 
+
 SelectedBatchRestartClass = BatchRestartCSV
 
 
