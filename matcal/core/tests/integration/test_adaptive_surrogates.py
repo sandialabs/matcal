@@ -30,7 +30,7 @@ def restart_model_func(a,b,c, eval_error_count=10, **kwargs):
     return {"x":x, "y":y}
 
 
-restart_model = mc.PythonModel(restart_model_func)
+restart_model = mc.PythonModel(restart_model_func, pass_evaluation_number=True)
 
 
 class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):

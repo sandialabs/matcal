@@ -118,11 +118,9 @@ class TestPythonSimulator(MatcalUnitTest):
         self.assertAlmostEqual(np.linalg.norm(results_delta), 0, delta=1e-10)
 
     def test_run_with_evaluation_number(self):
-        py_model = self.PythonModelSpy(py_sim_function_with_evaluation_number)
-        py_sim = PythonSimulator(py_model.name, 
-                                py_model.simulation_information(), 
-                                py_model._results_information,
-                                SolitaryState(),  py_model)
+        py_model = self.PythonModelSpy(py_sim_function_with_evaluation_number, 
+                                       pass_evaluation_number=True)
+        py_sim = PythonSimulator(*py_model._get_simulator_class_inputs(SolitaryState())[0])
         working_dir = MATCAL_WORKDIR_STR+".14"
         os.mkdir(working_dir)
         with self.assertRaises(RuntimeError):

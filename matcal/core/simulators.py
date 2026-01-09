@@ -297,7 +297,8 @@ class PythonSimulator(Simulator):
     Not intended for users: Runs python models.
     """
 
-    def __init__(self, name, compute_information, results_information, state, model, field_coordinates=None):
+    def __init__(self, name, compute_information, results_information, state, 
+                 model, field_coordinates=None, pass_evaluation_number=False):
         super().__init__(name, compute_information, results_information, state)
         self._workdir = None
         self._orig_stdout = None
@@ -305,6 +306,7 @@ class PythonSimulator(Simulator):
         self._model = model
         self._field_coordinates = field_coordinates
         self._archive_name = None
+        self._pass_evaluation_number=pass_evaluation_number
         self._save_dir = "matcal_python_results_archive"
         if not os.path.exists(self._save_dir):
             os.mkdir(self._save_dir)
@@ -353,12 +355,12 @@ class PythonSimulator(Simulator):
         run_variables = {**self._state.params}
         run_variables.update(self._model.get_model_constants(self._state))
         run_variables.update(parameters)
-        if working_dir is not None:
+        if working_dir is not None and self._pass_evaluation_number:
             if MATCAL_WORKDIR_STR in working_dir:
                 run_variables["evaluation_number"] = int(working_dir.split(MATCAL_WORKDIR_STR
                                                                            +".")[-1])
-        else:
-            logger.debug(f"No  \"{MATCAL_WORKDIR_STR}\". Evaluation number not identified.")
+            else:
+                logger.debug(f"No  \"{MATCAL_WORKDIR_STR}\". Evaluation number not identified.")
         logger.debug("{}".format(run_variables))
 
         results = self._python_function(**run_variables)

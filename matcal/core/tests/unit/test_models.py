@@ -592,6 +592,14 @@ class TestPythonModel(ModelTestBase.CommonTests, PythonModelForTests):
             for name in ['time', 'a']:
                 self.assert_close_arrays(goal[name], model_results[name])
 
+    def test_pass_eval_number(self):
+        model = PythonModel(linear_python_model_constants, 
+                            pass_evaluation_number=True)
+        self.assertTrue(model._pass_evaluation_number)
+
+        inputs = model._get_simulator_class_inputs(SolitaryState())
+        self.assertTrue(inputs[0][-1])
+
 
 class TestMatCalSurrogateModel(ModelTestBase.CommonTests, SurrogateModelForTests):
 
