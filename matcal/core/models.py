@@ -28,7 +28,7 @@ from matcal.core.surrogates import _MatCalSurrogateWrapper, MatCalSurrogateBase
 from matcal.core.utilities import (make_clean_dir, matcal_name_format, 
                                     check_value_is_nonempty_str, check_item_is_correct_type,
                                     _convert_list_of_files_to_abs_path_list, 
-                                    )
+                                    check_value_is_bool)
 
 
 from matcal.core.logger import initialize_matcal_logger
@@ -677,17 +677,23 @@ class PythonModel(ModelBase):
         the MatCal python input file.
     :type filename: str
 
-    :rtype: dict
+    :param filename: Name of the file where the function is defined if not in 
+        the MatCal python input file.
+    :type filename: str
     """
     model_type = "python"
     _simulator_class = PythonSimulator
     _input_file = None
 
-    def __init__(self, python_function, filename=None, field_coordinates=None):
+    def __init__(self, python_function, filename=None, field_coordinates=None, 
+                 pass_evaluation_number=False):
         super().__init__(executable="python")
         self._field_coordinates = field_coordinates
         self._function_importer = python_function_importer(python_function, 
                                                            filename)
+        check_value_is_bool(pass_evaluation_number, "pass_evaluation_number", 
+                            "PythonModel.__init__")
+        self._pass_evaluation_number=pass_evaluation_number
         self._results_information.results_filename = None
         self._set_results_reader_object(_python_model_results_reader)
 
@@ -697,7 +703,7 @@ class PythonModel(ModelBase):
 
     def _get_simulator_class_inputs(self, state):
         args = [self.name, self._simulation_information, self._results_information, 
-                state, self, self._field_coordinates]
+                state, self, self._field_coordinates, self._pass_evaluation_number]
         kwargs = {}
 
         return args, kwargs
