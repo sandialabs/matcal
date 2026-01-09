@@ -43,7 +43,8 @@ class EvaluationFailureDefaults():
         generic_values = np.linspace(-1, 1, n_points)
         for fname in self.all_fallback_fieldnames:
             if fname not in data.keys():
-                missing_msg = f"Evaluation Failed and no failure defaults detected for field {fname}, resorting to generic defaults."
+                missing_msg = (f"Evaluation Failed and no failure defaults detected "+
+                               f"for field {fname}, resorting to generic defaults.")
                 logger.warning(missing_msg)
                 data[fname] = generic_values
 
@@ -91,9 +92,9 @@ class BatchRestartBase(ABC):
     def file_extension(self)->str:
         """"""
 
-    def __init__(self, save_only:bool):
+    def __init__(self, save_only:bool, ignore_missing_file=False):
         self._save_only = save_only
-
+        self._ignore_missing_file=ignore_missing_file
     def _create_h5_group(self, job_keys:list)->str:
         group_name = ""
         for i, key_element in enumerate(job_keys):
@@ -138,7 +139,8 @@ class BatchRestartHDF5(BatchRestartBase):
             write_or_append = "w"
         else:
             write_or_append = "r+" #r+ is read/write/append, will not make a new file
-        self._restart_file = h5py.File(BATCH_RESTART_FILENAME+self.file_extension(), write_or_append)
+        self._restart_file = h5py.File(BATCH_RESTART_FILENAME+self.file_extension(),
+                                       write_or_append)
 
     def record(self, job_keys:list, results_filename:str)->None:
         if not isinstance(results_filename, str):
@@ -165,13 +167,15 @@ class BatchRestartHDF5(BatchRestartBase):
 
 class BatchRestartCSV(BatchRestartBase):
 
-    def __init__(self, save_only):
-        super().__init__(save_only)
+    def __init__(self, save_only, ignore_missing_file=False):
+        super().__init__(save_only, ignore_missing_file)
         current_dir = os.getcwd()
         full_path_restart_filename = os.path.join(current_dir, 
                                                   BATCH_RESTART_FILENAME+self.file_extension())
         self._finished_jobs = {}
-        if save_only:
+        ignore_missing_file_and_make_new = (self._ignore_missing_file and 
+                                            not os.path.exists(full_path_restart_filename))
+        if save_only or ignore_missing_file_and_make_new:
             write_or_append = "w"
         else:
             write_or_append = "a" 
@@ -241,18 +245,21 @@ class ParameterBatchEvaluator():
         study_objective_qois = OrderedDict()
         for eval_set in self._evaluation_sets.values():
             eval_set_sim_results = sim_runner_results[eval_set.model.name]
-            eval_set_objective_results, eval_set_objective_qois = eval_set.evaluate_objectives(eval_set_sim_results)
+            eval_objective_results_and_qois = eval_set.evaluate_objectives(eval_set_sim_results)
+            eval_set_objective_results, eval_set_objective_qois = eval_objective_results_and_qois
             study_objective_results[eval_set.model.name] = eval_set_objective_results
             study_objective_qois[eval_set.model.name] = eval_set_objective_qois
         return study_objective_results, study_objective_qois
 
     def run(self, parameter_sets, is_residual_study):
-        objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, is_residual_study, False)
+        objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, 
+                                                                           is_residual_study, False)
         return self.default_results_formatter(objectives, total_objectives, 
                                               parameter_sets, qois)
 
     def restart_run(self, parameter_sets, is_residual_study):
-        objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, is_residual_study, True)
+        objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, 
+                                                                           is_residual_study, True)
         return self.default_results_formatter(objectives, total_objectives, 
                                               parameter_sets, qois)
     
@@ -265,36 +272,44 @@ class ParameterBatchEvaluator():
                    'qois':list(qois.values())}
         return results
 
-    def evaluate_parameter_batch(self, parameter_sets, is_residual_study, is_restart=False):
+    def evaluate_parameter_batch(self, parameter_sets, is_residual_study, is_restart=False, 
+                                 ignore_missing_restart_file=False):
         save_only = not is_restart
-        batch_restart = SelectedBatchRestartClass(save_only)
+        batch_restart = SelectedBatchRestartClass(save_only, ignore_missing_restart_file)
         objectives, total_objectives, qois = self._evaluate_parameter_batch_impl(parameter_sets, 
-                                                                     is_residual_study, batch_restart, is_restart)
+                                                    is_residual_study, batch_restart, 
+                                                    is_restart)
         batch_restart.close()
 
         return objectives, total_objectives, qois
 
-    def _evaluate_parameter_batch_impl(self, parameter_sets, is_residual_study, batch_restart, is_restart):
+    def _evaluate_parameter_batch_impl(self, parameter_sets, is_residual_study, 
+                                       batch_restart, is_restart):
         bill_of_jobs = self._assemble_jobs(parameter_sets, is_restart)
         job_results = self._run_bill_of_jobs(bill_of_jobs, batch_restart)
-        objectives, qois, total_objectives = self._process_job_results(parameter_sets, is_residual_study, job_results)
+        objectives, qois, total_objectives = self._process_job_results(parameter_sets, 
+                                                                       is_residual_study, 
+                                                                       job_results)
         
         return objectives, total_objectives, qois
 
     def _run_bill_of_jobs(self, jobs_to_run, batch_restart):
         job_results = self._run_jobs(jobs_to_run, batch_restart)
         logger.info(f"\nAll parameter set evaluations for the current  batch completed.\n")        
-        job_results = convert_results_to_dict_of_data_collections(job_results, self._failure_defaults)
+        job_results = convert_results_to_dict_of_data_collections(job_results, 
+                                                                  self._failure_defaults)
         return job_results
 
     def _process_job_results(self, parameter_sets, is_residual_study, job_results):
-        objectives, qois = self._calculate_objectives_from_batch_results(job_results, parameter_sets)
+        objectives, qois = self._calculate_objectives_from_batch_results(job_results, 
+                                                                         parameter_sets)
         total_objectives = _calculate_total_objective(objectives, is_residual_study)
         return objectives,qois,total_objectives
 
     def _assemble_jobs(self, parameter_sets, is_restart):
         num_param_sets_to_evaluate = len(parameter_sets)
-        logger.info(f"Preparing to evaluate {num_param_sets_to_evaluate} parameter sets in the current batch...")
+        logger.info(f"Preparing to evaluate {num_param_sets_to_evaluate} "+
+                    "parameter sets in the current batch...")
         jobs_to_run = self._prepare_jobs_to_run_for_parameter_batch(parameter_sets, is_restart)
         return jobs_to_run
 
@@ -311,7 +326,8 @@ class ParameterBatchEvaluator():
         qois = OrderedDict()
         for evaluation_name in parameter_sets.keys():
             logger.debug(f"extracting objectives for workdir: {evaluation_name}")
-            objectives[evaluation_name], qois[evaluation_name] = self._make_objective_results_dict(job_results[evaluation_name])
+            results_dict = self._make_objective_results_dict(job_results[evaluation_name])
+            objectives[evaluation_name], qois[evaluation_name] = results_dict
             _log_evaluation_set_results(evaluation_name, objectives[evaluation_name])
         return objectives, qois
     
@@ -347,27 +363,33 @@ def _log_evaluation_set_results(evaluation_dir, eval_set_results):
     logger.info(f"\tEvaluation results for \"{evaluation_dir}\":")
     for model in eval_set_results.keys():
         for objective in eval_set_results[model].keys():
-            logger.info(f"\t\tObjective \"{objective}\" for model \"{model}\" = {eval_set_results[model][objective].get_objective()}")
+            logger.info(f"\t\tObjective \"{objective}\" for model \"{model}\" = "+
+                        f"{eval_set_results[model][objective].get_objective()}")
     logger.info("")
 
 
 def _calculate_total_objective(objectives_dict, is_residual_study):
-    combined_objs, combined_resds, evaluation_names = flatten_evaluation_batch_results(objectives_dict)
+    flattened_results = flatten_evaluation_batch_results(objectives_dict)
+    combined_objs, combined_resds, evaluation_names = flattened_results
     if is_residual_study:
-        total_objectives = _get_total_objective_from_residuals_from_each_evaluation(combined_resds, evaluation_names)
+        total_objectives = _get_total_objective_from_residuals_from_each_evaluation(combined_resds,
+                                                                                   evaluation_names)
     else:
-        total_objectives = _get_total_objective_from_objectives_from_each_evaluation(combined_objs, evaluation_names)
+        total_objectives = _get_total_objective_from_objectives_from_each_evaluation(combined_objs,
+                                                                                evaluation_names)
     return total_objectives
 
 
-def _get_total_objective_from_residuals_from_each_evaluation(residuals_for_all_evals, evaluation_names):
+def _get_total_objective_from_residuals_from_each_evaluation(residuals_for_all_evals,
+                                                             evaluation_names):
     total_objectives = {}
     for residual_list, eval_name in zip(residuals_for_all_evals, evaluation_names):
         total_objectives[eval_name] = float(np.linalg.norm(residual_list)**2)
     return total_objectives
     
 
-def _get_total_objective_from_objectives_from_each_evaluation(objectives_for_all_evals, evaluation_names):
+def _get_total_objective_from_objectives_from_each_evaluation(objectives_for_all_evals,
+                                                               evaluation_names):
     total_objectives = {}
     for residual_list, eval_name in zip(objectives_for_all_evals, evaluation_names):
         total_objectives[eval_name] = float(np.sum(residual_list))
