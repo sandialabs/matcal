@@ -16,7 +16,7 @@ from matcal.core.utilities import (check_value_is_positive_integer,
                                    check_value_is_array_like_of_reals, 
                                    check_value_is_bool, 
                                    check_value_is_positive_real)
-
+from matcal.core.serializer_wrapper import matcal_save
 
 logger = initialize_matcal_logger(__name__)
 
@@ -30,10 +30,6 @@ def _get_parameter_bounds(parameters):
     return bounds
 
 
-def _get_canonical_bounds(nvars):
-    return np.r_[[[-1., 1.]] * nvars]
-
-
 def _get_variable_from_bounds(bounds):
     from pyapprox.variables import IndependentMarginalsVariable
 
@@ -43,10 +39,8 @@ def _get_variable_from_bounds(bounds):
     return IndependentMarginalsVariable(marginals)
 
 
-def _get_pyapprox_variable_transformer(n_parameters, bounds):
+def _get_pyapprox_variable_transformer(bounds):
     from pyapprox.variables.transforms import AffineTransform
-    canonical_bounds = _get_canonical_bounds(n_parameters)
-    canonical_variable = _get_variable_from_bounds(canonical_bounds)
     variable = _get_variable_from_bounds(bounds)
     return AffineTransform(variable)
 
@@ -74,6 +68,203 @@ def _setup_sparse_grid_surrogate(n_parameters, n_qois):
     return sg
 
 
+class AdaptiveSurrogate:
+    """
+    Stores the surrogate and training and test information regarding the surrogate
+    and the progress of training for the surrogate.
+
+    Can also be used to call the surrogate objects for predictions 
+    using the surrogate models. Since all iterations of the surrogate are 
+    stored, any version of the surrogate can be called.
+    """
+
+    def __init__(self, target_field_name, indep_variable_name, 
+                 indep_variable_values, variable_transformer, 
+                 test_params, test_responses, param_names):
+        """
+        Create an :class:`AdaptiveSurrogate` instance.
+
+        :param str target_field_name: Name of the model field that the surrogate
+            will approximate (e.g., ``"temperature"``).
+        :param str indep_variable_name: Name of the auxiliary independent variable
+            (e.g., ``"time"`` or ``"x_position"``) that will be attached to the
+            surrogate output.
+        :param indep_variable_values: The values of the independent variable at
+            which the surrogate should be evaluated.
+        :type indep_variable_values: array‑like of real numbers
+        :param variable_transformer: Object that maps model parameters to the
+            canonical space required by the surrogate library.
+        :type variable_transformer: object with ``map_to_canonical`` and
+            ``map_from_canonical`` methods
+        :param test_params: Parameter samples used for testing the surrogate.
+        :type test_params: :class:`numpy.ndarray` of shape ``(n_parameters, n_test)``  
+        :param test_responses: Corresponding model responses for the test
+            parameter samples.
+        :type test_responses: :class:`numpy.ndarray` of shape
+            ``(n_test, n_qois)``  
+        :param param_names: Ordered list of parameter names that define the
+            mapping between positional arguments and model parameters.
+        :type param_names: list[str]
+
+        The constructor stores the supplied information and prepares internal
+        containers that will hold the surrogate objects, error histories and
+        sample counts as the adaptive training proceeds.
+        """
+
+        self._surrogates: list = []         
+        self._average_errors: list[float] = [] 
+        self._max_errors: list[float] = []     
+        self._sample_counts: list[int] = []    
+        self._target_field_name: str = target_field_name
+        self._indep_variable_name = indep_variable_name
+        self._indep_variable_values = np.asarray(indep_variable_values)
+        self._variable_transformer = variable_transformer
+        self._test_params = test_params
+        self._test_responses = test_responses
+        self._param_names = param_names
+
+    def _add_iteration(
+        self,
+        surrogate, 
+        nsamples 
+        ) -> None:
+        self._surrogates.append(copy.deepcopy(surrogate))
+        params = self._variable_transformer.map_to_canonical(self._test_params)
+        surrogate_values = self(params, batch_evaluate=True)
+        average_l2_error = (
+            np.linalg.norm(self._test_responses - surrogate_values)
+            / self._test_responses.shape[1]
+        )
+        max_abs_error = np.max(np.abs(self._test_responses - surrogate_values))
+        self._average_errors.append(average_l2_error)
+        self._max_errors.append(max_abs_error)
+        self._sample_counts.append(nsamples)
+
+    @property
+    def current_surrogate(self):
+        """Return the most recent surrogate (or ``None`` if no iteration yet)."""
+        return self._surrogates[-1] if self._surrogates else None
+
+    @property
+    def average_error_history(self):
+        """Returns the list of errors for the average error history. The average
+        error is calculated using
+       
+        .. math::
+            E_{avg}
+            = \\frac{\\lVert \\mathbf{R}_{\\text{test}} - \\hat{\\mathbf{R}} \\rVert_{2}}
+               {N}
+
+        where :math:`{N`} is the number of QoIs in the response, :math:`{R}_{\\text{test}}` is the 
+        test responses and :math:`{\hat{R}}` is the surrogate responses. 
+        """
+        return self._average_errors
+
+    @property
+    def max_error_history(self):
+        """Returns the list of errors for the max error history. The max
+        error is calculated using
+       
+        .. math::
+            E_{max}
+            = \\lVert \\mathbf{R}_{\\text{test}} - \\hat{\\mathbf{R}} \\rVert_{\\infty}
+              
+
+        where :math:`{R}_{\text{test}}` is the 
+        test responses and :math:`{\hat{R}}` is the surrogate responses. 
+        """
+        return self._max_errors
+
+    @property
+    def sample_count_history(self):
+        """Returns a list containing the number of samples used by each surrogate
+           training step."""
+        return self._sample_counts
+
+    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, **kwargs):
+        """
+        Evaluate a stored surrogate model. This is represented in mathematical notation by 
+
+        .. math::
+            \\hat{\\mathbf{R}} = S_i\\bigl(\\mathbf{p}\\bigr),
+
+        where :math:`\\mathbf{R}` is the vector (or matrix) of output responses,
+        :math:`\\mathbf{p}` is the vector (or matrix) of input
+        parameters and :math:`S_i` denotes the selected surrogate model.
+
+        The surrogate objects includes all the
+        models generated during the adaptive training process.  This method
+        provides an interface for retrieving predictions from any
+        version of the surrogate during training using the ``surrogate_index``
+        keyword argument.
+
+        :param *args: Positional arguments representing the model parameters.
+            The accepted calling patterns are:
+
+            * **Single‑sample evaluation** (``batch_evaluate=False``) – a
+            tuple whose length equals the number of model parameters.
+            The values are interpreted in the order defined by the 
+            :class:`matcal.core.parameters.ParameterCollection` or order of parameters
+            passed to the adaptive surrogate training study.
+
+            * **Batch evaluation** (``batch_evaluate=True``) – a single argument
+            that must be a two‑dimensional ``np.ndarray`` of shape
+            ``(n_parameters, n_samples)``.  The array is forwarded unchanged
+            to the surrogate.
+
+        :type *args: tuple or np.ndarray
+
+        :param surrogate_index: Index of the surrogate to use. ``-1`` selects the
+            most recent surrogate. Any valid list index is accepted.
+        :type surrogate_index: int, optional
+
+        :param batch_evaluate: When ``True`` the call is interpreted as a *batch*
+            evaluation; otherwise it is a *single‑sample* evaluation.
+        :type batch_evaluate: bool, optional
+
+        :param **kwargs: Keyword arguments that map each parameter name to the desired
+            evaluation value. This calling style is mutually exclusive 
+            with the positional ``*args`` form.
+        :type **kwargs: dict
+
+        :return: The surrogate prediction ``\\hat{\\mathbf{R}}``.  For a single
+            sample, this is a dictionary 
+            containing two one‑dimensional arrays of length ``n_qois`` 
+            with the independent variable and the corresponding target variable
+            response. For a batch evaluation,  it is a two‑dimensional array of shape
+            ``(n_samples, n_qois)``.
+        :rtype: np.ndarray or dict(str, np.ndarray)
+
+        :raises RuntimeError: If the supplied arguments do not match any of the
+            supported calling conventions (wrong number of positional arguments,
+            missing or extra keyword arguments, etc.).
+        """
+        surrogate = self._surrogates[surrogate_index]
+        if batch_evaluate:
+            response = surrogate(np.asarray(*args))
+            return response
+        elif len(args) == len(self._param_names) and len(kwargs) == 0:
+            params_array = np.asarray([args]).T
+            response = surrogate(params_array)[0]
+        elif len(args) == 0 and len(kwargs) == len(self._param_names):
+            param_ordered_list = []
+            for param_name in self._param_names:
+                if param_name not in kwargs:
+                    error_message = (f"All required parameters were not passed to the surrogate."+
+                        f"Required parameters:\n{self._param_names}\n"+
+                        f"Received parameters:\n{kwargs.keys()}")
+                    raise RuntimeError(error_message)
+                param_ordered_list.append(kwargs[param_name])
+            
+            return self(*param_ordered_list, surrogate_index=surrogate_index)
+        else:
+            raise RuntimeError("Surrogate model was not called correctly. The input parameters "+
+                               "are likely of the incorrect format. Check input")
+
+        return {self._target_field_name:response, 
+                self._indep_variable_name:self._indep_variable_values}
+
+
 class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
     """
     The SparseGridAdaptiveSurrogateStudy builds a Sparse Grid adaptive surrogate
@@ -96,11 +287,7 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
         self._evaluation_set_added = False
         self._results_synchronizer = None
 
-        self._test_params = None
-        self._test_responses = None
-        self._average_l2_errors = []
-        self._max_abs_errors = []
-        self._surrogates_history = []
+        self._surrogate = None
         self._variable_transformer = None
 
         self._max_training_samples=None
@@ -108,9 +295,10 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
         self._training_batch_number = 1
         self.set_max_training_samples()
 
-        self._nbatch_samples = []
         self._average_l2_error_goal = 1e-2
         self._max_abs_error_goal = 1e-1
+
+        self._save_filename = None
 
     def set_error_stopping_criteria(self,
                                     average_l2_error_goal: float | None = None,
@@ -279,7 +467,14 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
         After the test sample study finishes, the original working directory is restored
         and the surrogate‑building routine is started.
         """
-        self._run_test_sampling()
+        test_params, test_responses = self._run_test_sampling()
+        param_names = self._parameter_collection.get_item_names()
+        self._variable_transformer = _get_pyapprox_variable_transformer(self._bounds)
+        self._surrogate = AdaptiveSurrogate(self._target_field_name, self._independent_variable, 
+                                            self._independent_variable_values, 
+                                            self._variable_transformer, 
+                                            test_params, test_responses, param_names)
+        
         self._run_study = self._perform_sparse_grid_batch_sampling
         super().launch()
 
@@ -300,9 +495,10 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
         """
         orig_working_directory = self._update_work_dir_for_test_sampling()
         super().launch(self._number_of_test_samples)
-        self._test_params = self._format_params(self._results)
-        self._test_responses = self._format_output(self._results)
+        test_params = self._format_params(self._results)
+        test_responses = self._format_output(self._results)
         self._reset_study_after_test_sampling_generation(orig_working_directory)
+        return test_params, test_responses
 
     def _update_work_dir_for_test_sampling(self):
         """
@@ -437,50 +633,40 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
             self._target_field_name          
         )
 
-    def _update_surrogate_score(self, surrogate):
-        params = self._variable_transformer.map_to_canonical(self._test_params)
-        surrogate_values = surrogate(params)
-        average_l2_error = (
-            np.linalg.norm(self._test_responses - surrogate_values)
-            / self._test_responses.shape[1]
-        )
-        max_abs_error = np.max(np.abs(self._test_responses - surrogate_values))
-        self._average_l2_errors.append(average_l2_error)
-        self._max_abs_errors.append(max_abs_error)
-        self._surrogates_history.append(copy.deepcopy(surrogate))
-
     def _perform_sparse_grid_batch_sampling(self): 
         from pyapprox.interface.model import ModelFromVectorizedCallable
 
         n_parameters = len(self._parameter_collection.get_item_names())
         n_qois = len(self._independent_variable_values)
-        self._variable_transformer = _get_pyapprox_variable_transformer(n_parameters, self._bounds)
         canonical_model = ModelFromVectorizedCallable(n_qois, n_parameters, 
                                     self._matcal_evaluate_parameter_sets_batch_adaptive_training)
 
-        sg = _setup_sparse_grid_surrogate(n_parameters, n_qois)
+        if self._save_filename is None:
+            self.set_save_filename(f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib")
+        sg = _setup_sparse_grid_surrogate(n_parameters, n_qois)    
         while sg.step(canonical_model):
-            self._update_surrogate_score(sg)
-            self._nbatch_samples.append(self.results.number_of_evaluations)
-            logger.info(f"Training samples: {self._nbatch_samples[-1]}")
-            training_batch_number = len(self._nbatch_samples)
+            self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
+            logger.info(f"Training samples: {self._surrogate.sample_count_history[-1]}")
+            training_batch_number = len(self._surrogate.sample_count_history)
+            matcal_save(self._save_filename, self._surrogate)
             if self._stopping_criterion_met(training_batch_number):
                 break
             logger.info("Surrogate not converged yet.")
-            logger.info(f"Average L2 norm error score: {self._average_l2_errors[-1]}")
-            logger.info(f"Max absolute error score: {self._max_abs_errors[-1]}")
+            logger.info(f"Average L2 norm error score: {self._surrogate.average_error_history[-1]}")
+            logger.info(f"Max absolute error score: {self._surrogate.max_error_history[-1]}")
+
         return self._results
 
     def _stopping_criterion_met(self, training_batch_number):
         stop = False
         if training_batch_number > 1:
-            if np.abs(self._average_l2_errors[-1]) <= self._average_l2_error_goal:
+            if np.abs(self._surrogate.average_error_history[-1]) <= self._average_l2_error_goal:
                 logger.info(f"Average L2 norm score converged! "+
-                            f"Final score: {self._average_l2_errors[-1]}")
+                            f"Final score: {self._surrogate.average_error_history[-1]}")
                 stop=True
-            elif np.abs(self._max_abs_errors[-1]) <=self._max_abs_error_goal:
+            elif np.abs(self._surrogate.max_error_history[-1]) <=self._max_abs_error_goal:
                 logger.info(f"Max absolute error score converged! "+
-                            f"Final score: {self._max_abs_errors[-1]}")
+                            f"Final score: {self._surrogate.max_error_history[-1]}")
                 stop=True
         if self._results.number_of_evaluations >self._max_training_samples:
             logger.info("Surrogate not converged yet, but maximum training "+
@@ -490,13 +676,15 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
         
     def _matcal_evaluate_parameter_sets_batch_adaptive_training(self, parameter_sets_from_pyapprox):
         self._populate_parameter_evaluations_adaptive(parameter_sets_from_pyapprox)
-        logger.info(f"Active Learning Batch {len(self._nbatch_samples)+1}. ")
-        if len(self._nbatch_samples) > 1:
+        current_batch = len(self._surrogate.sample_count_history)
+        logger.info(f"Active Learning Batch {current_batch+1}. ")
+        if current_batch > 1:
             logger.info(f"Currently the surrogate is trained on "+
-                        "{self._nbatch_samples[-1]} samples.")
+                        f"{self._surrogate.sample_count_history[-1]} samples.")
         logger.info("................................................................")
         eval_meth = super()._matcal_evaluate_parameter_sets_batch
-        batch_results = eval_meth(self._parameter_sets_to_evaluate, is_restart=self._restart)
+        batch_results = eval_meth(self._parameter_sets_to_evaluate, 
+                                  is_restart=self._restart, ignore_missing_restart_file=True)
         return self._format_batch_results(batch_results, parameter_sets_from_pyapprox)
 
     def _populate_parameter_evaluations_adaptive(self, samples):
@@ -522,7 +710,55 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
     def _add_parameter_evaluation(self, **p):
       super()._add_parameter_evaluation(**p)
 
-    def add_parameter_evaluation(self, **parameters):
-        """"""
-        raise RuntimeError("Users cannot add parameter evaluations to "+
-                                   "an adaptive surrogate study.")
+    @property
+    def surrogate(self):
+        """
+        Return the :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` 
+        instance that holds the
+        surrogate models and their training history.
+
+        :return: The surrogate object, or ``None`` if the study has not yet
+            created one (i.e., before :meth:`launch` is called).
+        :rtype: :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` | None
+        """
+        return self._surrogate
+    
+    def set_save_filename(self, filename):
+        """
+        Set the path used to save the surrogate object after each training batch.
+
+        The surrogate (an :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` 
+        instance) is periodically saved to
+        disk with :func:`matcal.core.serializer_wrapper.matcal_save`.  The filename
+        must be a non‑empty string that ends with the ``.joblib`` extension.
+        The directory
+        component of the path is not created automatically; it must already exist
+        or be created by the user prior to calling this method.
+
+        :param str filename: Full path (absolute or relative) to the file that will
+            store the surrogate.  The filename **must** end with ``.joblib``.
+            Example: ``"my_model_sparse_grid_surrogate.joblib"`` or
+            ``"/tmp/surrogate.joblib"``.
+
+        :raises ValueError: If *filename* does not contain the required ``.joblib``
+            suffix or is empty.
+        :raises TypeError: If *filename* is not a string.
+        """
+        check_value_is_nonempty_str(filename, "filename", 
+                                    "SparseGridAdaptiveSurrogateStudy.set_save_filename")
+        if ".joblib" not in filename:
+            raise ValueError("The save filename for the SparseGridAdaptiveSurrogateStudy " +
+                f"must end with \".joblib\". Passed filename is \"{filename}\".")
+        self._save_filename = filename
+
+    @property
+    def save_filename(self):
+        """
+        Retrieve the filename (including the ``.joblib`` extension) that will be
+        used to save the surrogate object after each training batch.
+
+        :return: The absolute or relative path supplied via
+            :meth:`set_save_filename`, or ``None`` if no filename has been set.
+        :rtype: str | None
+        """
+        return self._save_filename

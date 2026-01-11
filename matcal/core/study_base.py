@@ -726,11 +726,13 @@ class StudyBase(ABC):
 
     def _matcal_evaluate_parameter_sets_batch(self, parameter_sets, 
                                               is_finite_difference_eval=False,
-                                              is_restart=False):
+                                              is_restart=False, 
+                                              ignore_missing_restart_file=False):
         formatted_parameter_sets = self._prepare_parameter_sets_to_evaluate(parameter_sets)
         evaluator_func = self._parameter_batch_evaluator.evaluate_parameter_batch
         batch_results = evaluator_func(formatted_parameter_sets, 
-                                       self._needs_residuals, is_restart)
+                                       self._needs_residuals, is_restart, 
+                                       ignore_missing_restart_file)
         batch_raw_objectives, total_objectives, batch_qois = _unpack_evaluation(batch_results)
         
         _record_results(self._results, formatted_parameter_sets, batch_raw_objectives, 
