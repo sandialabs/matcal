@@ -8,19 +8,19 @@ User API Documentation
 .. autosummary::
    :toctree: .
 
+   matcal.core.adaptive_surrogates
    matcal.core.calibration_studies
    matcal.core.data
    matcal.core.data_analysis
    matcal.core.data_importer
    matcal.core.file_modifications
    matcal.core.input_file_writer
-   matcal.core.plotting
    matcal.core.models
-   matcal.core.plotting
    matcal.core.objective
    matcal.core.objective_results
-   matcal.core.parameter_studies
+   matcal.core.plotting
    matcal.core.parameters
+   matcal.core.parameter_studies
    matcal.core.qoi_extractor
    matcal.core.residuals
    matcal.core.serializer_wrapper
@@ -32,8 +32,8 @@ User API Documentation
    matcal.dakota.local_calibration_studies
    matcal.dakota.sensitivity_studies
    matcal.dakota.uncertainty_quantification_studies
-   matcal.full_field.data_importer
    matcal.full_field.data
+   matcal.full_field.data_importer
    matcal.full_field.field_mappers
    matcal.full_field.objective
    matcal.sierra.input_file_writer
