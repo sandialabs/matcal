@@ -149,7 +149,7 @@ class HaltonStudy(ParameterStudy):
         """Initialize the HaltonStudy
 
         :param scramble: If True, Owen scrambling is used. Defaults to False.
-        :type scrambel: bool
+        :type scramble: bool
         
         :param rng: Pseudorandom numer generator state. When rng is None, a new generator
             is created using entropy from the operating system.
@@ -1070,12 +1070,14 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
     def launch(self, **options):
         """ Launch adaptive surrogate build using Voronoi batch sampling        
         """
-        # set voronoi and surrogate options if provided
+        # set voronoi, cross validation and surrogate options if provided
         voronoi_sampling_options = options.get('voronoi_sampling_options', {})
         surrogate_options = options.get('surrogate_options', {})
-        self._set_voronoi_sampling_options(**voronoi_sampling_options)
-        self._set_surrogate_options(**surrogate_options)
-        self._voronoi_options = {'finite_only' : self.finite_only} 
+        cross_validation_options = options.get('cross_validation_options', {})
+        self.set_voronoi_sampling_options(**voronoi_sampling_options)
+        self.set_surrogate_options(**surrogate_options)
+        self.set_cross_validation_options(**cross_validation_options)
+        self._voronoi_tessellation_options = {'finite_only' : self.finite_only} 
         self._set_seed()
         
         super().launch(self.ninitsamples)
@@ -1085,7 +1087,6 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self.par_names = self._parameter_collection.get_item_names()
         self._format_params()
         self._format_output()
-       
         # build/train surrogate with initial training set and calculate initial error
         self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
         self._update_surrogate_score()
@@ -1121,8 +1122,8 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._current_surrogate_score['rmse'] = []
         self._nbatch_samples = []
         self.test_eval_info = None
-        self._eps = 1e-4
         self.convergence_metric = 'nlpd'
+        self.eps = 1e-4
         self.seed = None
          
     def _extract_bounds_from_parameter_collection(self):
@@ -1149,32 +1150,79 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.dim)]
         return np.vstack(tuple(coords_ravel)).T
 
-    def _set_voronoi_sampling_options(self, **voronoi_sampling_kwargs):
-        """Set voronoi options. See documentation for properties that an be altered and their options."""
-        for key, value in voronoi_sampling_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
+    def set_voronoi_sampling_options(self, **voronoi_sampling_options):
+        """Set options pertaining to the voronoi sampling algorithm. Properties that can be altered
+        are listed below.
+        
+        :param ninitsamples: The number of samples to initiate the algorithm with. The initial samples are used
+        to train the initial surrogate and built the initial voronoi tessellation. Default 10*ndim.
+        :type ninitsamples: int
+        
+        :param vornoi_type: Defines which Vornoi-based sampling strategy to use. Supported options
+        are:
+            * 'full': Constructs the full Voronoi tessellation over all points (Default)
+            * 'local': Constructs a local Voronoi tessellation using only nearby points determined by k-nearest
+            neighbors. This can reduce computational cost in high dimensions.
+        :type voronoi_type: str
+        
+        :param finite_only: If True, only Vornoi vertices that lie inside the convex hull defined
+        by the boundary points are consided as candidate sample locations. If False, all vertices are considered,
+        and those lying outside the parameter bounds are clipped back to the convex hull. This is more flexible but
+        can be more computationally expensive, especially in high dimensions. Default False.
+        :type finite_onlye: bool
+        
+        :param iterative_updates: If True, the Voronoi tessellation is recomputed after each new sample
+        is added, promoting a more space-filling design. if False, the tessellation is updated once per batch after
+        all samples in the batch are selected. This can be faster but may result in sample clustering. Default True.
+        :type iterative_updates: bool
+
+        :param thin: If specified, every nth candidate sample location is selected as a new
+        sample location. This can significantly reduce computational cost in high-dimensional spaces.
+        Default None.
+        :type thin: int or None
+        
+        :param random_selection: If sepecified, this defines the nubmer of candidate sample
+        locations that are randomly selected as new samples. This provides an alternative way to reduce
+        computational cost in high-dimensional problems. Default None.
+        :type random_selection: int or None
+
+        :param nmaxbatches: The number of sampling batches to perform. If the surrogate converges before 
+        nbatches has been reached, the algorithm terminates early. Convergence is determined by comparing
+        RMSE or NLPD of surrogate between two successive batches. Default 20.
+        :type nbatches: int
+        
+        :param convergence_metric: Choose from root mean squared error ('rmse') or negative log posterior
+        density ('nlpd') to track surrogate performance at each batch iteration. This metric is used to 
+        determine if the surrogate has converged according to eps. Default 'nlpd'.
+        :type convergence metric: str
+        
+        :param eps: Tolerance for surrogate convergence. Default 1e-4.
+        :type eps: float
+        
+        :param seed: Set a random seed for reproducability. Default None.
+        :type seed: int or None
+        """
+        self._set_options(**voronoi_sampling_options)
         if self.random_selection is not None and self.thin is not None:
             raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
-        valid_cv_metrics = ['rmse', 'nlpd']
-        if self.cv_metric not in valid_cv_metrics:
-            raise ValueError("cv_metric not implemented. 'cv_metric' must one of 'rmse', 'nlpd'")
     
-    def _set_surrogate_options(self, **surrogate_options):
-        """Set voronoi options. See documentation for properties that an be altered and their options."""
+    def set_surrogate_options(self, **surrogate_options):
+        """Set options for surrogate construction.
+        
+        :param interpolation_field: the field that will be the independent field for surrogate results.            
+        :type interpolation_field: str
+        
+        :param test_eval_info: A container of the relevant
+            information to test a surrogate off of a body of data generated
+            from a MatCal sampling study.
+        :type test_eval_info: :class:`~matcal.core.study_base.StudyResults`
+
+        """
         self.interpolation_field = 'x'
         self._training_fraction = 1.0
         self._cv_test_set = False
-        for key, value in surrogate_options.items():
-            if hasattr(self, key):
-                if key == '_training_fraction':
-                    raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.0")
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-        
+        self._set_options(**surrogate_options)
+         
         if self.test_eval_info is None:
             raise AttributeError("User must provide surrogate test information from parameter study (i.e. HaltonStudy).")
         
@@ -1182,6 +1230,56 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                    'test_eval_info': self.test_eval_info}    
         self._surrogate_options = options
     
+    def set_cross_validation_options(self, **cross_validation_options):
+        """Set options for cross validation. Properties that can be altered are listed below.
+        
+        :param nsplits: The number of folds to use in k-fold cross validation. If nsplits = 0, k-fold
+        cross-validation is skipped entirely and new samples are instead selected from every region of the Voronoi
+        tessellation defined by the current set of training samples. Default 5.
+        :type nsplits: int
+        
+        :param nmax_folds: Points in the folds with the highest k-fold error (the top nmax_folds) define
+        the Voronoi regions from which new samples will be drawn. Default 3.
+        :type nmax_folds: int
+        
+        :param nmax_loo: Points with the largest leave-one-out cross-validation (LOOCV)
+        errors (the top nmax_loo). These define the Voronoi regions from which new samples will be drawn.
+        If nmax_loo = 'all', then new samples are drawn from all Voronoi regions defined by nmax_folds, and 
+        leave-one-out cross-validation is not performed. Default 10.
+        :type nmax_loo: int or 'all'
+        
+        :param cv_scale: Optional scaling applied to output before calculating errors in
+        cross-validation and leave-one-out cross-validation. This can be used to balance error magnitude across
+        dimensions or outputs. If None, no scaling is applied. Default None.
+        :type scale: float or None
+        
+        :param cv_metric: Determines which metric is used when computing errors during
+        cross-validation. Supported options are:
+            * rmse -- root mean squared error (Default)
+            * nlpd -- negative log posterior density
+        :type cv_metric: str
+        
+        :param group_kfold: If True, samples are grouped using k-means clustering prior to k-fold
+        cross-validation so that nearby points are allways assigned to the same fold. This prevents spatially
+        correllated points from being split across training and validation sets. If False, folds are assigned
+        randomly by the standard KFold algorithm. Default False.
+        :type group_kfold: bool
+        """
+
+        self._set_options(**cross_validation_options)
+        valid_cv_metrics = ['rmse', 'nlpd']
+        if self.cv_metric not in valid_cv_metrics:
+            raise ValueError("cv_metric not implemented. 'cv_metric' must one of 'rmse', 'nlpd'")
+    
+    def _set_options(self, **options):
+        for key, value in options.items():
+            if hasattr(self, key):
+                if key == '_training_fraction':
+                    raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.0")
+                setattr(self, key, value)
+            else:
+                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
+        
     def _format_params(self):
         params_formatted = []
         for param in self._results.parameter_history:
@@ -1209,15 +1307,15 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             self._populate_parameter_evaluations(self._new_points)
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
+            self._nbatch_samples.append(self.results.number_of_evaluations)
             self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
             self._update_surrogate_score()
-            self._nbatch_samples.append(self.results.number_of_evaluations)
             self._format_params()
             self._format_output()
             
             # convergence check
             if np.abs(self._current_surrogate_score[self.convergence_metric][batch_number+1] - \
-                self._current_surrogate_score[self.convergence_metric][batch_number]) <= self._eps:
+                self._current_surrogate_score[self.convergence_metric][batch_number]) <= self.eps:
                 logger.info(f"BREAKING: Convergence from surrogate score.")
                 logger.info(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
                 break
@@ -1236,11 +1334,9 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         self._check_parameter_sets_populated()
 
     def _create_voronoi_tess_and_choose_new_samples(self, iter_):
-        """
-        Perform Voronoi batch sampling based on the specified algorithm.
+        """Perform Voronoi batch sampling based on the specified algorithm.
         
-        Returns:
-        list: New samples selected.
+        :return: Returns a list of the new samples selected.
         """
         if self.nsplits > 0:
             # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
@@ -1279,7 +1375,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         if self.voronoi_type == 'full':
             # Initialize Voronoi tessellation
             self._voronoi_tessellation = VoronoiTessellation(self.X, self._bounds)
-            self._voronoi_tessellation.build(**self._voronoi_options)
+            self._voronoi_tessellation.build(**self._voronoi_tessellation_options)
 
         elif self.voronoi_type == 'local':
             # Make a local voronoi tesselation for each new sample by using knearest neighbors
@@ -1318,7 +1414,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
                 nearest_neighbors = self._tree.query(location, k=nneighbors)
                 nn_points = self._all_tree_points[nearest_neighbors[1].squeeze()]
                 nn_vor = VoronoiTessellation(nn_points, self._bounds)
-                nn_vor.build(**self._voronoi_options)
+                nn_vor.build(**self._voronoi_tessellation_options)
                 nn_region = nn_vor.get_voronoi_region(location)[0][0]
                 try:
                     nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
@@ -1344,7 +1440,7 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         # verify that all samples are within bounds
         lb = self._l_bounds
         ub = self._u_bounds
-        mask = (points > lb).all(axis=1) | (points < ub).all(axis=1)
+        mask = ((points >= lb) & (points <= ub)).all(axis=1)
         return points[mask]
         
     def _perform_kfold_cross_validation(self):
@@ -1404,15 +1500,9 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
         return result_arrays
 
     def _find_indices_of_n_largest_errors(self):
-        """
-        Find the indices of the n largest values in an array of errors.
+        """Find the indices of the n largest values in an array of errors.
 
-        Parameters:
-        errors (np.ndarray or list): An array or list of error values.
-        n (int): The number of largest values to find.
-
-        Returns:
-        np.ndarray: An array of indices corresponding to the n largest values.
+        :return: Returns an array of indices corresponding to the n largest errors.
         """
 
         nkeep = int(self.nmax_loo)
@@ -1443,11 +1533,11 @@ class VoronoiTessellation:
     def __init__(self, points, bounds):
         """Initialize the VoronoiBatchSamplingStudy
         
-        param points: Array of points that are the seeds of the Voronoi tessellation
-        type points: nd_array
+        :param points: Array of points that are the seeds of the Voronoi tessellation
+        :type points: nd_array
 
-        param bounds: Bounds for the parameter space, e.g., [(xmin, xmax), (ymin, ymax)] for a 2D space.
-        type boudns: list of tuples
+        :param bounds: Bounds for the parameter space, e.g., [(xmin, xmax), (ymin, ymax)] for a 2D space.
+        :type bounds: list of tuples
         """
         self.points = np.array(points)
         self.ndim = self.points.shape[1]
@@ -1484,15 +1574,15 @@ class VoronoiTessellation:
     def _set_voronoi_options(self, **voronoi_kwargs):
         """Set voronoi properties. See documentation for properties that an be altered and their options.
         
-        param incremental: Allow adding points incrementally. This takes up additional resources.
-        type incremental: bool
+        :param incremental: Allow adding points incrementally. This takes up additional resources. Default False.
+        :type incremental: bool
         
-        param finite: With finite = True, only vertices which reside inside convex hull defined by boundary points
-                       are returned as vertices of a voronoi region. With finite = False (default), all vertices
-                       are returned. In this case, vertices which fall outisde the parameter bounds are snipped 
-                       to the convex hull defined by boundary points, which requires more computational
-                       resources, especially in high dimensions.
-        type finite: bool
+        :param finite_only: When finite_only = True, only vertices which reside inside convex hull defined
+            by boundary points are returned as vertices of a voronoi region. With finite = False,
+            all vertices are returned. In this case, vertices which fall outisde the parameter bounds are snipped 
+            to the convex hull defined by boundary points, which requires more computational
+            resources, especially in high dimensions. Default False.
+        :type finite_only: bool
         """
         for key, value in voronoi_kwargs.items():
             if hasattr(self, key):
@@ -1606,11 +1696,11 @@ class VoronoiTessellation:
         """
         Identify vertices that sit outside the bounding region
 
-        Parameters:
-        region (list): A list of the voronoi regions. Each list contains indices of the voronoi vertices forming each Voronoi region.
+        :param region: A list of the voronoi regions. Each list contains indices of the voronoi 
+        vertices forming each Voronoi region.
+        :type region: list
 
-        Returns:
-        list: A new list of voronoi regions. With vertices outside the boudnign region replaced with -1.
+        :return: Returns a new list of voronoi regions with vertices outside the bounding region replaced with -2.
         """
 
         #outside = lambda lb, ub, x: (x < lb) + (x > ub)
@@ -1636,12 +1726,13 @@ class VoronoiTessellation:
         Replace the infinite vertices in a Voronoi region with new vertices on the edge of the bounding box.
         ** vertices that sit outside the bounding region are considered infinite here
 
-        Parameters:
-        region (list): A list of the voronoi regions. Each list contains indices of the Voronoi vertices forming each Voronoi region.
-        region_index (int): Region index
-
-        Returns:
-        list: A new list of voronoi regions with infinite vertices replaced.
+        :param region: A list of the voronoi regions. Each list contains indices of the Voronoi vertices forming each Voronoi region.
+        :type region: list
+        
+        :param region_index: Region index
+        :type region_index: int
+        
+        :return: Returns a new list of voronoi regions with infinite vertices replaced.
         """
         try:
             region_point_index, = np.argwhere(self.vor.point_region == region_index)[0]
@@ -1735,15 +1826,15 @@ class VoronoiTessellation:
         return ray_direction / np.linalg.norm(ray_direction)
         
     def find_boundary_hull_ray_crossings(self, U, z):
-        """
-        Find where a ray crosses the convex hull of the boundary.
+        """Find where a ray crosses the convex hull of the boundary.
 
-        Parameters:
-        U (np.ndarray): Ray direction.
-        z (np.ndarray): Ray origin.
+        :param U: Ray direction.
+        :type U: np.ndarray
+        
+        :param z: Ray origin.
+        :type z: np.ndarray
 
-        Returns:
-        list: List of intersection points with the convex hull.
+        :return: Returns a list of intersection points with the convex hull.
         """
         V = self.boundary_hull_V
         b = self.boundary_hull_b
@@ -1769,30 +1860,27 @@ class VoronoiTessellation:
         return vertices, furthest_vertex_index
 
     def get_region_seed(self, region_index):
-        """
-        Given a region_index, return the seed of the Voronoi tesselation that
+        """Given a region_index, return the seed of the Voronoi tesselation that
         belongs to the region.
 
-        Parameters:
-        region_index (integer): Region index.
-
-        Returns:
-        array: The Voronoi seed that belongs to the indexed region.
+        :param region_index: Region index.
+        :type region_index: int
+        
+        :return: Returns the Voronoi seed that belongs to the indexed region.
         """
 
         point_index, = np.where(self.vor.point_region == region_index)
         return np.atleast_2d(self.vor.points[point_index[0]])
 
     def get_voronoi_region(self, point_array):
-        """
-        Given an array of points, return the region of the Voronoi tesselation that the
+        """Given an array of points, return the region of the Voronoi tesselation that the
         points belongs to. If a point lies on a ridge or vertice, multiple regions are 
         returned for that point.
 
-        param point: An array of points to find the region of.
-        type point: nd_array
+        :param point: An array of points to find the region of.
+        :type point: nd_array
 
-        rtn: list of lists, where each sublist contains the Voronoi region(s) that contains the point.
+        :return: Returns a list of lists, where each sublist contains the Voronoi region(s) that contains the point.
              A point on a ridge has a sublist with two regions (for 2D). A point on a vertice has a sublist
              with 3 regions (for 2D)
         """
@@ -1835,10 +1923,10 @@ class VoronoiTessellation:
         return arr[mask]
     
     def add_points(self, points):
-        """ process a set of additional points.
+        """Process a set of additional points.
         
         Voronoi has a built in function to add points -- self.vor.add_points(points, restart=True).
-        However, 'incremental` must be set to True to use the build in add_points() method and is very slow.
+        However, 'incremental` must be set to True to use the built-in add_points() method and is very slow.
         Qhull throws an error for dim>2 when incremental=True and restart=False.
         This class method, which rebuilds 'manually` is faster.
         """
@@ -1868,13 +1956,7 @@ class VoronoiTessellation:
 
 class KFoldCrossValidation:
     def __init__(self):
-        """
-        Initialize the K-Fold Cross-Validation with a given surrogate model.
-
-        Parameters:
-        model: A machine learning model that has fit and predict methods.
-        nsplits: int
-            The number of folds for K-Fold Cross-Validation.
+        """Initialize the K-Fold Cross-Validation with a given surrogate model.
         """
         self._initialize_attributes()
 
@@ -1905,15 +1987,14 @@ class KFoldCrossValidation:
         """
         Perform K-Fold Cross-Validation.
 
-        Parameters:
-        X: np.ndarray
-            Feature matrix (training samples).
-        y: np.ndarray
-            Target values (ground truth).
-
-        Returns:
-        tuple: (index_of_max_error, max_error)
-            The index of the sample with the greatest prediction error and the corresponding error value.
+        :param X: Feature matrix (training samples).
+        :type X: np.ndarray
+        
+        :param y: Target values (ground truth).
+        :type y: np.ndarray
+        
+        :return: Returns the index of the sample with the greatest prediction error and the corresponding error value.
+        tuple (index_of_max_error, max_error)
         """
         from sklearn.model_selection import GroupKFold, KFold
         from joblib import Parallel, delayed
@@ -1987,18 +2068,16 @@ class LeaveOneOutCrossValidation:
 
     def perform_loocv(self, X, y, indices, **loocv_options):
 
-        """
-        Perform Leave-One-Out Cross-Validation.
+        """Perform Leave-One-Out Cross-Validation.
 
-        Parameters:
-        X: np.ndarray
-            Feature matrix (training samples).
-        y: np.ndarray
-            Target values (ground truth).
+        :param X: Feature matrix (training samples).
+        :type X: np.ndarray
+        
+        :param y: Target values (ground truth).
+        :type y: np.ndarray
 
-        Returns:
+        :return: Returns the index of the sample with the greatest prediction error and the corresponding error value.
         tuple: (index_of_max_error, max_error)
-            The index of the sample with the greatest prediction error and the corresponding error value.
         """
 
         from joblib import Parallel, delayed

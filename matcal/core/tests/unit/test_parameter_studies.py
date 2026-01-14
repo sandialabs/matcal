@@ -1784,17 +1784,18 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             voronoi_sampling_options = {'voronoi_type':'full',
                                         'finite_only':False,
                                         'iterative_updates':True,
-                                        'nsplits':0,
-                                        'nmax_folds':3,
-                                        'nmax_loo':'all',
                                         'nmaxbatches':1,
-                                        'cv_metric':'nlpd',
                                         'ninitsamples':20,
                                         'seed':42}
+            cross_validation_options = {'nsplits':0,
+                                        'nmax_folds':3,
+                                        'nmax_loo':'all',
+                                        'cv_metric':'nlpd'}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'surrogate_options': surrogate_options}
+                       'surrogate_options': surrogate_options,
+                       'cross_validation_options': cross_validation_options}
              
             vor_study.launch(**options)
             # build surrogate that given a, b, c gives you f
@@ -1824,135 +1825,164 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             self.assertTrue(np.all([i > 0 for i in rmse]))
    
     def test_error_handling(self):
+        test_information = self.setup_test_study(2)
         with self.assertRaises(AttributeError):
+            # _voronoi_type not an attribute
             vor_study = self.setup_study(2)
             voronoi_sampling_options = {'_voronoi_type':'full',
                                         'ninitsamples':10,
                                         'seed':42}
-            options = {'voronoi_sampling_options': voronoi_sampling_options}
+            surrogate_options = {'interpolation_field':'x',
+                                 'test_eval_info': test_information}
+            options = {'voronoi_sampling_options': voronoi_sampling_options,
+                       'surrogate_options': surrogate_options}
             vor_study.launch(**options)
         with self.assertRaises(ValueError):
+            # random selection and thin cannot both be defined
             vor_study = self.setup_study(2)
             voronoi_sampling_options = {'thin': 10,
                                         'random_selection': 10,
                                         'ninitsamples':10,
                                         'seed':42}
-            options = {'voronoi_sampling_options': voronoi_sampling_options}
+            surrogate_options = {'interpolation_field':'x',
+                                 'test_eval_info': test_information}
+            options = {'voronoi_sampling_options': voronoi_sampling_options,
+                       'surrogate_options': surrogate_options}
             vor_study.launch(**options)
         with self.assertRaises(ValueError):
+            # mse not implemented
             vor_study = self.setup_study(2)
-            voronoi_sampling_options = {'cv_metric': 'mse',
-                                        'ninitsamples':10,
+            voronoi_sampling_options = {'ninitsamples':10,
                                         'seed':42}
-            options = {'voronoi_sampling_options': voronoi_sampling_options}
+            cross_validation_options = {'cv_metric': 'mse'}
+            surrogate_options = {'interpolation_field':'x',
+                                 'test_eval_info': test_information}
+            options = {'voronoi_sampling_options': voronoi_sampling_options,
+                       'surrogate_options': surrogate_options,
+                       'cross_validation_options': cross_validation_options}
             vor_study.launch(**options)
         with self.assertRaises(ValueError):
+            # user cannot define training fraction
             vor_study = self.setup_study(2)
-            surrogate_options = {'_training_fraction': 0.5}
+            surrogate_options = {'_training_fraction': 0.5,
+                                 'interpolation_field':'x',
+                                 'test_eval_info': test_information}
             options = {'surrogate_options': surrogate_options}             
             vor_study.launch(**options)
         with self.assertRaises(AttributeError):
+            # training fraction not an attribute
             vor_study = self.setup_study(2)
-            surrogate_options = {'training_fraction': 0.5}
+            surrogate_options = {'training_fraction': 0.5,
+                                 'test_eval_info': test_information}
             options = {'surrogate_options': surrogate_options}             
             vor_study.launch(**options)
         with self.assertRaises(AttributeError):
+            # test info no provided
             vor_study = self.setup_study(2)
             vor_study.launch()
         with self.assertRaises(vor_study.StudyInputError):
+            # user cannot add_parameter_evaluation
             vor_study.add_parameter_evaluation(a=5)
             
     def test_convergence(self):
         vor_study = self.setup_study(2)
         test_information = self.setup_test_study(2)
-        voronoi_sampling_options = {'_eps':10.0,
+        voronoi_sampling_options = {'eps':10.0,
                                     'nmaxbatches': 10,
-                                    'nsplits':0,
                                     'ninitsamples':20,
                                     'seed':42}
+        cross_validation_options = {'nsplits':0}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'surrogate_options': surrogate_options}
+                    'surrogate_options': surrogate_options,
+                    'cross_validation_options': cross_validation_options}
         vor_study.launch(**options)
         converged = np.abs(vor_study._current_surrogate_score[vor_study.convergence_metric][-1] - \
-                vor_study._current_surrogate_score[vor_study.convergence_metric][-2]) <= vor_study._eps
+                vor_study._current_surrogate_score[vor_study.convergence_metric][-2]) <= vor_study.eps
         self.assertTrue(converged)
         
     def test_nmax_loo_all(self):
         vor_study = self.setup_study(2)
         test_information = self.setup_test_study(2)
-        voronoi_sampling_options = {'nmax_loo': 'all',
-                                    'nsplits':2,
-                                    'ninitsamples':5,
+        voronoi_sampling_options = {'ninitsamples':5,
                                     'nmaxbatches':1,
                                     'seed':42}
+        cross_validation_options = {'nsplits':2,
+                                    'nmax_loo':'all'}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'surrogate_options': surrogate_options}
+                    'surrogate_options': surrogate_options,
+                    'cross_validation_options': cross_validation_options}
         vor_study.launch(**options)
         self.assertTrue(vor_study._nbatch_samples[-1] > vor_study.ninitsamples)
             
     def test_thin(self):
         vor_study = self.setup_study(2)
         test_information = self.setup_test_study(2)
-        voronoi_sampling_options = {'nsplits':0,
-                                    'ninitsamples':6,
+        voronoi_sampling_options = {'ninitsamples':6,
                                     'nmaxbatches':1,
                                     'thin':2,
                                     'seed':42}
+        cross_validation_options = {'nsplits':0}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'surrogate_options': surrogate_options}
+                    'surrogate_options': surrogate_options,
+                    'cross_validation_options': cross_validation_options}
         vor_study.launch(**options)
         self.assertTrue(vor_study._nbatch_samples[-1] == vor_study.ninitsamples*1.5)
 
     def test_random_selection(self):
         vor_study = self.setup_study(2)
         test_information = self.setup_test_study(2)
-        voronoi_sampling_options = {'nsplits':0,
-                                    'ninitsamples':6,
+        voronoi_sampling_options = {'ninitsamples':6,
                                     'nmaxbatches':1,
                                     'random_selection':3,
-                                    'seed':42}
+                                    'seed':100}
+        cross_validation_options = {'nsplits':0}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'surrogate_options': surrogate_options}
+                    'surrogate_options': surrogate_options,
+                    'cross_validation_options': cross_validation_options
+                    }
         vor_study.launch(**options)
         self.assertTrue(vor_study._nbatch_samples[-1] == vor_study.ninitsamples*1.5)
 
     def test_local_tess(self):
         vor_study = self.setup_study(2)
         test_information = self.setup_test_study(2)
-        voronoi_sampling_options = {'nsplits':0,
-                                    'ninitsamples':20,
+        voronoi_sampling_options = {'ninitsamples':20,
                                     'nmaxbatches':1,
                                     'random_selection':3,
                                     'voronoi_type':'local',
                                     'seed':42}
+        cross_validation_options = {'nsplits':0}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'surrogate_options': surrogate_options}
+                    'surrogate_options': surrogate_options,
+                    'cross_validation_options': cross_validation_options}
         vor_study.launch(**options)
         self.assertIsNotNone(vor_study._tree)
         
     def test_group_kfold(self):
         vor_study = self.setup_study(2)
         test_information = self.setup_test_study(2)
-        voronoi_sampling_options = {'nsplits':2,
-                                    'ninitsamples':20,
+        voronoi_sampling_options = {'ninitsamples':20,
                                     'nmaxbatches':1,
                                     'random_selection':10,
-                                    'group_kfold':True,
                                     'seed':42}
+        cross_validation_options = {'nsplits':2,
+                                    'group_kfold':True}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
         options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'surrogate_options': surrogate_options}
+                    'surrogate_options': surrogate_options,
+                    'cross_validation_options': cross_validation_options
+                  }
         vor_study.launch(**options)
         self.assertTrue(vor_study._nbatch_samples[-1] > vor_study.ninitsamples)
 
@@ -1964,16 +1994,17 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             
             nsplits = 2
             nmax_loo = 3
-            voronoi_sampling_options = {'nsplits':nsplits,
-                                        'nmax_folds':1,
-                                        'nmax_loo':nmax_loo,
-                                        'nmaxbatches':1,
-                                        'cv_metric':'nlpd',
+            voronoi_sampling_options = {'nmaxbatches':1,
                                         'seed':42}
+            cross_validation_options = {'nsplits': nsplits,
+                                        'nmax_folds':1,
+                                        'nmax_loo': nmax_loo,
+                                        'cv_metric': 'nlpd'}
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'surrogate_options': surrogate_options}
+                       'surrogate_options': surrogate_options,
+                       'cross_validation_options': cross_validation_options}
              
             vor_study.launch(**options)
             max_fold_indices = vor_study._max_fold_error_indices
@@ -2030,18 +2061,20 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             voronoi_sampling_options = {'voronoi_type':'full',
                                         'finite_only':False,
                                         'iterative_updates':True,
-                                        'nsplits':2,
-                                        'nmax_folds':1,
-                                        'nmax_loo':5,
                                         'nmaxbatches':3,
-                                        'cv_metric':'nlpd',
                                         'ninitsamples':10,
                                         'convergence_metric':'score',
                                         'seed':42}
+            cross_validation_options = {'nsplits':2,
+                                        'nmax_folds':1,
+                                        'nmax_loo':5,
+                                        'cv_metric': 'nlpd'
+                                        }
             surrogate_options = {'interpolation_field':'x',
                                  'test_eval_info': test_information}
             options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'surrogate_options': surrogate_options}
+                       'surrogate_options': surrogate_options,
+                       'cross_validation_options': cross_validation_options}
              
             vor_study.launch(**options)
             # verify that errors are decreasing

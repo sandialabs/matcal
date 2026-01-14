@@ -98,7 +98,7 @@ class SurrogateGenerator:
             uses the implementations of these tools from the sklearn library. 
         :type regressor_type: str
 
-        :param test_evaluation_information: A container of the relevant
+        :param test_eval_info: A container of the relevant
             information to test a surrogate off of a body of data generated
             from a MatCal sampling study. This data is only used and must
             be provided if training_fraction == 1.0.

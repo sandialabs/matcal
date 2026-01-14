@@ -28,7 +28,7 @@ high-dimensional displacement field with little information loss.
 
 Response Dimensionality Reduction 
 ---------------------------------
-Given a data matix, :math:`\mathcal{A} \in \mathbb{R}^{u \times v}`, 
+Given a data matrix, :math:`\mathcal{A} \in \mathbb{R}^{u \times v}`, 
 PCA is used to factorize the matrix into three new matrices, 
 :math:`\mathcal{A} = USV^{T}`, where :math:`U \in \mathbb{R}^{u \times r}` and 
 :math:`V^{T} \in \mathbb{R}^{r \times v}` are orthonormal bases with columns and rows, 
@@ -69,3 +69,11 @@ samples simultaneously, reducing overall computational cost. By balancing explor
 through cross-validation error estimates and spatial partitioning, the method concentrates the sampling 
 efforts to regions of high uncertainty or error, steadily improving surrogate accuracy while 
 minimizing expensive model evaluations.
+
+Implementation
+======================
+
+Pseudo-algorithm
+
+
+K-fold Cross validation
