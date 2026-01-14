@@ -1327,11 +1327,11 @@ class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
             self._populate_parameter_evaluations(self._new_points)
             param_sets = self._parameter_sets_to_evaluate
             self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
-            self._nbatch_samples.append(self.results.number_of_evaluations)
             self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
             self._update_surrogate_score()
             self._format_params()
             self._format_output()
+            self._nbatch_samples.append(self.X.shape[0])
             
             # convergence check
             if np.abs(self._current_surrogate_score[self.convergence_metric][batch_number+1] - \
