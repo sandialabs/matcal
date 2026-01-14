@@ -1924,7 +1924,7 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         voronoi_sampling_options = {'ninitsamples':6,
                                     'nmaxbatches':1,
                                     'thin':2,
-                                    'seed':42}
+                                    'seed':100}
         cross_validation_options = {'nsplits':0}
         surrogate_options = {'interpolation_field':'x',
                              'test_eval_info': test_information}
