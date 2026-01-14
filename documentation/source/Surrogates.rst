@@ -35,7 +35,7 @@ PCA is used to factorize the matrix into three new matrices,
 respectively, containing the left and right singular vectors of :math:`\mathcal{A}`. 
 The matrix :math:`S \in \mathbb{R}^{r \times r}` is diagonal and contains the singular values, 
 and :math:`r` is the rank of :math:`\mathcal{A}`. By retaining a number of principal components 
-:math:`p \lt r`, matrix :math:`\mathcal{A}` can be expresed in a reduced-dimensional space. The 
+:math:`p \lt r`, matrix :math:`\mathcal{A}` can be expressed in a reduced-dimensional space. The 
 retained components are written as :math:`V^{*T} \subset V^{T}, V^{*T} in \mathbb{R}^{p times v}`.
 The reduction of :math:`\mathcal{A}` is written as 
 :math:`\mathcal{A}^{pca} = \mathcal{A}'V^{*} \in \mathbb{R}^{u \times p}` and its reconstruction by 
@@ -69,11 +69,3 @@ samples simultaneously, reducing overall computational cost. By balancing explor
 through cross-validation error estimates and spatial partitioning, the method concentrates the sampling 
 efforts to regions of high uncertainty or error, steadily improving surrogate accuracy while 
 minimizing expensive model evaluations.
-
-Implementation
-======================
-
-Pseudo-algorithm
-
-
-K-fold Cross validation
