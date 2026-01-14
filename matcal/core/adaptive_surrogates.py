@@ -551,7 +551,7 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
             data[idx,:] = sim_qoi[state_name][0][self._target_field_name]
         return data
 
-    def add_evaluation_set(self, model, state=None):
+    def add_evaluation_set(self, model, state=None, left=None, right=None, period=None):
         """
         Add an evaluation set that uses a 
         :class:`~matcal.core.objective.SimulationResultsSynchronizer`
@@ -596,7 +596,7 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
                 "to be a single `State` instance (or None)."
             )
 
-        self._results_synchronizer = self._make_simulation_results_synchronizer()
+        self._results_synchronizer = self._make_simulation_results_synchronizer(left, right, period)
         super().add_evaluation_set(
             model,
             objectives=self._results_synchronizer,
@@ -604,7 +604,7 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
             states=state,
         )
 
-    def _make_simulation_results_synchronizer(self):
+    def _make_simulation_results_synchronizer(self, left, right, period):
         """
         Build a :class:`~matcal.core.objective.SimulationResultsSynchronizer`
         that will be used by the surrogate study.
@@ -630,7 +630,7 @@ class SparseGridAdaptiveSurrogateStudy(HaltonStudy):
             )
         return SimulationResultsSynchronizer(
             self._independent_variable, self._independent_variable_values,
-            self._target_field_name          
+            self._target_field_name, left=left, right=right, period=period          
         )
 
     def _perform_sparse_grid_batch_sampling(self): 
