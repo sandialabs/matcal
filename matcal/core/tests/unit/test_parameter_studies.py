@@ -2053,6 +2053,7 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
 
     def test_adaptive_voronoi_surrogate_generation(self):
+        #move to integration
         dims = [2, 3]
         for dim in dims:
             vor_study = self.setup_study(dim)
