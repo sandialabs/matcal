@@ -118,8 +118,7 @@ class DakotaBayesFileBase(DakotaFileWithSeed):
         :param value: number of burn-in samples to run
         :type value: int
         """
-        check_value_is_positive_integer(value, "number of burn on samples", 
-                                        "set_number_of_burn_in_samples")
+        check_value_is_positive_integer(value, "value")
         self.set_method_type_block_line(self._method_class.Keywords.burn_in_samples, value)
 
     def get_number_of_burnin_samples(self):
@@ -154,8 +153,7 @@ class DakotaBayesFileBase(DakotaFileWithSeed):
             if isinstance(proposal_covariance, str):  # custom format compatible with dakotas
                 proposal_covariance = proposal_covariance
             elif isinstance(proposal_covariance, Real):
-                check_value_is_nonnegative_real(proposal_covariance, "proposal covariance", 
-                                     "set_proposal_covariance")
+                check_value_is_nonnegative_real(proposal_covariance, "proposal_covariance")
                 proposal_covariance = self._get_uniform_diagonals(proposal_covariance)
         else:
             proposal_covariance = self._get_general_diagonals(proposal_covariance)
@@ -164,8 +162,7 @@ class DakotaBayesFileBase(DakotaFileWithSeed):
 
     def _get_general_diagonals(self, proposal_covariances):
         for proposal_covariance in proposal_covariances:
-            check_value_is_nonnegative_real(proposal_covariance, "proposal covariance", 
-                                         "set_proposal_covariance")
+            check_value_is_nonnegative_real(proposal_covariance, "proposal_covariance")
         return "diagonal values " + " ".join(map(str, proposal_covariances))
 
     def _get_uniform_diagonals(self, proposal_covariance):

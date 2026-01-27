@@ -32,9 +32,10 @@ from matcal.core.plotting import _NullPlotter, StandardAutoPlotter
 from matcal.core.pruner import DirectoryPrunerKeepAll, DirectoryPrunerBase, Eliminator
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.state import StateCollection, SolitaryState
-from matcal.core.utilities import (_sort_workdirs, check_item_is_correct_type, 
+from matcal.core.utilities import (_sort_workdirs, check_value_is_bool, 
                                    check_value_is_positive_integer, 
-                                   check_value_is_nonnegative_integer) 
+                                   check_value_is_nonnegative_integer, 
+                                   check_item_is_correct_type) 
 from matcal.version import __version__
 
 logger = initialize_matcal_logger(__name__)
@@ -192,7 +193,7 @@ class StudyBase(ABC):
         :raises StudyTypeError: if passed arguments are of the incorrect type.
         :raises StudyError: if all the passed states are not in the data.
         """
-        self._check_item_is_correct_type(model, ModelBase, "model")
+        check_item_is_correct_type(model, ModelBase, "model")
         objective_collection = self._singleton_to_collection(objectives, ObjectiveCollection, 
                                                              "objectives")
         self._check_data_and_objectives(objective_collection, data)
@@ -243,18 +244,12 @@ class StudyBase(ABC):
         :type results_save_frequency: int
 
         """
-        check_item_is_correct_type(data, bool, "study.set_results_storage_options", 
-                                   "data")
-        check_item_is_correct_type(qois, bool, "study.set_results_storage_options", 
-                                   "qois") 
-        check_item_is_correct_type(residuals, bool, "study.set_results_storage_options", 
-                                   "residuals")
-        check_item_is_correct_type(objectives, bool, "study.set_results_storage_options", 
-                                   "objectve")
-        check_item_is_correct_type(weighted_conditioned, bool, "study.set_results_storage_options", 
-                                "weighted_conditioned")
-        check_value_is_positive_integer(results_save_frequency, "results_save_frequency",
-                                        "study.set_results_storage_options")
+        check_value_is_bool(data, "data")
+        check_value_is_bool(qois, "qois") 
+        check_value_is_bool(residuals, "residuals")
+        check_value_is_bool(objectives, "objectve")
+        check_value_is_bool(weighted_conditioned, "weighted_conditioned")
+        check_value_is_positive_integer(results_save_frequency, "results_save_frequency")
         self._results_reporting = OrderedDict()
         self._results_reporting["record_data"] = data
         self._results_reporting["record_qois"] = qois
@@ -294,12 +289,6 @@ class StudyBase(ABC):
         standard plotter and will show things such as objective value evolution. 
         """
         self._plotter = StandardAutoPlotter()
-
-    def _check_item_is_correct_type(self, item, desired_type, message):
-        if not isinstance(item, desired_type):
-            raise self.StudyTypeError(
-                f"The study expected a {desired_type} type "
-                f"for the added {message}, but received object of type {type(item)}")
 
     @property
     def final_results_filename(self):
@@ -525,7 +514,6 @@ class StudyBase(ABC):
             "Please do not invoke 'set_use_threads' with restarts.")
 
     def _initialize_results(self):
-        print("Results:", self._results)
         if self._results is None:
             self._results = StudyResults(**self._results_reporting)
 
@@ -553,7 +541,7 @@ class StudyBase(ABC):
 
         :raises StudyTypeError: if the passed value is not an int.
         """
-        self._check_item_is_correct_type(core_limit, int, "core limit")
+        check_item_is_correct_type(core_limit, int, "core limit")
         max_study_core_limit=500
         if core_limit > max_study_core_limit and not override_max_limit:
             raise self.StudyInputError(f"It is recommended to not allow more than "
@@ -636,9 +624,8 @@ class StudyBase(ABC):
         :type parameter_preprocessor:
             :class:`~matcal.core.parameters.UserDefinedParameterPreprocessor`
         """
-        self._check_item_is_correct_type(parameter_preprocessor, 
-                                         UserDefinedParameterPreprocessor, "parameter "
-                                        "preprocessor")
+        check_item_is_correct_type(parameter_preprocessor, 
+                                   UserDefinedParameterPreprocessor, "parameter_preprocessor")
         self._parameter_preprocessors.append(parameter_preprocessor)
         
     def set_parameters(self, *parameters):
@@ -678,7 +665,7 @@ class StudyBase(ABC):
         :type always_use_threads: bool
             
         """
-        self._check_item_is_correct_type(always_use_threads, bool, "always_use_threads")
+        check_item_is_correct_type(always_use_threads, bool, "always_use_threads")
         self._always_use_threads = always_use_threads
         self._use_threads = True
 
@@ -711,9 +698,8 @@ class StudyBase(ABC):
             pre-existing at study launch.
         :type remove_exiting: bool
         """
-        self._check_item_is_correct_type(working_directory, str, "study working directory")
-        check_item_is_correct_type(remove_existing, bool, "study.set_working_directory", 
-                                   "remove_existing")
+        check_item_is_correct_type(working_directory, str, "study working directory")
+        check_value_is_bool(remove_existing, "remove_existing")
         head, tail = os.path.split(working_directory)
         if head != "" and \
             not os.path.exists(head):
@@ -1508,7 +1494,7 @@ def _get_return_data_list_history(data_list, repeat_index=None,
                                   err_msg="study_results.get_*_qois/data"):
     return_val = data_list
     if repeat_index is not None:
-        check_value_is_nonnegative_integer(repeat_index, "index", err_msg)
+        check_value_is_nonnegative_integer(repeat_index, "index", call_depth=1)
         if repeat_index >= len(return_val):
             index_error_msg = (f"The index {repeat_index} is too large for the results"
                            f" list being returned from {err_msg}")

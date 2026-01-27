@@ -12,18 +12,13 @@ class jinja2_delimiters:
 
 def _check_jinja_delimiters_input(variable, block, comment, line_statement_prefix, 
                                   line_comment_prefix):
-    check_value_is_nonempty_str(variable, "variable", 
-                                "set_jinja_delimiters")
-    check_value_is_nonempty_str(block, "block", 
-                              "set_jinja_delimiters")
-    check_value_is_nonempty_str(comment, "comment", 
-                                "set_jinja_delimiters")
+    check_value_is_nonempty_str(variable, "variable", call_depth=1)
+    check_value_is_nonempty_str(block, "block", call_depth=1)
+    check_value_is_nonempty_str(comment, "comment", call_depth=1)
     if line_statement_prefix is not None:
-        check_value_is_nonempty_str(line_statement_prefix, "line_statement_prefix", 
-                                "set_jinja_delimiters")
+        check_value_is_nonempty_str(line_statement_prefix, "line_statement_prefix", call_depth=1)
     if line_comment_prefix is not None:
-        check_value_is_nonempty_str(line_comment_prefix, "line_comment_prefix", 
-                                "set_jinja_delimiters")
+        check_value_is_nonempty_str(line_comment_prefix, "line_comment_prefix", call_depth=1)
 
 
 def set_jinja_delimiters(variable="{{ }}", block="{% %}", 

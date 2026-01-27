@@ -35,20 +35,17 @@ class InputFileLine():
         self._symbol_location = self.default_symbol_index
         self._use_symbol = True
         self._symbol = self.default_symbol
-        check_value_is_nonempty_str(leading_statement, "leading_statement", 
-                                    "InputFileLine")
+        check_value_is_nonempty_str(leading_statement, "leading_statement")
         if name is None:
             name = leading_statement
         else:
-            check_value_is_nonempty_str(name, "name", 
-                                        "InputFileLine", )
+            check_value_is_nonempty_str(name, "name")
         self.name = name
 
         self._my_values = []
         self._my_values.append(leading_statement)
         for arg in args:
-            check_item_is_correct_type(arg, (str, Number), "InputFileLine", 
-                                      "arg")
+            check_item_is_correct_type(arg, (str, Number), "arg")
             self._my_values.append(arg)
 
     def write(self, f, indent=0):
@@ -62,8 +59,8 @@ class InputFileLine():
             The default indent is four spaces.
         :type indent: int
         """
-        check_item_is_correct_type(indent, int, "write", "ident")
-        check_item_is_correct_type(f, TextIOWrapper, "write", "f")
+        check_item_is_correct_type(indent, int, "ident")
+        check_item_is_correct_type(f, TextIOWrapper, "f")
         lines = self.get_string(indent)
         f.write(lines)
 
@@ -76,7 +73,7 @@ class InputFileLine():
             The default indent is four spaces.
         :type indent: int
         """
-        check_item_is_correct_type(indent, int, "get_string", "ident")
+        check_item_is_correct_type(indent, int, "ident")
         line = _default_indent * indent
         for idx, item in enumerate(self._my_values):
             if item is None:
@@ -107,7 +104,7 @@ class InputFileLine():
         :param symbol: the updated symbol to be used
         :type symbol: str  
         """
-        check_item_is_correct_type(symbol, str, "set_symbol", "symbol")
+        check_item_is_correct_type(symbol, str, "symbol")
         self._symbol = symbol
         self._use_symbol = True
 
@@ -121,7 +118,7 @@ class InputFileLine():
             will appear. The default values is {self.default_symbol_index}.
         :type index: int
         """
-        check_value_is_nonnegative_integer(index, "set_symbol_location", "index")
+        check_value_is_nonnegative_integer(index, "index")
         self._symbol_location = index
 
     def set_at_end(self, value):
@@ -151,7 +148,7 @@ class InputFileLine():
         :param index: the location of the value place in the line list.
         :type index: int
         """
-        check_value_is_nonnegative_integer(index, "index", "set")
+        check_value_is_nonnegative_integer(index, "index")
         if len(self._my_values) <= index:
             for i in range(index - len(self._my_values) + 1):
                 self._my_values.append(None)
@@ -190,18 +187,15 @@ class InputFileBlock:
     :type being_end: bool
     """
     def __init__(self, title, name=None, begin_end=False):
-        check_value_is_nonempty_str(title, "title", 
-                                    "InputFileBlock")
+        check_value_is_nonempty_str(title, "title")
         self._title = title
         self._name = None
-        check_item_is_correct_type(begin_end, bool, "InputFileBlock", 
-                                   "begin_end")
+        check_value_is_bool(begin_end, "begin_end")
         self._begin_end = begin_end
         if name is None:
             self.set_name(title)
         else:
-            check_value_is_nonempty_str(name, "name", 
-                                    "InputFileBlock")
+            check_value_is_nonempty_str(name, "name")
             self.set_name(name)
 
         self._lines = OrderedDict()
@@ -274,7 +268,7 @@ class InputFileBlock:
         :type replace: bool
         """
 
-        check_item_is_correct_type(line, InputFileLine, "add_line", "line")
+        check_item_is_correct_type(line, InputFileLine, "line")
         if line.name in self._lines and not replace:
             raise KeyError(f"A line with the name '{line.name}' is already included in block. " 
                            "Use the 'replace' keyword argument if you want to replace an "
@@ -308,8 +302,7 @@ class InputFileBlock:
         :param replace: replace lines if already existing in the subblock
         :type replace: bool
         """
-        check_item_is_correct_type(dictionary, dict, "add_lines_from_dictionary", 
-                                   "dictionary")
+        check_item_is_correct_type(dictionary, dict, "dictionary")
         for key, val in dictionary.items():
             if isinstance(val, bool): 
                 if val:
@@ -376,8 +369,7 @@ class InputFileBlock:
         """
         Add an InputFileTable to the subblock.
         """
-        check_item_is_correct_type(table, InputFileTable, 
-                                   "add_table", "table")
+        check_item_is_correct_type(table, InputFileTable, "table")
         self._tables[table.name] = table
 
     def get_line(self, line_name):
@@ -389,7 +381,7 @@ class InputFileBlock:
 
         :rtype: :class:`~matcal.core.input_file_writer.InputFileLine`
         """
-        check_value_is_nonempty_str(line_name, "line_name", "get_line")
+        check_value_is_nonempty_str(line_name, "line_name")
         if line_name in self._lines.keys():
              return self._lines[line_name]
         else:
@@ -410,9 +402,8 @@ class InputFileBlock:
             different index for the returned value from the line
         :type index: int
         """
-        check_item_is_correct_type(key, str, "get_line_value", "key", TypeError)
-        check_item_is_correct_type(index, Integral, "get_line_value", "index",
-                                   TypeError )
+        check_item_is_correct_type(key, str, "key")
+        check_item_is_correct_type(index, Integral, "index")
         line = self.get_line(key)
         values = line.get_values()
         if index > len(values)-1:
@@ -533,8 +524,7 @@ class InputFileBlock:
         :param print_name: print the name if True or do not if False.
         :type print_name: bool
         """
-        check_value_is_bool(print_name, "print_name", 
-                            "InputFileBlock.print_name")
+        check_value_is_bool(print_name, "print_name")
         self._print_name = print_name
 
     def set_print_title(self, print_title=True):
@@ -546,8 +536,7 @@ class InputFileBlock:
         :param print_title: print the title with the name or as the name
         :type print_title: bool
         """
-        check_value_is_bool(print_title, "print_title", 
-                            "InputFileBlock.print_name")
+        check_value_is_bool(print_title, "print_title")
         self._print_title = print_title
 
     def set_name(self, name):
@@ -557,8 +546,7 @@ class InputFileBlock:
         :param name: the new block name.
         :type name: str
         """
-        check_value_is_nonempty_str(name, "name", 
-                                    "set_name")
+        check_value_is_nonempty_str(name, "name")
         self._name = name
 
     def suppress_symbols_for_lines(self):
@@ -579,8 +567,7 @@ class InputFileBlock:
         if symbol is None:
             self.suppress_symbols_for_lines()
         else:
-            check_value_is_nonempty_str(symbol, "symbol", 
-                                        "InputFileBlock.set_symbol_for_lines")
+            check_value_is_nonempty_str(symbol, "symbol")
             for line in self._lines:
                 self._lines[line].set_symbol(symbol)
 
@@ -596,8 +583,7 @@ class InputFileBlock:
         :param filename: the filename to write the input file to.
         :type filename: str
         """
-        check_value_is_nonempty_str(filename, "filename", 
-                                    "InputFileBlock.write")
+        check_value_is_nonempty_str(filename, "filename")
         with open(filename, 'w') as f:
             self.write(f)
 
@@ -736,8 +722,7 @@ class InputFileTable:
             raise self.InvalidColumnNumberError()
         self._label = label
         self._print_label = False
-        check_item_is_correct_type(begin_end_values, bool,
-                                   "InputFileTable", begin_end_values)
+        check_value_is_bool(begin_end_values, "begin_end_values")
         self._begin_end_values = begin_end_values
         self._n_col = n_col
         self._values = []
@@ -803,8 +788,7 @@ class InputFileTable:
             Default is set to turn on label printing.
         :type print_label: bool
         """
-        check_item_is_correct_type(print_label, bool, 
-                                   "set_print_label", "print_label")
+        check_value_is_bool(print_label, "print_label")
         self._print_label = print_label
 
     def get_string(self, indents):

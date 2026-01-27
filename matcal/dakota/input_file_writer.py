@@ -36,16 +36,14 @@ class DakotaEnvironment(_BaseTypedInputFileBlock):
                       }
 
     def set_read_restart_filename(self,filename):
-        check_value_is_nonempty_str(filename, "filename", 
-                                    "set_read_restart_filename")
+        check_value_is_nonempty_str(filename, "filename")
         if DakEnvKeys.read_restart not in self._lines.keys():
             read_restart_line  = InputFileLine(DakEnvKeys.read_restart)
             self.add_line(read_restart_line)
         self.get_line(DakEnvKeys.read_restart).set(f"\"{filename}\"")
 
     def set_write_restart_filename(self,filename):
-        check_value_is_nonempty_str(filename, "filename", 
-                                    "set_write_restart_filename")
+        check_value_is_nonempty_str(filename, "filename")
         if DakEnvKeys.write_restart not in self._lines.keys():
             write_restart_line  = InputFileLine(DakEnvKeys.write_restart)
             self.add_line(write_restart_line)
@@ -400,8 +398,7 @@ class DakotaFileBase(_BaseTypedInputFileBlock):
         :param filename: The restart filename to be used.
         :type filename: str
         """
-        check_item_is_correct_type(filename, str, "set_read_restart_filename",
-                                   "Dakota restart filename")
+        check_item_is_correct_type(filename, str, "filename")
         self.get_subblock(DakotaEnvironment.type).set_read_restart_filename(filename)
 
     def set_restart_filename(self, filename):
@@ -413,8 +410,7 @@ class DakotaFileBase(_BaseTypedInputFileBlock):
         :param filename: The restart filename to be used.
         :type filename: str
         """
-        check_item_is_correct_type(filename, str, "set_restart_filename",
-                                   "Dakota restart filename")
+        check_item_is_correct_type(filename, str, "filename")
         self.get_subblock(DakotaEnvironment.type).set_write_restart_filename(filename)
 
     def get_read_restart_filename(self):
@@ -455,8 +451,7 @@ class DakotaFileBase(_BaseTypedInputFileBlock):
         :param output_verbosity: The output verbosity level
         :type output_verbosity: str
         """
-        check_item_is_correct_type(output_verbosity, str, "set_output_verbosity", 
-                                   "Dakota  output verbosity",
+        check_item_is_correct_type(output_verbosity, str, "output_verbosity",
                                    TypeError) 
         if output_verbosity in DakMethodKeys.output_options:
             method_block = self.get_method_block()
@@ -557,8 +552,7 @@ class DakotaCalibrationFile(DakotaFileBase, ABC):
         :param value: The desired convergence tolerance
         :type value: float
         """
-        check_value_is_real_between_values(value, 0, 1.0, "convergence tolerance", 
-                                           "set_convergence_tolerance")
+        check_value_is_real_between_values(value, 0, 1.0, "value")
         self.set_method_type_block_line(DakMethodKeys.convergence_tol,
                                         value)
         
@@ -569,8 +563,7 @@ class DakotaCalibrationFile(DakotaFileBase, ABC):
         :param max_iterations: The desired maximum iterations
         :type max_iterations: int
         """
-        check_value_is_positive_integer(max_iterations, "max iterations", 
-                                        "set_max_iterations")
+        check_value_is_positive_integer(max_iterations, "max_iterations")
         self.set_method_type_block_line(DakMethodKeys.max_iterations,
                                         max_iterations)
 
@@ -581,18 +574,16 @@ class DakotaCalibrationFile(DakotaFileBase, ABC):
         :param value: The desired maximum iterations
         :type value: int
         """
-        check_value_is_positive_integer(value, "max function evaluations", 
-                                        "set_max_function_evaluations")
+        check_value_is_positive_integer(value, "value")
         self.set_method_type_block_line(DakMethodKeys.max_func_evals,value)
         
 
 def check_seed_value(seed):
-    check_value_is_positive_integer(seed, "seed", "set_seed")
+    check_value_is_positive_integer(seed, "seed", call_depth=1)
 
 
 def check_number_of_samples(number_of_samples):
-    check_value_is_positive_integer(number_of_samples, "number_of_samples", 
-                            "set_number_of_samples")
+    check_value_is_positive_integer(number_of_samples, "number_of_samples", call_depth=1)
     
 
 class DakotaFileWithSeed(DakotaFileBase):

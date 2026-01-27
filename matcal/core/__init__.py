@@ -27,7 +27,7 @@ from .plotting import make_standard_plots
 from .state import State, SolitaryState, StateCollection
 from .residuals import UserFunctionWeighting, NoiseWeightingFromFile, \
     ConstantFactorWeighting, NoiseWeightingConstant
-from .surrogates import SurrogateGenerator, load_matcal_surrogate
+from .surrogates import SurrogateGenerator
 from .serializer_wrapper import matcal_save, matcal_load
 
 __all__ += ["SparseGridAdaptiveSurrogateStudy"]
@@ -52,6 +52,6 @@ __all__ += ["CurveBasedInterpolatedObjective", "ObjectiveCollection"]
 __all__ += ["DirectCurveBasedInterpolatedObjective"]
 __all__ += ["ObjectiveResults", "Objective"]
 __all__ += ['make_standard_plots']
-__all__ += ["SurrogateGenerator", "load_matcal_surrogate"]
+__all__ += ["SurrogateGenerator"]
 __all__ += ["matcal_save", "matcal_load"]
 __all__ += ["UserExecutableModel"]

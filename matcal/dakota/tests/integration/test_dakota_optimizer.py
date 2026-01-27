@@ -1,9 +1,7 @@
 import os
 import numpy as np
-import random
 
 from matcal.core.data import DataCollection, convert_dictionary_to_data
-from matcal.core.input_file_writer import InputFileLine
 from matcal.core.models import PythonModel
 from matcal.core.objective import Objective, ObjectiveCollection
 from matcal.core.parameters import ParameterCollection, Parameter

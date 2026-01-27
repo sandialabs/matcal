@@ -81,9 +81,7 @@ class _BaseSierraFunction(_BaseSierraInputFileBlock):
         if line_name in self._lines:
             self._lines.pop(line_name)
         if val is not None:
-            check_item_is_correct_type(val, numbers.Real, 
-                                       "SierraFunction.scale_function",
-                                         "scale_factor")
+            check_item_is_correct_type(val, numbers.Real, "scale_factor", call_depth=1)
             line = InputFileLine(line_name, val)
             self.add_line(line)
             
@@ -1257,10 +1255,7 @@ class _SolidMechanicsBaseOutput(_BaseSierraInputFileBlock):
     def add_output_variable(self, variable_scope, variable_name, save_as_name = None):
         new_line_args = [variable_scope, variable_name]
         if save_as_name is not None:
-            check_value_is_nonempty_str(
-                save_as_name, 
-                "save_as_name", 
-                "SolidMechanicsResultsOutputBlock.add_output_variable")
+            check_value_is_nonempty_str(save_as_name, "save_as_name")
             new_line_args.append("as")
             new_line_args.append(save_as_name)
         name = self._get_line_name(variable_scope, variable_name, save_as_name)
@@ -2054,7 +2049,7 @@ class SierraFileBase(_BaseTypedInputFileBlock):
             self._activate_exodus_output()
         for element_variable_name in element_variable_names:
             check_value_is_nonempty_str(element_variable_name, "element_variable_name", 
-                                             "SierraModel.add_element_output_variable")
+                                        call_depth=1)
             save_name = None
             if volume_average:
                 element_variable_name, save_name = self._add_volume_averaged_element_output(element_variable_name)
@@ -2104,8 +2099,7 @@ class SierraFileBase(_BaseTypedInputFileBlock):
         if self._exodus_output is None:
             self._activate_exodus_output()
         for nodal_variable_name in nodal_variable_names:
-            check_value_is_nonempty_str(nodal_variable_name, "nodal_variable_name", 
-                                             "SierraModel.add_nodal_output_variable")
+            check_value_is_nonempty_str(nodal_variable_name, "nodal_variable_name", call_depth=1)
             if not self._nodal_variable_in_mesh_output(nodal_variable_name):
                 self._exodus_output.add_nodal_output(nodal_variable_name)
             else:

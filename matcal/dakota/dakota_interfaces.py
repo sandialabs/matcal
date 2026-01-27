@@ -1,14 +1,15 @@
 from collections import OrderedDict
+import numpy as np
+import os
+import re
+
+
 from matcal.core.data import convert_data_to_dictionary
 from matcal.core.data_importer import FileData
 from matcal.core.serializer_wrapper import matcal_save, matcal_load
 from matcal.core.utilities import _find_smallest_rect
-from matcal.dakota.dakota_constants import DAKOTA_MCMC_CHAIN_FILE, \
-    DAKOTA_COVARIANCE_FILE, MATCAL_MCMC_CHAIN_FILE
-import numpy as np
-import os
-import re
-import copy
+from matcal.dakota.dakota_constants import (DAKOTA_MCMC_CHAIN_FILE, 
+    DAKOTA_COVARIANCE_FILE, MATCAL_MCMC_CHAIN_FILE)
 
 from matcal.core.logger import initialize_matcal_logger
 

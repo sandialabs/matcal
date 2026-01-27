@@ -13,9 +13,8 @@ from matcal.core.surrogates import load_matcal_surrogate
 
 COLUMN_WIDTH=600
 
-def parse_parameter_ranges(surrogate_package):
-    param_info = surrogate_package[0]
-    return param_info[0]
+def parse_parameter_ranges(surrogate):
+    return surrogate._param_ranges
 
 
 def get_source_data(args):

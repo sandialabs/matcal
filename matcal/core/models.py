@@ -168,8 +168,7 @@ class _ComputerControllerComponentBase(ABC):
         :type executable: str
         """
         
-        check_value_is_nonempty_str(executable, "model executable", 
-                                    "model.set_executable")
+        check_value_is_nonempty_str(executable, "model executable")
         self._simulation_information.executable = executable
 
     def continue_when_simulation_fails(self, **default_field_values):
@@ -273,8 +272,7 @@ class _ComputerControllerComponentBase(ABC):
         :type module_name: str
         """
 
-        check_value_is_nonempty_str(module_name, "module name", 
-                                    "model.add_environment_module")
+        check_value_is_nonempty_str(module_name, "module name")
 
         if self._simulation_information.modules_to_load is None:
             self._simulation_information.modules_to_load = [module_name]
@@ -333,10 +331,10 @@ class _ResultsRetriever:
             from the file extension.
         :type filename: str
         """
-        check_value_is_nonempty_str(filename, "filename", "model.set_results_filename")
+        check_value_is_nonempty_str(filename, "filename")
         self._results_information.results_filename = filename
         if file_type is not None:
-           check_value_is_nonempty_str(file_type, "file_type", "model.set_results_filename")
+           check_value_is_nonempty_str(file_type, "file_type")
         self._results_information.file_type = file_type
 
     def _set_results_reader_object(self, results_reader):
@@ -486,9 +484,8 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
         :rtype: :class:`~matcal.core.simulators.SimulatorResults`
         """
         logger.info(f"\tRunning simulation of state \"{state.name}\" for model \"{self.name}\".\n")
-        check_item_is_correct_type(state, State, "model.run", "state", )
-        check_item_is_correct_type(parameter_collection, 
-                                         ParameterCollection, "model.run", 
+        check_item_is_correct_type(state, State, "state" )
+        check_item_is_correct_type(parameter_collection, ParameterCollection, 
                                          "parameter_collection")
         self.preprocess(state, target_directory)
         sim = self.build_simulator(state)
@@ -523,9 +520,7 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
         """
 
         for key, value in kwargs.items():
-            check_item_is_correct_type(value, (str, Number), "model.add_constants", 
-                                       "constant parameter value ")
-
+            check_item_is_correct_type(value, (str, Number), "constant parameter value ")
         self._stateless_user_variables.update(kwargs)
 
     def add_state_constants(self, state, **kwargs):
@@ -547,12 +542,9 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
         :param kwargs: key/value pair of model constant parameters. 
             For example model.add_simulation_variables(my_var1=5, my_var2=1, etc.)
         """
-        check_item_is_correct_type(state, State, "model.add_state_constants", 
-                                   "state")
-
+        check_item_is_correct_type(state, State, "state")
         for key, value in kwargs.items():
-            check_item_is_correct_type(value, (str, Number), "model.add_state_constants", 
-                                             "state constant parameter value ")
+            check_item_is_correct_type(value, (str, Number), "state constant parameter value ")
 
         if state in self._state_user_variables.keys():
             self._state_user_variables[state].update(kwargs)
@@ -691,8 +683,7 @@ class PythonModel(ModelBase):
         self._field_coordinates = field_coordinates
         self._function_importer = python_function_importer(python_function, 
                                                            filename)
-        check_value_is_bool(pass_evaluation_number, "pass_evaluation_number", 
-                            "PythonModel.__init__")
+        check_value_is_bool(pass_evaluation_number, "pass_evaluation_number")
         self._pass_evaluation_number=pass_evaluation_number
         self._results_information.results_filename = None
         self._set_results_reader_object(_python_model_results_reader)
@@ -769,10 +760,10 @@ class UserExecutableModel(ModelBase):
     _input_file = None
 
     def __init__(self, executable, *arguments, results_filename=None, results_file_type=None):
-        check_value_is_nonempty_str(executable, "executable", "UserExecutableModel")
+        check_value_is_nonempty_str(executable, "executable")
         super().__init__(executable=executable)
         for arg in arguments:
-            check_value_is_nonempty_str(arg, "arguments", "UserExecutableModel")
+            check_value_is_nonempty_str(arg, "arguments")
         self.set_results_filename(filename=results_filename, file_type=results_file_type)
         self._arguments = list(arguments)
         self._additional_sources_to_copy = []

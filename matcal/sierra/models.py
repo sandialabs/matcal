@@ -162,7 +162,7 @@ class _SierraModelBaseNew(ModelBase):
         :type argument: str
         """
         if not isinstance(argument, str):
-            message = (f"Sierra Flags need to be passed as strings.\n" +
+            message = (f"Sierra arguments need to be passed as strings.\n" +
                       f" Flag Passed: {argument}\nFlag Type: {type(argument)}")
             raise TypeError(message)
         self._additional_executable_arguments.append(argument)
@@ -373,9 +373,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
         :param value: scale factor for the model boundary condition function 
         :type value: float
         """
-        check_value_is_real_between_values(value, 1, 10, 
-           "value", "SierraModel.set_boundary_condition_scale_factor", 
-           closed=True)
+        check_value_is_real_between_values(value, 1, 10, "value", closed=True)
         self._boundary_condition_scale_factor = value
 
     def add_boundary_condition_data(self, data):
@@ -418,8 +416,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
             Default is "{TEMPERATURE_KEY}".
         :type field_name: str
         """
-        check_value_is_nonempty_str(field_name, "field_name", 
-                                    "SierraModel.read_temperature_from_boundary_condition_data")
+        check_value_is_nonempty_str(field_name, "field_name")
         self._temperature_field_from_boundary_data = field_name
 
     def reset_boundary_condition_data(self):
@@ -569,8 +566,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
         :type number_of_steps: int
         """
 
-        check_value_is_positive_integer(number_of_steps, "number_of_steps", 
-                                         "SierraModel.set_number_of_time_steps")
+        check_value_is_positive_integer(number_of_steps, "number_of_steps")
         self._input_file._set_number_of_time_steps(number_of_steps)
 
     def set_end_time(self, end_time):
@@ -583,8 +579,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
         :param start_time: the simulation end time
         :type start_time: float
         """
-        check_item_is_correct_type(end_time, numbers.Real, "end_time", 
-                                         "SierraModel.set_end_time")
+        check_item_is_correct_type(end_time, numbers.Real, "end_time")
         self._input_file._set_end_time(end_time)
 
     def set_start_time(self, start_time):
@@ -595,8 +590,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
         :param start_time: the simulation start time
         :type start_time: float
         """
-        check_item_is_correct_type(start_time, numbers.Real, "start_time", 
-                                         "SierraModel.start_end_time")
+        check_item_is_correct_type(start_time, numbers.Real, "start_time")
         self._input_file._set_start_time(start_time)
 
     def use_total_lagrange_element(self):
@@ -666,8 +660,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
         :param output_step_interval: the desired output step interval
         :type output_step_interval: int
         """
-        check_value_is_positive_integer(output_step_interval, "output_step_interval",
-            "SierraModel.activate_exodus_output")
+        check_value_is_positive_integer(output_step_interval, "output_step_interval")
         self._input_file._activate_exodus_output(output_step_interval)
 
     @property
@@ -691,8 +684,7 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
             simulation will be exit cleanly.
         :type minimum_timestep: float
         """
-        check_value_is_positive_real(minimum_timestep, "minimum_timestep", 
-            "SierraModel.set_minimum_timestep")
+        check_value_is_positive_real(minimum_timestep, "minimum_timestep")
         sol_term = self.input_file.solution_termination
         sol_term.add_global_termination_criteria("timestep", minimum_timestep, "<")
 
@@ -729,18 +721,16 @@ class _StandardSierraModelNew(_MatcalGeneratedSierraModelNew):
         self._input_file._set_cg_convergence_tolerance(target_relative_residual, target_residual, 
             acceptable_relative_residual, acceptable_residual)
         check_value_is_real_between_values(target_relative_residual, 0, 1, 
-            "target_relative_residual", "SierraModel.set_convergence_tolerance")
+            "target_relative_residual")
         if target_residual is not None:
             check_value_is_real_between_values(target_residual, target_relative_residual, 1, 
-                "target_residual", "SierraModel.set_convergence_tolerance")
+                "target_residual")
         if acceptable_relative_residual is not None:
             check_value_is_real_between_values(acceptable_relative_residual, 
-                target_relative_residual, 1, "acceptable_relative_residual", 
-                "SierraModel.set_convergence_tolerance")
+                target_relative_residual, 1, "acceptable_relative_residual")
         if acceptable_residual is not None:
             check_value_is_real_between_values(acceptable_residual, 
-                self._input_file._cg.get_target_residual(), 1, "acceptable_residual", 
-                "SierraModel.set_convergence_tolerance")   
+                self._input_file._cg.get_target_residual(), 1, "acceptable_residual")   
 
 
 class _StandardSierraModelWithDeath(_StandardSierraModelNew):
@@ -765,11 +755,8 @@ class _StandardSierraModelWithDeath(_StandardSierraModelNew):
             a MatCal study parameter.
         :type critical_value: float, str
         """
-        check_value_is_nonempty_str(death_variable, "death_variable", 
-                                    "SierraModel.activate_element_death")
-        check_item_is_correct_type(critical_value, (numbers.Real, str), 
-                                   "SierraModel.activate_element_death",
-                                    "critical_value")
+        check_value_is_nonempty_str(death_variable, "death_variable")
+        check_item_is_correct_type(critical_value, (numbers.Real, str), "critical_value")
         self._input_file._activate_element_death(death_variable, critical_value)
 
     @property
@@ -929,14 +916,10 @@ class _CoupledStandardSierraModel(_StandardSierraModelWithDeath):
         self._verify_temperature_not_read_from_boundary_data()
         if (thermal_conductivity is not None and density is not None
         and specific_heat is not None  and plastic_work_variable is not None):
-            check_value_is_nonnegative_real(thermal_conductivity, "thermal_conductivity", 
-                                             "SierraModel.activate_thermal_coupling")
-            check_value_is_positive_real(density, "density", 
-                                             "SierraModel.activate_thermal_coupling")
-            check_value_is_positive_real(specific_heat, "specific_heat", 
-                                             "SierraModel.activate_thermal_coupling")
-            check_value_is_nonempty_str(plastic_work_variable, "plastic_work_variable", 
-                                             "SierraModel.activate_thermal_coupling")
+            check_value_is_nonnegative_real(thermal_conductivity, "thermal_conductivity")
+            check_value_is_positive_real(density, "density")
+            check_value_is_positive_real(specific_heat, "specific_heat")
+            check_value_is_nonempty_str(plastic_work_variable, "plastic_work_variable")
             self.set_executable(executable)
             self._input_file._activate_thermal_coupling(thermal_conductivity, density, 
                                                     specific_heat, plastic_work_variable)   
@@ -1032,7 +1015,7 @@ class _ThreeDimensionalStandardSierraModel(_CoupledStandardSierraModel):
             :type value: float
             """
             check_value_is_real_between_values(value, 0, 1, "allowable_load_drop_factor",
-                "SierraModel.set_alowable_load_drop_factor", closed=True)
+                                               closed=True)
             self._allowable_load_drop_factor = value
 
     def _create_user_output_blocks(self, state):
@@ -1091,10 +1074,8 @@ class _ThreeDimensionalStandardSierraModel(_CoupledStandardSierraModel):
             and its axis of loading.
         :type full_field_window_height: float
         """
-        check_value_is_positive_real(full_field_window_height, "full_field_window_height", 
-                                     "SierraModel.activate_full_field_data_output")
-        check_value_is_positive_real(full_field_window_width, "full_field_window_width", 
-                                     "SierraModel.activate_full_field_data_output")
+        check_value_is_positive_real(full_field_window_height, "full_field_window_height")
+        check_value_is_positive_real(full_field_window_width, "full_field_window_width")
         self._base_geo_params["full_field_window_width"] = full_field_window_width
         self._base_geo_params["full_field_window_height"] = full_field_window_height
         full_field_results_filename = "results/full_field_results.e"
@@ -1130,8 +1111,7 @@ class _ThreeDimensionalStandardSierraModel(_CoupledStandardSierraModel):
         """
         super().activate_element_death(death_variable, critical_value)
         if nonlocal_radius is not None:
-            check_value_is_positive_real(nonlocal_radius, "nonlocal_radius", 
-                                         "SierraModel.activate_element_death")
+            check_value_is_positive_real(nonlocal_radius, "nonlocal_radius")
             self._nonlocal_radius = nonlocal_radius
             self._death_variable = death_variable
             super().activate_element_death("damage", critical_value)
@@ -1477,8 +1457,7 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
         :param friction_coefficient: the desired friction coefficient for self-contact
         :type friction_coefficient: float
         """
-        check_value_is_nonnegative_real(friction_coefficient, "friction_coefficient", 
-            "SierraModel.activate_self_contact")
+        check_value_is_nonnegative_real(friction_coefficient, "friction_coefficient")
         logger.warning(f"Use of self contact with the MatCal generated "
                        f"SIERRA/SM model \"{self.name}\" may be unreliable "
                        f"and/or result in long run times.")
@@ -1526,18 +1505,16 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
         self._input_file._set_contact_convergence_tolerance(target_relative_residual, target_residual, 
             acceptable_relative_residual, acceptable_residual)
         check_value_is_real_between_values(target_relative_residual, 0, 1, 
-            "target_relative_residual", "SierraModel.set_contact_convergence_tolerance")
+            "target_relative_residual")
         if target_residual is not None:
             check_value_is_real_between_values(target_residual, target_relative_residual, 1, 
-                "target_residual", "SierraModel.set_contact_convergence_tolerance")
+                "target_residual")
         if acceptable_relative_residual is not None:
             check_value_is_real_between_values(acceptable_relative_residual, 
-                target_relative_residual, 100, "acceptable_relative_residual", 
-                "SierraModel.set_contact_convergence_tolerance")
+                target_relative_residual, 100, "acceptable_relative_residual")
         if acceptable_residual is not None:
             check_value_is_real_between_values(acceptable_residual, 
-                self._input_file._contact_target_residual, 100, "acceptable_relative_residual", 
-                "SierraModel.set_contact_convergence_tolerance")   
+                self._input_file._contact_target_residual, 100, "acceptable_relative_residual")   
 
 
 class TopHatShearModel(_SymmetricUniaxiallyLoadedModelContactBase):
@@ -1627,7 +1604,7 @@ class _VFMStandardSierraModel(_CoupledStandardSierraModel):
         :type thickness: float or int
         """
         self._reference_mesh_grid = self._import_mesh(mesh)
-        check_value_is_positive_real(thickness, "thickness", "VFMSierraModel")
+        check_value_is_positive_real(thickness, "thickness")
         self._thickness = thickness
         super().__init__(material, executable="adagio", thickness=self._thickness, 
                          reference_mesh_grid=self._reference_mesh_grid)
@@ -1704,10 +1681,8 @@ class _VFMStandardSierraModel(_CoupledStandardSierraModel):
             and smooths the data.
         :type search_radius_multiplier: float
          """
-        check_value_is_positive_integer(polynomial_order, "polynomial_order", 
-                                        "VFMSierraModel.set_mapping_parameters")
-        check_value_is_positive_real(search_radius_multiplier, "search_radius_multiplier", 
-                                     "VFMSierraModel.set_mapping_parameters")
+        check_value_is_positive_integer(polynomial_order, "polynomial_order")
+        check_value_is_positive_real(search_radius_multiplier, "search_radius_multiplier")
         self._polynomial_order = polynomial_order
         self._search_radius_multiplier = search_radius_multiplier
 
@@ -1728,10 +1703,8 @@ class _VFMStandardSierraModel(_CoupledStandardSierraModel):
         :param y_displacement: the field name for the y-displacement variable
         :type y_displacement: str
         """
-        check_value_is_nonempty_str(x_displacement, "x_displacement", 
-                                    "VFMSierraModel.set_displacement_field_names")
-        check_value_is_nonempty_str(y_displacement, "y_displacement", 
-                                    "VFMSierraModel.set_displacement_field_names")
+        check_value_is_nonempty_str(x_displacement, "x_displacement")
+        check_value_is_nonempty_str(y_displacement, "y_displacement")
         self._x_displacement_field_name = x_displacement
         self._y_displacement_field_name = y_displacement
         self._build_read_variables_list()

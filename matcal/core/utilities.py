@@ -4,6 +4,7 @@ from collections import OrderedDict
 import copy
 import datetime
 import getpass
+import inspect
 from numbers import Integral, Real
 import numpy as np
 import os
@@ -12,8 +13,8 @@ from packaging import version
 import re
 import shutil
 from time import sleep
+from typing import Optional, Tuple
 from scipy.interpolate import interp1d
-
 
 from matcal.core.logger import initialize_matcal_logger
 logger = initialize_matcal_logger(__name__)
@@ -86,6 +87,7 @@ def make_clean_dir(dir_path):
         shutil.rmtree(dir_path)
     os.mkdir(dir_path)
     return dir_path
+
 
 def set_significant_figures(x, p):
     x = np.asarray(x)
@@ -202,7 +204,6 @@ class CollectionBase(ABC):
         :return: the name of the collection
         :rtype: str
         """
-
         return self._name
 
     def __len__(self):
@@ -345,7 +346,6 @@ class ContainerCollectionBase(CollectionBase):
                 elements_equal = True
         return elements_equal
 
-
     def _check_for_equal_keys(self, other):
         keys_equal = True
         for self_key in self._items.keys():
@@ -364,32 +364,59 @@ def get_current_time_string():
     return str(datetime.datetime.now())
 
 
-def check_item_is_correct_type(item, desired_type, parent_call_name, 
-                               passed_parameter_name, error=TypeError):
+def introspect_caller(call_depth=0) -> Tuple[str, Optional[str], Optional[str]]:
+    # inspect.stack() returns a list of FrameInfo objects.
+    # Index 0 = this function (introspect_caller)
+    # Index 1 = the *direct* caller of introspect_caller
+    # Index 2 = the function *that contains* the call (i.e. the callee)
+    stack = inspect.stack()
+    caller_info = stack[2+call_depth]          # FrameInfo for direct caller
+    caller_class: Optional[str] = None
+    locals_ = caller_info.frame.f_locals
+    if "self" in locals_:
+        caller_class = locals_["self"].__class__.__name__
+    elif "cls" in locals_:
+        caller_class = locals_["cls"].__name__
+    caller_name = caller_info.function
+    del stack
+    if caller_class is not None:
+        caller_name = caller_class+"."+caller_name
+    return caller_name
+
+
+def check_item_is_correct_type(item, desired_type, passed_parameter_name, 
+                               error=TypeError, call_depth=0):
+    parent_call_name = introspect_caller(call_depth)
     if not isinstance(item, desired_type):
         error_msg =  (f"The parameter \"{passed_parameter_name}\" "+
                       f"passed to \"{parent_call_name}\" " 
                       + f"must be an instance of {desired_type}.\nBut received object " +
                         f" of type {type(item)}.")
         raise error(error_msg)
+    return True
 
 
-def check_value_is_positive(value, value_name, parent_call_name):
+def check_value_is_positive(value, value_name, call_depth=0):
+    parent_call_name = introspect_caller(call_depth)
     if value <= 0:
         raise ValueError(f"A positive value must be input for \"{value_name}\" in " +
                          f" \"{parent_call_name}\". Received a " +
                           f"value of {value}.")
+    return True
 
 
-def check_value_is_nonnegative(value, value_name, parent_call_name):
+def check_value_is_nonnegative(value, value_name, call_depth=0):
+    parent_call_name = introspect_caller(call_depth)
     if value < 0:
         raise ValueError(f"A non-negative value must be input for \"{value_name}\" in " +
                          f" \"{parent_call_name}\". Received a " +
                           f"value of {value}.")
+    return True
 
 
-def check_value_is_between_values(value, lower_bound, upper_bound, value_name, 
-                                  parent_call_name, closed=False):
+def check_value_is_between_values(value, lower_bound, upper_bound, 
+                                  value_name, closed=False, call_depth=0):
+    parent_call_name = introspect_caller(call_depth)
     if closed:
         not_between = value < lower_bound or value > upper_bound
         msg = (f"A value greater than or equal to {lower_bound} and less than " +
@@ -404,75 +431,76 @@ def check_value_is_between_values(value, lower_bound, upper_bound, value_name,
                f"of {value} in function call:\n\"{parent_call_name}\".")
     if not_between:
         raise ValueError(msg)
+    return True
 
 
-def check_value_is_positive_integer(value, value_name, parent_call_name):
-    check_item_is_correct_type(value, Integral, parent_call_name, 
-                               value_name)
-    check_value_is_positive(value, value_name, parent_call_name)
+def check_value_is_positive_integer(value, value_name, call_depth=0):
+    check_item_is_correct_type(value, Integral, value_name, call_depth=call_depth+1)
+    check_value_is_positive(value, value_name, call_depth=call_depth+1)
+    return True
 
 
-def check_value_is_positive_real(value, value_name, parent_call_name):
-    check_item_is_correct_type(value, Real, parent_call_name, 
-                               value_name)
-    check_value_is_positive(value, value_name, parent_call_name)
+def check_value_is_positive_real(value, value_name, call_depth=0):
+    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth+1)
+    check_value_is_positive(value, value_name, call_depth=call_depth+1)
+    return True
 
 
-def check_value_is_nonnegative_integer(value, value_name, parent_call_name):
-    check_item_is_correct_type(value, Integral, parent_call_name, 
-                               value_name)
-    check_value_is_nonnegative(value, value_name, parent_call_name)
+def check_value_is_nonnegative_integer(value, value_name, call_depth=0):
+    check_item_is_correct_type(value, Integral, value_name, call_depth=call_depth+1)
+    check_value_is_nonnegative(value, value_name, call_depth=call_depth+1)
+    return True
 
 
-def check_value_is_nonnegative_real(value, value_name, parent_call_name):
-    check_item_is_correct_type(value, Real, parent_call_name, 
-                               value_name)
-    check_value_is_nonnegative(value, value_name, parent_call_name)
+def check_value_is_nonnegative_real(value, value_name, call_depth=0):
+    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth+1)
+    check_value_is_nonnegative(value, value_name, call_depth=call_depth+1)
+    return True
 
 
-def check_value_is_array_like_of_reals(values, values_name, parent_call_name, 
-                                       top_level=True):
+def check_value_is_array_like_of_reals(values, values_name, top_level=True, call_depth=0):
+    parent_call_name = introspect_caller(call_depth)
     valid_array_like = (list, tuple, np.ndarray)
     if isinstance(values, valid_array_like):
         for idx, val in enumerate(values):
             check_value_is_array_like_of_reals(val, values_name+f"[{idx}]", 
-                                               parent_call_name, top_level=False)
+                                               top_level=False, call_depth=call_depth+1)
         if len(values) < 1:
             raise ValueError(f"The \"{values_name}\" argument must have a least "
                              f"one value. The container passed to "
                               f"\"{parent_call_name}\" is empty.")
     elif not top_level and not isinstance(values, valid_array_like):
-        check_item_is_correct_type(values, Real, parent_call_name, 
-                                    values_name)
+        check_item_is_correct_type(values, Real, values_name, call_depth=call_depth+1)
     elif top_level and not isinstance(values, valid_array_like):
         raise TypeError(f"\"{parent_call_name}\" expected an array-like "
                          f"object for \"{values_name}\". Received objective of "
                          f" type \"{type(values)}\"")
+    return True
+
+
+def check_value_is_real_between_values(value, lower_bound, upper_bound, value_name,
+                                        closed=False, call_depth=0):
+    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth+1)
+    check_value_is_between_values(value, lower_bound, upper_bound, 
+                                  value_name, closed, call_depth=call_depth+1)
+    return True
     
 
-def check_value_is_real_between_values(value, lower_bound, upper_bound,
-                                        value_name, parent_call_name, 
-                                        closed=False):
-    check_item_is_correct_type(value, Real, parent_call_name, 
-                               value_name)
-    check_value_is_between_values(value, lower_bound, upper_bound, 
-                                  value_name, parent_call_name, 
-                                  closed)
-    
-    
-def check_value_is_nonempty_str(value, value_name, parent_call_name):
-    check_item_is_correct_type(value, str, parent_call_name, 
-                                value_name)
+def check_value_is_nonempty_str(value, value_name, call_depth=0):
+    parent_call_name = introspect_caller(call_depth)  
+    check_item_is_correct_type(value, str, value_name, call_depth=call_depth+1)
     if len(value) < 1:
         raise ValueError(f"The argument \"{value_name}\" in "
                          f"\"{parent_call_name}\" must be at least"
                             " of length 1.")
+    return True
 
-def check_value_is_bool(value, value_name, parent_call_name):
-    check_item_is_correct_type(value, bool, parent_call_name, 
-                                value_name)
+
+def check_value_is_bool(value, value_name, call_depth=0):
+    check_item_is_correct_type(value, bool, value_name, call_depth=call_depth+1)
+    return True
     
-    
+
 def _tryint(s):
     try:
         return int(s)
