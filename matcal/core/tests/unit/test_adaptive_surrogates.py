@@ -1715,10 +1715,14 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
     def test_convergence(self):
         vor_study = self.setup_study(2)
         vor_study.set_max_training_samples(50)
-        vor_study.set_cross_validation_options(nsplits=0, nmax_loo='all', cv_metric='nlpd')
+        vor_study.set_cross_validation_options(nsplits=0, nmax_loo='all', 
+                                               cv_metric='rmse')
+        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+        vor_study.set_convergence_criteria(1e-1, 'rmse')
         vor_study.launch()
-        converged = np.abs(vor_study._current_surrogate_score[vor_study.convergence_metric][-1] - \
-                vor_study._current_surrogate_score[vor_study.convergence_metric][-2]) <= vor_study.eps
+        score = vor_study._current_surrogate_score
+        metric = vor_study._convergence_metric
+        converged = np.abs(score[metric][-1] - score[metric][-2]) <= vor_study._eps
         self.assertTrue(converged)
         
     def test_nmax_loo_all(self):

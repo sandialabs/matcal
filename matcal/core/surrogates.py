@@ -1001,7 +1001,7 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                 raise RuntimeError(f"The passed parameter values for parameter '{param}' contains "+ 
                                    "values outside of the trained parameter range of "+
                                    f"{self._param_ranges[param][0]} to "+
-                                   f"{self._param_ranges[param][1]}.")
+                                   f"{self._param_ranges[param][1]}.\n{param_values}")
             
     def _fit(train_data, test_data, train_params, test_params, fields_to_log_scale,
              decomposition_tool, surrogate_generator, param_ranges, 

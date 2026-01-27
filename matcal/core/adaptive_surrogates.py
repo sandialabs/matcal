@@ -128,7 +128,7 @@ class AdaptiveSurrogate:
         self._test_responses = test_responses
         self._param_names = param_names
         self._transpose_inputs = False
-        self._transpose_outputs = False
+        self._transpose_response = False
 
     def _add_iteration(
         self,
@@ -254,6 +254,8 @@ class AdaptiveSurrogate:
             if self._transpose_inputs:
                 params_array = params_array.T
             response = surrogate(params_array)
+            if isinstance(response, OrderedDict):
+                response = response[self._target_field_name]
             if self._transpose_response:
                 response = response.T
             return response
@@ -585,8 +587,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
         super().launch()
 
-    def _stopping_criterion_met(self, training_batch_number):
-        stop = False
+    def _stopping_criterion_met(self, training_batch_number, stop=False):
         if training_batch_number > 1:
             if np.abs(self._surrogate.average_error_history[-1]) <= self._average_l2_error_goal:
                 logger.info(f"Average L2 norm score converged! "+
@@ -596,7 +597,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                 logger.info(f"Max absolute error score converged! "+
                             f"Final score: {self._surrogate.max_error_history[-1]}")
                 stop=True
-        if self._results.number_of_evaluations >self._max_training_samples:
+        if self._results.number_of_evaluations > self._max_training_samples and not stop:
             logger.info("Surrogate not converged yet, but maximum training "+
                         "samples reached. Exiting.")
             stop=True
@@ -676,6 +677,19 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             params_formatted.append(results.parameter_history[param])
         return np.array(params_formatted)  
 
+    def _format_output(self, results):
+        model_name = self._get_model_names()[0]
+        objective = self._results_synchronizer
+        state_name = results.simulation_history[model_name].state_names[0]
+        qois = results.qoi_history[f"{model_name}:{objective.name}"]
+        sim_qois = qois.simulation_qois
+        nsamples = results.number_of_evaluations
+        nqois = len(self._independent_variable_values)
+        data = np.zeros((nsamples, nqois))
+        for idx, sim_qoi in enumerate(sim_qois):
+            data[idx,:] = sim_qoi[state_name][0][self._target_field_name]
+        return data
+
 
 class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     """
@@ -690,20 +704,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     """
 
     _variable_transformer_factory= _get_pyapprox_variable_transformer
-
-    def _format_output(self, results):
-        model_name = self._get_model_names()[0]
-        objective = self._results_synchronizer
-        state_name = results.simulation_history[model_name].state_names[0]
-        qois = results.qoi_history[f"{model_name}:{objective.name}"]
-        sim_qois = qois.simulation_qois
-        nsamples = results.number_of_evaluations
-        nqois = len(self._independent_variable_values)
-        data = np.zeros((nsamples, nqois))
-        for idx, sim_qoi in enumerate(sim_qois):
-            data[idx,:] = sim_qoi[state_name][0][self._target_field_name]
-        return data
-    
+   
     def _perform_adaptive_surrogate_batch_sampling(self): 
         from pyapprox.interface.model import ModelFromVectorizedCallable
 
@@ -980,7 +981,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         check_value_is_bool(group_kfold, "group_kfold")
         self._group_kfold = group_kfold
     
-    def _format_output(self, results):
+    def _format_output_for_surrogate_gen(self, results):
         from matcal.core.data import convert_data_to_dictionary
         model_name = self._get_model_names()[0]
         state_name = results.simulation_history[model_name].state_names[0]
@@ -998,6 +999,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _perform_adaptive_surrogate_batch_sampling(self):
         if self._surrogate_save_filename is None:
             self.set_surrogate_save_filename(f"{self._get_model_names()[0]}_voronoi_adaptive_surrogate.joblib") 
+        self._surrogate._transpose_inputs=True
         self._build_boundary_hull()
         self.param_names = self._parameter_collection.get_item_names()
         training_params, training_data = self._run_initial_training_samples()
@@ -1016,18 +1018,20 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             batch_number += 1
         return self._results
 
-    def _stopping_criterion_met(self, training_batch_number):
-        stop = super()._stopping_criterion_met(training_batch_number)
+    def _stopping_criterion_met(self, training_batch_number, stop=False):
         scores = self._current_surrogate_score
         if training_batch_number > 1:
             this_score = scores[self._convergence_metric][training_batch_number]
             last_score = scores[self._convergence_metric][training_batch_number-1]
             if np.abs(this_score - last_score) <= self._eps:
-                logger.info(f"Convergence from surrogate score.")
-                logger.info(f"{self._convergence_metric}: \
-                    {self._current_surrogate_score[self._convergence_metric]}")
+                logger.info(f"Surrogate Converged!\n"+
+                             f"Convergence from surrogate '{self._convergence_metric}' score:")
+                logger.info(f"Final score: {this_score}")
+                logger.info(f"Score delta: {np.abs(this_score - last_score)}")
+                logger.info(f"Score delta convergence criteria: {self._eps}\n")
+                
                 stop = True
-        return stop
+        return super()._stopping_criterion_met(training_batch_number, stop)
 
     def _run_initial_training_samples(self):
         super().set_number_of_samples(self._num_initial_samples)
@@ -1037,7 +1041,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     
     def _train_surrogate_with_current_results(self):
         training_params = self._format_params(self._results).T
-        training_data = self._format_output(self._results)
+        training_data = self._format_output_for_surrogate_gen(self._results)
         current_surrogate = _fit_surrogate_model(self, interpolation_field=self._independent_variable, 
                                                interpolation_locations=self._independent_variable_values, 
                                                test_eval_info=self._test_eval_info, 
