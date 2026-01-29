@@ -458,9 +458,9 @@ class TestMechanicalVFMObjective(MatcalUnitTest):
 
     def test_init(self):
         obj = MechanicalVFMObjective("time")
-        with self.assertRaises(obj.TypeError):
+        with self.assertRaises(TypeError):
             MechanicalVFMObjective(1)
-        with self.assertRaises(obj.TypeError):
+        with self.assertRaises(TypeError):
             MechanicalVFMObjective("yay",1)
     
     def test_get_results_object_from_calculate(self):
