@@ -783,7 +783,7 @@ class FullFieldCalculator:
                                            old_fields, field_names)
 
     def _check_data_inputs(self, data_name, field_data):
-        check_value_is_nonempty_str(data_name, str, "data_name", call_depth=1)
+        check_value_is_nonempty_str(data_name, "data_name", call_depth=1)
         check_item_is_correct_type(field_data, (str, FieldData), "field_data", call_depth=1)
         
         if data_name in list(self._data_sets.keys()):

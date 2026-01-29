@@ -8,6 +8,7 @@ and objectives.
 from matcal.core.objective import Objective
 from matcal.core.qoi_extractor import (DataSpecificExtractorWrapper, 
                                        StateSpecificExtractorWrapper)
+from matcal.core.utilities import check_item_is_correct_type
 
 from matcal.full_field.data_importer import mesh_file_to_skeleton
 from matcal.full_field.qoi_extractor import (ExternalVirtualPowerExtractor, 
@@ -385,8 +386,8 @@ class MechanicalVFMObjective(Objective):
         """
 
         super().__init__('virtual_power')
-        self._check_item_is_correct_type(time_field, str, "time_field")
-        self._check_item_is_correct_type(load_field, str, "load_field")
+        check_item_is_correct_type(time_field, str, "time_field")
+        check_item_is_correct_type(load_field, str, "load_field")
         
         self._time_field = time_field
         self._load_field = load_field

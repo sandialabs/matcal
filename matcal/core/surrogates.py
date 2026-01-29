@@ -1146,7 +1146,7 @@ def _ensure_2d_array(active_array):
     if active_array.ndim == 1:
         #Reshape 1D vector to be column vector (nsamples, 1) - single feature
         active_array = active_array.reshape(-1, 1)
-    return active_array
+    return np.atleast_2d(active_array)
 
 
 class _MatCalSurrogateWrapper:
