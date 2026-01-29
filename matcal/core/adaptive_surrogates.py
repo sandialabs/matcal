@@ -43,7 +43,7 @@ def _get_variable_from_bounds(bounds):
     return IndependentMarginalsVariable(marginals)
 
 
-def _get_pyapprox_variable_transformer(bounds):
+def _get_pyapprox_variable_transformer(study, bounds):
     from pyapprox.variables.transforms import AffineTransform
     variable = _get_variable_from_bounds(bounds)
     return AffineTransform(variable)
@@ -127,8 +127,7 @@ class AdaptiveSurrogate:
         self._test_params = test_params
         self._test_responses = test_responses
         self._param_names = param_names
-        self._transpose_inputs = False
-        self._transpose_response = False
+
 
     def _add_iteration(
         self,
@@ -136,17 +135,16 @@ class AdaptiveSurrogate:
         nsamples 
         ) -> None:
         self._surrogates.append(copy.deepcopy(surrogate))
-        if self._variable_transformer is not None:
-            params = self._variable_transformer.map_to_canonical(self._test_params)
-        else:
-            params = self._test_params
-        surrogate_values = self(params, batch_evaluate=True)
+        surrogate_values = self(self._test_params, batch_evaluate=True)
         average_l2_error = _average_l2_error_norm(self._test_responses, surrogate_values)
         max_abs_error = _max_error_inf_norm( self._test_responses, surrogate_values)
 
         self._average_errors.append(average_l2_error)
         self._max_errors.append(max_abs_error)
-        self._r2_scores.append(r2_score(self._test_responses, surrogate_values))
+        if len(self._test_params) < 1:
+            self._r2_scores.append(r2_score(self._test_responses, surrogate_values))
+        else:
+            self._r2_scores.append(np.nan)
         self._sample_counts.append(nsamples)
 
     @property
@@ -190,7 +188,9 @@ class AdaptiveSurrogate:
            training step."""
         return self._sample_counts
 
-    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, **kwargs):
+    
+    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, transpose=False, 
+                 **kwargs):
         """
         Evaluate a stored surrogate model. This is represented in mathematical notation by 
 
@@ -218,7 +218,7 @@ class AdaptiveSurrogate:
 
             * **Batch evaluation** (``batch_evaluate=True``) – a single argument
             that must be a two‑dimensional ``np.ndarray`` of shape
-            ``(n_parameters, n_samples)``.  The array is forwarded unchanged
+            ``(n_samples, n_parameters)``.  The array is forwarded unchanged
             to the surrogate.
 
         :type *args: tuple or np.ndarray
@@ -250,22 +250,24 @@ class AdaptiveSurrogate:
         """
         surrogate = self._surrogates[surrogate_index]
         if batch_evaluate:
-            params_array = np.asarray([args])
-            if self._transpose_inputs:
+            params_array = np.asarray(args[0])
+            if transpose:
                 params_array = params_array.T
             response = surrogate(params_array)
-            if isinstance(response, OrderedDict):
-                response = response[self._target_field_name]
-            if self._transpose_response:
-                response = response.T
+            if self._variable_transformer is not None:
+                params_array = self._variable_transformer.map_to_canonical(params_array)
+            else:
+                params_array = params_array
             return response
         elif len(args) == len(self._param_names) and len(kwargs) == 0:
-            params_array = np.asarray([args])
-            if self._transpose_inputs:
+            params_array =  np.asarray([args])
+            if transpose:
                 params_array = params_array.T
+            if self._variable_transformer is not None:
+                params_array = self._variable_transformer.map_to_canonical(params_array)
+            else:
+                params_array = params_array
             response = surrogate(params_array)[0]
-            if self._transpose_response:
-                response = response.T
         elif len(args) == 0 and len(kwargs) == len(self._param_names):
             param_ordered_list = []
             for param_name in self._param_names:
@@ -276,13 +278,42 @@ class AdaptiveSurrogate:
                     raise RuntimeError(error_message)
                 param_ordered_list.append(kwargs[param_name])
             
-            return self(*param_ordered_list, surrogate_index=surrogate_index)
+            return self(*param_ordered_list, surrogate_index=surrogate_index, transpose=transpose)
         else:
             raise RuntimeError("Surrogate model was not called correctly. The input parameters "+
                                "are likely of the incorrect format. Check input")
 
         return {self._target_field_name:response, 
                 self._indep_variable_name:self._indep_variable_values}
+
+
+class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
+    
+    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, transpose=False, **kwargs):
+        if batch_evaluate:
+            transpose=True
+        elif len(args) == len(self._param_names) and len(kwargs) == 0:
+            transpose=True
+        return super().__call__(*args, surrogate_index=surrogate_index, 
+                                batch_evaluate=batch_evaluate, 
+                                transpose=transpose, **kwargs)
+
+
+class VoronoiAdaptiveSurrogate(AdaptiveSurrogate):
+    
+    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, 
+                 transpose = False, **kwargs):
+        if batch_evaluate:
+            transpose=False
+            response = super().__call__(*args, surrogate_index=surrogate_index, 
+                                batch_evaluate=batch_evaluate, 
+                                transpose=transpose, **kwargs)
+            return response[self._target_field_name]
+        elif len(args) == len(self._param_names) and len(kwargs) == 0:
+            transpose=False
+        return super().__call__(*args, surrogate_index=surrogate_index, 
+                                batch_evaluate=batch_evaluate, 
+                                transpose=transpose, **kwargs)
 
 
 class AdaptiveSurrogateStudyBase(HaltonStudy):
@@ -301,7 +332,9 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._variable_transformer = None
 
         self._max_training_samples=None
+        self._training_samples_user_set = False
         self._number_of_test_samples=None
+        self._test_samples_user_set = False
         self._training_batch_number = 1
         self.set_max_training_samples()
 
@@ -309,6 +342,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._max_abs_error_goal = 1e-1
 
         self._surrogate_save_filename = None
+        self._test_group_random_seed = None
 
     def set_error_stopping_criteria(self,
                                     average_l2_error_goal: float | None = None,
@@ -376,6 +410,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         :param max_training_samples: desired number of test samples
         :type max_training_samples: int
         """
+        self._test_samples_user_set = True
         check_value_is_positive_integer(number_of_test_samples, "number_of_test_samples")
         self._number_of_test_samples = number_of_test_samples
         super().set_number_of_samples(self._number_of_test_samples)
@@ -394,8 +429,9 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         check_value_is_positive_integer(max_training_samples, "max_training_samples")
         self._max_training_samples = max_training_samples
         logger.debug(f"max_training_samples set to {self._max_training_samples}")
-        if self._number_of_test_samples is None:
+        if not self._test_samples_user_set:
             self.set_number_of_test_samples(self._set_default_number_of_test_samples())
+            self._test_samples_user_set = False
 
     def _set_default_number_of_test_samples(self) -> int:
         """
@@ -442,11 +478,30 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         :raises RuntimeError: If the test‑sampling launch fails.
         """
         orig_working_directory = self._update_work_dir_for_test_sampling()
+        seed = self._seed
+        if self._test_group_random_seed is not None:
+            super().set_seed(self._test_group_random_seed)
         super().launch()
         test_params = self._format_params(self._results)
         test_responses = self._format_output(self._results)
         self._reset_study_after_test_sampling_generation(orig_working_directory)
+        if seed is not None:
+            super().set_seed(seed)
         return test_params, test_responses
+
+    def set_test_group_random_seed(self, seed):
+        """
+        Set the random seed for the random generator that the study uses
+        to generate the  test samples only.
+        The method should be called **before**
+        :meth:`launch` to
+        guarantee reproducibility.
+
+        :param seed: Integer seed for the pseudo‑random number generator.
+        :type seed: int
+        """
+        check_value_is_positive_integer(seed, "seed")
+        self._test_group_random_seed = seed
 
     def _update_work_dir_for_test_sampling(self):
         """
@@ -579,11 +634,11 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         test_params, test_responses = self._run_test_sampling()
         param_names = self._parameter_collection.get_item_names()
         self._variable_transformer = self._variable_transformer_factory(self._bounds)
-        self._surrogate = AdaptiveSurrogate(self._target_field_name, self._independent_variable, 
+        self._surrogate = self._adaptive_surrogate_class(self._target_field_name, 
+                                                          self._independent_variable, 
                                             self._independent_variable_values, 
                                             self._variable_transformer, 
                                             test_params, test_responses, param_names)
-        
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
         super().launch()
 
@@ -675,7 +730,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         params_formatted = []
         for param in results.parameter_history:
             params_formatted.append(results.parameter_history[param])
-        return np.array(params_formatted)  
+        return np.array(params_formatted).T
 
     def _format_output(self, results):
         model_name = self._get_model_names()[0]
@@ -704,14 +759,13 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     """
 
     _variable_transformer_factory= _get_pyapprox_variable_transformer
-   
+    _adaptive_surrogate_class = SparseGridAdaptiveSurrogate
+
     def _perform_adaptive_surrogate_batch_sampling(self): 
         from pyapprox.interface.model import ModelFromVectorizedCallable
-
         n_qois = len(self._independent_variable_values)
         canonical_model = ModelFromVectorizedCallable(n_qois, self._number_parameters, 
                                     self._matcal_evaluate_parameter_sets_batch_adaptive_training)
-
         if self._surrogate_save_filename is None:
             self.set_surrogate_save_filename(f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib")
         sg = _setup_sparse_grid_surrogate(self._number_parameters, n_qois)    
@@ -745,19 +799,20 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
       
 
 def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations, 
-                         test_eval_info, save_filename='voronoi_surrogate', 
-                         cv_test_set=False):
+                         test_eval_info, save_filename='voronoi_surrogate', logger_on=True):
     from matcal.core.surrogates import SurrogateGenerator
     surrogate_generator = SurrogateGenerator(eval_info, training_fraction=1.0, 
                                              interpolation_field=interpolation_field, 
                                              interpolation_locations=interpolation_locations, 
-                                             test_eval_info=test_eval_info, 
-                                             cv_test_set=cv_test_set)
+                                             test_eval_info=test_eval_info)
+    surrogate_generator._logger_on=logger_on
     return surrogate_generator.generate(save_filename)
         
 
 class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
-    
+
+    _adaptive_surrogate_class = VoronoiAdaptiveSurrogate
+
     def _return_none(*args, **kwargs):
         return None
     
@@ -785,6 +840,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._cv_scale = None
         self._cv_metric = None
         self._group_kfold = None
+        self._loo_errors = None
         self.set_cross_validation_options()
         
         self._nbatch_samples = []
@@ -802,9 +858,10 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._seed = None
             
     def _update_surrogate_score(self):
-        self._current_surrogate_score['score'].append(_get_surrogate_metric(self._surrogate, 'score'))
-        self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(self._surrogate, 'nlpd'))
-        self._current_surrogate_score['rmse'].append(_get_surrogate_metric(self._surrogate, 'rmse'))
+        latent_score = self._surrogate.current_surrogate._latent_scores['test']
+        self._current_surrogate_score['score'].append(_get_surrogate_metric(latent_score, 'score'))
+        self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(latent_score, 'nlpd'))
+        self._current_surrogate_score['rmse'].append(_get_surrogate_metric(latent_score, 'rmse'))
          
     def _build_boundary_hull(self):
         from scipy.spatial import ConvexHull, Delaunay
@@ -888,10 +945,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         check_value_is_bool(iterative_updates, "iterative_updates")
         self._iterative_updates = iterative_updates
         if thin is not None:
-            check_value_is_bool(thin, "thin")
+            check_value_is_positive_integer(thin, "thin")
             self._thin = thin
         if random_selection is not None:
-            check_value_is_bool(random_selection, "random_selection")
+            check_value_is_positive_integer(random_selection, "random_selection")
+            self._random_selection = random_selection
         if self._random_selection is not None and self._thin is not None:
             raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
     
@@ -999,7 +1057,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _perform_adaptive_surrogate_batch_sampling(self):
         if self._surrogate_save_filename is None:
             self.set_surrogate_save_filename(f"{self._get_model_names()[0]}_voronoi_adaptive_surrogate.joblib") 
-        self._surrogate._transpose_inputs=True
         self._build_boundary_hull()
         self.param_names = self._parameter_collection.get_item_names()
         training_params, training_data = self._run_initial_training_samples()
@@ -1040,7 +1097,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         return self._train_surrogate_with_current_results()
     
     def _train_surrogate_with_current_results(self):
-        training_params = self._format_params(self._results).T
+        training_params = self._format_params(self._results)
         training_data = self._format_output_for_surrogate_gen(self._results)
         current_surrogate = _fit_surrogate_model(self, interpolation_field=self._independent_variable, 
                                                interpolation_locations=self._independent_variable_values, 
@@ -1070,7 +1127,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
                 self._perform_loo_cross_validation(training_params, training_data)
                 # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
-                worst_sample_locations = self._find_loo_max_errors()
+                worst_sample_locations = self._find_loo_max_errors(training_params)
                 
         else:
             # Do not perform kfold or loo CV. New samples drawn for all Voroni regions.
@@ -1094,8 +1151,9 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _create_voronoi_tess(self, training_params):
         if self._voronoi_type == 'full':
             # Initialize Voronoi tessellation
-            self._voronoi_tessellation = VoronoiTessellation(training_params, self._bounds)
-            self._voronoi_tessellation.build(finite_only=self._finite_only)
+            self._voronoi_tessellation = VoronoiTessellation(training_params, self._bounds, 
+                                                             self._finite_only)
+            self._voronoi_tessellation.build()
 
         elif self._voronoi_type == 'local':
             # Make a local voronoi tesselation for each new sample by using knearest neighbors
@@ -1135,8 +1193,8 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 nneighbors = int(self._all_tree_points.shape[0] * 0.25)
                 nearest_neighbors = self._tree.query(location, k=nneighbors)
                 nn_points = self._all_tree_points[nearest_neighbors[1].squeeze()]
-                nn_vor = VoronoiTessellation(nn_points, self._bounds)
-                nn_vor.build(**self._voronoi_tessellation_options)
+                nn_vor = VoronoiTessellation(nn_points, self._bounds, self._finite_only)
+                nn_vor.build()
                 nn_region = nn_vor.get_voronoi_region(location)[0][0]
                 try:
                     nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
@@ -1169,58 +1227,50 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _perform_kfold_cross_validation(self, training_params, training_data):
         self._kf = None
         logger.info("Performing kfold cross-validation")
-        kfcv = KFoldCrossValidation()
+        kfcv = KFoldCrossValidation(self._nsplits, self._group_kfold, self._independent_variable, 
+                                    self._independent_variable_values, 
+                                    self._cv_scale, self._cv_metric, self.param_names)
         groups = None
-
         if self._group_kfold:
             from sklearn.cluster import KMeans
             kmeans = KMeans(n_clusters=self._nsplits, random_state=42)
             groups = kmeans.fit_predict(training_params)
-        
-        kfcv_options = {'nsplits':self._nsplits, 'group_kfold':self._group_kfold,
-                        'scale':self._cv_scale, 'metric':self._cv_metric,
-                        'groups':groups, 'interpolation_field':self.interpolation_field,
-                        'par_names':self.param_names}
-        self._kf = kfcv.perform_kfold_cv(training_params, training_data, **kfcv_options)
-    
+        self._kf = kfcv.perform_kfold_cv(training_params, training_data, groups)
+
     def _find_kfold_max_errors(self):
         self._max_fold_error_indices = None
-        logger.info("Finding max kfold error")
         max_folds = self._find_indices_of_n_largest_kf_errors()
-        self._max_fold_error_indices = np.concatenate(list(max_folds.values())) 
+        self._max_fold_error_indices = np.concatenate(list(max_folds.values()))
+        logger.info(f"\n\tWorst kfold errors associated with the following sample indices:\n"+
+            f"\t{self._max_fold_error_indices}\n")
     
     def _perform_loo_cross_validation(self, training_params, training_data):
         self._loo_errors = None
-        logger.info("Finding worst sample locations")
-        loocv = LeaveOneOutCrossValidation()
-        loo_options = {'scale':self._cv_scale,
-                       'metric':self._cv_metric,
-                       'interpolation_field':self.interpolation_field,
-                       'par_names':self.param_names}
-        
+        logger.info("Finding worst sample locations using leave one out validation...")
+        loocv = LeaveOneOutCrossValidation(self._cv_scale, self._cv_metric, 
+                                           self._independent_variable, 
+                                           self._independent_variable_values, 
+                                           self.param_names)
         self._loo_errors = loocv.perform_loocv(training_params, training_data,
-                                               self._max_fold_error_indices,
-                                               **loo_options)
+                                               self._max_fold_error_indices)
     
     def _find_loo_max_errors(self, training_params):
             self._worst_sample_locations = None
             max_loo_indices = self._find_indices_of_n_largest_errors()
+            logger.info(f"\n\tWorst errors when the following sample indices " +
+                        "are left out of training:\n"+
+                        f"\t{max_loo_indices}\n")
             return training_params[max_loo_indices]
         
     def _find_indices_of_n_largest_kf_errors(self):
-
         # Create a list of (key, error, sample_index) tuples
         items = [(key, value[0], value[1]) for key, value in self._kf.items()]
-
         # Sort the items based on the error in descending order
         sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-
         # Get the top n items
         top_n_items = sorted_items[:self._nmax_folds]
-
         # Extract the arrays associated with the top n largest floats
         result_arrays = {key: array for key, _, array in top_n_items}
-
         return result_arrays
 
     def _find_indices_of_n_largest_errors(self):
@@ -1228,21 +1278,15 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         :return: Returns an array of indices corresponding to the n largest errors.
         """
-
         nkeep = int(self._nmax_loo)
-
         # Create a list of (key, error, sample_index) tuples
         items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
-
         # Sort the items based on the error in descending order
         sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-
         # Get the top n items
         top_n_items = sorted_items[:nkeep]
-
         # Extract the indices associated with the top n largest floats
         indices = [item[2] for item in top_n_items]
-
         return np.array(indices)
 
     def _add_parameter_evaluation(self, **p):
@@ -1255,7 +1299,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
 
 class VoronoiTessellation:
-    def __init__(self, points, bounds):
+    def __init__(self, points, bounds, finite_only):
         """Initialize the VoronoiBatchSamplingStudy
         
         :param points: Array of points that are the seeds of the Voronoi tessellation
@@ -1268,14 +1312,13 @@ class VoronoiTessellation:
         self.points = np.array(points)
         self.ndim = self.points.shape[1]
         self.bounds = bounds
+        self.finite_only = finite_only
+        self.incremental = False
         
-    def build(self, **options):
+    def build(self):
         """Initialize the Voronoi tessellation with given points and bounds.
         """
         from scipy.spatial import Voronoi, Delaunay, ConvexHull
-
-        self._initialize_attributes()
-        self._set_voronoi_options(**options)
         self.boundary_points = self._make_nd_grid(npts_along_dim=2)
         if not self.finite_only:
             self.boundary_hull = ConvexHull(self.boundary_points)
@@ -1292,33 +1335,7 @@ class VoronoiTessellation:
         self.vor = Voronoi(self._all_points, incremental=self.incremental)
         self.ghost_busters()
         self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
-
-    def _initialize_attributes(self):
-        self.finite_only = False
-        self.incremental = False
-         
-    def _set_voronoi_options(self, **voronoi_kwargs):
-        """Set voronoi properties. See documentation for properties that
-        an be altered and their options.
-        
-        :param incremental: Allow adding points incrementally. 
-        This takes up additional resources. Default False.
-        :type incremental: bool
-        
-        :param finite_only: When finite_only = True, only vertices which reside 
-        inside convex hull defined by boundary points are returned as vertices
-        of a voronoi region. With finite = False, all vertices are returned.
-        In this case, vertices which fall outisde the parameter bounds are snipped 
-            to the convex hull defined by boundary points, which requires more computational
-            resources, especially in high dimensions. Default False.
-        :type finite_only: bool
-        """
-        for key, value in voronoi_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-        
+       
     def _make_nd_grid(self, npts_along_dim):
         grid_pts = []
         for dim in np.arange(self.ndim):
@@ -1721,35 +1738,26 @@ class VoronoiTessellation:
 
 
 class KFoldCrossValidation:
-    def __init__(self):
+    def __init__(self, nsplits, group_kfold, interpolation_field, interpolation_values, 
+                 scale, metric, param_names):
         """Initialize the K-Fold Cross-Validation with a given surrogate model.
         """
-        self._initialize_attributes()
-
-    def _initialize_attributes(self):
-        self.nsplits = 5
-        self.group_kfold = False
-        self.scale = None
-        self.metric = 'rmse'
-        self.groups = None
-        self.interpolation_field = 'x'
-        self.par_names = None
-         
-    def _set_kfcv_options(self, **kfcv_kwargs):
-        """Set KFold CV properties."""
-        self._kfcv_kwargs = kfcv_kwargs
-        for key, value in kfcv_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-        if self.nsplits > self.X.shape[0]:
-            self.nsplits = int(self.X.shape[0]/2.0)
+        self.nsplits = nsplits
+        self.group_kfold = group_kfold
+        self.scale = scale
+        self.metric = metric
+        self.interpolation_field = interpolation_field
+        self.interpolation_values = interpolation_values
+        self.param_names = param_names
+        
+    def _check_npslits(self, training_params):
+        if self.nsplits > training_params.shape[0]:
+            self.nsplits = int(training_params.shape[0]/2.0)
             logger.warning("Input parameter \"nsplits\" can't be greater than " +
                            "the number of samples in KFoldCrosValidation. Reducing " +
                            "number of splits to approximately half the number of samples.")
         
-    def perform_kfold_cv(self, training_params, training_data, **kfcv_options):
+    def perform_kfold_cv(self, training_params, training_data, groups):
         """
         Perform K-Fold Cross-Validation.
 
@@ -1763,74 +1771,61 @@ class KFoldCrossValidation:
         prediction error and the corresponding error value.
         tuple (index_of_max_error, max_error)
         """
+        self._check_npslits(training_params)
+        self.groups = groups
         from sklearn.model_selection import GroupKFold, KFold
         from joblib import Parallel, delayed
-        self._set_kfcv_options(**kfcv_options)
         if self.group_kfold:
             assert self.groups is not None
             cv = GroupKFold(n_splits=self.nsplits)
             kf_results = Parallel(n_jobs=1)(
-                delayed(self.evaluate_fold)(train_index, test_index, training_params, training_data)
-                for train_index, test_index in cv.split(training_params, training_data, self.groups)
+                delayed(self.evaluate_fold)(train_index, test_index, training_params, training_data, index)
+                for index, (train_index, test_index) in enumerate(cv.split(training_params, training_data, self.groups))
             )
         else:
             cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
             kf_results = Parallel(n_jobs=1)(
-                delayed(self.evaluate_fold)(train_index, test_index, training_params, training_data)
-                for train_index, test_index in cv.split(self.X)
+                delayed(self.evaluate_fold)(train_index, test_index, training_params, training_data, index)
+                for index, (train_index, test_index) in enumerate(cv.split(training_params))
             )
-
         # Convert the results to a dictionary
         kf = {k_idx: result for k_idx, result in enumerate(kf_results)}
         return kf
 
-    def evaluate_fold(self, train_index, test_index, X, y):
-        """Perform a single fold of cross-validation."""
-
+    def evaluate_fold(self, train_index, test_index, X, y, kfold_count):
+        logger.info(f"\tEvaluating test '{self.metric}' error for surrogate for kfold cross validation set {kfold_count}..." +
+                    "")
         info = self.extract_fold_info(train_index, test_index, X, y)
         train_eval_info, test_eval_info, X_test, y_test = info
-        surrogate_options = get_cv_surrogate_options(test_eval_info,
-                                                     self.interpolation_field) 
-        
-        # Fit the model on the training data
-        fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
-        
-        # Make predictions for the test set and calculate error
-        error = _get_surrogate_metric(fold_surrogate, self.metric)
+        fold_surrogate = _fit_surrogate_model(train_eval_info, self.interpolation_field, 
+                                              self.interpolation_values, test_eval_info, 
+                                              "kfold_validation_surrogate.joblib", logger_on=False)
+        error = _get_surrogate_metric(fold_surrogate._latent_scores['test'], self.metric)
+        logger.info(f"\t\terror = {error}")
         return error, test_index
    
     def extract_fold_info(self, train_index, test_index, X, y):
         X_train, X_test = X[train_index], X[test_index]
         y_train = [y[i] for i in train_index]
         y_test = [y[i] for i in test_index]
-        train_res, test_res = _setup_studies_for_cv(self.par_names,
+        train_res, test_res = _setup_studies_for_cv(self.param_names,
                                                     X_train, X_test, y_train, y_test)
         return train_res, test_res, X_test, y_test
 
 
 class LeaveOneOutCrossValidation:
-    def __init__(self):
+    def __init__(self, scale, metric, interpolation_field, 
+                 interpolation_values, par_names):
         """
         Initialize the LOOCV.
         """
-        self._initialize_attributes()
-        
-    def _initialize_attributes(self):
-        self.scale = None
-        self.metric = 'rmse'
-        self.interpolation_field = 'x'
-        self.par_names = None
-        
-    def _set_loocv_options(self, **loocv_kwargs):
-        """Set LeaveOneOut CV properties."""
-        self._loocv_kwargs = loocv_kwargs
-        for key, value in loocv_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
+        self.scale = scale
+        self.metric = metric
+        self.interpolation_field = interpolation_field
+        self.interpolation_values = interpolation_values
+        self.par_names = par_names
 
-    def perform_loocv(self, X, y, indices, **loocv_options):
+    def perform_loocv(self, X, y, indices):
 
         """Perform Leave-One-Out Cross-Validation.
 
@@ -1844,9 +1839,7 @@ class LeaveOneOutCrossValidation:
         prediction error and the corresponding error value.
         tuple: (index_of_max_error, max_error)
         """
-
         from joblib import Parallel, delayed
-        self._set_loocv_options(**loocv_options)
         
         loo_results = Parallel(n_jobs=1)(
             delayed(self.evaluate_loo_sample)(X, y, i)
@@ -1858,15 +1851,15 @@ class LeaveOneOutCrossValidation:
     
     def evaluate_loo_sample(self, X, y, index):
         # Leave one out: create training and test sets
+        logger.info(f"\tEvaluating test '{self.metric}' error for surrogate leaving out sample {index}" +
+                    "")
         info = self.extract_loo_info(index, X, y)
         train_eval_info, test_eval_info, X_test, y_test = info
-        surrogate_options = get_cv_surrogate_options(test_eval_info,
-                                                     self.interpolation_field)
-        # Fit the model on the training data
-        loo_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
-
-        # Make predictions for the left-out sample and calculate error
-        error = _get_surrogate_metric(loo_surrogate, self.metric)
+        fold_surrogate = _fit_surrogate_model(train_eval_info, self.interpolation_field, 
+                                              self.interpolation_values, test_eval_info, 
+                                              "kfold_validation_surrogate.joblib", logger_on=False)
+        error = _get_surrogate_metric(fold_surrogate._latent_scores['test'], self.metric)
+        logger.info(f"\t\terror = {error}")
         return error, index
 
     def extract_loo_info(self, index, X, y):
@@ -1879,14 +1872,6 @@ class LeaveOneOutCrossValidation:
                                                     X_train, X_test,
                                                     y_train, y_test)
         return train_res, test_res, X_test, y_test
-    
-    
-def get_cv_surrogate_options(test_eval_info, interpolation_field):
-    surrogate_options = {'interpolation_field':interpolation_field,
-                         'training_fraction':1.0,
-                         'test_eval_info':test_eval_info,
-                         'cv_test_set':True}
-    return surrogate_options
 
 
 def _setup_studies_for_cv(p_names, train_samples, test_samples,
@@ -1899,7 +1884,7 @@ def _setup_studies_for_cv(p_names, train_samples, test_samples,
 def _get_parameter_and_simulation_hist(p_names, p_samples, m_evals):
     from matcal.core.study_base import StudyResults
     p_hist = _format_parameter_hist(p_names, p_samples)
-    res_hist = _format_parameter_evaluations(p_names, m_evals)
+    res_hist = _format_parameter_evaluations(m_evals)
     res = StudyResults()
     res._update_parameter_history(p_hist, list(p_hist.keys()))
     res._update_simulation_history(res_hist, 'cv')
@@ -1907,10 +1892,8 @@ def _get_parameter_and_simulation_hist(p_names, p_samples, m_evals):
 
 
 def _format_parameter_hist(names, p_samples):
-    from matcal.core.parameters import ParameterCollection
     n_samples = p_samples.shape[0]
     params = OrderedDict()
-    pc = ParameterCollection('cv')
     for idx in range(n_samples):
         params[f"eval_{idx}"] = OrderedDict()
         for n_idx, param_name in enumerate(names):
@@ -1918,7 +1901,7 @@ def _format_parameter_hist(names, p_samples):
     return params 
 
 
-def _format_parameter_evaluations(param_order, model_evals):
+def _format_parameter_evaluations(model_evals):
     from matcal.core.data import convert_dictionary_to_data, DataCollection
     results_hist = DataCollection("CV data collection")
     for eval in model_evals:
@@ -1926,13 +1909,14 @@ def _format_parameter_evaluations(param_order, model_evals):
     return results_hist
 
 
-def _get_surrogate_metric(surrogate, metric):
-    test_score = surrogate.current_surrogate._latent_scores['test']
+def _get_surrogate_metric(latent_scores_test, metric):
     combined_score = []
-    for field_idx, field_name in enumerate(test_score):
-        if isinstance(test_score[field_name], (dict, OrderedDict)):
-            combined_score += list(test_score[field_name][metric])
-    if metric == 'nlpd':
+    for field_idx, field_name in enumerate(latent_scores_test):
+        if isinstance(latent_scores_test[field_name], (dict, OrderedDict)):
+            combined_score += list(latent_scores_test[field_name][metric])
+    if combined_score == len(combined_score)*[None]:
+        return np.nan
+    elif metric == 'nlpd':
         return np.sum(combined_score)
     else:
         return np.mean(combined_score)

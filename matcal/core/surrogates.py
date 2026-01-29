@@ -62,8 +62,7 @@ class SurrogateGenerator:
     def __init__(self, evaluation_information, interpolation_field=None, 
                 interpolation_locations=200, 
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
-                regressor_type="Gaussian Process", test_eval_info=None, 
-                cv_test_set=False, **regressor_kwargs):
+                regressor_type="Gaussian Process", test_eval_info=None, **regressor_kwargs):
         """
         :param evaluation_information: A container of the relevant 
             information to form a surrogate off of 
@@ -117,7 +116,6 @@ class SurrogateGenerator:
         self._interpolation_locations = interpolation_locations
         self._eval_info = evaluation_information
         self._test_eval_info = test_eval_info
-        self._cv_test_set = cv_test_set
         self._model_name = None
         self._state = None
         self._training_fraction  = training_fraction
@@ -125,6 +123,7 @@ class SurrogateGenerator:
         self._regressor_type = regressor_type
         self._regressor_kwargs = regressor_kwargs
         self._decomp_tool = _assign_decomp(.99, None)
+        self._logger_on=True
 
         self._fields_to_log_scale = []
         self._fields_of_interest = None
@@ -257,7 +256,7 @@ class SurrogateGenerator:
             self._fields_of_interest = fields_of_interest
 
     def generate(self, save_filename:str, preprocessing_function:Callable=None, 
-                 plot_n_worst:int=12)->Callable:
+                 plot_n_worst:int=0)->Callable:
         """
         Generates a surrogate based on the information passed to it upon initialization
 
@@ -304,13 +303,14 @@ class SurrogateGenerator:
         train_data, test_data, train_params, test_params = test_train_split_results
         combined_params = _combine_parameters(test_params, train_params)
         param_ranges = _package_parameter_ranges(combined_params)
-        logger.info(f'Generating and scoring {self._regressor_type} surrogates. '+
+        if self._logger_on:
+            logger.info(f'Generating and scoring {self._regressor_type} surrogates. '+
                     'The ideal score is 1.0.')
         surrogate_class = _surrogate_selection.identify(self._surrogate_type)
         new_surrogate = surrogate_class.fit(train_data, test_data, train_params, test_params,
                                             self._fields_to_log_scale,
                                             self._decomp_tool, self, param_ranges, 
-                                            cv_test_set=self._cv_test_set)
+                                            self._logger_on)
         matcal_save(save_filename+".joblib", new_surrogate)
         self._plot_worst_recreations(new_surrogate, params, source_dict, 
                                      plot_n_worst, save_filename)
@@ -324,6 +324,7 @@ class SurrogateGenerator:
         if n_worst < 1:
             return
         import matplotlib.pyplot as plt
+        plt.close('all')
         n_eval = len(parameters[list(parameters.keys())[0]])
         sur_predict = surrogate(parameters)
         worst_sets = self._get_worst_recreations(source_data, n_worst, n_eval, sur_predict)
@@ -620,7 +621,7 @@ def _package_parameter_ranges(param_history):
 def _convert_data_and_make_basis(source_data, decomp_variance, make_log_scale):
     scaled_data, data_scaler = _scale_data_for_surrogate(source_data, make_log_scale)
     latent_data, decomposer = _use_pca_to_decompose_if_many_features(scaled_data, decomp_variance)
-    latent_data = _ensure_2d_array(latent_data, 1)
+    latent_data = _ensure_2d_array(latent_data)
     scaled_latent_data, latent_scaler = _scale_data_for_surrogate(latent_data)
     return data_scaler,decomposer,scaled_latent_data,latent_scaler
 
@@ -647,7 +648,7 @@ def _tune_data_decomposition(source_data, make_log_scale, reconstruction_error_t
             logger.info(message)
         else:
             logger.info("      Recreation error tolerance not met.\n")
-    latent_data = _ensure_2d_array(latent_data, 1)
+    latent_data = _ensure_2d_array(latent_data)
     scaled_latent_data, latent_scaler = _scale_data_for_surrogate(latent_data)
     return data_scaler,decomposer,scaled_latent_data,latent_scaler
 
@@ -737,29 +738,24 @@ class MatCalSurrogateBase(ABC):
         self._r2_scores['test'] = r2_scores[1]
 
 
-def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_tool, cv_test_set):
+def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_tool):
     combined_data = np.vstack([train_data, test_data])
     decomp_results = decomposition_tool.generate(combined_data, make_log_scale)
     data_scaler, decomposer, scaled_latent_data, latent_scaler = decomp_results
     scaled_latent_test_data = _apply_decomposing_and_scaling_to_data(test_data, data_scaler, 
-                                                                     decomposer, latent_scaler,
-                                                                     cv_test_set=cv_test_set)
+                                                                     decomposer, latent_scaler)
     scaled_latent_train_data = _apply_decomposing_and_scaling_to_data(train_data, data_scaler, 
-                                                                     decomposer, latent_scaler,
-                                                                     cv_test_set=cv_test_set)
+                                                                     decomposer, latent_scaler)
     return scaled_latent_test_data, scaled_latent_train_data, data_scaler, decomposer, latent_scaler
 
 
 def _apply_decomposing_and_scaling_to_data(data, data_scaler, decomposer, 
-                             latent_scaler, cv_test_set=False):
+                             latent_scaler):
     """Transform test data after scalers and decomposition tool have already 
         been trained on training data."""
-    check_relative_dims = True
-    if cv_test_set:
-        check_relative_dims = False
     scaled_data = data_scaler.transform(data)
     latent_data = decomposer.transform(scaled_data)
-    latent_data = _ensure_2d_array(latent_data, 1, check_relative_dims=check_relative_dims)
+    latent_data = _ensure_2d_array(latent_data)
     scaled_latent_test_data = latent_scaler.transform(latent_data)
     return scaled_latent_test_data
 
@@ -782,51 +778,53 @@ def _combine_parameters(test_params, train_params):
 
 def _train_parameter_to_pca_weight_regressor(scaled_train_params, scaled_latent_train_data, 
                                             regressor_type, regressor_kwargs,
-                                            regressor_init_func, cv_test_set=False):
+                                            regressor_init_func):
     n_parameters = scaled_train_params.shape[1]
     regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
-    scaled_latent_train_data = _ensure_2d_array(scaled_latent_train_data, 1)
+    scaled_latent_train_data = _ensure_2d_array(scaled_latent_train_data)
     regressor.fit(scaled_train_params, scaled_latent_train_data)
     return regressor
 
 
 def _score_regressor_in_latent_space(regressor, scaled_train_params, 
                                      scaled_latent_train_data, scaled_test_params, 
-                                     scaled_latent_test_data, cv_test_set):
+                                     scaled_latent_test_data, logger_on):
     train_score = _calculate_performance_metrics(regressor, scaled_train_params, 
                                                  scaled_latent_train_data)
-    check_relative_dims = True
-    if cv_test_set:
-        check_relative_dims = False
-    scaled_latent_test_data = _ensure_2d_array(scaled_latent_test_data, 1, check_relative_dims=check_relative_dims)
+    scaled_latent_test_data = _ensure_2d_array(scaled_latent_test_data)
     test_score = _calculate_performance_metrics(regressor, scaled_test_params, 
                                                 scaled_latent_test_data)
     training_fraction = scaled_train_params.shape[0]/(scaled_train_params.shape[0]+
                                                       scaled_test_params.shape[0])
-    logger.info(f"\tTraining Complete: {training_fraction*100} % of data used for training")
+    if logger_on:
+        logger.info(f"\tTraining Complete: {training_fraction*100} % of data used for training")
     return train_score, test_score
 
 
-def _print_scores(latent_train_score, latent_test_score, native_test_score, native_train_score):
+def _print_scores(latent_train_score, latent_test_score, native_train_score, native_test_score):
     for field in latent_train_score:
         logger.info(f"\nSurrogate scores for {field}: ")
         score_message = f"\tTrain:\n"
         score_message += f"\t\tlatent space score: {latent_train_score[field]['score']}\n"    
         score_message += f"\t\tnative space score: {native_train_score[field]}\n"    
-        score_message = f"\tTest:\n"
+        score_message += f"\tTest:\n"
         score_message += f"\t\tlatent space score: {latent_test_score[field]['score']}\n"    
         score_message += f"\t\tnative space score: {native_test_score[field]}\n"    
         logger.info(score_message)
 
 def _calculate_additional_score_metrics(train_score, test_score):
-    train_score = _convert_instances_to_stats(train_score )
+    train_score = _convert_instances_to_stats(train_score)
     test_score = _convert_instances_to_stats(test_score)
     return train_score, test_score
 
 
 def _calculate_performance_metrics(regressor, param, data):
     metrics = []
-    metrics.append(regressor.score(param, data))
+    if param.shape[0] > 1:
+        # R2 score only valid for more than one sample
+        metrics.append(regressor.score(param, data))
+    else:
+        metrics.append(None)
     metrics.append(nlpd(regressor, param, data))
     metrics.append(rmse(regressor, param, data))
     return metrics
@@ -889,10 +887,9 @@ def rmse(regressors, input_values, evals):
     
 def _convert_instances_to_stats(scores):
     score_stats = OrderedDict()
-    a_scores = np.array(scores)
-    score_stats['score'] = a_scores[0]
-    score_stats['nlpd'] = a_scores[1]
-    score_stats['rmse'] = a_scores[2]
+    score_stats['score'] = np.array(scores[0])
+    score_stats['nlpd'] = np.array(scores[1])
+    score_stats['rmse'] = np.array(scores[2])
     return score_stats
 
 
@@ -1005,7 +1002,7 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
             
     def _fit(train_data, test_data, train_params, test_params, fields_to_log_scale,
              decomposition_tool, surrogate_generator, param_ranges, 
-             regressor_initializer, surrogate_class, cv_test_set=False):
+             regressor_initializer, surrogate_class, logger_on=True):
         
         regressors = OrderedDict()
         decomposers = OrderedDict()
@@ -1017,10 +1014,11 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                                                                                   train_params, 
                                                                                   fields_to_log_scale)
         for field in train_data:
-            logger.info(f"\nGenerating Surrogate for {field}")
+            if logger_on:
+                logger.info(f"\nGenerating Surrogate for {field}")
             make_log_scale = field in fields_to_log_scale
             decomp_results = _get_decomp_results(train_data[field], test_data[field], 
-                                                 make_log_scale, decomposition_tool, cv_test_set)
+                                                 make_log_scale, decomposition_tool)
             scaled_latent_test_data, scaled_latent_train_data = decomp_results[0:2]
             data_scaler, decomposer, latent_scaler = decomp_results[2:5]
             decomposers[field] = decomposer
@@ -1039,7 +1037,7 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
             latent_scalers[field] = latent_scaler
             latent_scores = _score_regressor_in_latent_space(regressor, scaled_train_params, 
                                              scaled_latent_train_data, scaled_test_params, 
-                                             scaled_latent_test_data, cv_test_set)
+                                             scaled_latent_test_data, logger_on)
             latent_scores = _calculate_additional_score_metrics(latent_scores[0], latent_scores[1])
             latent_train_scores[field], latent_test_scores[field] = latent_scores
         latent_scores = [latent_train_scores, latent_test_scores]
@@ -1054,7 +1052,8 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                                                                train_params, train_data)
         average_scores, max_scores, r2_scores = native_space_scores
         surrogate._set_native_space_scores(average_scores, max_scores, r2_scores)
-        _print_scores(*latent_scores, *r2_scores)
+        if logger_on:
+            _print_scores(*latent_scores, *r2_scores)
         return surrogate
 
 
@@ -1069,7 +1068,12 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
                                         _average_l2_error_norm)
     max_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _max_error_inf_norm)
-    r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score)
+    num_evals = _get_eval_count(test_params)
+    if num_evals > 1:
+        #r2 not valid for only 1 eval
+        r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score)
+    else:
+        r2_test_score = None
 
     average_scores = (average_train_score, average_test_score)
     max_scores = (max_train_score, max_test_score)
@@ -1103,13 +1107,13 @@ class MatCalMonolithicPCASurrogate(MatCalPCASurrogateBase):
     
     def fit(train_data, test_data, train_params, test_params, 
             fields_to_log_scale, decomposition_tool,
-            surrogate_generator, param_ranges, cv_test_set=False):
+            surrogate_generator, param_ranges, print_score=True):
         return MatCalPCASurrogateBase._fit(train_data, test_data, train_params, 
                                            test_params, fields_to_log_scale, 
                                            decomposition_tool, surrogate_generator, 
                                            param_ranges, 
-                                           _initialize_regressor, __class__,
-                                           cv_test_set=cv_test_set)
+                                           _initialize_regressor, __class__, 
+                                           print_score)
 
 
 class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
@@ -1124,11 +1128,11 @@ class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
     
     def fit(train_data, test_data, train_params, test_params, 
             fields_to_log_scale, decomposition_tool,
-            surrogate_generator, param_ranges, cv_test_set=False):
+            surrogate_generator, param_ranges, print_score=True):
         return MatCalPCASurrogateBase._fit(train_data, test_data, train_params, test_params, 
                                             fields_to_log_scale, decomposition_tool,
                                             surrogate_generator, param_ranges, _modal_regressor,
-                                           __class__, cv_test_set=cv_test_set)
+                                           __class__, print_score)
 
 
 _surrogate_selection = BasicIdentifier()
@@ -1136,25 +1140,13 @@ _surrogate_selection.register(MatCalMultiModalPCASurrogate.name, MatCalMultiModa
 _surrogate_selection.register(MatCalMonolithicPCASurrogate.name, MatCalMonolithicPCASurrogate)
 
 
-def _ensure_2d_array(active_array, constrained_dim=0, check_relative_dims=True):
+def _ensure_2d_array(active_array):
     if not isinstance(active_array, np.ndarray):
-        active_array = np.array([active_array])    
+        active_array = np.array(active_array)    
     if active_array.ndim == 1:
-        if constrained_dim==0:
-            active_array = active_array.reshape(1, -1)
-        else:
-            active_array = active_array.reshape(-1, 1)
-    elif active_array.ndim == 2:
-        if check_relative_dims:
-            active_array = _check_array_shape_and_transpose(active_array, constrained_dim)
+        #Reshape 1D vector to be column vector (nsamples, 1) - single feature
+        active_array = active_array.reshape(-1, 1)
     return active_array
-
-
-def _check_array_shape_and_transpose(array, constrained_dim):
-    aa_shape = array.shape
-    if aa_shape[constrained_dim] > aa_shape[1-constrained_dim]:
-        array = array.T
-    return array
 
 
 class _MatCalSurrogateWrapper:
@@ -1291,7 +1283,7 @@ class _ParameterScalerSet:
         param_array = _init_param_array(parameter_dict)
         for field_i, (field_name, scaler) in enumerate(self._scalers.items()):
             param_data = parameter_dict[field_name]
-            param_data = _ensure_2d_array(param_data, 1)
+            param_data = _ensure_2d_array(param_data)
             method_to_call = getattr(scaler, transform_method_name)
             param_array[:, field_i] = method_to_call(param_data).flatten()
         return param_array
@@ -1307,7 +1299,7 @@ def _make_parameter_scaler_set(parameter_fields, fields_to_log_scale):
     parameter_scaler_set = _ParameterScalerSet()
     for parameter_name, parameter_values in parameter_fields.items():
         use_log_scale = parameter_name in fields_to_log_scale
-        prepared_params = _ensure_2d_array(parameter_values, 1)
+        prepared_params = _ensure_2d_array(parameter_values)
         s_parameters, field_scaler = _scale_data_for_surrogate(prepared_params, use_log_scale)
         parameter_scaler_set.add_scaler(parameter_name, field_scaler)
     return parameter_scaler_set  
@@ -1315,12 +1307,12 @@ def _make_parameter_scaler_set(parameter_fields, fields_to_log_scale):
 
 def _init_param_array(parameter_dict):
     n_params = len(parameter_dict)
-    first_key = list(parameter_dict.keys())[0]
-    n_evals = _get_eval_count(parameter_dict, first_key)
+    n_evals = _get_eval_count(parameter_dict)
     return np.zeros((n_evals, n_params))
 
 
-def _get_eval_count(parameter_dict, first_key):
+def _get_eval_count(parameter_dict):
+    first_key = list(parameter_dict.keys())[0]
     first_param_vals = parameter_dict[first_key]
     if isinstance(first_param_vals, (float, int)):
         n_evals = 1

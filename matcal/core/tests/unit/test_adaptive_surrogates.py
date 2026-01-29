@@ -7,7 +7,8 @@ import unittest
 from matcal.core.adaptive_surrogates import (
     SparseGridAdaptiveSurrogateStudy,
     _get_parameter_bounds, AdaptiveSurrogate, 
-    VoronoiAdaptiveSurrogateStudy, VoronoiTessellation, LeaveOneOutCrossValidation)
+    VoronoiAdaptiveSurrogateStudy, VoronoiTessellation, 
+    LeaveOneOutCrossValidation, KFoldCrossValidation)
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.models import PythonModel
 from matcal.core.parameters import Parameter, ParameterCollection
@@ -29,8 +30,8 @@ def return_data(*args, **kwargs):
 light_model = PythonModel(return_data)
 
 
-def quadratic_model_2d(**parameters):
-    """Quadratic curve: f = a + bx. x independent variable."""
+def linear_model_2d(**parameters):
+    """Linear curve: f = a + bx. x independent variable."""
     x = np.linspace(0, 1, 100)
     a = parameters['a']
     b = parameters['b']
@@ -49,7 +50,7 @@ def quadratic_model_3d(**parameters):
     return {"x":x, "f":f} 
 
 
-class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
+class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     """
     All tests inherit from MatcalUnitTest so that they get the same
     temporary build directory handling that the original MatCal unit tests use.
@@ -110,15 +111,13 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
     def test_set_group_random_seed(self):
         #appears to be no way to really test the seed that gets into the SciPy Halton class.
+        self.study.set_seed(10)
         self.study.set_test_group_random_seed(1234)
-        self.assertEqual(self.study.HaltonSampler.scramble, True)
-        self.study.set_test_group_random_seed(123, False)
-        self.assertEqual(self.study.HaltonSampler.scramble, False)
+        self.assertEqual(self.study._test_group_random_seed, 1234)
+        self.assertEqual(self.study._seed, 10)
+
         with self.assertRaises(TypeError):
-            self.study.set_test_group_random_seed("", False)
-        
-        with self.assertRaises(TypeError):
-            self.study.set_test_group_random_seed(123, 123)
+            self.study.set_test_group_random_seed("")
         
     def test_default_test_samples_calculation(self):
         self.study.set_max_training_samples(200)# 200//20 = 10; 2 params*10 = 20 → default = 20
@@ -216,7 +215,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
         params = self.study._format_params(fake)
         self.assertIsInstance(params, np.ndarray)
-        self.assertTupleEqual(params.shape, (2, 3))
+        self.assertTupleEqual(params.shape, (3, 2))
 
         model_name = "dummy_model"
 
@@ -274,7 +273,6 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
                 self.simulation_qois = {
                     state: [{target: np.array(values)}]
                 }
-
 
         sample_values = [
             [10.0, 20.0, 30.0],  
@@ -389,7 +387,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.study.set_number_of_test_samples(1)
         self.study.launch()
         self.assertIsNotNone(self.study.results)
-        sur_file = self.study.save_filename
+        sur_file = self.study.surrogate_save_filename
         sur_results = matcal_load(sur_file)
         self.assertEqual(self.study.surrogate.average_error_history, 
                          sur_results.average_error_history)
@@ -781,6 +779,7 @@ class _TestStudyStoppingCriteria(SparseGridAdaptiveSurrogateStudy):
         self._surrogate = _FakeSurrogate()
         self._results = _FakeResults()
         self._number_of_test_samples = 10
+        self._test_samples_user_set = True
         self.set_max_training_samples()
 
 class TestSparseGridStoppingCriteria(MatcalUnitTest):
@@ -845,6 +844,7 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         self.assertFalse(should_stop,
                          "Stopping should NOT be triggered when no criteria are met")
         
+
 class TestVoronoiTessellation(MatcalUnitTest):
     from scipy.spatial import voronoi_plot_2d, ConvexHull
     import matplotlib.pyplot as plt
@@ -890,8 +890,6 @@ class TestVoronoiTessellation(MatcalUnitTest):
         X_test_unscaled = np.atleast_2d(test_pts_sampler.random(n=ntest_samples))
         X_test = np.atleast_2d(qmc.scale(X_test_unscaled, l_bounds, u_bounds))
         y_test = model(X_test)
-        print(y_test.shape) 
-        
         return X_init, y_init, X_test, y_test, bounds
 
     @staticmethod
@@ -908,13 +906,12 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             
             for fo in [True, False]:
-                opts = {'finite_only':fo}
-                vor = VoronoiTessellation(X_init, bounds)
-                vor.build(**opts)
+                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
+                vor.build()
             
                 # Validate that ghost points are created correctly and that _all_points
                 # includes both original and ghost points.
@@ -952,25 +949,14 @@ class TestVoronoiTessellation(MatcalUnitTest):
                 # Check that ConvexHull is created only when finite_only is False
                 if fo:
                     self.assertIsNone(vor.boundary_hull, msg="Boundary hull created for finite_only=False.")
-
-    def test_attribute_error(self):
-        dim = 2
-        nsamples = 2 ** dim
-        bounds = [[-5, 5] for d in np.arange(dim)]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        
-        opts = {'_finite_only':True}
-        vor = VoronoiTessellation(X_init, bounds)
-        with self.assertRaises(AttributeError):
-            vor.build(**opts)
-        
+       
     def test_identify_vertices_outside_bounds(self):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
+            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
             vor.build()
             min_x, max_x = bounds[0]
             min_y, max_y = bounds[1]
@@ -998,9 +984,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
     def test_2d_find_boundary_hull_ray_crossing(self):
         nsamples = 4
         dim = 2
-        bounds = [[-5, 5], [-5, 5]]
+        bounds = np.array([[-5, 5], [-5, 5]])
         X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
+        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
         vor.build()
 
         # test crossing        
@@ -1019,9 +1005,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
     def test_3d_find_boundary_hull_ray_crossing(self):
         nsamples = 8
         dim = 3
-        bounds = [[-5, 5], [-5, 5], [-5, 5]]
+        bounds = np.array([[-5, 5], [-5, 5], [-5, 5]])
         X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
+        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
         vor.build()
 
         # test crossing        
@@ -1052,12 +1038,11 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             for fo in [True, False]:
-                opts = {'finite_only':fo}
-                vor = VoronoiTessellation(X_init, bounds)
-                vor.build(**opts)
+                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
+                vor.build()
             
                 for pt_idx in np.arange(nsamples):
                     region_idx = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
@@ -1156,9 +1141,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
+            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
             vor.build()
             boundary_hull = vor.boundary_hull
             boundary_hull_points = vor.boundary_points[boundary_hull.vertices]
@@ -1198,10 +1183,10 @@ class TestVoronoiTessellation(MatcalUnitTest):
     def test_add_points_error_handling(self):
         dim = 2
         nsamples = 2 ** dim
-        bounds = [[-5, 5] for d in np.arange(dim)]
+        bounds = np.array([[-5, 5] for d in np.arange(dim)])
         X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
 
-        vor = VoronoiTessellation(X_init, bounds)
+        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
         vor.build()
         initial_points = vor._all_points.copy()
         
@@ -1254,10 +1239,10 @@ class TestVoronoiTessellation(MatcalUnitTest):
     def test_invalid_region_index_error_handling(self):
         dim = 2
         nsamples = 2 ** dim
-        bounds = [[-5, 5] for d in np.arange(dim)]
+        bounds = np.array([[-5, 5] for d in np.arange(dim)])
         X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
 
-        vor = VoronoiTessellation(X_init, bounds)
+        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
         vor.build()
                        
         with self.assertRaises(ValueError):
@@ -1270,12 +1255,10 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
             for fo in [True, False]:
-                opts = {'finite_only':fo}
-                vor = VoronoiTessellation(X_init, bounds)
-                vor.build(**opts)
+                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
                 with self.assertRaises(ValueError):
                     vor.replace_unbounded_vertices([-2, -2, -2, -2], 100, [(1, -2), (2, -3), (3, -2), (4,-2)])
                       
@@ -1283,9 +1266,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
+            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
             vor.build()
             
             # point close to seed: should return seed
@@ -1306,9 +1289,6 @@ class TestVoronoiTessellation(MatcalUnitTest):
                     self.assertTrue(seed in closest_points)
     
     def test_get_voronoi_region(self):
-        from matplotlib.patches import Polygon
-        from matplotlib.path import Path
-        import random
         from scipy.spatial import Delaunay
         
         # Create polyhedron from region vertices
@@ -1316,9 +1296,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
+            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
             vor.build()
 
             # loop through all regions
@@ -1354,9 +1334,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
+            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
             vor.build()
             for pt_idx in np.arange(nsamples):
                 region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
@@ -1369,9 +1349,9 @@ class TestVoronoiTessellation(MatcalUnitTest):
         dims = [2, 3]
         for dim in dims:        
             nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
+            bounds = np.array([[-5, 5] for d in np.arange(dim)])
             X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
+            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
             vor.build()
             
             for pt_idx in np.arange(nsamples):
@@ -1422,60 +1402,57 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         super().setUp(__file__)
 
         # Sample data for testing
-        self.model = PythonModel(quadratic_model_2d)
+        self.model = PythonModel(linear_model_2d)
         self.model.set_name('quadratic_2d')
         theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
         theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
         pc = ParameterCollection("two_parameter", theta1, theta2)
-        self.kfold = KFoldCrossValidation()
         study = self._study_class(pc)
         self.nsamples = 20
-        test_points = np.linspace(.25, .75, 10)
-        objective = SimulationResultsSynchronizer("x", test_points, "f")
+        self.test_points = np.linspace(.25, .75, 10)
+        objective = SimulationResultsSynchronizer("x", self.test_points, "f")
         study.add_evaluation_set(self.model, objective)
-        study_info = study.launch(self.nsamples)
+        study.set_number_of_samples(self.nsamples)
+        study_info = study.launch()
         self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
         
     def test_initialization(self):
+        self.kfold = KFoldCrossValidation(5, False, 'x', [0,1], None, 'rmse', 
+                                          None)
+
         self.assertEqual(self.kfold.nsplits, 5)
         self.assertFalse(self.kfold.group_kfold)
         self.assertIsNone(self.kfold.scale)
         self.assertEqual(self.kfold.metric, 'rmse')
-        self.assertIsNone(self.kfold.groups)
         self.assertEqual(self.kfold.interpolation_field, 'x')
-        self.assertIsNone(self.kfold.par_names)
+        self.assertIsNone(self.kfold.param_names)
 
     def test_set_kfcv_options(self):
-        from sklearn.linear_model import LinearRegression
         kfcv_options = {'nsplits':4, 'group_kfold':True,
                         'scale': 'cbrt', 'metric':'nlpd',
-                        'groups': None,
                         'interpolation_field': 'x',
-                        'par_names': ['a', 'b']
+                        'interpolation_values':self.test_points,                         
+                        'param_names': ['a', 'b']
                         }
-        self.kfold.X = self.X
-        self.kfold._set_kfcv_options(**kfcv_options)
+        self.kfold = KFoldCrossValidation(**kfcv_options)
         self.assertEqual(self.kfold.nsplits, 4)
         self.assertTrue(self.kfold.group_kfold)
         self.assertEqual(self.kfold.scale, 'cbrt')
         self.assertEqual(self.kfold.metric, 'nlpd')
-        self.assertIsNone(self.kfold.groups)
         self.assertEqual(self.kfold.interpolation_field, 'x')
-        self.assertEqual(self.kfold.par_names, ['a', 'b'])
+        self.assertEqual(self.kfold.param_names, ['a', 'b'])
          
         # Test setting splits > number of samples. Should revert to length of X
-        kfcv_options = {'nsplits': 10}
-        self.kfold._set_kfcv_options(**kfcv_options)
-        self.assertEqual(self.kfold.nsplits, 10)
+        kfcv_options = {'nsplits':20, 'group_kfold':True,
+                        'scale': 'cbrt', 'metric':'nlpd',
+                        'interpolation_field': 'x',
+                        'interpolation_values':self.test_points,                         
+                        'param_names': ['a', 'b']
+                        } 
+        self.kfold = KFoldCrossValidation(**kfcv_options)
+        self.kfold._check_npslits(np.zeros((5,2)))
+        self.assertEqual(self.kfold.nsplits, 2)
 
-    def test_set_kfcv_options_error_handling(self):
-        kfcv_options = {'mmetric':'mse'}
-        with self.assertRaises(AttributeError):
-            self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
-        kfcv_options = {'nsplits':50}
-        kf_results = self.kfold._set_kfcv_options(**kfcv_options)
-        self.assertTrue(self.kfold.nsplits == int(self.nsamples/2.0))
-    
     def test_group_kfold_cv(self):
         nsplits = 4
         from sklearn.cluster import KMeans
@@ -1483,19 +1460,26 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         groups = kmeans.fit_predict(self.X)
         
         kfcv_options = {'group_kfold': True,
-                        'groups': groups,
                         'nsplits': nsplits,
+                        'scale':1,
+                        'metric': 'rmse',
                         'interpolation_field': 'x',
-                        'par_names': ['a', 'b']}  
-        
-        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
+                        'interpolation_values':self.test_points,                         
+                        'param_names': ['a', 'b']}  
+        self.kfold = KFoldCrossValidation(**kfcv_options)
+        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, groups)
         self.assertTrue(len(kf_results) == nsplits)
         
     def test_perform_kfold_cv(self):
-        kfcv_options = {'metric': 'rmse',
+        kfcv_options = {'nsplits':5, 
+                        'scale':1,
+                        'group_kfold':False,
+                        'metric': 'rmse',
                         'interpolation_field':'x',
-                        'par_names':['a', 'b']}
-        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
+                        'interpolation_values':self.test_points,                         
+                        'param_names':['a', 'b']}
+        self.kfold = KFoldCrossValidation(**kfcv_options)
+        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, None)
        
         # Check that the results are in the expected format
         self.assertIsInstance(kf_results, dict)
@@ -1516,12 +1500,20 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assertEqual(len(np.unique(test_indices)), self.nsamples)
             
     def test_cross_val_fold(self):
+        kfcv_options = {'nsplits':5, 
+                        'group_kfold':False,
+                        'scale':1,
+                        'metric': 'rmse',
+                        'interpolation_field':'x',
+                        'interpolation_values':self.test_points,                         
+                        'param_names':['a', 'b']}
+        self.kfold = KFoldCrossValidation(**kfcv_options)
         self.kfold.X = self.X
         self.kfold.y = self.y
         self.kfold.par_names = ['a', 'b']
         train_index = [0, 1, 2]
         test_index = [3, 4]
-        error, test_idx_returned = self.kfold.evaluate_fold(train_index, test_index, self.X, self.y)
+        error, test_idx_returned = self.kfold.evaluate_fold(train_index, test_index, self.X, self.y, 0)
         self.assertEqual(test_idx_returned, test_index)
         self.assertIsInstance(error, float)          
        
@@ -1531,50 +1523,40 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
     
     def setUp(self):
         super().setUp(__file__)
-
-        # Sample data for testing
-        self.model = PythonModel(quadratic_model_2d)
-        self.model.set_name('quadratic_2d')
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        self.loocv = LeaveOneOutCrossValidation()
-        study = self._study_class(theta1, theta2)
-        self.nsamples = 10
-        test_points = np.linspace(.25, .75, 10)
-        objective = SimulationResultsSynchronizer("x", test_points, "f")
-        study.add_evaluation_set(self.model, objective)
-        study_info = study.launch(self.nsamples)
-        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
+        self.test_points = np.linspace(.25, .75, 10)
 
     def test_initialization(self):
+        loocv_options = {'scale': None, 'metric':'rmse',
+                        'interpolation_field': 'x',
+                        'interpolation_values':self.test_points, 
+                        'par_names': None
+                        }
+        self.loocv = LeaveOneOutCrossValidation(**loocv_options)
         self.assertIsNone(self.loocv.scale)
         self.assertEqual(self.loocv.metric, 'rmse')
         self.assertEqual(self.loocv.interpolation_field, 'x')
         self.assertIsNone(self.loocv.par_names)
 
-    def test_set_loo_options(self):
-        loocv_options = {'scale': 'cbrt', 'metric':'nlpd',
-                        'interpolation_field': 'x',
+    def test_perform_loocv(self):
+        self.model = PythonModel(linear_model_2d)
+        self.model.set_name('quadratic_2d')
+        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
+        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
+        study = self._study_class(theta1, theta2)
+        self.nsamples = 10
+        objective = SimulationResultsSynchronizer("x", self.test_points, "f")
+        study.add_evaluation_set(self.model, objective)
+        study.set_number_of_samples(self.nsamples)
+        study_info = study.launch()
+        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
+        indices = range(self.nsamples)
+        loocv_options = {'scale': None, 'metric':'nlpd',
+                    'interpolation_field': 'x',
+                        'interpolation_values':self.test_points, 
                         'par_names': ['a', 'b']
                         }
-        self.loocv.X = self.X
-        self.loocv._set_loocv_options(**loocv_options)
-        self.assertEqual(self.loocv.scale, 'cbrt')
-        self.assertEqual(self.loocv.metric, 'nlpd')
-        self.assertEqual(self.loocv.interpolation_field, 'x')
-        self.assertEqual(self.loocv.par_names, ['a', 'b'])
-
-    def test_set_loocv_options_error_handling(self):
-        loocv_options = {'mmetric':'mse'}
-        with self.assertRaises(AttributeError):
-            self.loocv._set_loocv_options(**loocv_options)
-         
-    def test_perform_loocv(self):
-        indices = range(self.nsamples)
-        loocv_options = {'metric': 'rmse',
-                        'interpolation_field':'x',
-                        'par_names':['a', 'b']}
-        loo_results = self.loocv.perform_loocv(self.X, self.y, indices, **loocv_options)
+        self.loocv = LeaveOneOutCrossValidation(**loocv_options)
+        loo_results = self.loocv.perform_loocv(self.X, self.y, indices)
             
         self.assertIsInstance(loo_results, dict)
         self.assertEqual(len(loo_results), self.nsamples)
@@ -1613,7 +1595,7 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
     @staticmethod
     def setup_model(dim):
         if dim == 2:
-            physical_model = PythonModel(quadratic_model_2d)
+            physical_model = PythonModel(linear_model_2d)
             model_name = 'quadratic_2d'
         elif dim == 3:            
             physical_model = PythonModel(quadratic_model_3d)
@@ -1630,13 +1612,12 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         physical_model, parameter_collection = TestVoronoiAdaptiveSurrogateStudy.setup_model(dim)
         vor_study = self._study_class(parameter_collection)
 
-        indep_vals = np.linspace(.25, .75, 10)
+        indep_vals = np.linspace(.25, .75, 20)
         vor_study.set_independent_variable("x", indep_vals)
         vor_study.set_target_field_name("f")
         vor_study.add_evaluation_set(physical_model)
         vor_study.set_max_training_samples(5)
-        vor_study.set_number_of_initial_samples(20)
-        vor_study.set_seed(42)
+        vor_study.set_number_of_initial_samples(10)
         vor_study.set_cross_validation_options(nsplits=5, nmax_loo='all', cv_metric='nlpd')
         return vor_study
 
@@ -1670,48 +1651,6 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             self.assertTrue(np.all([i > 0 for i in rmse]))
             shutil.rmtree("test_samples")
             
-    def test_error_handling(self):
-        with self.assertRaises(AttributeError):
-            # _voronoi_type not an attribute
-            vor_study = self.setup_study(2)
-            voronoi_sampling_options = {'_voronoi_type':'full',
-                                        'ninitsamples':10,
-                                        'seed':42}
-            options = {'voronoi_sampling_options': voronoi_sampling_options}
-            vor_study.launch(**options)
-        with self.assertRaises(ValueError):
-            # random selection and thin cannot both be defined
-            vor_study = self.setup_study(2)
-            voronoi_sampling_options = {'thin': 10,
-                                        'random_selection': 10,
-                                        'ninitsamples':10,
-                                        'seed':42}
-
-            options = {'voronoi_sampling_options': voronoi_sampling_options}
-            vor_study.launch(**options)
-        with self.assertRaises(ValueError):
-            # mse not implemented
-            vor_study = self.setup_study(2)
-            voronoi_sampling_options = {'ninitsamples':10,
-                                        'seed':42}
-            cross_validation_options = {'cv_metric': 'mse'}
-
-            options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'cross_validation_options': cross_validation_options}
-            vor_study.launch(**options)
-        with self.assertRaises(ValueError):
-            # user cannot define training fraction
-            vor_study = self.setup_study(2)
-            vor_study.launch(**options)
-
-        with self.assertRaises(AttributeError):
-            # test info no provided
-            vor_study = self.setup_study(2)
-            vor_study.launch()
-        with self.assertRaises(vor_study.StudyInputError):
-            # user cannot add_parameter_evaluation
-            vor_study.add_parameter_evaluation(a=5)
-            
     def test_convergence(self):
         vor_study = self.setup_study(2)
         vor_study.set_max_training_samples(50)
@@ -1727,70 +1666,64 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         
     def test_nmax_loo_all(self):
         vor_study = self.setup_study(2)
-        voronoi_sampling_options = {'ninitsamples':5,
-                                    'nmaxbatches':1,
-                                    'seed':42}
-        cross_validation_options = {'nsplits':2,
-                                    'nmax_loo':'all'}
-
-        options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'cross_validation_options': cross_validation_options}
-        vor_study.launch(**options)
-        self.assertTrue(vor_study._nbatch_samples[-1] > vor_study.ninitsamples)
-            
+        vor_study.set_max_training_samples(15)
+        vor_study.set_number_of_initial_samples(7)
+        vor_study.set_cross_validation_options(nsplits=2, nmax_loo='all')
+        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+        vor_study.set_convergence_criteria(1e-1, 'rmse')
+        vor_study.launch()
+        self.assertIsNone(vor_study._loo_errors)
+        
     def test_thin(self):
         vor_study = self.setup_study(2)
-        voronoi_sampling_options = {'ninitsamples':6,
-                                    'nmaxbatches':1,
-                                    'thin':2,
-                                    'seed':100}
-        cross_validation_options = {'nsplits':0}
-
-        options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'cross_validation_options': cross_validation_options}
-        vor_study.launch(**options)
-        self.assertTrue(vor_study._nbatch_samples[-1] == vor_study.ninitsamples*1.5)
+        vor_study.set_max_training_samples(7)
+        vor_study.set_number_of_initial_samples(6)
+        vor_study.set_cross_validation_options(nsplits=0)
+        vor_study.set_voronoi_sampling_options(thin=2)
+        vor_study.set_seed(100)
+        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+        vor_study.set_convergence_criteria(1e-1, 'rmse')
+        vor_study.launch()
+        self.assertEqual(vor_study._nbatch_samples[-1], 
+                         vor_study._num_initial_samples*1.5)
 
     def test_random_selection(self):
         vor_study = self.setup_study(2)
-        voronoi_sampling_options = {'ninitsamples':6,
-                                    'nmaxbatches':1,
-                                    'random_selection':3,
-                                    'seed':100}
-        cross_validation_options = {'nsplits':0}
-
-        options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'cross_validation_options': cross_validation_options
-                    }
-        vor_study.launch(**options)
-        self.assertTrue(vor_study._nbatch_samples[-1] == vor_study.ninitsamples*1.5)
+        vor_study.set_max_training_samples(7)
+        vor_study.set_number_of_initial_samples(6)
+        vor_study.set_cross_validation_options(nsplits=0)
+        vor_study.set_voronoi_sampling_options(random_selection=3)
+        vor_study.set_seed(100)
+        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+        vor_study.set_convergence_criteria(1e-1, 'rmse')
+        vor_study.launch()
+        self.assertEqual(vor_study._nbatch_samples[-1], 
+                        vor_study._num_initial_samples*1.5)
 
     def test_local_tess(self):
         vor_study = self.setup_study(2)
-        voronoi_sampling_options = {'ninitsamples':20,
-                                    'nmaxbatches':1,
-                                    'random_selection':3,
-                                    'voronoi_type':'local',
-                                    'seed':42}
-        cross_validation_options = {'nsplits':0}
-        options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'cross_validation_options': cross_validation_options}
-        vor_study.launch(**options)
+        vor_study.set_max_training_samples(21)
+        vor_study.set_number_of_initial_samples(20)
+        vor_study.set_cross_validation_options(nsplits=0)
+        vor_study.set_voronoi_sampling_options(random_selection=3, 
+                                               voronoi_type='local')
+        vor_study.set_seed(42)
+        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+        vor_study.set_convergence_criteria(1e-1, 'rmse')
+        vor_study.launch()
         self.assertIsNotNone(vor_study._tree)
         
     def test_group_kfold(self):
         vor_study = self.setup_study(2)
-        voronoi_sampling_options = {'ninitsamples':20,
-                                    'nmaxbatches':1,
-                                    'random_selection':10,
-                                    'seed':42}
-        cross_validation_options = {'nsplits':2,
-                                    'group_kfold':True}
-        options = {'voronoi_sampling_options': voronoi_sampling_options,
-                    'cross_validation_options': cross_validation_options
-                  }
-        vor_study.launch(**options)
-        self.assertTrue(vor_study._nbatch_samples[-1] > vor_study.ninitsamples)
+        vor_study.set_max_training_samples(21)
+        vor_study.set_number_of_initial_samples(20)
+        vor_study.set_cross_validation_options(nsplits=4, group_kfold=True)
+        vor_study.set_voronoi_sampling_options(random_selection=10, 
+                                               voronoi_type='local')
+        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+        vor_study.set_convergence_criteria(1e-1, 'rmse')
+        vor_study.launch()
+        self.assertTrue(vor_study._nbatch_samples[-1] > vor_study._num_initial_samples)
 
     def test_perform_cv_and_find_max_errors(self):
         dims = [2, 3]
@@ -1798,16 +1731,13 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             vor_study = self.setup_study(dim)           
             nsplits = 2
             nmax_loo = 3
-            voronoi_sampling_options = {'nmaxbatches':1,
-                                        'seed':42}
-            cross_validation_options = {'nsplits': nsplits,
-                                        'nmax_folds':1,
-                                        'nmax_loo': nmax_loo,
-                                        'cv_metric': 'nlpd'}
-            options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'cross_validation_options': cross_validation_options}
-             
-            vor_study.launch(**options)
+            vor_study.set_max_training_samples(21)
+            vor_study.set_number_of_initial_samples(20)
+            vor_study.set_cross_validation_options(nsplits=nsplits, cv_metric='nlpd', 
+                                                   nmax_loo=3, nmax_folds=1)
+            vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+            vor_study.set_convergence_criteria(1e-1, 'rmse') 
+            vor_study.launch()
             max_fold_indices = vor_study._max_fold_error_indices
             kf_results = vor_study._kf
 
@@ -1825,8 +1755,8 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             test_indices = np.vstack(test_indices)
             
             # check that each test sample is used once and only once
-            self.assertTrue(np.all(np.isin(np.arange(vor_study.ninitsamples), test_indices)))
-            self.assertEqual(len(np.unique(test_indices)), vor_study.ninitsamples)
+            self.assertTrue(np.all(np.isin(np.arange(vor_study._num_initial_samples), test_indices)))
+            self.assertEqual(len(np.unique(test_indices)), vor_study._num_initial_samples)
 
             max_key = max(kf_results, key=kf_results.get)
             self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
@@ -1848,36 +1778,30 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             sorted_array = np.asarray(sorted(loo_errors_array, key=lambda x: x[0]))
 
             # verify that the training samples with the greatest LOO error are returned
-            worst_sample_locations = vor_study._find_loo_max_errors()
+            training_params = vor_study._format_params(vor_study._results)
+
+            worst_sample_locations = vor_study._find_loo_max_errors(training_params)
             max_error_indices = sorted_array[-nmax_loo:, :][:, 1][::-1] # get indices of largest errors and reverse (greatest to smallest)
             max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
-            self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
-
+            self.assertTrue(np.all(worst_sample_locations == training_params[max_error_indices]))
+            shutil.rmtree("test_samples")
     def test_adaptive_voronoi_surrogate_generation(self):
         #move to integration
         dims = [2, 3]
         for dim in dims:
             vor_study = self.setup_study(dim)
             
-            voronoi_sampling_options = {'voronoi_type':'full',
-                                        'finite_only':False,
-                                        'iterative_updates':True,
-                                        'nmaxbatches':3,
-                                        'ninitsamples':10,
-                                        'convergence_metric':'score',
-                                        'seed':42}
             cross_validation_options = {'nsplits':2,
                                         'nmax_folds':1,
                                         'nmax_loo':5,
                                         'cv_metric': 'nlpd'
                                         }
-            surrogate_options = {'interpolation_field':'x',
-                                 'test_eval_info': test_information}
-            options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'surrogate_options': surrogate_options,
-                       'cross_validation_options': cross_validation_options}
+            vor_study.set_max_training_samples(60)
+            vor_study.set_number_of_initial_samples(10)
+            vor_study.set_convergence_criteria(convergence_metric='score')
+            vor_study.set_cross_validation_options(**cross_validation_options)
              
-            vor_study.launch(**options)
+            vor_study.launch()
             # verify that errors are decreasing
             metrics = [vor_study._current_surrogate_score['score'],
                       vor_study._current_surrogate_score['nlpd'],
@@ -1894,13 +1818,12 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             nsamples = vor_study._nbatch_samples
             nsamples_increasing = all(x < y for x, y in zip(nsamples, nsamples[1:]))
             self.assertTrue(nsamples_increasing)
-            
-            self.assertEqual(vor_study.X.shape[0], vor_study._nbatch_samples[-1])
+            samples = vor_study._format_params(vor_study._results)
+            self.assertEqual(samples.shape[0], vor_study._nbatch_samples[-1])
             
             # verify that all samples are within bounds
-            samples = vor_study.X
-            lb = vor_study._l_bounds
-            ub = vor_study._u_bounds
+            lb = vor_study._bounds[:,0]
+            ub = vor_study._bounds[:,1]
             outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
             self.assertFalse(np.any(outside_samples))
-    
+            shutil.rmtree("test_samples")
