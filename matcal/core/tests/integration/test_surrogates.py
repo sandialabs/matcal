@@ -109,7 +109,7 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
                 n_features = np.random.randint(10, 50)
             x = np.linspace(0, 10, n_features)
             y = m * x + b
-            return {'x':x, 'y':y}
+            return {'y':y}
 
         n_samples = 500
         p_names = ['m', 'b']

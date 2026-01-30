@@ -504,7 +504,6 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         nsamples = 10
         self.setup_study()
         params, sim_history, state0 = TestHaltonStudy.run_study(self.study, nsamples, self.model_name, self.par_names)
-        print(params.shape)
         self.assertEqual(len(params), nsamples)
         
         data = [sim_history[i]['f'][0] for i in range(nsamples)]
@@ -690,7 +689,6 @@ class TestLaplaceStudy(StudyBaseUnitTests.CommonTests):
 
         study_param_results = study._get_parameter_specific_results("grad_key")
         self.assertEqual(study_param_results["mean:a"], 1)
-        print(study_param_results["grad_key:a"])
         #for raw residuals just one, for scaled residuals divide by sqrt of 3 for 
         # normalization by number of data sets
         self.assert_close_arrays(study_param_results["grad_key:a"], np.ones((1,3)))
@@ -845,18 +843,12 @@ class TestFitPosteriors(MatcalUnitTest):
         resids = model(mean_dict) - model(inputs)
         resids += noise
        
-        print("Avg. resids:", np.average(resids))
         resids = resids.T
         noise_guess = std**2
-        print(noise_guess)
         sens = resid_sensitivity(mean_dict).T
-        print("Avg. sens:", np.average(sens))
         cov_est = _estimate_parameter_covariance(resids, sens, noise_guess)
-        print("Est covar", cov_est)
         start = np.copy(cov_est)
-        print("Initial covar:", start)
         fitted_posterior = _fit_posterior(resids, sens, start, noise_guess, method=None)
-        print("Fitted posterior:", fitted_posterior)
         self.assert_close_arrays(cov, fitted_posterior, show_on_fail=True, 
                                  rtol=1e-2)
 

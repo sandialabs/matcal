@@ -250,24 +250,24 @@ class AdaptiveSurrogate:
         """
         surrogate = self._surrogates[surrogate_index]
         if batch_evaluate:
-            params_array = np.asarray(args[0])
+            processed_args = np.asarray(args[0])
             if transpose:
-                params_array = params_array.T
-            response = surrogate(params_array)
+                processed_args = processed_args.T
             if self._variable_transformer is not None:
-                params_array = self._variable_transformer.map_to_canonical(params_array)
+                processed_args = self._variable_transformer.map_to_canonical(processed_args)
             else:
-                params_array = params_array
+                processed_args = processed_args
+            response = surrogate(processed_args)
             return response
         elif len(args) == len(self._param_names) and len(kwargs) == 0:
-            params_array =  np.asarray([args])
+            processed_args =  np.asarray([args])
             if transpose:
-                params_array = params_array.T
+                processed_args = processed_args.T
             if self._variable_transformer is not None:
-                params_array = self._variable_transformer.map_to_canonical(params_array)
+                processed_args = self._variable_transformer.map_to_canonical(processed_args)
             else:
-                params_array = params_array
-            response = surrogate(params_array)[0]
+                processed_args = processed_args
+            response = surrogate(processed_args)[0]
         elif len(args) == 0 and len(kwargs) == len(self._param_names):
             param_ordered_list = []
             for param_name in self._param_names:
@@ -338,15 +338,16 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._training_batch_number = 1
         self.set_max_training_samples()
 
-        self._average_l2_error_goal = 1e-2
-        self._max_abs_error_goal = 1e-1
+        self._average_l2_error_goal = None
+        self._max_abs_error_goal = None
+        self.set_error_stopping_criteria()
 
         self._surrogate_save_filename = None
         self._test_group_random_seed = None
 
     def set_error_stopping_criteria(self,
-                                    average_l2_error_goal: float | None = None,
-                                    max_abs_error_goal: float | None = None):
+                                    average_l2_error_goal: float=1e-2,
+                                    max_abs_error_goal: float=1e-1):
         """
         Set the error thresholds that determine when the adaptive surrogate
         training stops.
@@ -357,22 +358,18 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         loop terminates (provided at least two batches have been evaluated).
 
         :param average_l2_error_goal: Desired upper bound for the average L2
-            error. Must be a positive number. If ``None`` the current goal is
-            left unchanged. Default is 1e-2.
+            error. Must be a positive number. 
         :type average_l2_error_goal: float, optional
 
         :param max_abs_error_goal: Desired upper bound for the maximum absolute
-            error. Must be a positive number. If ``None`` the current goal is
-            left unchanged. Default is 1e-1.
+            error. Must be a positive number. 
         :type max_abs_error_goal: float, optional
         """
-        if average_l2_error_goal is not None:
-            check_value_is_positive_real(average_l2_error_goal, "average_l2_error_goal")
-            self._average_l2_error_goal = float(average_l2_error_goal)
+        check_value_is_positive_real(average_l2_error_goal, "average_l2_error_goal")
+        self._average_l2_error_goal = float(average_l2_error_goal)
 
-        if max_abs_error_goal is not None:
-            check_value_is_positive_real(max_abs_error_goal, "max_abs_error_goal")
-            self._max_abs_error_goal = float(max_abs_error_goal)
+        check_value_is_positive_real(max_abs_error_goal, "max_abs_error_goal")
+        self._max_abs_error_goal = float(max_abs_error_goal)
 
     def set_independent_variable(self, independent_variable, 
                                  independent_variable_values):
@@ -480,13 +477,13 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         orig_working_directory = self._update_work_dir_for_test_sampling()
         seed = self._seed
         if self._test_group_random_seed is not None:
-            super().set_seed(self._test_group_random_seed)
+            self.set_seed(self._test_group_random_seed)
         super().launch()
         test_params = self._format_params(self._results)
         test_responses = self._format_output(self._results)
         self._reset_study_after_test_sampling_generation(orig_working_directory)
         if seed is not None:
-            super().set_seed(seed)
+            self.set_seed(seed)
         return test_params, test_responses
 
     def set_test_group_random_seed(self, seed):
@@ -646,11 +643,11 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         if training_batch_number > 1:
             if np.abs(self._surrogate.average_error_history[-1]) <= self._average_l2_error_goal:
                 logger.info(f"Average L2 norm score converged! "+
-                            f"Final score: {self._surrogate.average_error_history[-1]}")
+                            f"\nFinal L2 norm error: {self._surrogate.average_error_history[-1]}")
                 stop=True
             elif np.abs(self._surrogate.max_error_history[-1]) <=self._max_abs_error_goal:
                 logger.info(f"Max absolute error score converged! "+
-                            f"Final score: {self._surrogate.max_error_history[-1]}")
+                            f"\nFinal Inf norm error: {self._surrogate.max_error_history[-1]}")
                 stop=True
         if self._results.number_of_evaluations > self._max_training_samples and not stop:
             logger.info("Surrogate not converged yet, but maximum training "+
@@ -778,7 +775,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 break
             logger.info("Surrogate not converged yet.")
             logger.info(f"Average L2 norm error score: {self._surrogate.average_error_history[-1]}")
-            logger.info(f"Max absolute error score: {self._surrogate.max_error_history[-1]}")
+            logger.info(f"Max Inf norm error score: {self._surrogate.max_error_history[-1]}")
 
         return self._results
 
@@ -854,6 +851,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._current_surrogate_score['score'] = []
         self._current_surrogate_score['nlpd'] = []
         self._current_surrogate_score['rmse'] = []
+        self._max_fold_error_indices = None
 
         self._seed = None
             
@@ -1092,6 +1090,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def _run_initial_training_samples(self):
         super().set_number_of_samples(self._num_initial_samples)
+        super()._generate_samples(self._num_initial_samples, self._skip)
         self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate, 
                                                        is_restart=self._restart)        
         return self._train_surrogate_with_current_results()
@@ -1238,7 +1237,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._kf = kfcv.perform_kfold_cv(training_params, training_data, groups)
 
     def _find_kfold_max_errors(self):
-        self._max_fold_error_indices = None
         max_folds = self._find_indices_of_n_largest_kf_errors()
         self._max_fold_error_indices = np.concatenate(list(max_folds.values()))
         logger.info(f"\n\tWorst kfold errors associated with the following sample indices:\n"+

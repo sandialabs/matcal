@@ -161,6 +161,8 @@ class HaltonStudy(ParameterStudy):
         self.HaltonSampler = qmc.Halton(d=self._number_parameters)
         self._seed = None
         self._scramble=None 
+        self._number_of_samples=None
+        self._skip=None
         self.set_Halton_scramble()
         self.set_number_of_samples()
         
@@ -198,17 +200,25 @@ class HaltonStudy(ParameterStudy):
         :type skip: int
         """
         check_value_is_positive_integer(nsamples, 'nsamples')
+        self._number_of_samples = nsamples
         if skip is not None:
             check_value_is_positive_integer(skip, 'skip')
-            self._skip_ahead(skip)
-        self._generate_samples(nsamples)
+            self._skip=skip
 
-    def _generate_samples(self, nsamples):
+    def launch(self):
+        self._generate_samples(self._number_of_samples, self._skip)
+        return super().launch()
+
+    def _generate_samples(self, nsamples, skip):
         halton_sampler = qmc.Halton(d=self._number_parameters, 
                                        scramble=self._scramble, 
                                         seed=self._seed)
+        if skip is not None:
+            halton_sampler.fast_forward(skip)
         logger.debug(
-            f"Halton sampler re‑initialized with seed {self._seed} (scramble={self._scramble})"
+            f"Halton sampler initialized with seed = {self._seed}, scramble = " +
+            f"{self._scramble}, and "+
+            f"skip = {skip}."
         )
         unscaled_samples = halton_sampler.random(n=nsamples)
         scaled_samples = self._scale_samples_to_bounds(unscaled_samples)
@@ -221,9 +231,6 @@ class HaltonStudy(ParameterStudy):
             ss = { key:sample[i] for i, key in enumerate(param_order) }
             self._add_parameter_evaluation(**ss)
         self._check_parameter_sets_populated()
-
-    def _skip_ahead(self, skip):
-        _ = self.HaltonSampler.fast_forward(skip)
 
     def _scale_samples_to_bounds(self, samples):
         """

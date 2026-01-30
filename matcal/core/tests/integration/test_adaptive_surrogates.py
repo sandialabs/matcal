@@ -43,6 +43,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     def test_simple_function_fit(self):
         sg_study = mc.SparseGridAdaptiveSurrogateStudy(a,b,c)
         sg_study.set_independent_variable("x", np.linspace(0,3,100))
+        sg_study.set_error_stopping_criteria(1e-4)
         sg_study.set_number_of_test_samples(50)
         sg_study.set_target_field_name("y")
         sg_study.set_test_group_random_seed(1234)

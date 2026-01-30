@@ -555,7 +555,8 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
 
     @staticmethod
     def run_study(study, nsamples, model_name, par_names, skip=None):
-        results = study.launch(nsamples, skip=skip)
+        study.set_number_of_samples(nsamples, skip=skip)
+        results = study.launch()
         params = np.array([results.parameter_history[par] for par in par_names]).T.squeeze()
         state0 = results.simulation_history[model_name].states['matcal_default_state']
         sim_history = results.simulation_history[model_name][state0]
@@ -582,7 +583,9 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         return np.linalg.norm(y_pred - test_data), y_pred
             
     def setup_study(self, parameter_collection, model, objective): 
-        study = self._study_class(parameter_collection, scramble=False, rng=42)
+        study = self._study_class(parameter_collection)
+        study.set_Halton_scramble(False)
+        study.set_seed(1234)
         study.add_evaluation_set(model, objective)
         return study
     

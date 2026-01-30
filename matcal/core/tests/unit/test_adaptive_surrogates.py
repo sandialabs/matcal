@@ -434,8 +434,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     def test_setting_one_goal_keeps_other_untouched(self):
         new_avg = 1e-4
         self.study.set_error_stopping_criteria(
-            average_l2_error_goal=new_avg,
-            max_abs_error_goal=None,
+            average_l2_error_goal=new_avg
         )
         self.assertAlmostEqual(
             self.study._average_l2_error_goal,
