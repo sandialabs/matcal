@@ -20,7 +20,11 @@ from matcal.core.utilities import (check_value_is_positive_integer,
                                    check_value_is_bool, 
                                    check_value_is_nonnegative_integer)
 from matcal.core.serializer_wrapper import matcal_save
-from matcal.core.surrogates import _average_l2_error_norm, _max_error_inf_norm
+from matcal.core.surrogates import (_average_l2_error_norm, 
+                                    _max_error_inf_norm, 
+                                    _process_surrogate_args_call, 
+                                    _return_as_is, _check_params_in_range, 
+                                    _convert_param_array_to_dict)
 
 logger = initialize_matcal_logger(__name__)
 
@@ -84,7 +88,8 @@ class AdaptiveSurrogate:
 
     def __init__(self, target_field_name, indep_variable_name, 
                  indep_variable_values, variable_transformer, 
-                 test_params, test_responses, param_names):
+                 test_params, test_responses, param_names, 
+                 bounds):
         """
         Create an :class:`AdaptiveSurrogate` instance.
 
@@ -127,16 +132,33 @@ class AdaptiveSurrogate:
         self._test_params = test_params
         self._test_responses = test_responses
         self._param_names = param_names
+        self._bounds = bounds
+        self._enforce_training_data_parameter_range = True
 
-
+    def enforce_training_data_parameter_range(self, enforce_training_data_parameter_range=True):
+        """
+        By default the surrogate will error if called with a parameter set outside of the 
+        parameter ranges used in the training data set. To call the surrogate for parameters 
+        outside of the training data range, call this method with the argument set to False. 
+        Adherence to the training data range can be reactivated by calling this method 
+        with the argument set to True.
+        
+        :param ignore_training_range: bool flag to ignore training data range.
+        :type ignore_training_range:
+        """
+        check_value_is_bool(enforce_training_data_parameter_range, 
+                            "enforce_training_data_parameter_range")
+        self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
     def _add_iteration(
         self,
         surrogate, 
         nsamples 
         ) -> None:
         self._surrogates.append(copy.deepcopy(surrogate))
-        surrogate_values = self(self._test_params, batch_evaluate=True)
-        average_l2_error = _average_l2_error_norm(self._test_responses, surrogate_values)
+        surrogate_values = self(self._test_params, batch_evaluate=True)[self._target_field_name]
+        
+        average_l2_error = _average_l2_error_norm(self._test_responses, 
+                                                  surrogate_values)
         max_abs_error = _max_error_inf_norm( self._test_responses, surrogate_values)
 
         self._average_errors.append(average_l2_error)
@@ -187,7 +209,6 @@ class AdaptiveSurrogate:
         """Returns a list containing the number of samples used by each surrogate
            training step."""
         return self._sample_counts
-
     
     def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, transpose=False, 
                  **kwargs):
@@ -249,72 +270,31 @@ class AdaptiveSurrogate:
             missing or extra keyword arguments, etc.).
         """
         surrogate = self._surrogates[surrogate_index]
-        if batch_evaluate:
-            processed_args = np.asarray(args[0])
-            if transpose:
-                processed_args = processed_args.T
-            if self._variable_transformer is not None:
-                processed_args = self._variable_transformer.map_to_canonical(processed_args)
-            else:
-                processed_args = processed_args
-            response = surrogate(processed_args)
-            return response
-        elif len(args) == len(self._param_names) and len(kwargs) == 0:
-            processed_args =  np.asarray([args])
-            if transpose:
-                processed_args = processed_args.T
-            if self._variable_transformer is not None:
-                processed_args = self._variable_transformer.map_to_canonical(processed_args)
-            else:
-                processed_args = processed_args
-            response = surrogate(processed_args)[0]
-        elif len(args) == 0 and len(kwargs) == len(self._param_names):
-            param_ordered_list = []
-            for param_name in self._param_names:
-                if param_name not in kwargs:
-                    error_message = (f"All required parameters were not passed to the surrogate."+
-                        f"Required parameters:\n{self._param_names}\n"+
-                        f"Received parameters:\n{kwargs.keys()}")
-                    raise RuntimeError(error_message)
-                param_ordered_list.append(kwargs[param_name])
-            
-            return self(*param_ordered_list, surrogate_index=surrogate_index, transpose=transpose)
-        else:
-            raise RuntimeError("Surrogate model was not called correctly. The input parameters "+
-                               "are likely of the incorrect format. Check input")
-
-        return {self._target_field_name:response, 
-                self._indep_variable_name:self._indep_variable_values}
+        response = surrogate(*args, batch_evaluate=batch_evaluate, transpose=transpose, 
+                             **kwargs)
+        return response
 
 
 class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
-    
-    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, transpose=False, **kwargs):
-        if batch_evaluate:
-            transpose=True
-        elif len(args) == len(self._param_names) and len(kwargs) == 0:
-            transpose=True
-        return super().__call__(*args, surrogate_index=surrogate_index, 
-                                batch_evaluate=batch_evaluate, 
-                                transpose=transpose, **kwargs)
 
-
-class VoronoiAdaptiveSurrogate(AdaptiveSurrogate):
-    
     def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, 
-                 transpose = False, **kwargs):
-        if batch_evaluate:
-            transpose=False
-            response = super().__call__(*args, surrogate_index=surrogate_index, 
-                                batch_evaluate=batch_evaluate, 
-                                transpose=transpose, **kwargs)
-            return response[self._target_field_name]
-        elif len(args) == len(self._param_names) and len(kwargs) == 0:
-            transpose=False
-        return super().__call__(*args, surrogate_index=surrogate_index, 
-                                batch_evaluate=batch_evaluate, 
-                                transpose=transpose, **kwargs)
+                 transpose=True, **kwargs):
+        surrogate = self._surrogates[surrogate_index]
+        params_array = _process_surrogate_args_call(self._param_names, *args, 
+                                     batch_evaluate=batch_evaluate, transpose=transpose, **kwargs)
+        if not batch_evaluate:
+            params_array = np.atleast_2d(params_array).T
+        params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
+        _check_params_in_range(params_dict, self._bounds.T, 
+                               self._enforce_training_data_parameter_range)
 
+        params_array = self._variable_transformer.map_to_canonical(params_array)
+        response = surrogate(params_array)
+        if not batch_evaluate:
+            response = response.flatten()
+        results = {self._target_field_name:response}
+        results[self._indep_variable_name] = self._indep_variable_values
+        return results
 
 class AdaptiveSurrogateStudyBase(HaltonStudy):
     def __init__(self, *parameters):
@@ -635,7 +615,8 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                                                           self._independent_variable, 
                                             self._independent_variable_values, 
                                             self._variable_transformer, 
-                                            test_params, test_responses, param_names)
+                                            test_params, test_responses, param_names, 
+                                            self._bounds)
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
         super().launch()
 
@@ -808,7 +789,7 @@ def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations
 
 class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
-    _adaptive_surrogate_class = VoronoiAdaptiveSurrogate
+    _adaptive_surrogate_class = AdaptiveSurrogate
 
     def _return_none(*args, **kwargs):
         return None

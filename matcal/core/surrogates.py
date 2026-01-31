@@ -958,21 +958,30 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         """
         return self._interpolation_locations
     
-    def __call__(self, parameters)-> OrderedDict:
+    def __call__(self, *args, batch_evaluate=False, transpose=False, **kwargs)-> OrderedDict:
         """
         By executing a call on the surrogate object. [Example my_surrogate(my_parameters)]
         return a dictionary of the different field predictions
 
-        :param parameters: a list or array of parameter values to evaluate the surrogate at.
-            The parameters are expected to be in an order as detailed by 
-        :meth:`~matcal.core.surrogates.MatCalPCASurrogateBase.parameter_order`
+        :param parameters: parameter values to evaluate the surrogate at.
+            If not a dict, the parameters are expected to be in an order as detailed by 
+            :meth:`~matcal.core.surrogates.MatCalPCASurrogateBase.parameter_order`. 
+            As an array, the input should have shape (n_samples, n_parameters).
+        :type parameters: np.ndarray or list or dict
 
         :return: A dictionary of the various field predictions.
         :rtype: dict
         """
-        params_dict = _convert_param_array_to_dict(parameters, self.parameter_order)
-        self._check_params_in_range(params_dict)
+        param_names = self._parameter_scaler.parameter_order
+        params_array = _process_surrogate_args_call(param_names, *args, 
+                                     batch_evaluate=batch_evaluate, transpose=transpose, **kwargs)
+        params_dict = _convert_param_array_to_dict(params_array, param_names)
+        _check_params_in_range(params_dict, self._param_ranges, 
+                               self._enforce_training_data_parameter_range)
         scaled_params = self._parameter_scaler.transform_as_array(params_dict)
+        multiple_samples = False
+        if scaled_params.shape[0] > 1:
+            multiple_samples=True
         results = OrderedDict()
         if self._interpolation_field is not None:
             results[self._interpolation_field] = self._interpolation_locations
@@ -980,6 +989,8 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
             scaled_latent_prediction = self._regressors[field].predict(scaled_params)
             scaled_latent_prediction = scaled_latent_prediction.reshape(scaled_params.shape[0], -1)
             results[field] = self._transform_data_to_native_space(field, scaled_latent_prediction)
+            if not multiple_samples:
+                results[field] = results[field].flatten()
         return results
     
     def _transform_data_to_native_space(self, field, scaled_latent_data):
@@ -989,17 +1000,6 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         prediction = self._data_scalers[field].inverse_transform(scaled_prediction)
         return prediction
 
-    def _check_params_in_range(self, params_dict):
-        for param in params_dict:
-            param_values = params_dict[param]
-            bad_values = param_values > np.max(self._param_ranges[param])
-            bad_values = (param_values < np.min(self._param_ranges[param])) | bad_values
-            if bad_values.any() and self._enforce_training_data_parameter_range:
-                raise RuntimeError(f"The passed parameter values for parameter '{param}' contains "+ 
-                                   "values outside of the trained parameter range of "+
-                                   f"{self._param_ranges[param][0]} to "+
-                                   f"{self._param_ranges[param][1]}.\n{param_values}")
-            
     def _fit(train_data, test_data, train_params, test_params, fields_to_log_scale,
              decomposition_tool, surrogate_generator, param_ranges, 
              regressor_initializer, surrogate_class, logger_on=True):
@@ -1055,6 +1055,58 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         if logger_on:
             _print_scores(*latent_scores, *r2_scores)
         return surrogate
+
+
+def _return_as_is(passed_params):
+    return passed_params
+
+
+def _process_surrogate_args_call(param_names, *args,  
+                                 batch_evaluate=False, transpose=False, **kwargs,):
+    if batch_evaluate:
+        processed_args = np.asarray(args[0])
+        if transpose:
+            processed_args = processed_args.T
+    elif len(args)==1 and isinstance(args[0], dict or OrderedDict):
+        params = _convert_param_dict_to_array(args[0], param_names)
+        batch_evaluate=True
+        return _process_surrogate_args_call( param_names, params, batch_evaluate=batch_evaluate, 
+                                            transpose=transpose)
+    elif len(args) == len(param_names) and len(kwargs) == 0:
+        processed_args =  np.asarray(args)
+        if transpose:
+            processed_args = processed_args.T
+    elif len(args) == 0 and len(kwargs) == len(param_names):
+        param_ordered_list = []
+        for param_name in param_names:
+            if param_name not in kwargs:
+                error_message = (f"All required parameters were not passed to the surrogate."+
+                    f"Required parameters:\n{param_names}\n"+
+                    f"Received parameters:\n{kwargs.keys()}")
+                raise RuntimeError(error_message)
+            param_ordered_list.append(kwargs[param_name])        
+        return _process_surrogate_args_call(param_names, *param_ordered_list,  transpose=transpose)
+
+    else:
+        raise RuntimeError("Surrogate model was not called correctly. The input parameters "+
+                            "are likely of the incorrect format. Check input")
+    return processed_args
+
+
+def _check_params_in_range( params_dict, param_ranges, enforce_range=True):
+    if not isinstance(param_ranges, (dict, OrderedDict)):
+        param_ranges = _convert_param_array_to_dict(param_ranges, params_dict.keys())
+    for param in params_dict:
+        param_values = params_dict[param]
+        bad_values = param_values > np.max(param_ranges[param])
+        bad_values = (param_values < np.min(param_ranges[param])) | bad_values
+        if bad_values.any() and enforce_range:
+            raise RuntimeError(f"The passed parameter values for parameter '{param}' contains "+ 
+                                "values outside of the trained parameter range of "+
+                                f"{param_ranges[param][0]} to "+
+                                f"{param_ranges[param][1]}.\n{param_values}")
+            
+
 
 
 def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_params, train_data):
@@ -1279,14 +1331,15 @@ class _ParameterScalerSet:
     def parameter_order(self):
         return list(self._scalers.keys())
 
-    def _arbitrary_transform_to_array(self, parameter_dict, transform_method_name):
-        param_array = _init_param_array(parameter_dict)
-        for field_i, (field_name, scaler) in enumerate(self._scalers.items()):
-            param_data = parameter_dict[field_name]
+    def _arbitrary_transform_to_array(self, parameters, transform_method_name):
+        if isinstance(parameters, (dict, OrderedDict)):
+            parameters = _convert_param_dict_to_array(parameters, self.parameter_order)
+        for param_index, (param_name, scaler) in enumerate(self._scalers.items()):
+            param_data = parameters[:, param_index]
             param_data = _ensure_2d_array(param_data)
             method_to_call = getattr(scaler, transform_method_name)
-            param_array[:, field_i] = method_to_call(param_data).flatten()
-        return param_array
+            parameters[:, param_index] = method_to_call(param_data).flatten()
+        return parameters
 
     def transform_as_array(self, parameter_dict):
         return self._arbitrary_transform_to_array(parameter_dict, "transform")
@@ -1331,12 +1384,12 @@ def _convert_param_array_to_dict(passed_params, parameter_order):
             out[param_name] = passed_params.reshape(-1, len(parameter_order))[:,param_i]
         return out
 
+
 def _convert_param_dict_to_array(passed_params_dict, parameter_order):
     array = _init_param_array(passed_params_dict)
     for param_i, param_name  in enumerate(parameter_order):
         array[:,param_i] = passed_params_dict[param_name]
     return array
-
 
 def _average_l2_error_norm(test_values, surrogate_values):
     #expects arrays to be sized (n_samples, n_qois)

@@ -6,7 +6,7 @@ import unittest
 
 from matcal.core.adaptive_surrogates import (
     SparseGridAdaptiveSurrogateStudy,
-    _get_parameter_bounds, AdaptiveSurrogate, 
+    _get_parameter_bounds, AdaptiveSurrogate, SparseGridAdaptiveSurrogate,
     VoronoiAdaptiveSurrogateStudy, VoronoiTessellation, 
     LeaveOneOutCrossValidation, KFoldCrossValidation)
 from matcal.core.objective import SimulationResultsSynchronizer
@@ -352,18 +352,20 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
                 return x
         self.study._variable_transformer = DummyTransform()
 
-        self.study._test_params = np.array([[0.0, 1.0], [0.5, 0.5]])
-        self.study._test_responses = np.array([[1.0, 2.0], [1.5, 2.5]])
+        self.study._test_params = np.array([[0.0, 1.0], [0.5, 0.5], [ 1.0, 0]])
+        self.study._test_responses = np.array([[1.0, 2.0], [1.5, 2.5], [0.75, 0.85]])
 
         class DoubleParamSurrogate:
             def __call__(self, params):
-                return params * 2.0
-        self.study._surrogate = AdaptiveSurrogate("target", "independent", 
+                results = np.array(params)*2.0
+                return results.T
+        self.study._surrogate = SparseGridAdaptiveSurrogate("target", "independent", 
                                                    np.array([0.0, 1.0]), 
                                                    DummyTransform(), 
                                                    self.study._test_params, 
                                                    self.study._test_responses, 
-                                                   ["p1", "p2"]   
+                                                   ["p1", "p2"], 
+                                                   np.array([[-1.0, 1.0], [-1.0, 1.0]])   
                                                    )        
         self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)        
         
@@ -371,7 +373,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertEqual(len(self.study.surrogate.max_error_history), 1)
 
         expected_l2 = np.linalg.norm(self.study._test_responses -
-                                    DoubleParamSurrogate()(self.study._test_params))
+                                    DoubleParamSurrogate()(self.study._test_params.T))
         expected_l2 /= self.study._test_responses.shape[1]
         self.assertAlmostEqual(self.study.surrogate.average_error_history[0], expected_l2)
 
@@ -379,7 +381,6 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
     def test_study_results_is_not_none(self):
         """launch must eventually call the sparse‑grid routine."""
-        called = {"flag": False}
         self.study.set_independent_variable("x", np.linspace(0,1,3))
         self.study.set_target_field_name("y")
         self.study.add_evaluation_set(light_model)
@@ -523,7 +524,7 @@ class TestAdaptiveSurrogate(MatcalUnitTest):
         test_responses = np.array([[1.0], [2.0]])
 
         transformer = IdentityTransformer()
-        surrogate = AdaptiveSurrogate(
+        surrogate = SparseGridAdaptiveSurrogate(
             target_field_name="target",
             indep_variable_name="independent",
             indep_variable_values=np.array([0.0]),
@@ -531,6 +532,7 @@ class TestAdaptiveSurrogate(MatcalUnitTest):
             test_params=test_params,
             test_responses=test_responses,
             param_names=param_names,
+            bounds = np.array([[0.0,1], [0,1]])
         )
         return surrogate
 
@@ -633,13 +635,14 @@ class TestAdaptiveSurrogate(MatcalUnitTest):
         sur = ConstantSurrogate(2, 2.0)
         surrogate._add_iteration(sur, 1)
         # Create a batch of three samples, each with 2 parameters
-        batch = np.array([[0.0, 1.0, 2.0],   # p1 values
-                          [0.0, 1.0, 2.0]])  # p2 values
+        # call array should be n_samplesXn_params
+        batch = np.array([[0.0, 0.5, 1.0],   # p1 values
+                          [0.0, 0.5, 1.0]]).T  # p2 values
 
         out = surrogate(batch, batch_evaluate=True)
 
-        self.assertEqual(out.shape, (3, 1))
-        self.assertTrue(np.allclose(out, 2.0))
+        self.assertEqual(out["target"].shape, (3, 1))
+        self.assertTrue(np.allclose(out["target"], 2.0))
 
     def test_call_error_on_invalid_input(self):
         """
