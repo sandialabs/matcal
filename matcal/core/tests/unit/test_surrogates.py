@@ -705,7 +705,7 @@ class TestSurrogateGenerator(MatcalUnitTest):
                                             test_function, surrogate)
         self._confirm_good_test_scores(surrogate)
 
-    def test_surrogate_confirm_error_for_bad_parameter_range(self):
+    def test_surrogate_confirm_error_for_bad_calls(self):
         def test_function(m, b, n_features=None):
             if n_features == None:
                 n_features = np.random.randint(10, 50)
@@ -729,12 +729,80 @@ class TestSurrogateGenerator(MatcalUnitTest):
         sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
         surrogate = sur_gen.generate('my_surrogate')
         with self.assertRaises(RuntimeError):
-            surrogate([-1,0])
+            surrogate(-1,0)
         with self.assertRaises(RuntimeError):
-            surrogate([0.5,2])
+            surrogate(0.5,2)
         surrogate.enforce_training_data_parameter_range(False)
-        vals = surrogate([-1,0])
+        vals = surrogate(-1,0)
+        surrogate.enforce_training_data_parameter_range(True)
+
         self.assertIsInstance(vals, OrderedDict)
+
+        # Wrong number of positional arguments (only one while two are required)
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1)  # missing second parameter
+
+        # Incomplete keyword dict (missing 'b')
+        with self.assertRaises(RuntimeError):
+            surrogate(m=0.2)
+
+        # Incorrect keyword dict 'a' != 'b')
+        with self.assertRaises(RuntimeError):
+            surrogate(m=0.2, a=0.1)
+
+        # Both positional and keyword arguments together – also invalid
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1, b=0.3)
+
+        #outside of bound (-5,5) for both params
+        with self.assertRaises(RuntimeError):
+            surrogate(-10, 0)
+        with self.assertRaises(RuntimeError):
+            surrogate(0, 10)
+
+        with self.assertRaises(RuntimeError):
+            surrogate([[0, 10], [1, 0]], batch_evaluate=True)
+        #verify it takes in kwargs with lists of param values
+        res = surrogate(m=[0.1, 0.8], b=[0.1, 0.8])
+        self.assertEqual(res["y"].shape, (2,200))
+
+    def test_set_param_ranges(self):
+        def test_function(m, b, n_features=None):
+            if n_features == None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x':x, 'y':y}
+
+        n_samples = 20
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        res_file = "test_results"
+        err_tol = 1e-2
+        n_interp = 200
+
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
+                                                     indep_var, test_function)
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        surrogate = sur_gen.generate('my_surrogate')
+        surrogate.set_parameter_ranges(m=[-10, 10], b=[0, 20])
+        self.assert_close_dicts_or_data(surrogate._param_ranges, {"m": [-10, 10], "b":[0, 20]})
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(1, 1)
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(a=[1, 2], b=[1, 2])
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(m=[1, 2, 1], b=[1, 2])
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(b=[1, 2])
+        with self.assertRaises(TypeError):
+            surrogate.set_parameter_ranges(b=["a", 2])
+        with self.assertRaises(ValueError):
+            surrogate.set_parameter_ranges(b=[2, 1])          
 
     def test_surrogate_for_line_training_fraction_1(self):
         def test_function(m, b, n_features=None):
@@ -776,7 +844,7 @@ class TestSurrogateGenerator(MatcalUnitTest):
         for test_set in test_sets:
             for test_field in probes:
                 goal = test_function(*test_set, n_interp)[test_field]*goal_scale_factor
-                predictions = surrogate(np.array(test_set).reshape(1, -1))
+                predictions = surrogate(np.array(test_set).reshape(1, -1), batch_evaluate=True)
                 prediction = predictions[test_field]
                 results = self.check_if_close_arrays(prediction, 
                                                      goal, 

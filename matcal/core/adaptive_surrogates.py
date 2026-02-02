@@ -11,6 +11,7 @@ from sklearn.metrics import r2_score
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.parameter_studies import HaltonStudy
+from matcal.core.qoi_extractor import UserDefinedExtractor
 from matcal.core.state import State
 from matcal.core.utilities import (check_value_is_positive_integer, 
                                    check_value_is_array_like_of_reals, 
@@ -23,7 +24,7 @@ from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.surrogates import (_average_l2_error_norm, 
                                     _max_error_inf_norm, 
                                     _process_surrogate_args_call, 
-                                    _return_as_is, _check_params_in_range, 
+                                    _check_params_in_range, 
                                     _convert_param_array_to_dict)
 
 logger = initialize_matcal_logger(__name__)
@@ -512,7 +513,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._results = None
         self._next_evaluation_id_number = 1
 
-    def add_evaluation_set(self, model, state=None):
+    def add_evaluation_set(self, model, state=None, qoi_extractor=None):
         """
         Add an evaluation set that uses a 
         :class:`~matcal.core.objective.SimulationResultsSynchronizer`
@@ -540,6 +541,13 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             If ``None`` the model’s default state is used.
         :type state: :class:`~matcal.core.state.State`, optional
 
+        :param qoi_extractor: Provide a  
+            :class:`~matcal.core.qoi_extractor.UserDefinedExtractor` that will act on the 
+            simulation results to provide a quantity of interest for the surrogate.
+            It must return target field values of the same length of the 
+            independent variable values.
+        :type qoi_extractor: :class:`~matcal.core.qoi_extractor.UserDefinedExtractor`
+        
         :raises RuntimeError: If the required attributes for the synchronizer
             (independent variable, its values, or target field name) have not been set.
         """
@@ -549,7 +557,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                 f"{self.__class__.__name__} instance because adaptivity "
                 "is only supported for a single model and single response of interest."
             )
-        self._evaluation_set_added = True
+        
 
         if state is not None and not isinstance(state, State):
             raise TypeError(
@@ -557,15 +565,16 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                 "to be a single `State` instance (or None)."
             )
 
-        self._results_synchronizer = self._make_simulation_results_synchronizer()
+        self._results_synchronizer = self._make_simulation_results_synchronizer(qoi_extractor)
         super().add_evaluation_set(
             model,
             objectives=self._results_synchronizer,
             data=None,
             states=state,
         )
+        self._evaluation_set_added = True
 
-    def _make_simulation_results_synchronizer(self):
+    def _make_simulation_results_synchronizer(self, qoi_extractor):
         """
         Build a :class:`~matcal.core.objective.SimulationResultsSynchronizer`
         that will be used by the surrogate study.
@@ -589,10 +598,18 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                 "Target field name has not been set. Call "
                 "`set_target_field_name` before creating the synchronizer."
             )
-        return SimulationResultsSynchronizer(
+        sim_res_synch = SimulationResultsSynchronizer(
             self._independent_variable, self._independent_variable_values,
             self._target_field_name          
         )
+
+        if qoi_extractor is not None:
+            if not isinstance(qoi_extractor, UserDefinedExtractor):
+                raise TypeError(f"The qoi extractor passed to {self.__class__.__name__} "+
+                                f"must be a UserDefinedExtractor. Received "+
+                                f"argument of type '{type(qoi_extractor)}'. Check input.")
+            sim_res_synch.set_simulation_qoi_extractor(qoi_extractor)
+        return sim_res_synch
 
     def launch(self):
         """
@@ -618,7 +635,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                                             test_params, test_responses, param_names, 
                                             self._bounds)
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
-        super().launch()
+        return super().launch()
 
     def _stopping_criterion_met(self, training_batch_number, stop=False):
         if training_batch_number > 1:

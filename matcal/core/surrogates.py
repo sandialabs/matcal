@@ -737,6 +737,72 @@ class MatCalSurrogateBase(ABC):
         self._r2_scores['train'] = r2_scores[0]
         self._r2_scores['test'] = r2_scores[1]
 
+    def set_parameter_ranges(self, *args, **param_ranges):
+        """
+        Update the admissible parameter ranges that the user can call the surrogate to evaluate.
+
+        The surrogate stores, for each input parameter, a lower and upper bound that
+        define the region of parameter space where the surrogate is considerd valid.  When
+        the surrogate is called, values that fall outside of these ranges trigger a
+        ``RuntimeError`` unless :meth:`enforce_training_data_parameter_range` has been
+        disabled.
+
+        Only keyword arguments are accepted; each keyword corresponds to a parameter
+        name and must map to a two‑element sequence ``(lower, upper)`` describing the
+        allowed range for that parameter.
+
+        :param param_ranges: Mapping of parameter names to (lower, upper) bounds.
+        :type param_ranges: ``dict`` or ``OrderedDict`` where each value is an
+            iterable of two ``float``/``int`` values.
+
+        :raises RuntimeError: If any positional arguments are supplied, or if a
+            required parameter is missing from ``param_ranges``.
+        :raises RuntimeError: If a supplied parameter name is not part of the
+            surrogate’s ``parameter_order`` (i.e., it was not present in the training
+            data).
+        :raises ValueError: If the lower bound is greater than the upper bound for any
+            parameter.
+        :raises TypeError: If either bound is not a real number (i.e., not an instance
+            of :class:`numbers.Real`).
+
+        **Example**
+
+        >>> surrogate.set_parameter_ranges(
+        ...     temperature=(300.0, 800.0),
+        ...     pressure=(1e5, 5e5)
+        ... )
+        """
+        valid_params = self._parameter_scaler.parameter_order
+        if args:
+            raise RuntimeError(f"{self.__class__.__name__}.set_parameter_ranges "+
+                               "does not accept positional arguments. "+
+                               "All inputs must be keyword arguments.")
+        for param in param_ranges:
+            if param not in valid_params:
+                raise RuntimeError(f"The parameter '{param}' is not a valid "+
+                                   f"parameter for the surrogate. Valid parameters include "+
+                                    f"{valid_params}.")
+            range_values = np.asarray(param_ranges[param])
+            if range_values.shape != (2,):
+                raise RuntimeError("Each parameter range must only have two values. "+
+                                   f"Received values with shape {range_values.shape} "+
+                                   f"for parameter '{param}'.")
+            for idx, value in enumerate(range_values):
+                hi_low = ["lower", "upper"]
+                if not isinstance(value, Real):
+                    raise TypeError(f"The {hi_low[idx]} bound for parameter '{param}' "+
+                                     f"must be a real number. Received '{value}' of type {type(value)}.")
+            if range_values[1] < range_values[0]:
+                raise ValueError(f"The range for parameter '{param}' has a lower bound greater "+
+                                 "than the upper bound. The lower bound is specified first! "+
+                                 f"Received {range_values[0]} and then {range_values[1]} as "
+                                  "the lower bound and upper bound, respectively.")
+        for param in self._parameter_scaler.parameter_order:
+            if param not in param_ranges:
+                raise RuntimeError(f"The parameter '{param}' is required for the surrogate "+
+                                   "and was not provided for the desired updated parameter ranges. "
+                                   f"Received ranges for parameters {list(param_ranges.keys())}.")
+        self._param_ranges = param_ranges
 
 def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_tool):
     combined_data = np.vstack([train_data, test_data])
@@ -1057,10 +1123,6 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         return surrogate
 
 
-def _return_as_is(passed_params):
-    return passed_params
-
-
 def _process_surrogate_args_call(param_names, *args,  
                                  batch_evaluate=False, transpose=False, **kwargs,):
     if batch_evaluate:
@@ -1105,9 +1167,7 @@ def _check_params_in_range( params_dict, param_ranges, enforce_range=True):
                                 "values outside of the trained parameter range of "+
                                 f"{param_ranges[param][0]} to "+
                                 f"{param_ranges[param][1]}.\n{param_values}")
-            
-
-
+   
 
 def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_params, train_data):
     average_train_score = _get_field_scores(surrogate, train_params, train_data, 

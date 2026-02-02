@@ -9,10 +9,12 @@ from matcal.core.adaptive_surrogates import (
     _get_parameter_bounds, AdaptiveSurrogate, SparseGridAdaptiveSurrogate,
     VoronoiAdaptiveSurrogateStudy, VoronoiTessellation, 
     LeaveOneOutCrossValidation, KFoldCrossValidation)
+from matcal.core.data import convert_dictionary_to_data
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.models import PythonModel
 from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.parameter_studies import HaltonStudy
+from matcal.core.qoi_extractor import UserDefinedExtractor, InterpolatingExtractor
 from matcal.core.serializer_wrapper import matcal_load
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
@@ -24,10 +26,23 @@ except Exception:
     HAS_PYAPPROX = False
 
 
+def change_y_to_z(working_data, reference_data, return_keys_list):
+    working_qois = {}
+    for key in working_data.field_names:
+        if key == "y":
+            working_qois["z"] = working_data[key]
+        else:
+            working_qois[key] = working_data[key]
+    working_qois = convert_dictionary_to_data(working_qois)
+    interp = InterpolatingExtractor("x")
+    working_qois = interp.calculate(working_qois, reference_data, return_keys_list)
+    return working_qois
+
 
 def return_data(*args, **kwargs):
     return {"x":np.linspace(0,1,10), "y":np.linspace(1,3,10)}
 light_model = PythonModel(return_data)
+light_model.set_name("light_model")
 
 
 def linear_model_2d(**parameters):
@@ -200,7 +215,23 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.study.launch()
         self.assertTrue(os.path.isdir(test_dir))
         self.assertTrue(os.path.isdir("work"))
-    
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_qoi_extractor_in_add_eval_set(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("z")
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        extractor = UserDefinedExtractor(change_y_to_z, "y", "x")
+        with self.assertRaises(TypeError):
+            self.study.add_evaluation_set(light_model, qoi_extractor="yay")
+        self.study.add_evaluation_set(light_model, qoi_extractor=extractor)
+        results = self.study.launch()
+        objs = results.get_objectives_for_model("light_model")
+        self.assertTrue("z" in results.best_simulation_qois("light_model", objs[0], 
+                                                             "matcal_default_state", 0).field_names)
+
     def test_format_params_and_output(self):
         """Check that the two formatting helpers produce the expected arrays."""
         class FakeResults:
@@ -491,8 +522,8 @@ class ConstantSurrogate:
 
     It expects a NumPy array with shape (n_parameters, n_samples) and
     returns an array of shape (n_samples, n_qois).  For simplicity we set
-    n_qois == 1 and return a constant value equal to the sum of the
-    input parameters (broadcast to the output shape).  This deterministic
+    n_qois == 1 and return a constant value (broadcast to the output shape).  
+    This deterministic
     behavior makes it easy to compute expected errors.
     """
     def __init__(self, n_parameters: int, constant: float = 0.0):
@@ -505,7 +536,7 @@ class ConstantSurrogate:
         return out
 
 
-class TestAdaptiveSurrogate(MatcalUnitTest):
+class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)   
 
@@ -664,10 +695,23 @@ class TestAdaptiveSurrogate(MatcalUnitTest):
         with self.assertRaises(RuntimeError):
             surrogate(p1=0.2, q2=0.1)
 
-
         # Both positional and keyword arguments together – also invalid
         with self.assertRaises(RuntimeError):
             surrogate(0.1, p2=0.3)
+
+        #outside of bound (0,1) for both params
+        with self.assertRaises(RuntimeError):
+            surrogate(-1, 0)
+        with self.assertRaises(RuntimeError):
+            surrogate(0, 2)
+
+        with self.assertRaises(RuntimeError):
+            surrogate([[0, 2], [1, 0]], batch_evaluate=True)
+        #verify it takes in kwargs with lists of param values
+        res = surrogate(p1=[0, 1], p2=[1, 0])
+        self.assertEqual(res["target"].shape, (2,))
+        self.assertEqual(res["target"][0], 3.0)
+        self.assertEqual(res["target"][1], 3.0)
 
     def test_call_with_explicit_surrogate_index(self):
         """
@@ -1787,6 +1831,7 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
             self.assertTrue(np.all(worst_sample_locations == training_params[max_error_indices]))
             shutil.rmtree("test_samples")
+
     def test_adaptive_voronoi_surrogate_generation(self):
         #move to integration
         dims = [2, 3]
@@ -1829,3 +1874,47 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
             self.assertFalse(np.any(outside_samples))
             shutil.rmtree("test_samples")
+
+    def test_call_error_on_invalid_input(self):
+        """
+        Supplying a mismatched number of positional arguments (or an
+        incomplete keyword dict) must raise RuntimeError.
+        """
+        vor_study = self.setup_study(2)
+        vor_study.set_max_training_samples(7)
+        vor_study.set_number_of_initial_samples(6)
+        vor_study.set_cross_validation_options(nsplits=0)
+        vor_study.set_voronoi_sampling_options(random_selection=3)
+        vor_study.set_seed(100)
+        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
+        vor_study.set_convergence_criteria(1e-1, 'rmse')
+        vor_study.launch()
+        surrogate = vor_study._surrogate
+
+        # Wrong number of positional arguments (only one while two are required)
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1)  # missing second parameter
+
+        # Incomplete keyword dict (missing 'b')
+        with self.assertRaises(RuntimeError):
+            surrogate(a=0.2)
+
+        # Incorrect keyword dict 'a2' != 'b')
+        with self.assertRaises(RuntimeError):
+            surrogate(a=0.2, a2=0.1)
+
+        # Both positional and keyword arguments together – also invalid
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1, b=0.3)
+
+        #outside of bound (-5,5) for both params
+        with self.assertRaises(RuntimeError):
+            surrogate(-10, 0)
+        with self.assertRaises(RuntimeError):
+            surrogate(0, 10)
+
+        with self.assertRaises(RuntimeError):
+            surrogate([[0, 10], [1, 0]], batch_evaluate=True)
+        #verify it takes in kwargs with lists of param values
+        res = surrogate(a=[0, 1], b=[1, 0])
+        self.assertEqual(res["f"].shape, (2,20))
