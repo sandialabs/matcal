@@ -146,7 +146,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     def test_make_simulation_results_synchronizer_success(self):
         self.study.set_independent_variable("x", [0.0, 1.0])
         self.study.set_target_field_name("y")
-        sync = self.study._make_simulation_results_synchronizer()
+        sync = self.study._make_simulation_results_synchronizer(None)
         self.assertIsInstance(sync, SimulationResultsSynchronizer)
         self.assertEqual(sync.independent_field, "x")
         self.assertEqual(sync._independent_field_values, [0.0, 1.0])
@@ -155,14 +155,14 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     def test_make_simulation_results_synchronizer_missing(self):
         self.study.set_independent_variable("x", [0, 1])
         with self.assertRaises(RuntimeError) as ctx:
-            self.study._make_simulation_results_synchronizer()
+            self.study._make_simulation_results_synchronizer(None)
         self.assertIn("Target field name", str(ctx.exception))
 
         self.study._independent_variable = None
         self.study._independent_variable_values = None
         self.study.set_target_field_name("test")
         with self.assertRaises(RuntimeError) as ctx:
-            self.study._make_simulation_results_synchronizer()
+            self.study._make_simulation_results_synchronizer(None)
         self.assertIn("Independent variable name", str(ctx.exception))
 
     def test_add_evaluation_set_once(self):
