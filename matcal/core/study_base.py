@@ -514,6 +514,7 @@ class StudyBase(ABC):
             "Please do not invoke 'set_use_threads' with restarts.")
 
     def _initialize_results(self):
+        print("Results:", self._results)
         if self._results is None:
             self._results = StudyResults(**self._results_reporting)
 
