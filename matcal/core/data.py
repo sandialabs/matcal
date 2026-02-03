@@ -13,7 +13,8 @@ import os
 
 from matcal.core.state import SolitaryState, State, StateCollection
 from matcal.core.utilities import (ContainerCollectionBase, check_value_is_real_between_values, 
-                                   check_value_is_positive_integer, check_value_is_bool)
+                                   check_value_is_positive_integer, check_value_is_bool, 
+                                   check_item_is_correct_type, check_value_is_nonempty_str)
 
 from matcal.core.logger import initialize_matcal_logger
 logger = initialize_matcal_logger(__name__)
@@ -763,8 +764,7 @@ class DataCollectionStatistics:
         :param sort_ascending: Flag to turn sorting off/on.
         :type sort_ascending: bool
         """
-        check_value_is_bool(sort_ascending, "sort_ascending", 
-                            "DataColleciontStatistics")
+        check_value_is_bool(sort_ascending, "sort_ascending")
         self._sort_ascending = sort_ascending
 
     def set_number_of_interpolation_points(self, num_interpolation_points):
@@ -776,8 +776,7 @@ class DataCollectionStatistics:
         :type num_interpolation_points: int
         """
         if num_interpolation_points is not None:
-            check_value_is_positive_integer(num_interpolation_points, "num_interpolation_points", 
-                                            "DataCollectionStatistics")
+            check_value_is_positive_integer(num_interpolation_points, "num_interpolation_points")
             self._num_interpolation_points = num_interpolation_points
         
     def set_percentiles_to_evaluate(self, *percentiles):
@@ -792,8 +791,7 @@ class DataCollectionStatistics:
         self._percentiles = []
         for percentile in percentiles:
             check_value_is_real_between_values(percentile, 0,100, 
-                "percentiles", "DataCollectionStatistics.set_percentiles_to_evaluate", 
-                closed=True)
+                "percentiles", closed=True)
             self._percentiles.append(percentile)
 
     def generate_state_statistics(self, indep_field, data_collection, state):
@@ -1350,11 +1348,10 @@ def scale_data_collection(data_collection, field_name, scale, offset=0):
     :return: new scaled data collection
     :rtype: :class:`~matcal.core.data.DataCollection`
     """
-    _check_type(data_collection, DataCollection, "data collection to be scaled")
-    _check_type(field_name, str, "the field name to be scaled in the data collection")
-    _check_type(scale, numbers.Real, "the scale factor to be applied to the data collection field")
-    _check_type(offset, numbers.Real, "the offset to be applied to the data collection field")
-
+    check_item_is_correct_type(data_collection, DataCollection, "data_collection")
+    check_value_is_nonempty_str(field_name, "field_name")
+    check_item_is_correct_type(scale, numbers.Real, "scale")
+    check_item_is_correct_type(offset, numbers.Real, "offset")
     name = "scale_{}".format(field_name)
     scaling_collection = ScalingCollection(name, Scaling(field_name, scale, offset))
     scaled_data_collection = DataCollection(name+"_{}".format(data_collection.name))
@@ -1362,12 +1359,6 @@ def scale_data_collection(data_collection, field_name, scale, offset=0):
         for data in data_collection[state]:
             scaled_data_collection.add(_scale_data(scaling_collection, data))
     return scaled_data_collection
-
-
-def _check_type(variable, desired_type, message):
-    if not isinstance(variable, desired_type):
-        raise Data.TypeError(f"The {message} is not the correct type. Expected type {desired_type} "
-                             f" and recieved {type(variable)}. Check input.")
 
 
 def convert_data_to_dictionary(data):

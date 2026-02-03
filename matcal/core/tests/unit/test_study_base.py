@@ -183,7 +183,7 @@ class StudyBaseUnitTests(object):
             study = self._study_class(self.parameter_collection)
             study.add_evaluation_set(self.mock_model, self.objective, self.gold_results)
             self._set_study_specific_options(study)
-            with self.assertRaises(StudyBase.StudyTypeError):
+            with self.assertRaises(TypeError):
                 study.set_use_threads("not valid")
 
             study.set_use_threads(always_use_threads=True)
@@ -209,9 +209,9 @@ class StudyBaseUnitTests(object):
 
         def test_core_limit_incorrect_type(self):
             study = self._study_class(self.parameter_collection)
-            with self.assertRaises(StudyBase.StudyTypeError):
+            with self.assertRaises(TypeError):
                 study.set_core_limit(1.0)
-            with self.assertRaises(StudyBase.StudyTypeError):
+            with self.assertRaises(TypeError):
                 study.set_core_limit("a")
 
         def test_set_core_limit(self):
@@ -248,16 +248,16 @@ class StudyBaseUnitTests(object):
 
         def test_add_evaluation_set_bad_types(self):
             study = self._study_class(self.parameter_collection)
-            with self.assertRaises(study.StudyTypeError):
+            with self.assertRaises(StudyBase.StudyTypeError):
                 study.add_evaluation_set(self.mock_model, 
                                          self.objective, "not data")
-            with self.assertRaises(study.StudyTypeError):
+            with self.assertRaises(TypeError):
                 study.add_evaluation_set("not model", 
                                          self.objective, self.gold_results)
-            with self.assertRaises(study.StudyTypeError):
+            with self.assertRaises(StudyBase.StudyTypeError):
                 study.add_evaluation_set(self.mock_model, 
                                          "not objective", self.gold_results)
-            with self.assertRaises(study.StudyTypeError):
+            with self.assertRaises(StudyBase.StudyTypeError):
                 study.add_evaluation_set(self.mock_model, 
                                          self.objective, self.gold_results,
                                          "not states")
@@ -384,7 +384,7 @@ class StudyBaseUnitTests(object):
             study = self._study_class(self.parameter_collection)
             study.add_parameter_preprocessor(param_preprocessor)
 
-            with self.assertRaises(StudyBase.StudyTypeError):
+            with self.assertRaises(TypeError):
                 study.add_parameter_preprocessor("not valid preprocessor")
 
             pc_dict = self.parameter_collection.get_current_value_dict()
@@ -493,7 +493,7 @@ class StudyBaseUnitTests(object):
             
         def test_study_set_working_directory_bad(self):
             study = self._study_class(self.parameter_collection)
-            with self.assertRaises(study.StudyTypeError):
+            with self.assertRaises(TypeError):
                 study.set_working_directory(1)
             with self.assertRaises(study.StudyInputError):
                 study.set_working_directory("./sub_dir/goal_dir")
@@ -676,6 +676,8 @@ class StudyResultsBaseUnitTests(object):
             self.assertEqual(rc.qoi_history[eval_name].experiment_qois["MockState"], exp_qoi_list)
             with self.assertRaises(IndexError):
                 exp_qoi = rc.get_experiment_qois("MockModel", "MockObj", "MockState", 1)
+            with self.assertRaises(TypeError):
+                exp_qoi = rc.get_experiment_qois("MockModel", "MockObj", "MockState", "1")
 
         def test_return_get_experiment_data(self):
             rc = self._specified_init()
@@ -727,6 +729,8 @@ class StudyResultsBaseUnitTests(object):
             self.assertEqual(rc.objective_history[eval_name].weighted_conditioned_residuals[5]["MockState"], resids_list)
             resid = rc.best_weighted_conditioned_residuals("MockModel", "MockObj", "MockState", 0)
             self.assertEqual(resids_list[0], resid)
+            with self.assertRaises(TypeError):
+                resid = rc.best_weighted_conditioned_residuals("MockModel", "MockObj", "MockState", "")
 
         def test_get_obj_name_if_not_string(self):
             class TestObj:

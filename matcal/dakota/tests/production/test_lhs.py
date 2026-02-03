@@ -479,7 +479,7 @@ class TestLHSToSurrogate(MatcalUnitTest):
                                                                      sur_type)
         
         for a, b in zip(test_points['A'], test_points["B"]):
-            sur_guess = surrogate([a, b])
+            sur_guess = surrogate(a, b)
             truth = my_function(n_pts = 200, **{"A":a, "B":b})
             self.assert_close_arrays(truth['y'], sur_guess['y'], rtol=5e-2, 
                                      atol=1e-2, show_on_fail=True)
@@ -502,7 +502,7 @@ class TestLHSToSurrogate(MatcalUnitTest):
                                                                       sur_type, 1.0)
         
         for e, y, n in zip(test_points['E'], test_points['Y'], test_points['n']):
-            sur_guess = surrogate([e, y, n])
+            sur_guess = surrogate(e, y, n)
             truth = my_function(n_pts = 200, **{"E":e, "Y":y, 'n':n})
             self.assert_close_arrays(truth['y'], sur_guess['y'], rtol=5e-2, atol=1e-2, 
                                      show_on_fail=True)

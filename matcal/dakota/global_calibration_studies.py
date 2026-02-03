@@ -51,8 +51,7 @@ class _JegaCalibrationDakotaFile(DakotaCalibrationFile):
         :param population_size: The desired population size
         :type population_size: int
         """
-        check_value_is_positive_integer(population_size, "set_population_size",
-                                   "population size")
+        check_value_is_positive_integer(population_size, "population size")
         self.set_method_type_block_line(_JegaKeywords.population_size, population_size)
 
     def get_population_size(self):
@@ -101,8 +100,7 @@ class _JegaCalibrationDakotaFile(DakotaCalibrationFile):
         :param crossover_rate: crossover rate value
         :type crossover_rate: float
         """
-        check_value_is_real_between_values(crossover_rate, 0, 1.0, "crossover rate", 
-                                           "set_crossover_rate")
+        check_value_is_real_between_values(crossover_rate, 0, 1.0, "crossover rate")
         self.set_method_type_block_line(_JegaKeywords.crossover_rate, crossover_rate)
 
     def get_crossover_rate(self):
@@ -122,8 +120,7 @@ class _JegaCalibrationDakotaFile(DakotaCalibrationFile):
             See manuals at dakota.sandia.gov.
         :type crossover_type: str
         """
-        check_item_is_correct_type(crossover_type, str, "set_crossover_type", 
-                                   "crossover type")
+        check_item_is_correct_type(crossover_type, str, "crossover type")
         crossover_types = ['multi_point_binary', 
                            'multi_point_parameterized_binary', 'multi_point_real',
                            'shuffle_random']
@@ -151,8 +148,7 @@ class _JegaCalibrationDakotaFile(DakotaCalibrationFile):
         :param mutation_rate: mutation rate value
         :type mutation_rate: float
         """
-        check_value_is_real_between_values(mutation_rate, 0, 1.0, "mutation rate", 
-                                           "set_mutation_rate")
+        check_value_is_real_between_values(mutation_rate, 0, 1.0, "mutation rate")
 
         self.set_method_type_block_line(_JegaKeywords.mutation_rate,  mutation_rate)
 

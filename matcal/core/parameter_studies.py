@@ -14,7 +14,9 @@ from matcal.core.study_base import StudyBase
 from matcal.core.utilities import (check_value_is_real_between_values, 
                                    check_value_is_positive_integer, 
                                    check_value_is_nonnegative_real, 
-                                   check_value_is_array_like_of_reals)
+                                   check_value_is_array_like_of_reals, 
+                                   check_value_is_bool
+                                   )
 
 
 logger = initialize_matcal_logger(__name__)
@@ -62,8 +64,7 @@ class ParameterStudy(StudyBase):
             check_value_is_real_between_values(value, 
                                                pc[param].get_lower_bound(), 
                                                pc[param].get_upper_bound(), 
-                                               param, "add_parameter_evaluation", 
-                                               closed=True)
+                                               param, closed=True)
             parameters[param] = float(value)
         self._parameter_sets_to_evaluate.append(OrderedDict(**parameters))
 
@@ -85,7 +86,8 @@ class ParameterStudy(StudyBase):
         exit_status = 0
         err_msg=""
         try:
-            self._batch_results = self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
+            self._batch_results = self._matcal_evaluate_parameter_sets_batch(param_sets, 
+                                                                             is_restart=self._restart)
         except Exception as e:
             success = False
             exit_status = -1
@@ -147,53 +149,48 @@ class ParameterStudy(StudyBase):
 
 
 class HaltonStudy(ParameterStudy):
-    def __init__(self, *parameters, scramble=True, rng=None):
-        """Initialize the HaltonStudy
 
-        :param scramble: If True, Owen scrambling is used. Defaults to False.
-        :type scrambel: bool
-        
-        :param rng: Pseudorandom numer generator state. When rng is None, a new generator
-            is created using entropy from the operating system.
-        :type rng: int
-        """
+    def __init__(self, *parameters):
         super().__init__(*parameters)
         self.l_bounds = []
         self.u_bounds = []
         for idx, key in enumerate(self._parameter_collection):
             self.l_bounds.append(self._parameter_collection[key].get_lower_bound())
             self.u_bounds.append(self._parameter_collection[key].get_upper_bound())
-        self.dim = len(self._parameter_collection)
-        self._design = None
-        self._check_variable_type(scramble, 'scramble', bool)
-        #if rng is None:
-        #    warnings.warn("If design will be continued, we recommend setting rng to an integer value.", UserWarning)
-        self.HaltonSampler = qmc.Halton(d=self.dim, scramble=scramble, seed=rng)
-
-
-    def _check_variable_type(self, var, var_name, *var_types):
-        """Assert variables are of the given type.
-
-        :param var_name: name of parameter being checked
-        :type var_name: str
+        self._number_parameters = len(self._parameter_collection)
+        self.HaltonSampler = qmc.Halton(d=self._number_parameters)
+        self._seed = None
+        self._scramble=None 
+        self._number_of_samples=None
+        self._skip=None
+        self.set_Halton_scramble()
+        self.set_number_of_samples()
         
-        :param var: variable to be checked
-        :type var: any
-        
-        :param var_types: type(s) that 'var_name' should be. If not, a TypeError is raised
-        :type var_types: (__type__)
+    def set_seed(self, seed):
         """
+        Set the random seed for the random generator that the study uses
+        to generate the samples.
+        The method should be called **before**
+        :meth:`launch` to
+        guarantee reproducibility.
 
-        if not isinstance(var, var_types):
-            if len(var_types) == 1:
-                message = f"'{var_name}' must be of type {var_types[0].__name__}"
-            else:
-                message = f"'{var_name}' must be one of the types: {', '.join(t.__name__ for t in var_types)}"
-            raise TypeError(message)
+        :param seed: Integer seed for the pseudo‑random number generator.
+        :type seed: int
+        """
+        check_value_is_positive_integer(seed, "seed")
+        self._seed = seed
+    
+    def set_Halton_scramble(self, scramble=True):
+        """
+        :param scramble: set the scramble keyword for the numpy Halton object.
+        :type scramble: bool        
+        """
+        check_value_is_bool(scramble, "scramble")
+        self._scramble=scramble
 
-    def launch(self, nsamples=20, skip=None):
-        """ Launch study, generates samples from Halton Sequence and
-        scales to bounds if bounds are defined.
+    def set_number_of_samples(self, nsamples=20, skip=None):
+        """
+        Set the number of samples for the study.
 
         :param nsamples: Number of parameter samples to generate from Halton sequence.
         :type nsamples: int
@@ -202,43 +199,38 @@ class HaltonStudy(ParameterStudy):
                      Halton sequence by an amount determined by 'skip'.
         :type skip: int
         """
-        if nsamples is not None:
-            self._set_number_of_samples_and_generate(nsamples, skip)
+        check_value_is_positive_integer(nsamples, 'nsamples')
+        self._number_of_samples = nsamples
+        if skip is not None:
+            check_value_is_positive_integer(skip, 'skip')
+            self._skip=skip
+
+    def launch(self):
+        self._generate_samples(self._number_of_samples, self._skip)
         return super().launch()
 
-    def _set_number_of_samples_and_generate(self, nsamples, skip):
-        """ generates samples from Halton Sequence and
-        scales to bounds if bounds are defined.
-
-        :param nsamples: number of parameter samples to generate from Halton sequence
-        :type nsamples: int
-        """
-
-        self._check_variable_type(nsamples, 'nsamples', int)
+    def _generate_samples(self, nsamples, skip):
+        halton_sampler = qmc.Halton(d=self._number_parameters, 
+                                       scramble=self._scramble, 
+                                        seed=self._seed)
         if skip is not None:
-            self._check_variable_type(skip, 'skip', int)
-            self._skip_ahead(skip)
-        self._generate_samples(nsamples)
-
-    def _generate_samples(self, nsamples):
-        """ Generate sample from a Halton seqence
-        """
-        unscaled_samples = self.HaltonSampler.random(n=nsamples)
+            halton_sampler.fast_forward(skip)
+        logger.debug(
+            f"Halton sampler initialized with seed = {self._seed}, scramble = " +
+            f"{self._scramble}, and "+
+            f"skip = {skip}."
+        )
+        unscaled_samples = halton_sampler.random(n=nsamples)
         scaled_samples = self._scale_samples_to_bounds(unscaled_samples)
         self._populate_parameter_evaluations(scaled_samples)
         
     def _populate_parameter_evaluations(self, scaled_samples):
-        
         param_order = self._parameter_collection.get_item_names() 
-
-        self._new_sample_start_index = len(self._parameter_sets_to_evaluate)
+        self._parameter_sets_to_evaluate = []
         for sample in scaled_samples:
             ss = { key:sample[i] for i, key in enumerate(param_order) }
             self._add_parameter_evaluation(**ss)
         self._check_parameter_sets_populated()
-
-    def _skip_ahead(self, skip):
-        _ = self.HaltonSampler.fast_forward(skip)
 
     def _scale_samples_to_bounds(self, samples):
         """
@@ -250,7 +242,6 @@ class HaltonStudy(ParameterStudy):
         :return: scaled samples
         :type return: np.ndarray of size (nsamples x nfeatures)
         """
-
         return qmc.scale(samples, self.l_bounds, self.u_bounds)
 
     def _add_parameter_evaluation(self, **p):
@@ -258,7 +249,8 @@ class HaltonStudy(ParameterStudy):
 
     def add_parameter_evaluation(self, **parameters):
         """"""
-        raise self.StudyInputError("Users cannot add parameter evaluations to a HaltonStudy.")
+        raise RuntimeError(f"Users cannot add parameter evaluations to a "+
+                           f"{self.__class__.__name__}.")
 
 
 class FiniteDifference:
@@ -636,9 +628,7 @@ class _LaplaceStudyBase(ParameterStudy):
         :param step_size: the desired step_size
         :type step_size: float
         """
-        check_value_is_real_between_values(step_size, 0, 1, 
-                                           "step_size", 
-                                           "LaplaceStudy.set_step_size")
+        check_value_is_real_between_values(step_size, 0, 1, "step_size")
         self._step_size=step_size
         if self._finite_difference is not None:
             self._setup_finite_difference()
@@ -735,8 +725,7 @@ class LaplaceStudy(_LaplaceStudyBase):
         :param noise_estimate: value for the noise estimate, must be non-negative
         :type noise_estimate: float
         """
-        check_value_is_nonnegative_real(noise_estimate, "noise_estimate", 
-                                     f"{self.study_class}.set_noise_estimate")
+        check_value_is_nonnegative_real(noise_estimate, "noise_estimate")
         self._noise_variance=noise_estimate**2
 
     def set_calibrate_covariance(self, calibrate_covaraince=True):
@@ -902,25 +891,22 @@ def sample_multivariate_normal(nsamples, mean, covariance_matrix, seed=None, par
     :rtype: dict(str, list(float))
     
     """
-    _check_sample_covariance_mat_inputs(nsamples, mean, covariance_matrix, seed, param_names)
+    check_value_is_positive_integer(nsamples, "nsamples")
+    check_value_is_array_like_of_reals(mean, "mean")
+    check_value_is_array_like_of_reals(covariance_matrix, "covariance_matrix")
+    if seed is not None:
+        check_value_is_positive_integer(seed, "seed")
+    _check_sample_covariance_mat_inputs(mean, covariance_matrix, param_names)
     samples = _get_multivariate_normal_samples(mean, covariance_matrix, nsamples, seed)
     samples_dict = _create_samples_dict_from_samples_array(samples, param_names)   
     
     return samples_dict
 
-def _check_sample_covariance_mat_inputs(nsamples, mean, covariance_matrix, seed, param_names):
-    check_value_is_positive_integer(nsamples, "nsamples", "sample_covariance_matrix")
-    check_value_is_array_like_of_reals(mean, "mean", 
-                                       "sample_covariance_matrix")
-    check_value_is_array_like_of_reals(covariance_matrix, "covariance_matrix", 
-                                "sample_covariance_matrix")
+def _check_sample_covariance_mat_inputs(mean, covariance_matrix, param_names):
     if (len(mean)!=covariance_matrix.shape[0] or
        covariance_matrix.shape[0]!=covariance_matrix.shape[1]):
        raise ValueError("The mean and covariance matrix passed to \"sample_covariance_matrix\" "
                         "are invalid. Their sizes must match appropriately.")
-
-    if seed is not None:
-        check_value_is_positive_integer(seed, "seed", f"sample_covariance_matrix")
    
     if param_names is not None and len(param_names) != covariance_matrix.shape[0]:
         raise ValueError("The length of the parameter names list must equal the number of "
@@ -1059,1073 +1045,3 @@ def _combine_array_list_into_zero_padded_single_array(arrays):
     return combined_array
 
 
-def _fit_surrogate_model(eval_info, save_filename='voronoi_surrogate', **surrogate_opts):
-    from matcal.core.surrogates import SurrogateGenerator
-    surrogate_generator = SurrogateGenerator(eval_info, **surrogate_opts)
-    return surrogate_generator.generate(save_filename)
-        
-
-class VoronoiAdaptiveSurrogateStudy(HaltonStudy):
-    def __init__(self, *parameters):
-        """Initialize the VoronoiAdaptiveSurrogateStudy
-        """
-        super().__init__(*parameters)
-        self._initialize_attributes()
-        
-    def launch(self, **options):
-        """ Launch adaptive surrogate build using Voronoi batch sampling        
-        """
-        super().launch(self.nsamples)
-        self._format_params()
-        self._format_output()
-       
-        # set voronoi and surrogate options if provided
-        voronoi_sampling_options = options.get('voronoi_sampling_options', {})
-        surrogate_options = options.get('surrogate_options', {})
-        self._set_voronoi_sampling_options(**voronoi_sampling_options)
-        self._set_surrogate_options(**surrogate_options)
-        self._voronoi_options = {'finite_only' : self.finite_only} 
-        
-        # build/train surrogate with initial training set and calculate initial error
-        self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
-        self._update_surrogate_score()
-        self._perform_voronoi_batch_sampling()
-        
-    def _update_surrogate_score(self):
-        self._current_surrogate_score['score'].append(_get_surrogate_metric(self._surrogate, 'score'))
-        self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(self._surrogate, 'nlpd'))
-        self._current_surrogate_score['rmse'].append(_get_surrogate_metric(self._surrogate, 'rmse'))
-
-    def _initialize_attributes(self):
-        self._extract_bounds_from_parameter_collection()
-        self._build_boundary_hull()
-        self.nsamples = 10 * self.dim
-        self.voronoi_type = 'full'
-        self.finite_only = False
-        self.iterative_updates = True
-        self.dim = len(self._parameter_collection)
-        self.nsplits = 2
-        self.nmax_folds = 1
-        self.nmax_loo = 10
-        self.cv_scale = None
-        self.cv_metric = 'rmse'
-        self.group_kfold = False
-        self.thin = None
-        self.random_selection = None
-        self.nmaxbatches = 20
-        self._current_surrogate_score = {}
-        self._current_surrogate_score['score'] = []
-        self._current_surrogate_score['nlpd'] = []
-        self._current_surrogate_score['rmse'] = []
-        self._nbatch_samples = []
-        self.test_eval_info = None
-        self.par_names = self._parameter_collection.get_item_names()
-        self._eps = 1e-4
-        self.convergence_metric = 'nlpd'
-         
-    def _extract_bounds_from_parameter_collection(self):
-        self._l_bounds = []
-        self._u_bounds = []
-        for _, key in enumerate(self._parameter_collection):
-            self._l_bounds.append(self._parameter_collection[key].get_lower_bound())
-            self._u_bounds.append(self._parameter_collection[key].get_upper_bound())
-        self._bounds = [[a, b] for a, b in zip(self._l_bounds, self._u_bounds)]
-
-    def _build_boundary_hull(self):
-        from scipy.spatial import ConvexHull, Delaunay
-        self._boundary_points = self._make_nd_grid(2)
-        self._boundary_hull = ConvexHull(self._boundary_points)
-        self._boundary_hull_eq = self._boundary_hull.equations # (nfacet, ndim + 1)
-        self._boundary_hull_V, self._boundary_hull_b = self._boundary_hull_eq[:, :-1], self._boundary_hull_eq[:, -1] # normal, offset
-        self._bhullD = Delaunay(self._boundary_points)
-
-    def _make_nd_grid(self, npts_along_dim):
-        grid_pts = []
-        for dim in np.arange(self.dim):
-            grid_pts.append(np.linspace(self._bounds[dim][0], self._bounds[dim][1], npts_along_dim))
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.dim)]
-        return np.vstack(tuple(coords_ravel)).T
-
-    def _set_voronoi_sampling_options(self, **voronoi_sampling_kwargs):
-        """Set voronoi options. See documentation for properties that an be altered and their options."""
-        for key, value in voronoi_sampling_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-        if self.random_selection is not None and self.thin is not None:
-            raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
-        valid_cv_metrics = ['rmse', 'nlpd']
-        if self.cv_metric not in valid_cv_metrics:
-            raise ValueError("cv_metric not implemented. 'cv_metric' must one of 'rmse', 'nlpd'")
-    
-    def _set_surrogate_options(self, **surrogate_options):
-        """Set voronoi options. See documentation for properties that an be altered and their options."""
-        self.interpolation_field = 'x'
-        self._training_fraction = 1.0
-        self._cv_test_set = False
-        for key, value in surrogate_options.items():
-            if hasattr(self, key):
-                if key == 'training_fraction':
-                    raise ValueError("User cannot set training fraction in VoronoiAdaptiveSurrogate Study. It is always 1.0")
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-        
-        if self.test_eval_info is None:
-            raise AttributeError("User must provide surrogate test information from parameter study (i.e. HaltonStudy).")
-        
-        options = {'interpolation_field': self.interpolation_field, 'training_fraction': self._training_fraction,
-                   'test_eval_info': self.test_eval_info}    
-        self._surrogate_options = options
-    
-    def _format_params(self):
-        params_formatted = []
-        for param in self._results.parameter_history:
-            params_formatted.append(self._results.parameter_history[param])
-        self.X = np.array(params_formatted).T  
-    
-    def _format_output(self):
-        from matcal.core.data import convert_data_to_dictionary
-        model_name = self._get_model_names()[0]
-        state0 = self._results.simulation_history[model_name].states['matcal_default_state']
-        sim_history = self._results.simulation_history[model_name][state0]
-        nsamples = len(self.X)
-        data = []
-        for nn in np.arange(nsamples):
-            data.append(convert_data_to_dictionary(sim_history[nn]))
-        self.y = data
-        
-    def _perform_voronoi_batch_sampling(self): 
-        self._nbatch_samples.append(self.results.number_of_evaluations)
-        batch_number = 0
-        while batch_number < self.nmaxbatches:
-            logger.info(f"Active Learning Batch {batch_number}. Currently {self._nbatch_samples[-1]} samples.")
-            logger.info("................................................................")
-            self._create_voronoi_tess_and_choose_new_samples(iter_=batch_number)
-            self._populate_parameter_evaluations(self._new_points)
-            param_sets = self._parameter_sets_to_evaluate
-            self._matcal_evaluate_parameter_sets_batch(param_sets, is_restart=self._restart)
-            self._surrogate = _fit_surrogate_model(self, **self._surrogate_options)
-            self._update_surrogate_score()
-            self._nbatch_samples.append(self.results.number_of_evaluations)
-            self._format_params()
-            self._format_output()
-            
-            # convergence check
-            if np.abs(self._current_surrogate_score[self.convergence_metric][batch_number+1] - \
-                self._current_surrogate_score[self.convergence_metric][batch_number]) <= self._eps:
-                logger.info(f"BREAKING: Convergence from surrogate score.")
-                logger.info(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
-                break
-            else:
-                logger.info("Surrogate not converged yet.")
-                logger.info(f"{self.convergence_metric}: {self._current_surrogate_score[self.convergence_metric]}")
-            batch_number += 1
-
-    def _populate_parameter_evaluations(self, samples):
-        self._parameter_sets_to_evaluate = []
-        param_order = self._parameter_collection.get_item_names() 
-
-        for sample in samples:
-            ss = { key:sample[i] for i, key in enumerate(param_order) }
-            self._add_parameter_evaluation(**ss)
-        self._check_parameter_sets_populated()
-
-    def _create_voronoi_tess_and_choose_new_samples(self, iter_):
-        """
-        Perform Voronoi batch sampling based on the specified algorithm.
-        
-        Returns:
-        list: New samples selected.
-        """
-        
-        if self.nsplits > 0:
-            # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
-            self._perform_kfold_cross_validation()
-
-            # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
-            self._find_kfold_max_errors()
-            
-            if self.nmax_loo == 'all':
-                worst_sample_locations = self.X[self._max_fold_error_indices]
-            else:
-                # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
-                self._perform_loo_cross_validation()
-                # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
-                worst_sample_locations = self._find_loo_max_errors()
-                
-        else:
-            # Do not perform kfold or loo CV. New samples drawn for all Voroni regions.
-            worst_sample_locations = self.X
-
-        if self.thin is not None:
-            # thin the new samples locations according to "thin"
-            worst_sample_locations = worst_sample_locations[::self.thin, ...]
-        elif self.random_selection is not None:
-            # randomly select the new sample locations from the candidates in worst_sample_locations
-            draw_n = np.min((int(0.5 * worst_sample_locations.shape[0]), self.random_selection))
-            random_rows = np.random.choice(worst_sample_locations.shape[0], size=draw_n, replace=False)
-            worst_sample_locations = worst_sample_locations[random_rows, ...]
-
-        self._worst_sample_locations = worst_sample_locations
-        logger.info(f"Initializing voronoi/tree for batch {iter_}")
-        self._create_voronoi_tess()
-        self._find_new_sample_locations()
-        
-    def _create_voronoi_tess(self):
-        if self.voronoi_type == 'full':
-            # Initialize Voronoi tessellation
-            self._voronoi_tessellation = VoronoiTessellation(self.X, self._bounds)
-            self._voronoi_tessellation.build(**self._voronoi_options)
-
-        elif self.voronoi_type == 'local':
-            # Make a local voronoi tesselation for each new sample by using knearest neighbors
-            # to determine the closest points
-            from scipy.spatial import KDTree
-            all_points = self.X.copy()
-            self._tree = KDTree(all_points)
-                
-    def _find_new_sample_locations(self):
-
-        self._new_points = []
-        logger.info("Finding new sample locations")
-        for loc_idx, location in enumerate(self._worst_sample_locations):
-            if np.mod(loc_idx, 100) == 0:
-                logger.info(f"Drawing new sample from region index {loc_idx} of {len(self._worst_sample_locations)}.")
-
-            if self.voronoi_type == 'full':
-                # Identify corresponding voronoi cell
-                region_index = self._voronoi_tessellation.get_voronoi_region(location)[0][0]
-
-                # Step 5: Select the point within this sample’s Voronoi cell that is furthest from existing samples
-                region_vertices, furthest_vertex_index = self._voronoi_tessellation.find_furthest_vertex(region_index)
-                if region_vertices is None:
-                    continue
-                furthest_vertex = region_vertices[furthest_vertex_index]
-
-                # Step 6: Add the new point and update Voronoi tessellation
-                if self.iterative_updates:
-                    self._voronoi_tessellation.add_points(furthest_vertex)
-
-                # Step 7: Update X
-                self._new_points.append(furthest_vertex)
-
-            elif self.voronoi_type == 'local':
-                nearest_neighbors = tree.query(location, k=10*self.dim)
-                nn_points = all_points[nearest_neighbors[1].squeeze()]
-                nn_vor = VoronoiTessellation(nn_points, self._bounds)
-                nn_vor.build(**self._voronoi_options)
-                nn_region = nn_vor.get_voronoi_region(location)[0]
-                try:
-                    nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
-                except:
-                    continue
-
-                if nn_vert is None:
-                    continue
-                furthest_vertex = nn_vert[nn_fvi]
-                self._new_points.append(furthest_vertex)
-                if self.iterative_updates:
-                    all_points = np.vstack((all_points, furthest_vertex))
-                    tree = KDTree(all_points)
-
-        self._new_points = np.asarray(self._new_points)
-        # Make sure all new points are unique
-        unique_points = set(tuple(row) for row in self._new_points)
-        self._new_points = np.asarray([list(row) for row in unique_points])
-
-    def _perform_kfold_cross_validation(self):
-        self._kf = None
-        logger.info("Performing kfold cross-validation")
-        kfcv = KFoldCrossValidation()
-        groups = None
-
-        if self.group_kfold:
-            from sklearn.cluster import KMeans
-            kmeans = KMeans(n_clusters=self.nsplits, random_state=42)
-            groups = kmeans.fit_predict(self.X)
-        
-        kfcv_options = {'nsplits':self.nsplits, 'group_kfold':self.group_kfold,
-                        'scale':self.cv_scale, 'metric':self.cv_metric,
-                        'groups':groups, 'interpolation_field':self.interpolation_field,
-                        'par_names':self.par_names}
-        self._kf = kfcv.perform_kfold_cv(self.X, self.y, **kfcv_options)
-    
-    def _find_kfold_max_errors(self):
-        self._max_fold_error_indices = None
-        logger.info("Finding max kfold error")
-        max_folds = self._find_indices_of_n_largest_kf_errors()
-        self._max_fold_error_indices = np.concatenate(list(max_folds.values())) 
-    
-    def _perform_loo_cross_validation(self):
-        self._loo_errors = None
-        logger.info("Finding worst sample locations")
-        loocv = LeaveOneOutCrossValidation()
-        loo_options = {'scale':self.cv_scale,
-                       'metric':self.cv_metric,
-                       'interpolation_field':self.interpolation_field,
-                       'par_names':self.par_names}
-        
-        self._loo_errors = loocv.perform_loocv(self.X, self.y, self._max_fold_error_indices,
-                                               **loo_options)
-    
-    def _find_loo_max_errors(self):
-            self._worst_sample_locations = None
-            max_loo_indices = self._find_indices_of_n_largest_errors()
-            return self.X[max_loo_indices]
-        
-    def _find_indices_of_n_largest_kf_errors(self):
-
-        # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in self._kf.items()]
-
-        # Sort the items based on the error in descending order
-        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-
-        # Get the top n items
-        top_n_items = sorted_items[:self.nmax_folds]
-
-        # Extract the arrays associated with the top n largest floats
-        result_arrays = {key: array for key, _, array in top_n_items}
-
-        return result_arrays
-
-    def _find_indices_of_n_largest_errors(self):
-        """
-        Find the indices of the n largest values in an array of errors.
-
-        Parameters:
-        errors (np.ndarray or list): An array or list of error values.
-        n (int): The number of largest values to find.
-
-        Returns:
-        np.ndarray: An array of indices corresponding to the n largest values.
-        """
-
-        if self.nmax_loo < 1:
-            # treat as ratio of indices to keep
-            nkeep = int(self.nmax_loo * len(self._loo_errors))
-        else:
-            nkeep = int(self.nmax_loo)
-
-        # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
-
-        # Sort the items based on the error in descending order
-        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-
-        # Get the top n items
-        top_n_items = sorted_items[:nkeep]
-
-        # Extract the indices associated with the top n largest floats
-        indices = [item[2] for item in top_n_items]
-
-        return np.array(indices)
-
-    def _add_parameter_evaluation(self, **p):
-      super()._add_parameter_evaluation(**p)
-
-    def add_parameter_evaluation(self, **parameters):
-        """"""
-        raise self.StudyInputError("Users cannot add parameter evaluations to a VoronoiAdaptiveSurrogateStudy.")
-
-
-class VoronoiTessellation:
-    def __init__(self, points, bounds):
-        """Initialize the VoronoiBatchSamplingStudy
-        
-        param points: Array of points that are the seeds of the Voronoi tessellation
-        type points: nd_array
-
-        param bounds: Bounds for the parameter space, e.g., [(xmin, xmax), (ymin, ymax)] for a 2D space.
-        type boudns: list of tuples
-        """
-        self.points = np.array(points)
-        self.ndim = self.points.shape[1]
-        self.bounds = bounds
-        
-    def build(self, **options):
-        """Initialize the Voronoi tessellation with given points and bounds.
-        """
-        from scipy.spatial import Voronoi, Delaunay, ConvexHull
-
-        self._initialize_attributes()
-        self._set_voronoi_options(**options)
-
-        self.boundary_points = self._make_nd_grid(npts_along_dim=2)
-        if not self.finite_only:
-            self.boundary_hull = ConvexHull(self.boundary_points)
-            self.boundary_hull_eq = self.boundary_hull.equations # (nfacet, ndim + 1)
-            self.boundary_hull_V, self.boundary_hull_b = self.boundary_hull_eq[:, :-1], self.boundary_hull_eq[:, -1] # normal, offset
-            self.bhullD = Delaunay(self.boundary_points)
-        else:
-            self.boundary_hull = None
-            self.bhullD = None
-        self.create_ghost_points()
-        self._all_points = np.vstack([self.points, self._ghost_points])
-        
-        self.vor = Voronoi(self._all_points, incremental=self.incremental)
-        self.ghost_busters()
-        self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
-
-    def _initialize_attributes(self):
-        self.finite_only = False
-        self.incremental = False
-         
-    def _set_voronoi_options(self, **voronoi_kwargs):
-        """Set voronoi properties. See documentation for properties that an be altered and their options.
-        
-        param incremental: Allow adding points incrementally. This takes up additional resources.
-        type incremental: bool
-        
-        param finite: With finite = True, only vertices which reside inside convex hull defined by boundary points
-                       are returned as vertices of a voronoi region. With finite = False (default), all vertices
-                       are returned. In this case, vertices which fall outisde the parameter bounds are snipped 
-                       to the convex hull defined by boundary points, which requires more computational
-                       resources, especially in high dimensions.
-        type finite: bool
-        """
-        for key, value in voronoi_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-        
-    def _make_nd_grid(self, npts_along_dim):
-        grid_pts = []
-        for dim in np.arange(self.ndim):
-            grid_pts.append(np.linspace(self.bounds[dim][0], self.bounds[dim][1], npts_along_dim))
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.ndim)]
-        return np.vstack(tuple(coords_ravel)).T
-        
-    def create_ghost_points(self, stretchCoef=1.75, centCoef=1.5):
-        """Reflect points nearest to the boundary hull across the nearest
-        face of the boundary hull """
-
-        boundary_points_stretched = self.boundary_points * stretchCoef
-        self._ghost_points = boundary_points_stretched
-
-        boundary_centroid = np.mean(self.boundary_points, axis=0)
-        max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
-        self._ghost_points = np.vstack([self._ghost_points, boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
-        self._ghost_points = np.vstack([self._ghost_points, boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
-
-    def ghost_busters(self):
-        """ Identify which points in self._all_points are ghost points"""
-        self._boo = []
-        for point in self._all_points:
-            if point in self._ghost_points:
-                self._boo.append(True)
-            else:
-                self._boo.append(False)
-
-    def get_region_vertices(self, region_index, identify_outside_vertices=True):
-        """Return the vertices of the Voronoi region."""
-        region = self.vor.regions[region_index].copy()
-        if -1 in region:
-            logger.warning(f"Infinite vertice in Region {region_index}")
-        
-        if identify_outside_vertices:
-            updated_region = self.identify_vertices_outside_bounds(region)
-            if not -2 in updated_region and len(updated_region) > 0:
-                region_vertices = self.vor.vertices[region]
-            elif -2 in updated_region:
-                if self.finite_only:
-                    if max(updated_region) < 0:
-                        region_vertices = None
-                    else: 
-                        region_vertices = np.asarray([self.vor.vertices[i] for i in updated_region if i > 0])
-                else:
-                    region_tuple_list = list(zip(region, updated_region))
-                    region_vertices = self.replace_unbounded_vertices(updated_region, region_index, region_tuple_list)
-            if region_vertices is not None:
-                if not self.finite_only:
-                    boundary_in_region = [i for i in np.arange(len(self.boundary_regions)) if self.boundary_regions[i][0] == region_index]
-                    if boundary_in_region:
-                        boundary_vertices = self.boundary_points[boundary_in_region] 
-                        region_vertices = np.concatenate((region_vertices, boundary_vertices))
-                        unique_vertices = set(tuple(row) for row in region_vertices)
-                        return np.asarray([list(row) for row in unique_vertices])
-                    else:
-                        return region_vertices
-            else:
-                return region_vertices
-
-        elif not identify_outside_vertices:
-            return self.vor.vertices[region]
-
-    def get_voronoi_vertices(self, identify_outside_vertices=True):
-        """Return the vertices of the Voronoi tessellation."""
-        vertices = []
-        for i, region in enumerate(self.vor.regions):
-            try:
-                region_point_index, = np.where(self.vor.point_region == i)[0]
-            except:
-                # empty region: Voronoi region for a point at infinity that was added internally
-                continue
-            if self._boo[region_point_index]:
-                # region belongs to a ghost point
-                continue
-            elif -1 in region:
-                logger.warning(f"Infinite vertice in Region {i}")
-
-            if identify_outside_vertices:
-                updated_region = self.identify_vertices_outside_bounds(region)
-                if not -2 in updated_region and len(updated_region) > 0:
-                    vertices.append(self.vor.vertices[region])
-                elif -2 in updated_region:
-                    if self.finite_only:
-                        verts = np.asarray([self.vor.vertices[i] for i in updated_region if i > 0])
-                        vertices.append(verts)
-                    else:
-                        region_tuple_list = list(zip(region, updated_region))
-                        vertices.append(self.replace_unbounded_vertices(updated_region, i, region_tuple_list))
-                        boundary_in_region = [ii for ii in np.arange(len(self.boundary_regions)) if self.boundary_regions[ii][0] == i]
-                        if boundary_in_region:
-                            boundary_vertices = self.boundary_points[boundary_in_region] 
-                            vertices.append(boundary_vertices)
-
-            elif not identify_outside_vertices:
-                vertices.append(self.vor.vertices[region])
-        
-        if vertices is not None:
-            vertices = np.concatenate((vertices))
-            unique_vertices = set(tuple(row) for row in vertices)
-            return np.asarray([list(row) for row in unique_vertices])
-        else: 
-            return vertices
-        
-    def identify_vertices_outside_bounds(self, region):
-        """
-        Identify vertices that sit outside the bounding region
-
-        Parameters:
-        region (list): A list of the voronoi regions. Each list contains indices of the voronoi vertices forming each Voronoi region.
-
-        Returns:
-        list: A new list of voronoi regions. With vertices outside the boudnign region replaced with -1.
-        """
-
-        #outside = lambda lb, ub, x: (x < lb) + (x > ub)
-        # Create a boolean mask for vertices outside the bounds
-        region = np.array(region)
-        region_vertices = self.vor.vertices[region]
-        outside_mask = np.zeros(region_vertices.shape, dtype=bool)
-
-        for col_index in range(self.ndim):
-            lb, ub = self.bounds[col_index]
-            #vert_outside, = np.where(outside(lb, ub, region_vertices[:, col_index]))
-            outside_mask[:, col_index] |= (region_vertices[:, col_index] < lb) | (region_vertices[:, col_index] > ub)
-
-        # Get the indices of vertices that are outside the bounds
-        vert_outside = np.where(outside_mask.any(axis=1))[0]
-        if len(vert_outside) > 0:
-            outside_vert_index = [region[i] for i in vert_outside]
-            region[vert_outside] = -2
-        return region.tolist()
-
-    def replace_unbounded_vertices(self, region, region_index, region_tuple):
-        """
-        Replace the infinite vertices in a Voronoi region with new vertices on the edge of the bounding box.
-        ** vertices that sit outside the bounding region are considered infinite here
-
-        Parameters:
-        region (list): A list of the voronoi regions. Each list contains indices of the Voronoi vertices forming each Voronoi region.
-        region_index (int): Region index
-
-        Returns:
-        list: A new list of voronoi regions with infinite vertices replaced.
-        """
-        try:
-            region_point_index, = np.argwhere(self.vor.point_region == region_index)
-        except:
-            raise ValueError("No region point index found in VoronoiTessesllation for Adaptive Surrogate Generation. Try a different random seed.")
-        
-        region_vertices = []
-        if -2 in region:
-            finite_indices = [v for v in region if v >= 0]
-            if len(finite_indices) > 0:
-                finite_vertices = self.vor.vertices[finite_indices]
-            new_vertices = self.snip_ridge_vertices(\
-                region_index, region_point_index, region_tuple)
-
-            # Replace the infinite vertex
-            if len(finite_indices) > 0:
-                region_vertices = np.concatenate((finite_vertices, new_vertices))
-            elif len(new_vertices) > 0:
-                region_vertices = new_vertices
-            else:
-                return None
-
-        else:
-            region_vertices = self.vor.vertices[region]
-
-        return region_vertices
-
-    def snip_ridge_vertices(self, region_index, region_point_index, region_tuple):
-
-        # Find the ridge vertices for the specified region
-        region_dict = {x[0]: x[1] for x in region_tuple}
-        
-        # the voronoi points that are equidistant from the ridge that lies between them
-        ridge_point_indices = np.argwhere(self.vor.ridge_points == region_point_index)[:, 0]
-        
-        # the vertices at the end of each ridge
-        region_ridge_vertices = [self.vor.ridge_vertices[i] for i in ridge_point_indices]
-
-        new_vertices = []
-        for rv in region_ridge_vertices:
-            urv = [region_dict.get(num) for num in rv]
-            if len(urv) == 2: #2D Voronoi region
-                u, v = np.argsort(urv)
-                if urv[u] == -2: # and urv[v] > 0: # only one vertice is out of bounds - snip one end to the boundary hull
-                    ray_end = self.vor.vertices[rv[u]]
-                    ray_origin = self.vor.vertices[rv[v]]
-                    norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
-                    new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]: # confirm new vertice is in given region
-                        if self.bhullD.find_simplex(new_vertice) >= 0: # confirm point is within boundary hull
-                            new_vertices.append(new_vertice)
-                if urv[v] == -2: # both vertices are out of bounds - snip both ends to the boundary hull
-                    ray_end = self.vor.vertices[rv[v]]
-                    ray_origin = self.vor.vertices[rv[u]]
-                    norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
-                    new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
-                        if self.bhullD.find_simplex(new_vertice) >= 0:
-                            new_vertices.append(new_vertice)
-
-            elif len(urv) > 2: #3D + Voronoi region
-                nunbounded_vert = urv.count(-1) + urv.count(-2)
-                if nunbounded_vert > 0 and nunbounded_vert < len(urv):
-
-                    edges = [[rv[i], rv[(i+1) % len(rv)]] for i in range(len(rv))]
-                    updated_edges = [[urv[i], urv[(i+1) % len(urv)]] for i in range(len(urv))]
-                    unbounded_edges = [[i, edge] for i, edge in enumerate(updated_edges) if -2 in edge]
-                    for i, ev in unbounded_edges:
-                        u, v = np.argsort(ev)
-                        if ev[u] == -2: # and ev[v] > 0:
-                            ray_end = self.vor.vertices[edges[i][u]]
-                            ray_origin = self.vor.vertices[edges[i][v]]
-                            norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
-                            new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                            if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
-                                if self.bhullD.find_simplex(new_vertice) >= 0:
-                                            new_vertices.append(new_vertice)
-                        if ev[v] == -2: # and ev[v] > 0:
-                            ray_end = self.vor.vertices[edges[i][v]]
-                            ray_origin = self.vor.vertices[edges[i][u]]
-                            norm_ray_direction = self.get_normal_ray_direction(ray_origin, ray_end)
-                            new_vertice = self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                            if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
-                                if self.bhullD.find_simplex(new_vertice) >= 0:
-                                            new_vertices.append(new_vertice)
-
-        return np.asarray(new_vertices)
-
-    def get_normal_ray_direction(self, ray_origin, ray_end):
-        ray_direction = ray_end - ray_origin
-        return ray_direction / np.linalg.norm(ray_direction)
-        
-    def find_boundary_hull_ray_crossings(self, U, z):
-        """
-        Find where a ray crosses the convex hull of the boundary.
-
-        Parameters:
-        U (np.ndarray): Ray direction.
-        z (np.ndarray): Ray origin.
-
-        Returns:
-        list: List of intersection points with the convex hull.
-        """
-        V = self.boundary_hull_V
-        b = self.boundary_hull_b
-        denom = np.dot(V, U)
-        num = -(b + np.dot(V, z))
-        alpha = num[denom!=0] / denom[denom!=0]
-        if not np.any(alpha > 0):
-           return None 
-            
-        return np.min(alpha[alpha >0]) * U + z
-
-    def find_furthest_vertex(self, region_index, identify_outside_vertices=True):
-        """Find the vertex that has the greatest distance from the cell centroid."""
-
-        self.raise_if_invalid_region_index(region_index)
-        vertices = self.get_region_vertices(region_index, identify_outside_vertices=identify_outside_vertices)
-        if vertices is not None:
-            centroid = self.get_region_seed(region_index)
-            distances = np.linalg.norm(vertices - centroid, axis=1)
-            furthest_vertex_index = np.argmax(distances)
-        else:
-            furthest_vertex_index = None
-        return vertices, furthest_vertex_index
-
-    def recalculate_with_new_seed(self, new_seed):
-        """Recalculate the Voronoi tessellation with the addition of a new seed."""
-        self.points = np.vstack([self.points, new_seed])
-        self.vor = Voronoi(self.points)
-
-    def get_region_seed(self, region_index):
-        """
-        Given a region_index, return the seed of the Voronoi tesselation that
-        belongs to the region.
-
-        Parameters:
-        region_index (integer): Region index.
-
-        Returns:
-        array: The Voronoi seed that belongs to the indexed region.
-        """
-
-        point_index, = np.where(self.vor.point_region == region_index)
-        return np.atleast_2d(self.vor.points[point_index[0]])
-
-    def get_voronoi_region(self, point_array):
-        """
-        Given an array of points, return the region of the Voronoi tesselation that the
-        points belongs to. If a point lies on a ridge or vertice, multiple regions are 
-        returned for that point.
-
-        param point: An array of points to find the region of.
-        type point: nd_array
-
-        rtn: list of lists, where each sublist contains the Voronoi region(s) that contains the point.
-             A point on a ridge has a sublist with two regions (for 2D). A point on a vertice has a sublist
-             with 3 regions (for 2D)
-        """
-        point_array = np.atleast_2d(point_array)
-        region_index = []
-        for point in point_array:
-            point_already_exists = np.any(np.all(self.vor.points == point, axis=1))
-            if point_already_exists:
-                seed_index, = np.where(np.all(self.vor.points == point, axis=1))
-            else:
-                seed_index = self.get_closest_seed(point)
-            
-            # Get the region index for the point
-            region_index.append(self.vor.point_region[seed_index].tolist())
-        region_index = [sublist if sublist else [np.inf] for sublist in region_index]
-        return region_index
-    
-    def get_closest_seed(self, point):
-        """Return the index of the seed of the Voronoi cell that contains the given point.
-            If the point lies on a ridge or vertex, multiple seeds are returned."""
-        closest_seed_index = self.get_closest_point(self.vor.points, point)
-        return closest_seed_index[0]
-
-    def get_closest_point(self, candidates, target_point):
-        """Return the index of the candidate point that has the min distance
-           from the target point"""
-        distances = np.linalg.norm(candidates - target_point, axis=1)
-        min_dist = min(distances)
-        closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-10))
-        return closest_candidate_index        
-
-    def add_points(self, points):
-        """ process a set of additional points"""
-        from scipy.spatial import Voronoi 
-        points = np.atleast_2d(points)
-        ### TODO: consider identifying unique new pts and adding them instead of just skipping 
-        ### the entire batch if it contains pre-existing pts.
-        try:
-            # Qhull error in dim>2 with incremental=True and restart=False
-            # Must set Incremental=True to use add_points(), but very slow
-            # May be faster to rebuild manually
-
-            #self.vor.add_points(points, restart=True)
-            self._all_points = np.vstack((self._all_points, points))
-            self.vor = Voronoi(self._all_points)
-            #self.vor.updated_ridge_vertices= [inner_list[:] for inner_list in self.vor.ridge_vertices]
-        except:
-            if np.any(np.all(self.vor.points == points, axis=1)):
-                logger.debug('Some new points trying to be added for the voronoi tessealation are'
-                              'already in the point collection.')
-            if np.any(np.isnan(points)) or np.any(np.isinf(points)):
-                raise ValueError("Input points contain NaN or Inf.")
-            logger.debug("Exception caught in add_points(), attemptiung to continue...")
-
-
-    def raise_if_invalid_region_index(self, region_index):
-        if region_index > len(self.vor.regions):
-            raise ValueError('Invalid region index. Index must be in (0, nregions]')
-
-    def raise_if_no_finite_vertices(self, finite_indices, region_index):
-        if len(finite_indices) == 0:
-            point = self.get_region_seed(region_index)
-            raise ValueError(f"0 finite indices for region {region_index}, with seed {point}")
-
-    def plot_voronoi_3d(self):
-
-        fig, ax = plt.subplots(111, projection='3d')
-        # Plot the Voronoi vertices
-        ax.scatter(self.vor.vertices[:, 0], self.vor.vertices[:, 1], self.vor.vertices[:, 2], color='orange')
-
-        # Plot the Voronoi ridges
-        for ridge in vor.ridge_vertices:
-            if -1 in ridge:
-                continue  # Skip infinite ridges
-            ax.plot3D(*zip(vor.vertices[ridge[0]], vor.vertices[ridge[1]]), color='blue')
-        plt.savefig("voronoi_3d.png")
-
-    def plot_voronoi_2d(self):
-        import matplotlib.pyplot as plt
-        from scipy.spatial import voronoi_plot_2d
-        
-        fig, ax = plt.subplots(figsize=(12,8))
-        voronoi_plot_2d(self.vor, ax=ax, show_vertices=True,
-            line_width=2, point_size=20)
-        for simplex in self.boundary_hull.simplices:
-            plt.plot(self.boundary_points[simplex, 0], self.boundary_points[simplex, 1], 'k-', lw=2)
-        plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation_viz.png")
-        plt.close()
-
-
-class KFoldCrossValidation:
-    def __init__(self):
-        """
-        Initialize the K-Fold Cross-Validation with a given surrogate model.
-
-        Parameters:
-        model: A machine learning model that has fit and predict methods.
-        nsplits: int
-            The number of folds for K-Fold Cross-Validation.
-        """
-        self._initialize_attributes()
-
-    def _initialize_attributes(self):
-        self.nsplits = 5
-        self.group_kfold = False
-        self.scale = None
-        self.metric = 'rmse'
-        self.groups = None
-        self.interpolation_field = 'x'
-        self.par_names = None
-         
-    def _set_kfcv_options(self, **kfcv_kwargs):
-        """Set KFold CV properties."""
-        self._kfcv_kwargs = kfcv_kwargs
-        for key, value in kfcv_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-        if self.nsplits > self.X.shape[0]:
-            self.nsplits = int(self.X.shape[0]/2.0)
-            logger.warning("Input parameter \"nsplits\" can't be greater than " +
-                           "the number of samples in KFoldCrosValidation. Reducing " +
-                           "number of splits to approximately half the number of samples.")
-        
-    def perform_kfold_cv(self, X, y, **kfcv_options):
-        """
-        Perform K-Fold Cross-Validation.
-
-        Parameters:
-        X: np.ndarray
-            Feature matrix (training samples).
-        y: np.ndarray
-            Target values (ground truth).
-
-        Returns:
-        tuple: (index_of_max_error, max_error)
-            The index of the sample with the greatest prediction error and the corresponding error value.
-        """
-        from sklearn.model_selection import GroupKFold, KFold
-        from joblib import Parallel, delayed
-
-        self.X = X
-        self.y = y
-        self._set_kfcv_options(**kfcv_options)
-        if self.group_kfold:
-            assert self.groups is not None
-            cv = GroupKFold(nsplits=self.nsplits)
-            kf_results = Parallel(n_jobs=1)(
-                delayed(self.cross_val_fold)(train_index, test_index, self.X, self.y, self.metric)
-                for train_index, test_index in cv.split(X, y, self.groups)
-            )
-        else:
-            cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
-            kf_results = Parallel(n_jobs=1)(
-                delayed(self.evaluate_fold)(train_index, test_index, self.X, self.y)
-                for train_index, test_index in cv.split(self.X)
-            )
-
-        # Convert the results to a dictionary
-        kf = {k_idx: result for k_idx, result in enumerate(kf_results)}
-        return kf
-
-    def evaluate_fold(self, train_index, test_index, X, y):
-        """Perform a single fold of cross-validation."""
-
-        info = self.extract_fold_info(train_index, test_index, X, y)
-        train_eval_info, test_eval_info, X_test, y_test = info
-        surrogate_options = get_cv_surrogate_options(test_eval_info,
-                                                     self.interpolation_field) 
-        
-        # Fit the model on the training data
-        fold_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
-        
-        # Make predictions for the test set and calculate error
-        error = _get_surrogate_metric(fold_surrogate, self.metric)
-        return error, test_index
-   
-    def extract_fold_info(self, train_index, test_index, X, y):
-        X_train, X_test = X[train_index], X[test_index]
-        y_train = [y[i] for i in train_index]
-        y_test = [y[i] for i in test_index]
-        train_res, test_res = _setup_studies_for_cv(self.par_names,
-                                                    X_train, X_test, y_train, y_test)
-        return train_res, test_res, X_test, y_test
-
-
-class LeaveOneOutCrossValidation:
-    def __init__(self):
-        """
-        Initialize the LOOCV.
-        """
-        self._initialize_attributes()
-        
-    def _initialize_attributes(self):
-        self.scale = None
-        self.metric = 'rmse'
-        self.interpolation_field = 'x'
-        self.par_names = None
-        
-    def _set_loocv_options(self, **loocv_kwargs):
-        """Set LeaveOneOut CV properties."""
-        self._loocv_kwargs = loocv_kwargs
-        for key, value in loocv_kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-            else:
-                raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{key}'")
-
-    def perform_loocv(self, X, y, indices, **loocv_options):
-
-        """
-        Perform Leave-One-Out Cross-Validation.
-
-        Parameters:
-        X: np.ndarray
-            Feature matrix (training samples).
-        y: np.ndarray
-            Target values (ground truth).
-
-        Returns:
-        tuple: (index_of_max_error, max_error)
-            The index of the sample with the greatest prediction error and the corresponding error value.
-        """
-
-        from joblib import Parallel, delayed
-        self._set_loocv_options(**loocv_options)
-        
-        loo_results = Parallel(n_jobs=1)(
-            delayed(self.evaluate_loo_sample)(X, y, i)
-            for i in indices
-        )
-
-        loo = {loo_idx: result for loo_idx, result in enumerate(loo_results)}
-        return loo
-    
-    def evaluate_loo_sample(self, X, y, index):
-        # Leave one out: create training and test sets
-        info = self.extract_loo_info(index, X, y)
-        train_eval_info, test_eval_info, X_test, y_test = info
-        surrogate_options = get_cv_surrogate_options(test_eval_info,
-                                                     self.interpolation_field)
-        # Fit the model on the training data
-        loo_surrogate = _fit_surrogate_model(train_eval_info, **surrogate_options)
-
-        # Make predictions for the left-out sample and calculate error
-        error = _get_surrogate_metric(loo_surrogate, self.metric)
-        return error, index
-
-    def extract_loo_info(self, index, X, y):
-        X_train = np.delete(X, index, axis=0)
-        y_train = y.copy()
-        del y_train[index]
-        X_test = X[index].reshape(1, -1)  # Reshape for a single sample
-        y_test = [y[index]]
-        train_res, test_res = _setup_studies_for_cv(self.par_names,
-                                                    X_train, X_test,
-                                                    y_train, y_test)
-        return train_res, test_res, X_test, y_test
-    
-    
-def get_cv_surrogate_options(test_eval_info, interpolation_field):
-    surrogate_options = {'interpolation_field':interpolation_field,
-                         'training_fraction':1.0,
-                         'test_eval_info':test_eval_info,
-                         'cv_test_set':True}
-    return surrogate_options
-
-
-def perform_cbrt_transform(y):
-    return np.sign(y) * np.abs(y) ** (1/3)
-
-
-def transform_output(scale, y_test, y_pred):
-    y_test = transform_y(scale, y_test)
-    y_pred = transform_y(scale, y_pred)
-    return y_test, y_pred
-
-
-def transform_y(scale, y):
-    if scale == 'cbrt':
-        return perform_cbrt_transform(y)
-    elif scale == 'log':
-        return np.log(y)
-    elif scale is None:
-        return y
-
-
-def _setup_studies_for_cv(p_names, train_samples, test_samples,
-                               train_evals, test_evals):
-    res = _get_parameter_and_simulation_hist(p_names, train_samples, train_evals)
-    test_res = _get_parameter_and_simulation_hist(p_names, test_samples, test_evals)
-    return res, test_res
-
-
-def _get_parameter_and_simulation_hist(p_names, p_samples, m_evals):
-    from matcal.core.study_base import StudyResults
-    p_hist = _format_parameter_hist(p_names, p_samples)
-    res_hist = _format_parameter_evaluations(p_names, m_evals)
-    res = StudyResults()
-    res._update_parameter_history(p_hist, list(p_hist.keys()))
-    res._update_simulation_history(res_hist, 'cv')
-    return res
-
-
-def _format_parameter_hist(names, p_samples):
-    from matcal.core.parameters import ParameterCollection
-    n_samples = p_samples.shape[0]
-    params = OrderedDict()
-    pc = ParameterCollection('cv')
-    for idx in range(n_samples):
-        params[f"eval_{idx}"] = OrderedDict()
-        for n_idx, param_name in enumerate(names):
-            params[f"eval_{idx}"][param_name] = p_samples[idx, n_idx]
-    return params 
-
-
-def _format_parameter_evaluations(param_order, model_evals):
-    from matcal.core.data import convert_dictionary_to_data, DataCollection
-    results_hist = DataCollection("CV data collection")
-    for eval in model_evals:
-        results_hist.add(convert_dictionary_to_data(eval))
-    return results_hist
-
-
-def _get_surrogate_metric(surrogate, metric):
-    test_score = surrogate.scores['test']
-    combined_score = []
-    for field_idx, field_name in enumerate(test_score):
-        if isinstance(test_score[field_name], (dict, OrderedDict)):
-            combined_score += list(test_score[field_name][metric])
-    if metric == 'nlpd':
-        return np.sum(combined_score)
-    else:
-        return np.mean(combined_score)

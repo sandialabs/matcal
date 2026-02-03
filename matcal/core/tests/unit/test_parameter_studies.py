@@ -20,11 +20,8 @@ from matcal.core.parameter_studies import (FiniteDifference, ClassicLaplaceStudy
                                            _get_residual_covariance, 
                                            _combine_array_list_into_zero_padded_single_array, 
                                            _package_parameter_specific_results, 
-                                           _fit_posterior,
-                                           VoronoiTessellation,
-                                           KFoldCrossValidation,
-                                           LeaveOneOutCrossValidation,
-                                           VoronoiAdaptiveSurrogateStudy, )
+                                           _fit_posterior)
+
 from matcal.core.state import State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests, model_func
@@ -47,24 +44,7 @@ def oneD_model(**param_dict):
     y = x ** 2
     return {"x":x, "f":y}
 
-def quadratic_model_2d(**parameters):
-    """Quadratic curve: f = a + bx. x independent variable."""
-    x = np.linspace(0, 1, 100)
-    a = parameters['a']
-    b = parameters['b']
-    f = a + b * x
-    return {"x":x, "f":f}
 
-def quadratic_model_3d(**parameters):
-    """Quadratic curve: f = a + bx + cx^2. x independent variable."""
-    
-    x = np.linspace(0, 1, 100)
-    a = parameters['a']
-    b = parameters['b']
-    c = parameters['c']
-    f = a + b * x + c * x ** 2
-    return {"x":x, "f":f} 
-    
 class FiniteDifferenceTest(MatcalUnitTest):
 
   def f(self,x,y,a0,a1,a2,a11,a12,a22):
@@ -464,7 +444,8 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         
     @staticmethod
     def run_study(study, nsamples, model_name, par_names, skip=None):
-        results = study.launch(nsamples, skip=skip)
+        study.set_number_of_samples(nsamples, skip)
+        results = study.launch()
         params = np.array([results.parameter_history[par] for par in par_names]).T.squeeze()
         state0 = results.simulation_history[model_name].states['matcal_default_state']
         sim_history = results.simulation_history[model_name][state0]
@@ -481,13 +462,24 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         y_pred = f(test_points)
         return np.linalg.norm(y_pred - test_data), y_pred
             
-    def setup_study(self, parameter_collection, model, objective): 
-        study = self._study_class(parameter_collection, scramble=False, rng=42)
-        study.add_evaluation_set(model, objective)
-        return study
+    def setup_study(self, scramble=False): 
+        self.model_name = 'oneD'
+        self.par_names = ['theta']
+        
+        # set up model, objective, parameter collection
+        self.model = PythonModel(oneD_model)
+        self.model.set_name(self.model_name)
+        parameter_collection = TestHaltonStudy.setup_1d_parameter_collection()
+        test_points = np.linspace(-2, 2, 5) 
+        objective = SimulationResultsSynchronizer("x", test_points, "f")
+        self.study = self._study_class(parameter_collection)
+        self.study.set_Halton_scramble(scramble)
+        self.study.set_seed(42)
+        self.study.add_evaluation_set(self.model, objective)
     
     def setUp(self):
         super().setUp(__file__)
+
 
     def test_check_variable_type(self):
         pass
@@ -508,21 +500,10 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         pass
     
     def test_1d_launch(self):
-        nsamples = 10
-        model_name = 'oneD'
-        par_names = ['theta']
-        
-        # set up model, objective, parameter collection
-        model = PythonModel(oneD_model)
-        model.set_name(model_name)
-        parameter_collection = TestHaltonStudy.setup_1d_parameter_collection()
-        test_points = np.linspace(-2, 2, 5) 
-        objective = SimulationResultsSynchronizer("x", test_points, "f")
-
         # run initial study
-        study = self.setup_study(parameter_collection, model, objective)
-        params, sim_history, state0 = TestHaltonStudy.run_study(study, nsamples, model_name, par_names)
-        print(params.shape)
+        nsamples = 10
+        self.setup_study()
+        params, sim_history, state0 = TestHaltonStudy.run_study(self.study, nsamples, self.model_name, self.par_names)
         self.assertEqual(len(params), nsamples)
         
         data = [sim_history[i]['f'][0] for i in range(nsamples)]
@@ -534,32 +515,49 @@ class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
         for val in test_points: 
             th = Parameter("theta", -2, 2, distribution="uniform_uncertain", current_value=val)
             pc = ParameterCollection("predictions", th)
-            res = model.run(state0, pc)
+            res = self.model.run(state0, pc)
             test_data.append(res.results_data['f'][0])
             time.sleep(0.1)
         test_data = np.array(test_data)
          
         # interpolate and calculate prediction error of test points
-        pred_error, y_pred = TestHaltonStudy.calculate_interpolated_pred_error(\
+        pred_error, _ = TestHaltonStudy.calculate_interpolated_pred_error(\
             params, data, test_points, test_data)
 
         # continue study with additional Halton samples
         nnew_samples = 12
-        study = self.setup_study(parameter_collection, model, objective)
-        study.restart()
-        new_params, sim_history, state0 = TestHaltonStudy.run_study(study, nsamples+nnew_samples, model_name, par_names)
+        self.setup_study()
+        self.study.restart()
+        new_params, sim_history, state0 = TestHaltonStudy.run_study(self.study, nsamples+nnew_samples, self.model_name, self.par_names)
         self.assertEqual(len(new_params), nsamples + nnew_samples)
 
         new_data = [sim_history[i]['f'][0] for i in range(nsamples+nnew_samples)]
 
         # interpolate and calculate prediction error of test points
-        new_pred_error, y_pred = TestHaltonStudy.calculate_interpolated_pred_error(\
+        new_pred_error, _ = TestHaltonStudy.calculate_interpolated_pred_error(\
             new_params, new_data, test_points, test_data)
         
         # prediction error should be less with more Halton samples
         self.assertGreater(pred_error, new_pred_error)
-    
 
+    def test_error_handling(self):    
+        # check variable type error handling
+        nsamples = 10
+        self.setup_study()
+        with self.assertRaises(TypeError):
+            TestHaltonStudy.run_study(self.study, nsamples, self.model_name, self.par_names, skip=True)
+        
+        with self.assertRaises(RuntimeError):
+            self.study.add_parameter_evaluation(a=5)
+        
+    def test_skipping(self):
+        # skip not None
+        nsamples = 10
+        self.setup_study()
+        params, _, _= TestHaltonStudy.run_study(self.study, nsamples, self.model_name, self.par_names, skip=10)
+        self.assertEqual(len(params), nsamples)
+       
+        
 def model_linear(a):
     disp = np.linspace(0,1, 10)
     load = a*disp
@@ -691,7 +689,6 @@ class TestLaplaceStudy(StudyBaseUnitTests.CommonTests):
 
         study_param_results = study._get_parameter_specific_results("grad_key")
         self.assertEqual(study_param_results["mean:a"], 1)
-        print(study_param_results["grad_key:a"])
         #for raw residuals just one, for scaled residuals divide by sqrt of 3 for 
         # normalization by number of data sets
         self.assert_close_arrays(study_param_results["grad_key:a"], np.ones((1,3)))
@@ -846,18 +843,12 @@ class TestFitPosteriors(MatcalUnitTest):
         resids = model(mean_dict) - model(inputs)
         resids += noise
        
-        print("Avg. resids:", np.average(resids))
         resids = resids.T
         noise_guess = std**2
-        print(noise_guess)
         sens = resid_sensitivity(mean_dict).T
-        print("Avg. sens:", np.average(sens))
         cov_est = _estimate_parameter_covariance(resids, sens, noise_guess)
-        print("Est covar", cov_est)
         start = np.copy(cov_est)
-        print("Initial covar:", start)
         fitted_posterior = _fit_posterior(resids, sens, start, noise_guess, method=None)
-        print("Fitted posterior:", fitted_posterior)
         self.assert_close_arrays(cov, fitted_posterior, show_on_fail=True, 
                                  rtol=1e-2)
 
@@ -957,825 +948,3 @@ class TestClassicLaplaceStudy(StudyBaseUnitTests.CommonTests):
         self.assertAlmostEqual(res.hessian[0,0], goal)
 
 
-class TestVoronoiTessellation(MatcalUnitTest):
-    from scipy.spatial import voronoi_plot_2d, ConvexHull
-    import matplotlib.pyplot as plt
-    from matplotlib.path import Path
-    from matplotlib.patches import Polygon as MplPolygon
-    
-    @staticmethod
-    def fun2D(x):
-        return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
-    
-    @staticmethod
-    def funND(x):
-        # Tang function
-        d = x.shape[1]
-        sum_ = 0
-        for ii in np.arange(d):
-            sum_ += (x[:, ii] ** 4) - (16 * x[:, ii] ** 2) + (5 * x[:, ii])
-        quadrant_filter = np.all(x < 0, axis=1)
-        sum_[quadrant_filter] = 0
-        return 0.5 * sum_  
-    
-    @staticmethod
-    def voronoi_initialization(dim, nsamples, bounds, seed=20):
-        from scipy.stats.qmc import Halton
-        from scipy.stats import qmc
-
-        if dim == 2:
-            model = TestVoronoiTessellation.fun2D
-        elif dim == 3:
-            model = TestVoronoiTessellation.funND
-                
-        l_bounds = [bounds[i][0] for i in np.arange(dim)]
-        u_bounds = [bounds[i][1] for i in np.arange(dim)]
-
-        # Generate initial points from Halton Sequence
-        sampler = Halton(d=dim, seed=seed)
-        X_unscaled = sampler.random(n=nsamples)
-        X_init = qmc.scale(X_unscaled, l_bounds, u_bounds)
-        y_init = model(X_init)
-
-        ntest_samples = 40
-        test_pts_sampler = Halton(d=dim, seed=seed+2)
-        X_test_unscaled = np.atleast_2d(test_pts_sampler.random(n=ntest_samples))
-        X_test = np.atleast_2d(qmc.scale(X_test_unscaled, l_bounds, u_bounds))
-        y_test = model(X_test)
-        print(y_test.shape) 
-        
-        return X_init, y_init, X_test, y_test, bounds
-    
-    def setUp(self):
-        super().setUp(__file__)
-
-    def test_initialization(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            
-            for fo in [True, False]:
-                opts = {'finite_only':fo}
-                vor = VoronoiTessellation(X_init, bounds)
-                vor.build(**opts)
-            
-                # Validate that ghost points are created correctly and that _all_points
-                # includes both original and ghost points.
-                self.assertEqual(vor._ghost_points.shape[1], dim)
-                min_x, max_x = bounds[0]
-                min_y, max_y = bounds[1]
-                if dim == 3:
-                    min_z, max_z = bounds[2]
-                for point in vor._ghost_points:
-                    if dim == 2:
-                        x, y = point
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
-                                        msg=f"Ghost point {point} is inside the bounding box.")
-                    elif dim == 3:
-                        x, y, z = point
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y or z < min_z or z > max_z,
-                                        msg=f"Ghost point {point} is inside the bounding box.")
-                    
-                nghost = vor._ghost_points.shape[0]
-                self.assertEqual(vor._all_points.shape[0], nsamples + nghost, msg="vor._all_points does not have correct dimensions.")
-                self.assertEqual(vor._all_points[:nsamples, :].tolist(), X_init.tolist(), msg="vor._all_points does not contain X_init")
-                self.assertEqual(vor._all_points[nsamples:, :].tolist(), vor._ghost_points.tolist(), msg="vor._all_points does not contain ghost points.")
-                
-                self.assertTrue(all(vor._boo[nsamples:]), msg="Ghost points not correctly identified.")
-                self.assertFalse(any(vor._boo[:nsamples]), msg="Ghost points not correctly identified") 
-                
-                # Check that all training points belong to regions that contain no infinite vertices
-                training_point_regions = vor.vor.point_region[:nsamples].tolist()
-                finite_training_regions = [i for i in training_point_regions if -1 not in vor.vor.regions[i]]
-                self.assertEqual(training_point_regions, finite_training_regions)
-                
-                # Check that the dimension of the voronoi tessellation is correct
-                self.assertEqual(dim, vor.ndim, msg="Dimension of voronoi tessellation not correct.")
-            
-                # Check that ConvexHull is created only when finite_only is False
-                if fo:
-                    self.assertIsNone(vor.boundary_hull, msg="Boundary hull created for finite_only=False.")
-
-    def test_identify_vertices_outside_bounds(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
-            vor.build()
-            min_x, max_x = bounds[0]
-            min_y, max_y = bounds[1]
-            if dim == 3:
-                min_z, max_z = bounds[2]
-        
-            for point_idx in np.arange(nsamples):
-                region_idx = vor.get_voronoi_region(vor.vor.points[point_idx])[0][0]
-                region = vor.vor.regions[region_idx]
-                updated_region = vor.identify_vertices_outside_bounds(region)
-                outside_vertices = [region[i] for i in np.arange(len(updated_region)) if updated_region[i] < 0]
-                for vertex_idx in outside_vertices:
-                    vertex = vor.vor.vertices[vertex_idx]
-                    if dim == 2:
-                        x, y = vertex
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
-                                        msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
-                    elif dim == 3:
-                        x, y, z = vertex
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y or z < min_z or z > max_z,
-                                        msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
-                    vor_region = vor.get_voronoi_region(vertex)[0]
-                    self.assertIn(region_idx, vor_region, msg="identified vertex not in region")
-
-    def test_2d_find_boundary_hull_ray_crossing(self):
-        nsamples = 4
-        dim = 2
-        bounds = [[-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
-        vor.build()
-
-        # test crossing        
-        U = np.array([1, 1])  # Example ray direction
-        z = np.array([0, 0])  # Example ray origin
-        expected_result = np.array([5, 5])  # Replace with the expected intersection point
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertTrue(np.all(result == expected_result))
-
-        # test no crossing
-        z = np.array([6, 6])  # Origin above the convex hull
-        U = np.array([1, 1])  # Direction that does not intersect
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertIsNone(result) 
-    
-    def test_3d_find_boundary_hull_ray_crossing(self):
-        nsamples = 8
-        dim = 3
-        bounds = [[-5, 5], [-5, 5], [-5, 5]]
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds)
-        vor.build()
-
-        # test crossing        
-        U = np.array([1, 1, 1])  # Example ray direction
-        z = np.array([0, 0, 0])  # Example ray origin
-        expected_result = np.array([5, 5, 5])  # Replace with the expected intersection point
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertTrue(np.all(result == expected_result))
-
-        # test no crossing
-        z = np.array([6, 6, 6])  # Origin above the convex hull
-        U = np.array([1, 1, 1])  # Direction that does not intersect
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertIsNone(result)
-        
-        # test two crossings
-        z = np.array([-6, -6, -6]) # origin 
-        U = np.array([1, 1, 1,]) # Direction
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        
-    def test_get_region_vertices(self):
-        # implicitly tests vor.replace_unbounded_vertices and vor.snip_ridge_vertices
-        
-        from scipy.spatial import voronoi_plot_2d, ConvexHull, Delaunay
-        import matplotlib.pyplot as plt
-        from matplotlib.path import Path
-        from matplotlib.patches import Polygon as MplPolygon
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
-            vor.build()
-            
-            for pt_idx in np.arange(nsamples):
-                region_idx = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                region_vertices = vor.get_region_vertices(region_idx, identify_outside_vertices=False)
-                bounded_region_vertices = vor.get_region_vertices(region_idx, identify_outside_vertices=True)
-                for vert in region_vertices:
-                    self.assertIn(region_idx, vor.get_voronoi_region(vert)[0]) # confirm vertices are within given region
-                for vert in bounded_region_vertices:
-                    self.assertIn(region_idx, vor.get_voronoi_region(vert)[0]) # confirm vertices are within given region
-                    self.assertGreaterEqual(vor.bhullD.find_simplex(vert), 0) # confirm point is within boundary hull
-
-                self.assertEqual(vor._all_points.shape[0], len(vor.vor.point_region))
-
-                # compare convex hulls of original and bounded region vertices
-                # the area of the original hull should be >= the area of the bounded hull
-                # the bounded hull should reside completely within the original hull
-                region_hull = ConvexHull(region_vertices)
-                region_hull_pts = region_vertices[region_hull.vertices]
-                delaunay_region = Delaunay(region_hull_pts) #Delaunay triangulation of region vertices
-                #region_path = Path(region_hull_pts) # only works for 2D
-
-                bounded_region_hull = ConvexHull(bounded_region_vertices)
-                bounded_hull_pts = bounded_region_vertices[bounded_region_hull.vertices]
-                # check if all points of the bounded hull are inside the original hulls
-                #is_inside = region_path.contains_points(bounded_hull_pts, radius=1e-10)
-                is_inside = delaunay_region.find_simplex(bounded_hull_pts) >= 0
-                
-                self.assertGreaterEqual(region_hull.area, bounded_region_hull.area)
-                self.assertTrue(np.all(is_inside))
-                    
-                # 2d plots
-                if dim == 2:
-                    _, ax = plt.subplots(figsize=(12,8))
-                    voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
-                                    line_width=2)
-                    ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
-                    plt.legend(fontsize=20)
-                    #plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation.png")
-
-                    ax.plot(region_vertices[:, 0], region_vertices[:, 1], '.', markersize=15, color='g', label='R1 Vertices')
-                    plt.legend(fontsize=20)
-                    plt.savefig(f"voronoi_tessellation_r{region_idx}_vertices.png")
-                    plt.close()
-                
-                    _, ax = plt.subplots(figsize=(12,8))
-                    voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
-                                    line_width=2)
-                    ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
-                    ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], '.', color='r', markersize=15, label=f'R{region_idx} Bounded Vertices')
-                    for simplex in vor.boundary_hull.simplices:
-                        plt.plot(vor.boundary_points[simplex, 0], vor.boundary_points[simplex, 1], 'k-', lw=2)
-                    plt.legend(fontsize=20)
-                    plt.savefig(f"voronoi_tessellation_r{region_idx}_bounded_vertices.png")
-                    plt.close()
-
-                    # Fig of voronoi tessellation with boundary hull
-                    _, ax = plt.subplots(figsize=(12, 12))
-
-                    # Plot original points
-                    ax.plot(region_vertices[:, 0], region_vertices[:, 1], 'bo', label='Outer Points')
-                    ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], 'ro', label='Inner Points')
-
-                    # Draw convex hulls as filled polygons
-                    outer_patch = MplPolygon(region_hull_pts, closed=True, fill=False, edgecolor='blue', linewidth=2, label='Outer Hull')
-                    inner_patch = MplPolygon(bounded_hull_pts, closed=True, fill=False, edgecolor='red', linewidth=2, label='Inner Hull')
-                    ax.add_patch(outer_patch)
-                    ax.add_patch(inner_patch)
-
-                    # Optional: mark inner hull vertices that are not contained
-                    for pt, inside in zip(bounded_hull_pts, is_inside):
-                        if not inside:
-                            ax.plot(pt[0], pt[1], 'kx', markersize=10, label='Outside Hull Vertex')
-
-                    ax.legend()
-                    ax.set_title('Convex Hull Containment Test')
-                    ax.set_aspect('equal')
-                    plt.grid(True)
-                    plt.savefig(f"inner_outer_hull_r{region_idx}.png")
-                    plt.close("all")       
-         
-    def test_get_voronoi_vertices(self):
-        from matplotlib.path import Path
-        from scipy.spatial import Delaunay
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
-            vor.build()
-            boundary_hull = vor.boundary_hull
-            boundary_hull_points = vor.boundary_points[boundary_hull.vertices]
-            #boundary_path = Path(vor.boundary_points[boundary_hull_points]) # only works for 2D
-            delaunay_region = Delaunay(boundary_hull_points) #Delaunay triangulation of region vertices
-            region_vertices = np.empty((0, dim))
-                    
-            # voronoi vertices of all training points
-            vor_vertices = vor.get_voronoi_vertices(identify_outside_vertices=False)
-
-            # check that the vertices returned by vor.get_voronoi_vertices are the same as
-            # the region vertices returned by vor.get_region_vertices for all regions
-            for pt_idx in np.arange(nsamples):
-                region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=False)])
-            unique_vertices = set(tuple(row) for row in region_vertices)
-            vertices = np.asarray([list(row) for row in unique_vertices])
-            self.assertEqual(set(map(tuple, vor_vertices)), set(map(tuple, vertices)))
-            
-            # voronoi vertices snipped to boundary - check that all bounded vertices are within Convex
-            # hull defined by boundary points
-            bounded_vor_vertices = vor.get_voronoi_vertices(identify_outside_vertices=True)
-            #is_inside = boundary_path.contains_points(bounded_vor_vertices, radius=1e-10)
-            is_inside = delaunay_region.find_simplex(bounded_vor_vertices) >= 0
-            self.assertTrue(np.all(is_inside))
-
-            # check that the bounded vertices returned by vor.get_voronoi_vertices are the same as
-            # the bounded region vertices returned by vor.get_region_vertices for all regions
-            region_vertices = np.empty((0, dim))
-            for pt_idx in np.arange(nsamples):
-                region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=True)])
-            unique_vertices = set(tuple(row) for row in region_vertices)
-            vertices = np.asarray([list(row) for row in unique_vertices])
-            self.assertEqual(set(map(tuple, bounded_vor_vertices)), set(map(tuple, vertices)))
-        
-    def test_get_closest_seed(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
-            vor.build()
-            
-            # point close to seed: should return seed
-            for i in np.arange(nsamples):
-                test_point = vor.points[i] * 1.01
-                closest_point = vor.vor.points[vor.get_closest_seed(test_point)]
-                self.assertTrue(np.all(closest_point == vor.points[i]))
-                
-            # vertices of seed region: should return multiple seeds, including given seed
-            for pt_idx in np.arange(nsamples):
-                seed = vor.points[pt_idx]
-                region_index = vor.get_voronoi_region(seed)[0][0]
-                region_vertices = vor.vor.vertices[vor.vor.regions[region_index]]
-                for vertice in region_vertices:
-                    closest_point_indices = vor.get_closest_seed(vertice)
-                    self.assertGreater(len(closest_point_indices), 1)
-                    closest_points = vor.vor.points[closest_point_indices]
-                    self.assertTrue(seed in closest_points)
-    
-    def test_get_voronoi_region(self):
-        from matplotlib.patches import Polygon
-        from matplotlib.path import Path
-        import random
-        from scipy.spatial import Delaunay
-        
-        # Create polyhedron from region vertices
-        # sample point from within polygon, and assert that point is in the region
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
-            vor.build()
-
-            # loop through all regions
-            for region_idx, region in enumerate(vor.vor.regions):
-            
-                if -1 in region: # skip over regions with infinite vertices (all seeds have finite vertices)
-                    continue
-                if not region: # skip over empty regions
-                    continue
-                
-                # Get region vertices
-                vertices = vor.vor.vertices[region]
-
-                # Create a Delaunay triangulation for the region vertices
-                delaunay_region = Delaunay(vertices)
-                
-                # Define the bounding box for sampling
-                min_coords = vertices.min(axis=0)
-                max_coords = vertices.max(axis=0)
-                
-                # Sample points
-                samples = np.random.uniform(min_coords, max_coords, (1000, dim))
-                # Create mask for samples that are inside the polyhedron
-                mask = delaunay_region.find_simplex(samples) >= 0
-                inside_samples = samples[mask] 
-        
-                # check that get_voronoi_region returns given region
-                voronoi_region_list = vor.get_voronoi_region(inside_samples)
-                voronoi_region = np.array(voronoi_region_list).squeeze()
-                self.assertTrue(np.all(region_idx == voronoi_region))
-               
-    def test_get_region_seed(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
-            vor.build()
-            for pt_idx in np.arange(nsamples):
-                region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                seed = vor.get_region_seed(region_index)
-                region_point_idx, = np.where(vor.vor.point_region == region_index)
-                region_seed = vor.points[region_point_idx]
-                self.assertTrue(np.all(seed == region_seed))
-    
-    def test_find_furthest_vertex(self):
-        dims = [2, 3]
-        for dim in dims:        
-            nsamples = 2 ** dim
-            bounds = [[-5, 5] for d in np.arange(dim)]
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds)
-            vor.build()
-            
-            for pt_idx in np.arange(nsamples):
-                seed = vor.points[pt_idx]
-                region_index = vor.get_voronoi_region(seed)[0][0]
-                region = vor.vor.regions[region_index]
-
-                # without snipping vertices: assert the identified furthest vertex has the greatest distance
-                vertices = vor.get_region_vertices(region_index, identify_outside_vertices=False)
-                all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=False)
-                distances = np.linalg.norm(seed - all_vertices, axis=1)
-                max_dist = np.argmax(distances)
-                self.assertEqual(max_dist, furthest_vertex)
-                self.assertTrue(np.all(all_vertices == vertices))
-                
-                # with snipping vertices: assert the identified furthest vertex has the greatest distance
-                vertices = vor.get_region_vertices(region_index, identify_outside_vertices=True)
-                all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=True)
-                distances = np.linalg.norm(seed - all_vertices, axis=1)
-                max_dist = np.argmax(distances)
-                self.assertEqual(max_dist, furthest_vertex)
-                self.assertTrue(np.all(all_vertices == vertices))
-
-
-class TestKFoldCrossValidation(MatcalUnitTest):
-    _study_class = HaltonStudy
-    
-    @staticmethod
-    def format_study_params_and_output(study):
-        from matcal.core.data import convert_data_to_dictionary
-
-        params_formatted = []
-        for param in study.parameter_history:
-            params_formatted.append(study.parameter_history[param])
-        X = np.array(params_formatted).T  
-    
-        model_name = list(study.simulation_history.keys())[0]
-        state0 = study.simulation_history[model_name].states['matcal_default_state']
-        sim_history = study.simulation_history[model_name][state0]
-        nsamples = len(X)
-        data = []
-        for nn in np.arange(nsamples):
-            data.append(convert_data_to_dictionary(sim_history[nn]))
-        y = data
-        return X, y
-    
-    def setUp(self):
-        super().setUp(__file__)
-
-        from sklearn.linear_model import LinearRegression
-        # Sample data for testing
-        self.model = PythonModel(quadratic_model_2d)
-        self.model.set_name('quadratic_2d')
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        pc = ParameterCollection("two_parameter", theta1, theta2)
-        self.kfold = KFoldCrossValidation()
-        study = self._study_class(pc)
-        self.nsamples = 20
-        test_points = np.linspace(.25, .75, 10)
-        objective = SimulationResultsSynchronizer("x", test_points, "f")
-        study.add_evaluation_set(self.model, objective)
-        study_info = study.launch(self.nsamples)
-        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
-        
-    def test_initialization(self):
-        self.assertEqual(self.kfold.nsplits, 5)
-        self.assertFalse(self.kfold.group_kfold)
-        self.assertIsNone(self.kfold.scale)
-        self.assertEqual(self.kfold.metric, 'rmse')
-        self.assertIsNone(self.kfold.groups)
-        self.assertEqual(self.kfold.interpolation_field, 'x')
-        self.assertIsNone(self.kfold.par_names)
-
-    def test_set_kfcv_options(self):
-        from sklearn.linear_model import LinearRegression
-        kfcv_options = {'nsplits':4, 'group_kfold':True,
-                        'scale': 'cbrt', 'metric':'nlpd',
-                        'groups': None,
-                        'interpolation_field': 'x',
-                        'par_names': ['a', 'b']
-                        }
-        self.kfold.X = self.X
-        self.kfold._set_kfcv_options(**kfcv_options)
-        self.assertEqual(self.kfold.nsplits, 4)
-        self.assertTrue(self.kfold.group_kfold)
-        self.assertEqual(self.kfold.scale, 'cbrt')
-        self.assertEqual(self.kfold.metric, 'nlpd')
-        self.assertIsNone(self.kfold.groups)
-        self.assertEqual(self.kfold.interpolation_field, 'x')
-        self.assertEqual(self.kfold.par_names, ['a', 'b'])
-         
-        # Test setting splits > number of samples. Should revert to length of X
-        kfcv_options = {'nsplits': 10}
-        self.kfold._set_kfcv_options(**kfcv_options)
-        self.assertEqual(self.kfold.nsplits, 10)
-
-    def test_perform_kfold_cv(self):
-        kfcv_options = {'metric': 'rmse',
-                        'interpolation_field':'x',
-                        'par_names':['a', 'b']}
-        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, **kfcv_options)
-       
-        # Check that the results are in the expected format
-        self.assertIsInstance(kf_results, dict)
-        self.assertEqual(len(kf_results), self.kfold.nsplits)
-
-        # Check that each result is a tuple (kfold error, indices of test samples)
-        test_indices = []
-        for result in kf_results.values():
-            self.assertIsInstance(result, tuple)
-            self.assertEqual(len(result), 2)
-            self.assertIsInstance(result[0], float)  # error
-            self.assertIsInstance(result[1], np.ndarray)  # test indices
-            test_indices.append(result[1])
-        test_indices = np.vstack(test_indices)
-        
-        # check that each test sample is used once and only once
-        self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
-        self.assertEqual(len(np.unique(test_indices)), self.nsamples)
-            
-    def test_cross_val_fold(self):
-        self.kfold.X = self.X
-        self.kfold.y = self.y
-        self.kfold.par_names = ['a', 'b']
-        train_index = [0, 1, 2]
-        test_index = [3, 4]
-        error, test_idx_returned = self.kfold.evaluate_fold(train_index, test_index, self.X, self.y)
-        self.assertEqual(test_idx_returned, test_index)
-        self.assertIsInstance(error, float)          
-       
-        
-class TestLeaveOneOutCrossValidation(MatcalUnitTest):
-    _study_class = HaltonStudy
-    
-    def setUp(self):
-        super().setUp(__file__)
-
-        # Sample data for testing
-        self.model = PythonModel(quadratic_model_2d)
-        self.model.set_name('quadratic_2d')
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        pc = ParameterCollection("two_parameter", theta1, theta2)
-        self.loocv = LeaveOneOutCrossValidation()
-        study = self._study_class(pc)
-        self.nsamples = 10
-        test_points = np.linspace(.25, .75, 10)
-        objective = SimulationResultsSynchronizer("x", test_points, "f")
-        study.add_evaluation_set(self.model, objective)
-        study_info = study.launch(self.nsamples)
-        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
-
-    def test_initialization(self):
-        self.assertIsNone(self.loocv.scale)
-        self.assertEqual(self.loocv.metric, 'rmse')
-        self.assertEqual(self.loocv.interpolation_field, 'x')
-        self.assertIsNone(self.loocv.par_names)
-
-    def test_set_loo_options(self):
-        loocv_options = {'scale': 'cbrt', 'metric':'nlpd',
-                        'interpolation_field': 'x',
-                        'par_names': ['a', 'b']
-                        }
-        self.loocv.X = self.X
-        self.loocv._set_loocv_options(**loocv_options)
-        self.assertEqual(self.loocv.scale, 'cbrt')
-        self.assertEqual(self.loocv.metric, 'nlpd')
-        self.assertEqual(self.loocv.interpolation_field, 'x')
-        self.assertEqual(self.loocv.par_names, ['a', 'b'])
-         
-    def test_perform_loocv(self):
-        indices = range(self.nsamples)
-        loocv_options = {'metric': 'rmse',
-                        'interpolation_field':'x',
-                        'par_names':['a', 'b']}
-        loo_results = self.loocv.perform_loocv(self.X, self.y, indices, **loocv_options)
-            
-        self.assertIsInstance(loo_results, dict)
-        self.assertEqual(len(loo_results), self.nsamples)
-        self.assertIn(0, loo_results)  # Check if the first index is present in results
-        
-        # Check that each result is a tuple (r, indices of test samples)
-        test_indices = []
-        for result in loo_results.values():
-            self.assertIsInstance(result, tuple)
-            self.assertEqual(len(result), 2)
-            self.assertIsInstance(result[0], float)  # error
-            self.assertIsInstance(result[1], int)  # test indices
-            test_indices.append(result[1])
-        test_indices = np.vstack(test_indices)
-        
-        # check that each test sample is used once and only once
-        self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
-        self.assertEqual(len(np.unique(test_indices)), self.nsamples)
-
-
-class TestVoronoiBatchStudy(MatcalUnitTest):
-    
-    _study_class = VoronoiAdaptiveSurrogateStudy
-    _study_test_class = HaltonStudy
-    
-    @staticmethod
-    def setup_parameter_collection(dim):
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        if dim == 2:
-            return ParameterCollection("two_parameter", theta1, theta2)
-        elif dim == 3:
-            theta3 = Parameter('c', -5, 5, distribution="uniform_uncertain")
-            return ParameterCollection("three_parameter", theta1, theta2, theta3)
-
-    @staticmethod
-    def setup_model(dim):
-        if dim == 2:
-            physical_model = PythonModel(quadratic_model_2d)
-            model_name = 'quadratic_2d'
-        elif dim == 3:            
-            physical_model = PythonModel(quadratic_model_3d)
-            model_name = 'quadratic_3d'
-        physical_model.set_name(model_name)
-        parameter_collection =  TestVoronoiBatchStudy.setup_parameter_collection(dim)
-
-        return physical_model, parameter_collection
-
-    def setUp(self):
-        super().setUp(__file__)
-    
-    def test_initialization(self):
-        dims = [2, 3]
-        for dim in dims:
-            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self._study_class(parameter_collection)
-            hal_test_study = self._study_test_class(parameter_collection)
-            ntest_samples = 50
-
-            test_points = np.linspace(.25, .75, 10)
-            objective = SimulationResultsSynchronizer("x", test_points, "f")
-            vor_study.add_evaluation_set(physical_model, objective)
-            hal_test_study.add_evaluation_set(physical_model, objective)
-            test_information = hal_test_study.launch(ntest_samples)
-            
-            voronoi_sampling_options = {'voronoi_type':'full',
-                                        'finite_only':False,
-                                        'iterative_updates':True,
-                                        'nsplits':0,
-                                        'nmax_folds':3,
-                                        'nmax_loo':'all',
-                                        'nmaxbatches':1,
-                                        'cv_metric':'nlpd'}
-            surrogate_options = {'interpolation_field':'x',
-                                 'test_eval_info': test_information}
-            options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'surrogate_options': surrogate_options}
-             
-            vor_study.launch(**options)
-            # build surrogate that given a, b, c gives you f
-            self.assertFalse(vor_study.finite_only)
-            self.assertTrue(vor_study.iterative_updates)
-            self.assertEqual(vor_study.voronoi_type, 'full')
-            
-            if dim == 2:
-                expected_boundary_points = np.array([[-5, -5],[5, -5],[-5, 5],[5, 5]])
-            elif dim == 3:
-                expected_boundary_points = np.array([[-5, -5, -5],
-                                                     [-5, -5, 5],
-                                                     [5, -5, -5],
-                                                     [5, -5, 5],
-                                                     [-5, 5, -5],
-                                                     [-5, 5, 5],
-                                                     [5, 5, -5],
-                                                     [5, 5, 5]])
-            self.assertTrue(np.all(vor_study._boundary_points == expected_boundary_points))
-            
-            from matcal.core.parameter_studies import _get_surrogate_metric
-            surr_score = vor_study._current_surrogate_score['score']
-            rmse = vor_study._current_surrogate_score['rmse']
-            nlpd = vor_study._current_surrogate_score['nlpd']
-            self.assertGreater(len(surr_score), 1)
-            self.assertTrue(np.all([i > 0 for i in surr_score]))
-            self.assertTrue(np.all([i > 0 for i in rmse]))
-    
-    
-    def test_perform_cv_and_find_max_errors(self):
-        dims = [2, 3]
-        for dim in dims:
-            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self._study_class(parameter_collection)
-            hal_test_study = self._study_test_class(parameter_collection)
-            ntest_samples = 50
-
-            test_points = np.linspace(.25, .75, 10)
-            objective = SimulationResultsSynchronizer("x", test_points, "f")
-            vor_study.add_evaluation_set(physical_model, objective)
-            hal_test_study.add_evaluation_set(physical_model, objective)
-            test_information = hal_test_study.launch(ntest_samples)
-            
-            nsplits = 2
-            nmax_loo = 3
-            voronoi_sampling_options = {'nsplits':nsplits,
-                                        'nmax_folds':1,
-                                        'nmax_loo':nmax_loo,
-                                        'nmaxbatches':1,
-                                        'cv_metric':'nlpd'}
-            surrogate_options = {'interpolation_field':'x',
-                                 'test_eval_info': test_information}
-            options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'surrogate_options': surrogate_options}
-             
-            vor_study.launch(**options)
-            max_fold_indices = vor_study._max_fold_error_indices
-            kf_results = vor_study._kf
-
-            # Check that the results are in the expected format
-            self.assertIsInstance(kf_results, dict)
-            self.assertEqual(len(kf_results), nsplits)
-
-            # Check that each result is a tuple (kfold error, indices of test samples)
-            test_indices = []
-            for result in kf_results.values():
-                self.assertIsInstance(result, tuple)
-                self.assertIsInstance(result[0], float)  # error
-                self.assertIsInstance(result[1], np.ndarray)  # test indices
-                test_indices.append(result[1])
-            test_indices = np.vstack(test_indices)
-            
-            # check that each test sample is used once and only once
-            self.assertTrue(np.all(np.isin(np.arange(vor_study.nsamples), test_indices)))
-            self.assertEqual(len(np.unique(test_indices)), vor_study.nsamples)
-
-            max_key = max(kf_results, key=kf_results.get)
-            self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
-    
-            loo_errors = vor_study._loo_errors
-            self.assertIsInstance(loo_errors, dict)
-            self.assertEqual(len(loo_errors), len(max_fold_indices))
-            for val in loo_errors.values():
-                self.assertIsInstance(val, tuple)
-                self.assertIsInstance(val[0], float) # error
-                self.assertIsInstance(val[1], np.int64) # indice
-                
-            indices = [val[1] for val in loo_errors.values()]
-            # check that each indice in max_fold_indices appear once and only once
-            self.assertTrue(np.all(np.isin(max_fold_indices, indices)))
-
-            loo_errors_list = [value for key, value_tuple in loo_errors.items() for value in value_tuple]
-            loo_errors_array = np.asarray(loo_errors_list).reshape(-1, 2)
-            sorted_array = np.asarray(sorted(loo_errors_array, key=lambda x: x[0]))
-
-            # verify that the training samples with the greatest LOO error are returned
-            worst_sample_locations = vor_study._find_loo_max_errors()
-            max_error_indices = sorted_array[-nmax_loo:, :][:, 1][::-1] # get indices of largest errors and reverse (greatest to smallest)
-            max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
-            self.assertTrue(np.all(worst_sample_locations == vor_study.X[max_error_indices]))
-
-    def test_adaptive_voronoi_surrogate_generation(self):
-        dims = [2, 3]
-        for dim in dims:
-            physical_model, parameter_collection = TestVoronoiBatchStudy.setup_model(dim)
-            vor_study = self._study_class(parameter_collection)
-            hal_test_study = self._study_test_class(parameter_collection)
-            ntest_samples = 50
-
-            test_points = np.linspace(.25, .75, 10)
-            objective = SimulationResultsSynchronizer("x", test_points, "f")
-            vor_study.add_evaluation_set(physical_model, objective)
-            hal_test_study.add_evaluation_set(physical_model, objective)
-            test_information = hal_test_study.launch(ntest_samples)
-            
-            voronoi_sampling_options = {'voronoi_type':'full',
-                                        'finite_only':False,
-                                        'iterative_updates':True,
-                                        'nsplits':2,
-                                        'nmax_folds':1,
-                                        'nmax_loo':5,
-                                        'nmaxbatches':3,
-                                        'cv_metric':'nlpd',
-                                        'nsamples':10,
-                                        'convergence_metric':'score'}
-            surrogate_options = {'interpolation_field':'x',
-                                 'test_eval_info': test_information}
-            options = {'voronoi_sampling_options': voronoi_sampling_options,
-                       'surrogate_options': surrogate_options}
-             
-            vor_study.launch(**options)
-            # verify that errors are decreasing
-            metrics = [vor_study._current_surrogate_score['score'],
-                      vor_study._current_surrogate_score['nlpd'],
-                      vor_study._current_surrogate_score['rmse']]
-            for idx, metric in enumerate(metrics):
-                # error metric may not decrease every iteration. Looking for overall trend.
-                metric_decreasing = metric[0] > metric[-1]
-                if idx == 0:
-                    self.assertFalse(metric_decreasing)
-                else:
-                    self.assertTrue(metric_decreasing)
-
-            # verify that the number of samples is increasing each iteration
-            nsamples = vor_study._nbatch_samples
-            nsamples_increasing = all(x < y for x, y in zip(nsamples, nsamples[1:]))
-            self.assertTrue(nsamples_increasing)
-            
-            self.assertEqual(vor_study.X.shape[0], vor_study._nbatch_samples[-1])
-            
-            # verify that all samples are within bounds
-            samples = vor_study.X
-            lb = vor_study._l_bounds
-            ub = vor_study._u_bounds
-            outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
-            self.assertFalse(np.any(outside_samples))
-    

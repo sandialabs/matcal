@@ -138,7 +138,7 @@ class TestObjective(MatcalUnitTest):
         ob = Objective("x")
 
     def test_bad_init(self):
-        with self.assertRaises(Objective.TypeError):
+        with self.assertRaises(TypeError):
             ob = Objective(1)
             ob = Objective(None)
 
@@ -150,7 +150,7 @@ class TestObjective(MatcalUnitTest):
         ob = Objective("X", "Y")
         extractor = MaxExtractor("Y")
         ob.set_qoi_extractors(extractor)
-        with self.assertRaises(Objective.TypeError):
+        with self.assertRaises(TypeError):
             ob.set_qoi_extractors(None)
             ob.set_qoi_extractors(1)
     
@@ -833,13 +833,13 @@ class TestObjectiveSet(MatcalUnitTest):
             self.assertTrue(np.array_equal(np.asarray(self.data_collection2[state_name]), np.asarray(ob_set_dc[state_name])))
 
     def test_bad_init(self):
-        with self.assertRaises(ObjectiveSet.TypeError):
+        with self.assertRaises(TypeError):
             ob = ObjectiveSet("x", None, None)
-        with self.assertRaises(ObjectiveSet.TypeError):
+        with self.assertRaises(TypeError):
             ob = ObjectiveSet(self.objective_collection, None, self.state_collection)
-        with self.assertRaises(ObjectiveSet.TypeError):
+        with self.assertRaises(TypeError):
             ob = ObjectiveSet("x", self.data_collection, self.state_collection)
-        with self.assertRaises(ObjectiveSet.TypeError):
+        with self.assertRaises(TypeError):
             ob = ObjectiveSet(self.objective_collection, self.data_collection, None)
 
     def test_get_num_residuals_and_objectives(self):

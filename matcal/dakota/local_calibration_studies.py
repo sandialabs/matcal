@@ -113,8 +113,7 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         :param step_size: the desired step_size
         :type step_size: float
         """
-        check_value_is_real_between_values(value, 1e-9, 1e-1, 
-                                           "step size", "set_step_size")
+        check_value_is_real_between_values(value, 1e-9, 1e-1, "step size")
         grad_block = self.get_gradient_block()
         step_size_line  = grad_block.get_line(DakGradientKeys.fd_step_size) 
         step_size_line.set(value)
@@ -170,8 +169,7 @@ class _NongradientDakotaFileWithVarTol(_NongradientDakotaFile):
         :param value: the desired variable tolerance
         :type value: float
         """
-        check_value_is_real_between_values(value, 0, 1.0, "variable tolerance", 
-                                           "set_variable_tolerance")
+        check_value_is_real_between_values(value, 0, 1.0, "value")
         self.set_method_type_block_line(DakMethodKeys.variable_tolerance,
                                         value)
 
@@ -204,8 +202,7 @@ class _MeshAdaptiveDakotaFile(_NongradientDakotaFileWithVarTol):
         :param value: the desired variable tolerance
         :type value: float
         """
-        check_value_is_real_between_values(value, 0, 1.0, "variable neighborhood search", 
-                                           "set_variable_neighborhood_search")
+        check_value_is_real_between_values(value, 0, 1.0, "value")
         self.set_method_type_block_line(self.Keywords.variable_neighborhood_search, value)
 
     def get_variable_neighborhood_search(self):
@@ -261,8 +258,7 @@ class _ColinyNongradientDakotaFile(_NongradientDakotaFileWithVarTol):
         :param value: solution target value
         :type value: float
         """
-        check_item_is_correct_type(value, Real, "set_solution_target", 
-                                    "solution target")
+        check_item_is_correct_type(value, Real, "value")
         self.set_method_type_block_line(DakMethodKeys.solution_target, value)
 
     def get_solution_target(self):
@@ -350,8 +346,7 @@ class _PatternSearchDakotaFile(_ColinyNongradientDakotaFile):
         :param value: the exploratory move type to be used
         :type value: str
         """
-        check_item_is_correct_type(value, str, "set_exploratory_moves", 
-                                         "exploratory moves")
+        check_item_is_correct_type(value, str, "value")
 
         valid_types = ["basic_pattern", "adaptive_pattern", "multi_step"]
         if value not in valid_types:
@@ -418,8 +413,7 @@ class _OptppPdsDakotaFile(DakotaCalibrationFile):
         :param value: the search scheme size
         :type value: int
         """
-        check_value_is_positive_integer(value, "set_search_scheme_size", 
-                                        "search scheme size")
+        check_value_is_positive_integer(value, "value")
         self.set_method_type_block_line(self.Keywords.search_scheme_size, value)
 
     def get_search_scheme_size(self):

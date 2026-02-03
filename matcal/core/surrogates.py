@@ -1,29 +1,32 @@
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from glob import glob
 from numbers import Integral, Real
 import numpy as np
 from sklearn.base import BaseEstimator
+from sklearn.metrics import r2_score
 from typing import Callable
 
 
 from matcal.core.data import convert_dictionary_to_data
-from matcal.core.data_importer import FileData
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.object_factory import BasicIdentifier
-from matcal.core.serializer_wrapper import matcal_save, matcal_load
+from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.state import State
 from matcal.core.utilities import (check_value_is_nonempty_str, 
                                    check_item_is_correct_type, 
-                                   _sort_numerically, _time_interpolate, 
-                                   _find_smallest_rect)
+                                   _time_interpolate, 
+                                   _find_smallest_rect, 
+                                   check_value_is_bool)
+
 
 logger = initialize_matcal_logger(__name__)
 
-surrogate_restart_suffix = 'source_information'
 
 class _DoNothingDataTransformer:
     def inverse_transform(self, source_data):
+        return source_data
+
+    def transform(self, source_data):
         return source_data
 
 class _VarianceDecomposition:
@@ -59,8 +62,7 @@ class SurrogateGenerator:
     def __init__(self, evaluation_information, interpolation_field=None, 
                 interpolation_locations=200, 
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
-                regressor_type="Gaussian Process", test_eval_info=None, cv_test_set=False,
-                **regressor_kwargs):
+                regressor_type="Gaussian Process", test_eval_info=None, **regressor_kwargs):
         """
         :param evaluation_information: A container of the relevant 
             information to form a surrogate off of 
@@ -71,7 +73,8 @@ class SurrogateGenerator:
         :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`
 
         :param training_fraction: What fraction of the source data to use as training data. 
-            Value should be 0 < training_fraction <= 1. If training_fraction == 1, test_evaluation_information
+            Value should be 0 < training_fraction <= 1. If training_fraction == 1, 
+            test_evaluation_information
             must be provided.
         :type training_fraction: float
 
@@ -98,8 +101,8 @@ class SurrogateGenerator:
             uses the implementations of these tools from the sklearn library. 
         :type regressor_type: str
 
-        :param test_evaluation_information: A container of the relevant
-            information to test a surrogate off of a body of data generated
+        :param test_eval_info: A container of the relevant
+            information to test a surrogate generated
             from a MatCal sampling study. This data is only used and must
             be provided if training_fraction == 1.0.
         :type test_evaluation_information: :class:`~matcal.core.study_base.StudyResults`
@@ -113,7 +116,6 @@ class SurrogateGenerator:
         self._interpolation_locations = interpolation_locations
         self._eval_info = evaluation_information
         self._test_eval_info = test_eval_info
-        self._cv_test_set = cv_test_set
         self._model_name = None
         self._state = None
         self._training_fraction  = training_fraction
@@ -121,10 +123,13 @@ class SurrogateGenerator:
         self._regressor_type = regressor_type
         self._regressor_kwargs = regressor_kwargs
         self._decomp_tool = _assign_decomp(.99, None)
+        self._logger_on=True
 
         self._fields_to_log_scale = []
+        self._fields_of_interest = None
         self._train_score = OrderedDict()
         self._test_score = OrderedDict()
+        self._check_test_evaluation_information_provided()
 
     def set_model_and_state(self, model_name=None, state=None):
         """
@@ -145,21 +150,12 @@ class SurrogateGenerator:
         """
 
         if model_name is not None:
-            check_value_is_nonempty_str(model_name, "model_name", 
-                                        "SurrogateGenerator.set_model_and_state")
+            check_value_is_nonempty_str(model_name, "model_name")
             self._model_name = model_name
         if state is not None:
-            check_item_is_correct_type(state, (str, State), 
-                                       "SurrogateGenerator.set_model_and_state", 
-                                       "state")
+            check_item_is_correct_type(state, (str, State), "state")
             self._state = state
-        
-    def _select_relevant_study_data(self, evaluation_information):
-        parsed_eval_info = _parse_evaluation_info(evaluation_information, self._model_name)  
-        input_parameter_history, _sim_hist_data_collection = parsed_eval_info                                                          
-        data_history = _select_state_data(self._state, _sim_hist_data_collection)
-        return data_history, input_parameter_history
-    
+   
     def set_PCA_details(self, decomp_var=.99, reconstruction_error=None):
         """
         :param decomp_var: What level of the total variance should be accounted for in the PCA
@@ -172,11 +168,10 @@ class SurrogateGenerator:
         """
         self._decomp_tool = _assign_decomp(decomp_var, reconstruction_error)
 
-
     def set_surrogate_details(self, surrogate_type="PCA Multiple Regressors", 
                               regressor_type="Gaussian Process", 
-                              training_fraction=.8, interpolation_locations=None,  
-                              **regressor_kwargs):
+                              training_fraction=.8, interpolation_locations=None, 
+                              test_eval_info=None, **regressor_kwargs):
         """
         This method provides an other avenue to alter the surrogate 
         generation parameters after initialization. 
@@ -199,6 +194,12 @@ class SurrogateGenerator:
             uses the implementations of these tools from the sklearn library. 
         :type regressor_type: str
 
+        :param test_eval_info: A container of the relevant
+            information to test a surrogate generated
+            from a MatCal sampling study. This data is only used and must
+            be provided if training_fraction == 1.0.
+        :type test_evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        
         :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
             Please refer to the sklearn documentation for more information for what can be passed to 
             the predictors. 
@@ -207,6 +208,9 @@ class SurrogateGenerator:
         self._surrogate_type = surrogate_type
         self._regressor_type = regressor_type
         self._regressor_kwargs = regressor_kwargs
+        if test_eval_info is not None:
+            self._test_eval_info = test_eval_info
+        self._check_test_evaluation_information_provided()
         if (interpolation_locations is not None):
             self._interpolation_locations = interpolation_locations
 
@@ -224,10 +228,35 @@ class SurrogateGenerator:
         :param field_names: a series of field names to train on the log scale
         :type field_names: str
         """
-        self._fields_to_log_scale += field_names
+        self._fields_to_log_scale = field_names
+
+    def set_fields_of_interest(self, *fields_of_interest):
+        """
+        Specify which data fields the surrogate should model.
+
+        By default the surrogate generator attempts to build a model for every
+        field present in the source data (aside from the independent
+        interpolation field).  Use this method to limit the surrogate to a
+        user‑selected subset of fields.
+
+        :param fields_of_interest: One or more field names that should be
+            included in the surrogate model. 
+        :type fields_of_interest: ``*str``
+
+        .. note::
+            * The independent interpolation field (if any) is never treated as a
+            field of interest and is automatically excluded; you should not 
+            pass it here.
+            * Fields that are **not** listed will be ignored during surrogate
+            generation and will not appear in the surrogate’s output.
+        """
+        if fields_of_interest:
+            for field in fields_of_interest:
+                check_value_is_nonempty_str(field, "field_of_interest")
+            self._fields_of_interest = fields_of_interest
 
     def generate(self, save_filename:str, preprocessing_function:Callable=None, 
-                 plot_n_worst:int=12)->Callable:
+                 plot_n_worst:int=0)->Callable:
         """
         Generates a surrogate based on the information passed to it upon initialization
 
@@ -256,61 +285,46 @@ class SurrogateGenerator:
         :return: a callable surrogate
         :rtype: :class:`~matcal.core.surrogates.MatCalPCASurrogateBase` 
         """
-        test_source_dict = None
-        test_param_history = None
-        check_value_is_nonempty_str(save_filename, "save_filename", "SurrogateGenerator.generate")
-        training_data_history, param_history, param_ranges = self._package_surrogate_generator_input_data(
-            preprocessing_function, self._eval_info)
-        fields_of_interest = _identify_fields_of_interest(training_data_history, 
-                                                          self._interpolation_field)
-        if self._training_fraction == 1.0:
-            self._check_test_evaluation_information_provided()
-            test_data_history, test_param_history, test_param_ranges = self._package_surrogate_generator_input_data(
-                preprocessing_function, self._test_eval_info)
-             
-        self._interpolation_locations = _process_interpolation_locations(training_data_history, 
+        check_value_is_nonempty_str(save_filename, "save_filename")
+        results = _package_surrogate_generator_input_data(self._eval_info, self._model_name, 
+                                                          self._state)
+        source_data, params = results
+        self._fields_of_interest = _identify_fields_of_interest(source_data, 
+                                                                self._interpolation_field, 
+                                                                self._fields_of_interest)
+        self._interpolation_locations = _process_interpolation_locations(source_data, 
                                                                          self._interpolation_locations, 
                                                                          self._interpolation_field)
-        source_dict = _process_training_data(training_data_history, fields_of_interest,
-                                           self._interpolation_locations, self._interpolation_field)
-        if self._training_fraction == 1.0:
-            test_source_dict = _process_training_data(test_data_history, fields_of_interest,
-                                               self._interpolation_locations, self._interpolation_field)
-    
-        support_information = {'parameter_ranges':param_ranges, 
-                "interpolation_field":self._interpolation_field,
-                'interpolation_locations':self._interpolation_locations, 
-                'training_fraction': self._training_fraction,
-                'regressor_type': self._regressor_type, 
-                'regressor_kwargs': self._regressor_kwargs,
-                'save_filename': save_filename}
-        logger.info(f'Generating and scoring {self._regressor_type} surrogates. '+
+        source_dict = _process_data_for_surrogate(source_data, self._fields_of_interest,
+                                                  self._interpolation_locations, 
+                                                  self._interpolation_field, preprocessing_function)
+        test_train_split_results = self._select_training_and_test_data(source_dict, params, 
+                                                                preprocessing_function)
+        train_data, test_data, train_params, test_params = test_train_split_results
+        combined_params = _combine_parameters(test_params, train_params)
+        param_ranges = _package_parameter_ranges(combined_params)
+        if self._logger_on:
+            logger.info(f'Generating and scoring {self._regressor_type} surrogates. '+
                     'The ideal score is 1.0.')
         surrogate_class = _surrogate_selection.identify(self._surrogate_type)
-        new_surrogate = surrogate_class.fit(param_history, source_dict, self._fields_to_log_scale,
-                                            self._decomp_tool, support_information,
-                                            test_parameter_history=test_param_history,
-                                            test_source_history=test_source_dict,
-                                            cv_test_set=self._cv_test_set)
-        self._plot_worst_recreations(new_surrogate, param_history, source_dict, 
+        new_surrogate = surrogate_class.fit(train_data, test_data, train_params, test_params,
+                                            self._fields_to_log_scale,
+                                            self._decomp_tool, self, param_ranges, 
+                                            self._logger_on)
+        matcal_save(save_filename+".joblib", new_surrogate)
+        self._plot_worst_recreations(new_surrogate, params, source_dict, 
                                      plot_n_worst, save_filename)
         return new_surrogate
 
     def _check_test_evaluation_information_provided(self):
-        if self._test_eval_info is None:
+        if self._training_fraction == 1.0 and self._test_eval_info is None:
             raise ValueError("Test evaluations must be provided when training_fraction = 1.0.")
-        
-    def _package_surrogate_generator_input_data(self, preprocessing_function, eval_info):
-        data_history, input_parameter_history = self._select_relevant_study_data(eval_info)
-        data_history = _apply_preprocessing_function(preprocessing_function, data_history)
-        param_history = _import_parameter_hist(input_parameter_history)
-        param_ranges = _package_parameter_ranges(input_parameter_history)
-        return data_history, param_history, param_ranges
         
     def _plot_worst_recreations(self, surrogate, parameters, source_data, n_worst, save_filename):
         if n_worst < 1:
             return
         import matplotlib.pyplot as plt
+        plt.close('all')
         n_eval = len(parameters[list(parameters.keys())[0]])
         sur_predict = surrogate(parameters)
         worst_sets = self._get_worst_recreations(source_data, n_worst, n_eval, sur_predict)
@@ -359,6 +373,60 @@ class SurrogateGenerator:
         worst_sets = worst.get_set()
         return worst_sets
 
+    def _select_training_and_test_data(self, source_dict, params, 
+                                       preprocessing_function):
+        if self._training_fraction == 1.0:
+            results = _package_surrogate_generator_input_data(self._test_eval_info, 
+                                                              self._model_name, self._state)
+            test_data, test_params = results
+            test_data = _process_data_for_surrogate(test_data, self._fields_of_interest,
+                                                    self._interpolation_locations,
+                                                    self._interpolation_field, 
+                                                    preprocessing_function) 
+            train_data = source_dict
+            train_params = params
+            _check_fields_in_keys_list(self._fields_of_interest, test_data.keys(), "test data set")
+        else:
+            from sklearn.model_selection import train_test_split
+            first_param_key = list(params.keys())[0]
+            indices = np.arange(len(params[first_param_key]))
+            data_split_results = train_test_split(indices, train_size=self._training_fraction)
+            train_indices, test_indices = data_split_results
+            train_params, test_params = _split_dict_data_into_test_train_data_dicts(train_indices, 
+                                                                                    test_indices, 
+                                                                                    params)
+            train_data, test_data = _split_dict_data_into_test_train_data_dicts(train_indices, 
+                                                                                test_indices, 
+                                                                                source_dict)
+        return train_data, test_data, train_params, test_params
+
+def _check_fields_in_keys_list(fields, data_fields, data_set_name):
+    for field in fields:
+        if field not in data_fields:
+            raise KeyError(f"The field of interest {field} for the surrogate was "+
+                            f"not in the provided the {data_set_name}.")
+
+def _split_dict_data_into_test_train_data_dicts(train_indices, test_indices, data_dict):
+    test_data = OrderedDict()
+    train_data = OrderedDict()
+    for key in data_dict:
+        data_key_array =  np.array(data_dict[key])
+        test_data[key] = data_key_array[test_indices]
+        train_data[key] =  data_key_array[train_indices]
+    return train_data, test_data
+
+def _package_surrogate_generator_input_data(eval_info, model_name, state):
+        data_history, input_parameter_history = _select_relevant_study_data(eval_info, model_name, state)
+        param_history = _import_parameter_hist(input_parameter_history)
+        return data_history, param_history
+    
+
+def _select_relevant_study_data(evaluation_information, model_name, state):
+    parsed_eval_info = _parse_evaluation_info(evaluation_information, model_name)  
+    input_parameter_history, _sim_hist_data_collection = parsed_eval_info                                                          
+    data_history = _select_state_data(state, _sim_hist_data_collection)
+    return data_history, input_parameter_history
+
 
 def _select_state_data(state, sim_history_dc):
     if state is None:
@@ -405,26 +473,23 @@ def _parse_evaluation_info(eval_info, model_name):
 
 def _apply_preprocessing_function(preprocessing_function, training_data_history):
     if preprocessing_function is not None:
-        check_item_is_correct_type(preprocessing_function, Callable,
-                                    "SurrogateGenerator.generate",
-                                    "preprocessing_function")
+        check_item_is_correct_type(preprocessing_function, Callable, "preprocessing_function")
         for idx, data in enumerate(training_data_history):
-            processed_data = preprocessing_function(training_data_history[idx])
+            processed_data = preprocessing_function(data)
             if isinstance(processed_data, (dict, OrderedDict)):
                 processed_data = convert_dictionary_to_data(processed_data)
+                processed_data.set_state(data.state)
             training_data_history[idx] = processed_data
     return training_data_history    
 
 
-def _process_training_data(training_data_list, 
-                         fields_of_interest,
-                         interpolation_locations, 
-                         interpolation_field):
-   
-    processed_data = _initialize_processed_data(training_data_list, fields_of_interest,
+def _process_data_for_surrogate(source_data_list, fields_of_interest, 
+                                interpolation_locations, interpolation_field, 
+                                preprocessing_function=None):
+    source_data_list = _apply_preprocessing_function(preprocessing_function, source_data_list)
+    processed_data = _initialize_processed_data(source_data_list, fields_of_interest,
                                                  interpolation_locations)
-    
-    for idx, data in enumerate(training_data_list):
+    for idx, data in enumerate(source_data_list):
         for field in fields_of_interest:
             data_field = data[field]
             if interpolation_locations is not None and interpolation_field is not None:
@@ -435,11 +500,11 @@ def _process_training_data(training_data_list,
     return processed_data
 
 
-def _initialize_processed_data(training_data_list, processed_fields,
+def _initialize_processed_data(training_data_list, fields_of_interest,
                                interpolation_locations):
     processed_data = OrderedDict()
     n_evals = len(training_data_list)
-    for field in processed_fields:
+    for field in fields_of_interest:
         n_points = _get_n_points(interpolation_locations, 
                             training_data_list, field)
         processed_data[field] = np.zeros([n_evals, n_points])
@@ -484,11 +549,8 @@ def _init_random_forest_surrogate(n_inputs, **kwargs):
 
 def _init_gp_surrogate(n_inputs, **kwargs):
     from sklearn.gaussian_process import GaussianProcessRegressor
-    from sklearn.gaussian_process.kernels import RBF
-    iso_kernel = RBF(1e-1, length_scale_bounds=(1e-5, 1e5))
     # reference for later for anisotropic kernel generation
     # aniso_kernel = RBF(1e-1 * np.ones(n_inputs), length_scale_bounds=(1e-5, 1e5))
-    #gpr = GaussianProcessRegressor(kernel=iso_kernel, **kwargs)
     gpr = GaussianProcessRegressor(**kwargs)
     return gpr
 
@@ -499,40 +561,6 @@ _regressor_lookup = {"Random Forest":_init_random_forest_surrogate,
 
 def _initialize_regressor(regressor_type, n_inputs, regressor_kwargs):
     return _regressor_lookup[regressor_type](n_inputs, **regressor_kwargs)
-
-
-def _import_and_interpolate(file_search_string, 
-                            fields_of_interest, 
-                            interp_field, 
-                            interp_loc):
-    files_to_import =_sort_numerically(_get_file_list(file_search_string))
-    interp_data = _initialize_storage(fields_of_interest, interp_loc, files_to_import)
-    for file_idx, filename in enumerate(files_to_import):
-        current_data = FileData(filename)
-        _add_current_data_to_storage(fields_of_interest, interp_data, file_idx, current_data, 
-                                     interp_loc, interp_field)
-    return interp_data
-
-
-def _add_current_data_to_storage(fields_of_interest, interp_data, file_idx, current_data, 
-                                 interp_loc, interp_field):
-    for field in fields_of_interest:
-        interp_data[field][file_idx,:] = _time_interpolate(interp_loc, current_data[interp_field], 
-                                                           current_data[field])
-
-
-def _get_file_list(file_search_string):
-    files_to_import  = glob(file_search_string)
-    return files_to_import
-
-
-def _initialize_storage(fields_of_interest, interp_loc, files_to_import):
-    interp_data = {}
-    n_features = len(interp_loc)
-    n_samples = len(files_to_import)
-    for field in fields_of_interest:
-        interp_data[field] = np.zeros([n_samples, n_features])
-    return interp_data
 
 
 def _scale_data_for_surrogate(data_array, make_log=False):
@@ -559,12 +587,12 @@ def _decompose_with_pca(data, var_tol):
     pca = PCA(n_components=var_tol, svd_solver='full')
     transformed_data = pca.fit_transform(data)
     if isinstance(var_tol, Integral):
-        logger.info(f"Generated PCA decomposition with {pca.n_components_} components.")
+        logger.info(f"\tGenerated PCA decomposition with {pca.n_components_} components.")
     elif isinstance(var_tol, Real):
-        logger.info(f"Generated PCA decomposition with {pca.n_components_}"
+        logger.info(f"\tGenerated PCA decomposition with {pca.n_components_}"
                     f" components using {var_tol} variance explanation.")
     else:
-        logger.info(f"Generated PCA decomposition with {pca.n_components_}"
+        logger.info(f"\tGenerated PCA decomposition with {pca.n_components_}"
                     f" components using option \'{var_tol}\'.")
     return transformed_data, pca
 
@@ -593,7 +621,7 @@ def _package_parameter_ranges(param_history):
 def _convert_data_and_make_basis(source_data, decomp_variance, make_log_scale):
     scaled_data, data_scaler = _scale_data_for_surrogate(source_data, make_log_scale)
     latent_data, decomposer = _use_pca_to_decompose_if_many_features(scaled_data, decomp_variance)
-    latent_data = _ensure_2d_array(latent_data, 1)
+    latent_data = _ensure_2d_array(latent_data)
     scaled_latent_data, latent_scaler = _scale_data_for_surrogate(latent_data)
     return data_scaler,decomposer,scaled_latent_data,latent_scaler
 
@@ -620,7 +648,7 @@ def _tune_data_decomposition(source_data, make_log_scale, reconstruction_error_t
             logger.info(message)
         else:
             logger.info("      Recreation error tolerance not met.\n")
-    latent_data = _ensure_2d_array(latent_data, 1)
+    latent_data = _ensure_2d_array(latent_data)
     scaled_latent_data, latent_scaler = _scale_data_for_surrogate(latent_data)
     return data_scaler,decomposer,scaled_latent_data,latent_scaler
 
@@ -650,105 +678,219 @@ class MatCalSurrogateBase(ABC):
     def fit(parameters, predictions):
         """"""
     
-    @abstractmethod
-    def _save():
-        """"""
-        
-    @abstractmethod
-    def _load(self, tool_package):
-        """"""
     @property
     def scores(self):
-        return self._scores
+        return self._r2_scores
         
     @abstractmethod
     def __call__(self, parameters)-> OrderedDict:
         """"""
         
-    def __init__(self, surrogate_information):
+    def __init__(self, latent_scores,  
+                 fields_to_log_scale, interp_field, interp_locs, 
+                 parameter_scaler, regressors, decomposers, data_scalers, 
+                 latent_scalers, param_ranges):
         """Surrogate abstract base class from which all surrogates should be derived 
         in MatCal.
         """
-        self._scores = None
-        self._load(surrogate_information) 
+        self._latent_scores = OrderedDict()
+        self._average_scores = OrderedDict()
+        self._max_scores = OrderedDict()
+        self._r2_scores = OrderedDict()
 
+        self._latent_scores['train'] = latent_scores[0]
+        self._latent_scores['test'] = latent_scores[1]
 
-def _get_decomp_results(source_history, field, make_log_scale, decomposition_tool):
-    source_data = _get_data(source_history, field)
-    decomp_results = decomposition_tool.generate(source_data, make_log_scale)
-    return decomp_results
+        self._fields_to_log_scale = fields_to_log_scale
+        self._interpolation_field = interp_field
+        self._interpolation_locations = interp_locs
+        self._parameter_scaler = parameter_scaler
+        self._regressors = regressors
+        self._decomposers = decomposers
+        self._data_scalers = data_scalers
+        self._latent_scalers = latent_scalers
+        self._param_ranges = param_ranges
+        self._enforce_training_data_parameter_range = True
 
-
-def _get_test_decomp_results(source_history, field, data_scaler, decomposer, latent_scaler, cv_test_set=False):
-    """Transform test data after scalers and decomposition tool have already been trained on training data."""
-    check_relative_dims = True
-    if cv_test_set:
-        check_relative_dims = False
+    def enforce_training_data_parameter_range(self, enforce_training_data_parameter_range=True):
+        """
+        By default the surrogate will error if called with a parameter set outside of the 
+        parameter ranges used in the training data set. To call the surrogate for parameters 
+        outside of the training data range, call this method with the argument set to False. 
+        Adherence to the training data range can be reactivated by calling this method 
+        with the argument set to True.
         
-    source_data = _get_data(source_history, field)
-    scaled_data = data_scaler.transform(source_data)
+        :param ignore_training_range: bool flag to ignore training data range.
+        :type ignore_training_range:
+        """
+        check_value_is_bool(enforce_training_data_parameter_range, 
+                            "enforce_training_data_parameter_range")
+        self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
+
+    def _set_native_space_scores(self, average_scores, max_scores, r2_scores):
+        self._average_scores['train'] = average_scores[0]
+        self._average_scores['test'] = average_scores[1]
+
+        self._max_scores['train'] = max_scores[0]
+        self._max_scores['test'] = max_scores[1]
+
+        self._r2_scores['train'] = r2_scores[0]
+        self._r2_scores['test'] = r2_scores[1]
+
+    def set_parameter_ranges(self, *args, **param_ranges):
+        """
+        Update the admissible parameter ranges that the user can call the surrogate to evaluate.
+
+        The surrogate stores, for each input parameter, a lower and upper bound that
+        define the region of parameter space where the surrogate is considerd valid.  When
+        the surrogate is called, values that fall outside of these ranges trigger a
+        ``RuntimeError`` unless :meth:`enforce_training_data_parameter_range` has been
+        disabled.
+
+        Only keyword arguments are accepted; each keyword corresponds to a parameter
+        name and must map to a two‑element sequence ``(lower, upper)`` describing the
+        allowed range for that parameter.
+
+        :param param_ranges: Mapping of parameter names to (lower, upper) bounds.
+        :type param_ranges: ``dict`` or ``OrderedDict`` where each value is an
+            iterable of two ``float``/``int`` values.
+
+        :raises RuntimeError: If any positional arguments are supplied, or if a
+            required parameter is missing from ``param_ranges``.
+        :raises RuntimeError: If a supplied parameter name is not part of the
+            surrogate’s ``parameter_order`` (i.e., it was not present in the training
+            data).
+        :raises ValueError: If the lower bound is greater than the upper bound for any
+            parameter.
+        :raises TypeError: If either bound is not a real number (i.e., not an instance
+            of :class:`numbers.Real`).
+
+        **Example**
+
+        >>> surrogate.set_parameter_ranges(
+        ...     temperature=(300.0, 800.0),
+        ...     pressure=(1e5, 5e5)
+        ... )
+        """
+        valid_params = self._parameter_scaler.parameter_order
+        if args:
+            raise RuntimeError(f"{self.__class__.__name__}.set_parameter_ranges "+
+                               "does not accept positional arguments. "+
+                               "All inputs must be keyword arguments.")
+        for param in param_ranges:
+            if param not in valid_params:
+                raise RuntimeError(f"The parameter '{param}' is not a valid "+
+                                   f"parameter for the surrogate. Valid parameters include "+
+                                    f"{valid_params}.")
+            range_values = np.asarray(param_ranges[param])
+            if range_values.shape != (2,):
+                raise RuntimeError("Each parameter range must only have two values. "+
+                                   f"Received values with shape {range_values.shape} "+
+                                   f"for parameter '{param}'.")
+            for idx, value in enumerate(range_values):
+                hi_low = ["lower", "upper"]
+                if not isinstance(value, Real):
+                    raise TypeError(f"The {hi_low[idx]} bound for parameter '{param}' "+
+                                     f"must be a real number. Received '{value}' of type {type(value)}.")
+            if range_values[1] < range_values[0]:
+                raise ValueError(f"The range for parameter '{param}' has a lower bound greater "+
+                                 "than the upper bound. The lower bound is specified first! "+
+                                 f"Received {range_values[0]} and then {range_values[1]} as "
+                                  "the lower bound and upper bound, respectively.")
+        for param in self._parameter_scaler.parameter_order:
+            if param not in param_ranges:
+                raise RuntimeError(f"The parameter '{param}' is required for the surrogate "+
+                                   "and was not provided for the desired updated parameter ranges. "
+                                   f"Received ranges for parameters {list(param_ranges.keys())}.")
+        self._param_ranges = param_ranges
+
+def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_tool):
+    combined_data = np.vstack([train_data, test_data])
+    decomp_results = decomposition_tool.generate(combined_data, make_log_scale)
+    data_scaler, decomposer, scaled_latent_data, latent_scaler = decomp_results
+    scaled_latent_test_data = _apply_decomposing_and_scaling_to_data(test_data, data_scaler, 
+                                                                     decomposer, latent_scaler)
+    scaled_latent_train_data = _apply_decomposing_and_scaling_to_data(train_data, data_scaler, 
+                                                                     decomposer, latent_scaler)
+    return scaled_latent_test_data, scaled_latent_train_data, data_scaler, decomposer, latent_scaler
+
+
+def _apply_decomposing_and_scaling_to_data(data, data_scaler, decomposer, 
+                             latent_scaler):
+    """Transform test data after scalers and decomposition tool have already 
+        been trained on training data."""
+    scaled_data = data_scaler.transform(data)
     latent_data = decomposer.transform(scaled_data)
-    latent_data = _ensure_2d_array(latent_data, 1, check_relative_dims=check_relative_dims)
+    latent_data = _ensure_2d_array(latent_data)
     scaled_latent_test_data = latent_scaler.transform(latent_data)
     return scaled_latent_test_data
-    
-def _scale_parameters(parameter_fields, fields_to_log_scale):
-    parameter_scaler_set = _make_parameter_scaler_set(parameter_fields, fields_to_log_scale)
-    scaled_parameters = parameter_scaler_set.transform_to_array(parameter_fields)
-    return parameter_scaler_set, scaled_parameters
-
-        
-def _get_data(source_dict, field):
-    source_data = source_dict[field]
-    return source_data
 
 
-def _train_parameter_to_pca_weight_regressor(scaled_parameters, field, scaled_latent_data,
-                        training_fraction, regressor_type, regressor_kwargs, regressor_init_func,
-                        test_scaled_latent_data=None, test_scaled_parameters=None, cv_test_set=False):
-    if training_fraction == 1.0:
-        param_train = scaled_parameters
-        param_test = test_scaled_parameters
-        data_train = scaled_latent_data
-        data_test = test_scaled_latent_data
-    else: 
-        param_train, param_test, data_train, data_test = _select_training_and_test_data(
-            scaled_parameters, scaled_latent_data,
-            training_fraction)
-   
-    n_parameters = scaled_parameters.shape[1]
+def _scale_parameters(test_params, train_params, fields_to_log_scale):
+    combined_params = _combine_parameters(test_params, train_params)
+    parameter_scaler_set = _make_parameter_scaler_set(combined_params, fields_to_log_scale)
+    scaled_test_parameters = parameter_scaler_set.transform_as_array(test_params)
+    scaled_train_parameters = parameter_scaler_set.transform_as_array(train_params)
+    return parameter_scaler_set, scaled_test_parameters, scaled_train_parameters
+
+
+def _combine_parameters(test_params, train_params):
+    combined_params = OrderedDict()
+    combined_params.update(train_params)
+    for field in combined_params:
+        combined_params[field] = np.hstack((combined_params[field], test_params[field]))
+    return combined_params
+
+
+def _train_parameter_to_pca_weight_regressor(scaled_train_params, scaled_latent_train_data, 
+                                            regressor_type, regressor_kwargs,
+                                            regressor_init_func):
+    n_parameters = scaled_train_params.shape[1]
     regressor = regressor_init_func(regressor_type, n_parameters, regressor_kwargs)
-    data_train = _ensure_2d_array(data_train, 1)
-    check_relative_dims = True
-    if cv_test_set:
-        check_relative_dims = False
-    data_test = _ensure_2d_array(data_test, 1, check_relative_dims=check_relative_dims)
-    regressor.fit(param_train, data_train)
-    
-    train_score = _calculate_performance_metrics(regressor, param_train, data_train)
-    test_score = _calculate_performance_metrics(regressor, param_test, data_test)
-    
-    logger.info(f"    Training Complete: {training_fraction*100} % of data used for training")
-    logger.info(f"    Surrogate scores for {field}: ")
-    print_score = not cv_test_set
-    train_score = _convert_instances_to_stats(train_score, "Train", print_score)
-    test_score = _convert_instances_to_stats(test_score, "Test", print_score)
-    return regressor, train_score, test_score
+    scaled_latent_train_data = _ensure_2d_array(scaled_latent_train_data)
+    regressor.fit(scaled_train_params, scaled_latent_train_data)
+    return regressor
 
 
-def _select_training_and_test_data(scaled_parameters, scaled_latent_data,
-                                   training_fraction):
-    from sklearn.model_selection import train_test_split
-    data_split_results = train_test_split(scaled_parameters, 
-                                            scaled_latent_data, 
-                                            train_size=training_fraction)
-    param_train, param_test, data_train, data_test = data_split_results
-    return param_train, param_test, data_train, data_test
+def _score_regressor_in_latent_space(regressor, scaled_train_params, 
+                                     scaled_latent_train_data, scaled_test_params, 
+                                     scaled_latent_test_data, logger_on):
+    train_score = _calculate_performance_metrics(regressor, scaled_train_params, 
+                                                 scaled_latent_train_data)
+    scaled_latent_test_data = _ensure_2d_array(scaled_latent_test_data)
+    test_score = _calculate_performance_metrics(regressor, scaled_test_params, 
+                                                scaled_latent_test_data)
+    training_fraction = scaled_train_params.shape[0]/(scaled_train_params.shape[0]+
+                                                      scaled_test_params.shape[0])
+    if logger_on:
+        logger.info(f"\tTraining Complete: {training_fraction*100} % of data used for training")
+    return train_score, test_score
+
+
+def _print_scores(latent_train_score, latent_test_score, native_train_score, native_test_score):
+    for field in latent_train_score:
+        logger.info(f"\nSurrogate scores for {field}: ")
+        score_message = f"\tTrain:\n"
+        score_message += f"\t\tlatent space score: {latent_train_score[field]['score']}\n"    
+        score_message += f"\t\tnative space score: {native_train_score[field]}\n"    
+        score_message += f"\tTest:\n"
+        score_message += f"\t\tlatent space score: {latent_test_score[field]['score']}\n"    
+        score_message += f"\t\tnative space score: {native_test_score[field]}\n"    
+        logger.info(score_message)
+
+def _calculate_additional_score_metrics(train_score, test_score):
+    train_score = _convert_instances_to_stats(train_score)
+    test_score = _convert_instances_to_stats(test_score)
+    return train_score, test_score
 
 
 def _calculate_performance_metrics(regressor, param, data):
     metrics = []
-    metrics.append(regressor.score(param, data))
+    if param.shape[0] > 1:
+        # R2 score only valid for more than one sample
+        metrics.append(regressor.score(param, data))
+    else:
+        metrics.append(None)
     metrics.append(nlpd(regressor, param, data))
     metrics.append(rmse(regressor, param, data))
     return metrics
@@ -809,21 +951,11 @@ def rmse(regressors, input_values, evals):
     return rmse
     
     
-def _convert_instances_to_stats(scores, score_set_name, print_score):
+def _convert_instances_to_stats(scores):
     score_stats = OrderedDict()
-    a_scores = np.array(scores)
-    score_stats['score'] = a_scores[0]
-    score_stats['nlpd'] = a_scores[1]
-    score_stats['rmse'] = a_scores[2]
-    print_stat = [True, False ,False]
-    if not print_score:
-        print_stat = [not item for item in print_stat]        
-    
-    score_message = f"\t{score_set_name}:\n"
-    for idx, (name, value) in enumerate(score_stats.items()):
-        if print_stat[idx]:
-            score_message += f"\t {name} : {value}\n"    
-    logger.info(score_message)
+    score_stats['score'] = np.array(scores[0])
+    score_stats['nlpd'] = np.array(scores[1])
+    score_stats['rmse'] = np.array(scores[2])
     return score_stats
 
 
@@ -869,147 +1001,210 @@ class _modal_regressor:
         
 
 class MatCalPCASurrogateBase(MatCalSurrogateBase):
-    
-    def _load(self, parsed_information):
-        param_info, score_info, self._field_surrogate_tools = parsed_information[0:3]
-        self._log_data_fields, self._interp_field, self._interp_loc = parsed_information[3:]
-        self._scores = {'train': score_info[0], 'test':score_info[1]}
-        _, self._parameter_order, self._parameter_scaler = param_info
-
-    def _save(source_dict, field_surrogate_tools, parameter_scaler,
-              fields_to_log_scale, train_scores, test_scores, support_information, load_key):
-        all_surrogate_tools = MatCalPCASurrogateBase._package_surrogate_for_export(source_dict, 
-                            field_surrogate_tools, parameter_scaler,fields_to_log_scale,
-                            train_scores, test_scores, support_information)
-        full_save_filename = support_information['save_filename']+".joblib"
-        matcal_save(full_save_filename, [load_key, all_surrogate_tools])
-        return all_surrogate_tools
-
-    def _package_surrogate_for_export(source_dict, field_surrogate_tools, parameter_scaler,
-                                      fields_to_log_scale, train_scores, test_scores,
-                                      support_information):
-        packed_parameter_details = [support_information['parameter_ranges'], 
-                                    parameter_scaler.parameter_order, parameter_scaler]
-        scores = [train_scores, test_scores]
-        all_surrogate_tools = [packed_parameter_details, scores,  field_surrogate_tools,
-                               fields_to_log_scale, support_information['interpolation_field'], 
-                               support_information['interpolation_locations']]
-        return all_surrogate_tools
-        
+               
     @property
     def parameter_order(self):
         """
         A list of strings that describe the correct order to input parameters 
         into the surrogate prediction.
         """
-        return self._parameter_order
+        return self._parameter_scaler.parameter_order
 
     @property
     def independent_field(self):
         """
         The name of the independent field used in the surrogate prediction
         """
-        return self._interp_field
+        return self._interpolation_field
 
     @property
     def prediction_locations(self):
         """
         The array of locations that the surrogate predicts at
         """
-        return self._interp_loc
+        return self._interpolation_locations
     
-    def __call__(self, parameters)-> OrderedDict:
+    def __call__(self, *args, batch_evaluate=False, transpose=False, **kwargs)-> OrderedDict:
         """
         By executing a call on the surrogate object. [Example my_surrogate(my_parameters)]
         return a dictionary of the different field predictions
 
-        :param parameters: a list or array of parameter values to evaluate the surrogate at.
-            The parameters are expected to be in an order as detailed by 
-        :meth:`~matcal.core.surrogates.MatCalPCASurrogateBase.parameter_order`
+        :param parameters: parameter values to evaluate the surrogate at.
+            If not a dict, the parameters are expected to be in an order as detailed by 
+            :meth:`~matcal.core.surrogates.MatCalPCASurrogateBase.parameter_order`. 
+            As an array, the input should have shape (n_samples, n_parameters).
+        :type parameters: np.ndarray or list or dict
 
         :return: A dictionary of the various field predictions.
         :rtype: dict
         """
-        params_dict = _convert_array_to_dict(parameters, self.parameter_order)
-        scaled_params = self._parameter_scaler.transform_to_array(params_dict)
+        param_names = self._parameter_scaler.parameter_order
+        params_array = _process_surrogate_args_call(param_names, *args, 
+                                     batch_evaluate=batch_evaluate, transpose=transpose, **kwargs)
+        params_dict = _convert_param_array_to_dict(params_array, param_names)
+        _check_params_in_range(params_dict, self._param_ranges, 
+                               self._enforce_training_data_parameter_range)
+        scaled_params = self._parameter_scaler.transform_as_array(params_dict)
+        multiple_samples = False
+        if scaled_params.shape[0] > 1:
+            multiple_samples=True
         results = OrderedDict()
-        if self._interp_field is not None:
-            results[self._interp_field] = self._interp_loc
-        for field, field_tools in self._field_surrogate_tools.items():
-            surrogate, decomposer, data_scaler, latent_scaler = field_tools
-            scaled_latent_prediction = surrogate.predict(scaled_params)
+        if self._interpolation_field is not None:
+            results[self._interpolation_field] = self._interpolation_locations
+        for field in self._regressors:
+            scaled_latent_prediction = self._regressors[field].predict(scaled_params)
             scaled_latent_prediction = scaled_latent_prediction.reshape(scaled_params.shape[0], -1)
-            latent_prediction = latent_scaler.inverse_transform(scaled_latent_prediction)
-            scaled_prediction  = decomposer.inverse_transform(latent_prediction)
-            prediction = data_scaler.inverse_transform(scaled_prediction)
-            results[field] = prediction
+            results[field] = self._transform_data_to_native_space(field, scaled_latent_prediction)
+            if not multiple_samples:
+                results[field] = results[field].flatten()
         return results
+    
+    def _transform_data_to_native_space(self, field, scaled_latent_data):
+        latent_scaler = self._latent_scalers[field]
+        latent_prediction = latent_scaler.inverse_transform(scaled_latent_data)
+        scaled_prediction  = self._decomposers[field].inverse_transform(latent_prediction)
+        prediction = self._data_scalers[field].inverse_transform(scaled_prediction)
+        return prediction
 
-    def _fit(parameter_fields, source_history, fields_to_log_scale, decomposition_tool,
-             support_information, regressor_initializer, surrogate_class, load_key,
-             test_parameter_fields=None, test_source_history=None, cv_test_set=False):
-        scaled_latent_test_data = None
-        test_scaled_parameters = None
-        parameter_scaler_set, scaled_parameters = _scale_parameters(parameter_fields, fields_to_log_scale)
-        if support_information['training_fraction'] == 1.0:
-            test_scaled_parameters = parameter_scaler_set.transform_to_array(test_parameter_fields)
+    def _fit(train_data, test_data, train_params, test_params, fields_to_log_scale,
+             decomposition_tool, surrogate_generator, param_ranges, 
+             regressor_initializer, surrogate_class, logger_on=True):
         
-        field_surrogate_tools = OrderedDict()
-        train_scores = OrderedDict()
-        test_scores = OrderedDict()
-        for field in list(source_history.keys()):
-            logger.info(f"\nGenerating Surrogate for {field}")
+        regressors = OrderedDict()
+        decomposers = OrderedDict()
+        data_scalers = OrderedDict()
+        latent_scalers = OrderedDict()
+        latent_train_scores = OrderedDict()
+        latent_test_scores = OrderedDict()
+        param_scaler, scaled_test_params, scaled_train_params = _scale_parameters(test_params, 
+                                                                                  train_params, 
+                                                                                  fields_to_log_scale)
+        for field in train_data:
+            if logger_on:
+                logger.info(f"\nGenerating Surrogate for {field}")
             make_log_scale = field in fields_to_log_scale
-            decomp_results = _get_decomp_results(source_history, field, make_log_scale, decomposition_tool)
-            data_scaler, decomposer, scaled_latent_data, latent_scaler = decomp_results
-            
-            if support_information['training_fraction'] == 1.0:
-                scaled_latent_test_data = _get_test_decomp_results(test_source_history, field,
-                                                                   data_scaler, decomposer, latent_scaler,
-                                                                   cv_test_set=cv_test_set)
-                
+            decomp_results = _get_decomp_results(train_data[field], test_data[field], 
+                                                 make_log_scale, decomposition_tool)
+            scaled_latent_test_data, scaled_latent_train_data = decomp_results[0:2]
+            data_scaler, decomposer, latent_scaler = decomp_results[2:5]
+            decomposers[field] = decomposer
+            data_scalers[field] = data_scaler
+            latent_scalers[field] = latent_scaler
+
+            regressor_type = surrogate_generator._regressor_type
+            regressor_kwargs = surrogate_generator._regressor_kwargs
+            regressor = _train_parameter_to_pca_weight_regressor(scaled_train_params,
+                                                                scaled_latent_train_data, 
+                                                                regressor_type, regressor_kwargs, 
+                                                                regressor_initializer)
+            regressors[field] = regressor
+            decomposers[field] = decomposer
+            data_scalers[field] = data_scaler
+            latent_scalers[field] = latent_scaler
+            latent_scores = _score_regressor_in_latent_space(regressor, scaled_train_params, 
+                                             scaled_latent_train_data, scaled_test_params, 
+                                             scaled_latent_test_data, logger_on)
+            latent_scores = _calculate_additional_score_metrics(latent_scores[0], latent_scores[1])
+            latent_train_scores[field], latent_test_scores[field] = latent_scores
+        latent_scores = [latent_train_scores, latent_test_scores]
+
+        surrogate = surrogate_class(latent_scores, fields_to_log_scale, 
+                                    surrogate_generator._interpolation_field, 
+                                    surrogate_generator._interpolation_locations, 
+                                    param_scaler, regressors, 
+                                    decomposers, data_scalers, latent_scalers, param_ranges) 
+
+        native_space_scores = _get_scores_in_native_data_space(surrogate, test_params, test_data, 
+                                                               train_params, train_data)
+        average_scores, max_scores, r2_scores = native_space_scores
+        surrogate._set_native_space_scores(average_scores, max_scores, r2_scores)
+        if logger_on:
+            _print_scores(*latent_scores, *r2_scores)
+        return surrogate
+
+
+def _process_surrogate_args_call(param_names, *args,  
+                                 batch_evaluate=False, transpose=False, **kwargs,):
+    if batch_evaluate:
+        processed_args = np.asarray(args[0])
+        if transpose:
+            processed_args = processed_args.T
+    elif len(args)==1 and isinstance(args[0], dict or OrderedDict):
+        params = _convert_param_dict_to_array(args[0], param_names)
+        batch_evaluate=True
+        return _process_surrogate_args_call( param_names, params, batch_evaluate=batch_evaluate, 
+                                            transpose=transpose)
+    elif len(args) == len(param_names) and len(kwargs) == 0:
+        processed_args =  np.asarray(args)
+        if transpose:
+            processed_args = processed_args.T
+    elif len(args) == 0 and len(kwargs) == len(param_names):
+        param_ordered_list = []
+        for param_name in param_names:
+            if param_name not in kwargs:
+                error_message = (f"All required parameters were not passed to the surrogate."+
+                    f"Required parameters:\n{param_names}\n"+
+                    f"Received parameters:\n{kwargs.keys()}")
+                raise RuntimeError(error_message)
+            param_ordered_list.append(kwargs[param_name])        
+        return _process_surrogate_args_call(param_names, *param_ordered_list,  transpose=transpose)
+
+    else:
+        raise RuntimeError("Surrogate model was not called correctly. The input parameters "+
+                            "are likely of the incorrect format. Check input")
+    return processed_args
+
+
+def _check_params_in_range( params_dict, param_ranges, enforce_range=True):
+    if not isinstance(param_ranges, (dict, OrderedDict)):
+        param_ranges = _convert_param_array_to_dict(param_ranges, params_dict.keys())
+    for param in params_dict:
+        param_values = params_dict[param]
+        bad_values = param_values > np.max(param_ranges[param])
+        bad_values = (param_values < np.min(param_ranges[param])) | bad_values
+        if bad_values.any() and enforce_range:
+            raise RuntimeError(f"The passed parameter values for parameter '{param}' contains "+ 
+                                "values outside of the trained parameter range of "+
+                                f"{param_ranges[param][0]} to "+
+                                f"{param_ranges[param][1]}.\n{param_values}")
+   
+
+def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_params, train_data):
+    average_train_score = _get_field_scores(surrogate, train_params, train_data, 
+                                        _average_l2_error_norm)
+    max_train_score = _get_field_scores(surrogate, train_params, train_data, 
+                                        _max_error_inf_norm)
+    r2_train_score = _get_field_scores(surrogate, train_params, train_data, r2_score)
+
+    average_test_score = _get_field_scores(surrogate, test_params, test_data, 
+                                        _average_l2_error_norm)
+    max_test_score = _get_field_scores(surrogate, test_params, test_data, 
+                                        _max_error_inf_norm)
+    num_evals = _get_eval_count(test_params)
+    if num_evals > 1:
+        #r2 not valid for only 1 eval
+        r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score)
+    else:
+        r2_test_score = None
+
+    average_scores = (average_train_score, average_test_score)
+    max_scores = (max_train_score, max_test_score)
+    r2_scores = (r2_train_score, r2_test_score)
+    return average_scores, max_scores, r2_scores
+
+
+def _get_field_scores(surrogate, params, data, score_function):
+    surrogate_data = surrogate(params)
+    scores = OrderedDict()
+    for field in surrogate_data:
+        if field != surrogate._interpolation_field:
+            scores[field] = score_function(data[field], surrogate_data[field])
+    return scores
+
+
+#TODO - make function for surrogate class
 #            if not isinstance(decomposer, _DoNothingDataTransformer):
 #                _record_variance_behaviors(decomposer, support_information['save_filename'], field)
-            training_results = _train_parameter_to_pca_weight_regressor(scaled_parameters, 
-                    field, scaled_latent_data, 
-                    support_information['training_fraction'], support_information['regressor_type'],
-                    support_information['regressor_kwargs'], regressor_initializer,
-                    test_scaled_latent_data=scaled_latent_test_data, test_scaled_parameters=test_scaled_parameters,
-                    cv_test_set=cv_test_set)
-        
-            regressor, train_scores[field], test_scores[field] = training_results
-            packed_field_tools = [regressor, decomposer, data_scaler, latent_scaler]
-            field_surrogate_tools[field] = packed_field_tools
-        all_surrogate_tools = surrogate_class._save(source_history, field_surrogate_tools,
-                                                    parameter_scaler_set, 
-                                                    fields_to_log_scale, train_scores, test_scores, 
-                                                    support_information, load_key)
-        return surrogate_class(all_surrogate_tools) 
-
-    
-def load_matcal_surrogate(surrogate_savefile:str) -> MatCalPCASurrogateBase:
-    """
-    Load a MatCal PCA surrogate model from a saved file.
-
-    This function loads the surrogate model information from the specified file and
-    returns an instance of the appropriate surrogate class based on the loaded data.
-    
-    The function uses the `matcal_load` function to read the surrogate 
-    model information from the file.
-    The appropriate surrogate class is selected based on the `load_key` 
-    obtained from the loaded data.
-
-    :parameter surrogate_savefile: The path to the file where the surrogate model is saved.
-    :type surrogate_savefile: str
-
-    :return: An instance of a class derived from `MatCalPCASurrogateBase` containing 
-        the loaded surrogate model.
-    :rtype: :class:`~matcal.core.surrogates.MatCalPCASurrogateBase`
-
-
-    """
-    load_key, surrogate_info = matcal_load(surrogate_savefile)
-    return _surrogate_selection.identify(load_key)(surrogate_info)
 
 
 class MatCalMonolithicPCASurrogate(MatCalPCASurrogateBase):
@@ -1022,14 +1217,15 @@ class MatCalMonolithicPCASurrogate(MatCalPCASurrogateBase):
     """    
     name = "PCA Monolythic Regressor"
     
-    def fit(parameter_history, source_history, fields_to_log_scale, decomposition_variance,
-            support_information, test_parameter_history=None, test_source_history=None, cv_test_set=False):
-        return MatCalPCASurrogateBase._fit(parameter_history, source_history, fields_to_log_scale, 
-                                           decomposition_variance, support_information,
+    def fit(train_data, test_data, train_params, test_params, 
+            fields_to_log_scale, decomposition_tool,
+            surrogate_generator, param_ranges, print_score=True):
+        return MatCalPCASurrogateBase._fit(train_data, test_data, train_params, 
+                                           test_params, fields_to_log_scale, 
+                                           decomposition_tool, surrogate_generator, 
+                                           param_ranges, 
                                            _initialize_regressor, __class__, 
-                                           MatCalMonolithicPCASurrogate.name,
-                                           test_parameter_fields=test_parameter_history,
-                                           test_source_history=test_source_history, cv_test_set=cv_test_set)
+                                           print_score)
 
 
 class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
@@ -1042,41 +1238,29 @@ class MatCalMultiModalPCASurrogate(MatCalPCASurrogateBase):
     """
     name = "PCA Multiple Regressors"
     
-    def fit(parameter_history, source_history, fields_to_log_scale, decomposition_tool,
-            support_information, test_parameter_history=None, test_source_history=None,
-            cv_test_set=False):
-        return MatCalPCASurrogateBase._fit(parameter_history, source_history, 
-                                           fields_to_log_scale, decomposition_tool,
-                                           support_information, _modal_regressor,
-                                           __class__, MatCalMultiModalPCASurrogate.name,
-                                           test_parameter_fields=test_parameter_history,
-                                           test_source_history=test_source_history,
-                                           cv_test_set=cv_test_set)
+    def fit(train_data, test_data, train_params, test_params, 
+            fields_to_log_scale, decomposition_tool,
+            surrogate_generator, param_ranges, print_score=True):
+        return MatCalPCASurrogateBase._fit(train_data, test_data, train_params, test_params, 
+                                            fields_to_log_scale, decomposition_tool,
+                                            surrogate_generator, param_ranges, _modal_regressor,
+                                           __class__, print_score)
 
 
 _surrogate_selection = BasicIdentifier()
 _surrogate_selection.register(MatCalMultiModalPCASurrogate.name, MatCalMultiModalPCASurrogate)
 _surrogate_selection.register(MatCalMonolithicPCASurrogate.name, MatCalMonolithicPCASurrogate)
 
-def _ensure_2d_array(active_array, constrained_dim=0, check_relative_dims=True):
-    if not isinstance(active_array, np.ndarray):
-        active_array = np.array([active_array])    
-    if active_array.ndim == 1:
-        if constrained_dim==0:
-            active_array = active_array.reshape(1, -1)
-        else:
-            active_array = active_array.reshape(-1, 1)
-    elif active_array.ndim == 2:
-        if check_relative_dims:
-            active_array = _check_array_shape_and_transpose(active_array, constrained_dim)
-    return active_array
 
-def _check_array_shape_and_transpose(array, constrained_dim):
-    aa_shape = array.shape
-    if aa_shape[constrained_dim] > aa_shape[1-constrained_dim]:
-        array = array.T
-    return array
-    
+def _ensure_2d_array(active_array):
+    if not isinstance(active_array, np.ndarray):
+        active_array = np.array(active_array)    
+    if active_array.ndim == 1:
+        #Reshape 1D vector to be column vector (nsamples, 1) - single feature
+        active_array = active_array.reshape(-1, 1)
+    return np.atleast_2d(active_array)
+
+
 class _MatCalSurrogateWrapper:
     
     def __init__(self, surrogate):
@@ -1148,11 +1332,16 @@ def _identify_common_region(output_history, interpolation_field):
     return start,end   
     
 
-def _identify_fields_of_interest(sim_list,  indep_field):
-    field_of_interest = sim_list[0].field_names
-    if indep_field is not None:
-        field_of_interest.remove(indep_field)
-    return field_of_interest
+def _identify_fields_of_interest(sim_list,  indep_field, user_fields_of_interest):
+    sim_data_fields = sim_list[0].field_names
+    if user_fields_of_interest is not None:
+        fields_of_interest = user_fields_of_interest
+        _check_fields_in_keys_list(fields_of_interest, sim_data_fields, "training data set")
+    else:
+        fields_of_interest = sim_data_fields
+    if indep_field is not None and indep_field in fields_of_interest:
+        fields_of_interest.remove(indep_field)
+    return fields_of_interest
 
 
 class _MatCalLogScaler(BaseEstimator):
@@ -1201,39 +1390,51 @@ class _ParameterScalerSet:
     @property
     def parameter_order(self):
         return list(self._scalers.keys())
-    
-    def transform_to_array(self, parameter_dict):
-        n_params = len(self._scalers)
-        first_key = list(self._scalers.keys())[0]
-        n_evals = self._get_eval_count(parameter_dict, first_key)
-        a = np.zeros((n_evals, n_params))
-        for field_i, (field_name, scaler) in enumerate(self._scalers.items()):
-            param_data = parameter_dict[field_name]
-            param_data = _ensure_2d_array(param_data, 1)
-            a[:, field_i] = scaler.transform(param_data).flatten()
 
-        return a
+    def _arbitrary_transform_to_array(self, parameters, transform_method_name):
+        if isinstance(parameters, (dict, OrderedDict)):
+            parameters = _convert_param_dict_to_array(parameters, self.parameter_order)
+        for param_index, (param_name, scaler) in enumerate(self._scalers.items()):
+            param_data = parameters[:, param_index]
+            param_data = _ensure_2d_array(param_data)
+            method_to_call = getattr(scaler, transform_method_name)
+            parameters[:, param_index] = method_to_call(param_data).flatten()
+        return parameters
 
-    def _get_eval_count(self, parameter_dict, first_key):
-        first_param_vals = parameter_dict[first_key]
-        if isinstance(first_param_vals, (float, int)):
-            n_evals = 1
-        else:
-            n_evals = len(first_param_vals)
-        return n_evals
-            
+    def transform_as_array(self, parameter_dict):
+        return self._arbitrary_transform_to_array(parameter_dict, "transform")
+
+    def inverse_transform_as_array(self, parameter_dict):
+        return self._arbitrary_transform_to_array(parameter_dict, "inverse_transform")
+           
 
 def _make_parameter_scaler_set(parameter_fields, fields_to_log_scale):
     parameter_scaler_set = _ParameterScalerSet()
     for parameter_name, parameter_values in parameter_fields.items():
         use_log_scale = parameter_name in fields_to_log_scale
-        prepared_params = _ensure_2d_array(parameter_values, 1)
+        prepared_params = _ensure_2d_array(parameter_values)
         s_parameters, field_scaler = _scale_data_for_surrogate(prepared_params, use_log_scale)
         parameter_scaler_set.add_scaler(parameter_name, field_scaler)
     return parameter_scaler_set  
 
 
-def _convert_array_to_dict(passed_params, parameter_order):
+def _init_param_array(parameter_dict):
+    n_params = len(parameter_dict)
+    n_evals = _get_eval_count(parameter_dict)
+    return np.zeros((n_evals, n_params))
+
+
+def _get_eval_count(parameter_dict):
+    first_key = list(parameter_dict.keys())[0]
+    first_param_vals = parameter_dict[first_key]
+    if isinstance(first_param_vals, (float, int)):
+        n_evals = 1
+    else:
+        n_evals = len(first_param_vals)
+    return n_evals
+
+
+def _convert_param_array_to_dict(passed_params, parameter_order):
     if isinstance(passed_params, (dict, OrderedDict)):
         return passed_params
     else:
@@ -1242,3 +1443,20 @@ def _convert_array_to_dict(passed_params, parameter_order):
         for param_i, param_name  in enumerate(parameter_order):
             out[param_name] = passed_params.reshape(-1, len(parameter_order))[:,param_i]
         return out
+
+
+def _convert_param_dict_to_array(passed_params_dict, parameter_order):
+    array = _init_param_array(passed_params_dict)
+    for param_i, param_name  in enumerate(parameter_order):
+        array[:,param_i] = passed_params_dict[param_name]
+    return array
+
+def _average_l2_error_norm(test_values, surrogate_values):
+    #expects arrays to be sized (n_samples, n_qois)
+    return (np.linalg.norm(test_values - surrogate_values)
+            / test_values.shape[1])
+
+
+def _max_error_inf_norm(test_values, surrogate_values):
+    #expects arrays to be sized (n_samples, n_qois)
+    return np.linalg.norm(test_values - surrogate_values, ord=np.inf)

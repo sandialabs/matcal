@@ -5,8 +5,8 @@ from scipy import sparse
 from scipy.optimize import root
 from typing import Callable
 
-from matcal.core.utilities import _time_interpolate
-from matcal.core.utilities import check_item_is_correct_type
+from matcal.core.utilities import (check_item_is_correct_type, check_value_is_nonempty_str, 
+                                   _time_interpolate)
 from matcal.full_field.data import FieldData, convert_dictionary_to_field_data
 from matcal.full_field.data_importer import FieldSeriesData
 from matcal.full_field.data_exporter import matcal_field_data_exporter_identifier 
@@ -523,35 +523,29 @@ class FullFieldCalculator:
         self._position_names = position_names
 
         check_item_is_correct_type(independent_field_vals, (list, np.ndarray), 
-                                   "FullFieldCalculator", "independent_field_vals", 
-                                   TypeError)
+                                   "independent_field_vals")
         self._independent_field_vals = independent_field_vals
 
         self._data_sets = OrderedDict()
         self._spatial_calculations = OrderedDict()
 
-        check_item_is_correct_type(independent_field_name, str, "FullFieldCalculator", 
-                                   "independent_field_name", TypeError)
+        check_item_is_correct_type(independent_field_name, str, "independent_field_name")
         self._independent_field_name = independent_field_name
 
-        check_item_is_correct_type(reference_data, (str, FieldData), 
-                                   "FullFieldCalculator", "reference_data", 
-                                   TypeError)        
+        check_item_is_correct_type(reference_data, (str, FieldData), "reference_data")        
         self._original_reference_data = reference_data
         self._reference_data = self._process_data_input(reference_data, 
                                                         self._position_names)
         self._mapping_polynomial_order = MeshlessMapperGMLS.default_polynomial_order
         self._mapping_search_radius_multiplier = MeshlessMapperGMLS.default_epsilon_multiplier
         
-        check_item_is_correct_type(add_global_variables, bool, "FullFieldCalculator", 
-                                   "global_variables", TypeError)
+        check_item_is_correct_type(add_global_variables, bool, "global_variables")
         self._add_global_variables = add_global_variables
+
     def _check_position_names_input(self, position_names):
-        check_item_is_correct_type(position_names, list, "FullFieldCalculator", 
-                                   "position_names", TypeError)
+        check_item_is_correct_type(position_names, list, "position_names", call_depth=1)
         for pos_name in position_names:
-            check_item_is_correct_type(pos_name, str, "FullFieldCalculator", 
-                                   "position_name", TypeError)
+            check_item_is_correct_type(pos_name, str, "position_name", call_depth=1)
 
     def set_mapping_parameters(self, polynomial_order, search_radius_multiplier):
         """
@@ -560,12 +554,9 @@ class FullFieldCalculator:
         information on the mapping parameters.
         """
         import numbers
-        check_item_is_correct_type(polynomial_order, numbers.Integral, 
-                                   "FullFieldCalculator.set_mapping_parameters", 
-                                   "polynomial_order", TypeError)
+        check_item_is_correct_type(polynomial_order, numbers.Integral, "polynomial_order")
         check_item_is_correct_type(search_radius_multiplier, numbers.Real, 
-                                   "FullFieldCalculator.set_mapping_parameters", 
-                                   "search_radius_multiplier", TypeError)
+                                   "search_radius_multiplier")
         self._mapping_polynomial_order=polynomial_order
         self._mapping_search_radius_multiplier=search_radius_multiplier
 
@@ -592,13 +583,9 @@ class FullFieldCalculator:
             however, other file types may be available in other modules. 
         :type file_type: str
         """
-        check_item_is_correct_type(export_filename, str, 
-                                   "FullFieldCalculator.calculate_and_export",
-                                   "export_filename", TypeError)
+        check_item_is_correct_type(export_filename, str, "export_filename")
         if file_type is not None:
-            check_item_is_correct_type(file_type, str, 
-                                       "FullFieldCalculator.calculate_and_export",
-                                       "file_type", TypeError)
+            check_item_is_correct_type(file_type, str, "file_type")
         
         self._precalculate_check()
         fields_to_map = self._assemble_fields_to_map()
@@ -782,36 +769,25 @@ class FullFieldCalculator:
         if n_data_sets < n_required:
             raise InsuffichentFieldDataSetsError(n_data_sets, n_required)
 
-    def _check_measurement_inputs(self, new_name:str, new_function:Callable,
-                                   new_fields:str, measurement_record:dict)->None:
-        check_item_is_correct_type(new_name, str, 
-                                   "FullFieldCalculator.add_spatial_calculation", 
-                                   "new measurement function name", TypeError)
-        check_item_is_correct_type(new_function, Callable, 
-                                   "FullFieldCalculator.add_spatial_calculation", 
-                                   "calculation function", TypeError)
-        check_item_is_correct_type(new_fields, tuple, 
-                                   "FullFieldCalculator.add_spatial_calculation", 
-                                   "calculation fields", TypeError)
-        for field in new_fields:
-            check_item_is_correct_type(field, str, 
-                                   "FullFieldCalculator.add_spatial_calculation", 
-                                   "a calculation field", TypeError)
+    def _check_measurement_inputs(self, calculation_name:str, calculation_function:Callable,
+                                   field_names:str, measurement_record:dict)->None:
+        check_item_is_correct_type(calculation_name, str, "calculation_name", call_depth=1)
+        check_item_is_correct_type(calculation_function, Callable, "calculation_function", call_depth=1)
+        check_item_is_correct_type(field_names, tuple, "field_names",call_depth=1)
+        for field in field_names:
+            check_value_is_nonempty_str(field, "field_name in field_names", call_depth=1)
         
-        if new_name in list(measurement_record.keys()):
-            old_function, old_fields = measurement_record[new_name]
-            raise SameMeasurementNameError(new_name, old_function, new_function, 
-                                           old_fields, new_fields)
+        if calculation_name in list(measurement_record.keys()):
+            old_function, old_fields = measurement_record[calculation_name]
+            raise SameMeasurementNameError(calculation_name, old_function, calculation_function, 
+                                           old_fields, field_names)
 
-    def _check_data_inputs(self, new_name, new_data):
-        check_item_is_correct_type(new_name, str, "FullFieldCalculator.add_data", 
-                                   "added data name", TypeError)
-        check_item_is_correct_type(new_data, (str, FieldData), 
-                                   "FullFieldCalculator.add_data", 
-                                   "added data", TypeError)
+    def _check_data_inputs(self, data_name, field_data):
+        check_value_is_nonempty_str(data_name, "data_name", call_depth=1)
+        check_item_is_correct_type(field_data, (str, FieldData), "field_data", call_depth=1)
         
-        if new_name in list(self._data_sets.keys()):
-            raise SameDataNameError(new_name)
+        if data_name in list(self._data_sets.keys()):
+            raise SameDataNameError(data_name)
         
     def _has_measurements(self):
         return len(self._spatial_calculations) > 0

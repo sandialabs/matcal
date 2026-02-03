@@ -45,7 +45,7 @@ class _ScipyCalibrationStudyBase(StudyBase):
         super().__init__(*parameters)
         if method is None:
             method = self._default_method
-        check_value_is_nonempty_str(method, 'method', f'{self.study_class}.__init__')
+        check_value_is_nonempty_str(method, 'method')
         method = method.lower()
         self._check_valid_method(method)
         self._method = method
@@ -114,9 +114,7 @@ class _ScipyCalibrationStudyBase(StudyBase):
         :type use_three_point_finite_difference: bool
         """
         check_item_is_correct_type(use_three_point_finite_difference, 
-                                   bool, 
-                                   self.study_class+".use_three_point_finite_difference", 
-                                   "use_three_point_finite_difference")
+                                   bool, "use_three_point_finite_difference")
         self._three_point_finite_difference = use_three_point_finite_difference
 
     def restart(self):
@@ -139,9 +137,7 @@ class _ScipyCalibrationStudyBase(StudyBase):
             gradients and hessians.
         :type step_size: float
         """
-        check_value_is_positive_real(step_size, "step_size", 
-                                     f"{self.study_class}.set_step_size")
-
+        check_value_is_positive_real(step_size, "step_size")
         self._step_size = step_size
 
     def _run_study(self):

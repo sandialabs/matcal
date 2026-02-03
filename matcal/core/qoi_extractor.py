@@ -131,8 +131,8 @@ class MaxExtractor(QoIExtractorBase):
         :raises TypeError:  If the wrong types are passed into
             the constructor.
         """
-        check_value_is_nonempty_str(analyzed_field, "analyzed_field", "MaxExtractor")
-        check_item_is_correct_type(max_index, int, "max_index", "MaxExtractor")
+        check_value_is_nonempty_str(analyzed_field, "analyzed_field")
+        check_item_is_correct_type(max_index, int, "max_index")
         self._max_index = max_index
         self._analyzed_field = analyzed_field
         super().__init__()
@@ -199,8 +199,7 @@ class InterpolatingExtractor(QoIExtractorBase):
 
         :raises TypeError:  If the wrong types are passed into the constructor.
         """
-        check_value_is_nonempty_str(independent_field, "independent_field", 
-                                    InterpolatingExtractor)
+        check_value_is_nonempty_str(independent_field, "independent_field")
         self._independent_field = independent_field
         self._left = left
         self._right = right
@@ -281,11 +280,9 @@ class UserDefinedExtractor(QoIExtractorBase):
 
         :raises TypeError: if the function is not callable
         """
-        check_item_is_correct_type(function, FunctionType, "UserDefinedExtractor",
-                                    "function")
+        check_item_is_correct_type(function, FunctionType, "function")
         for field in required_experiment_fields:
-            check_value_is_nonempty_str(field, "required_experiment_field", 
-                                        "UserDefinedExtractor")
+            check_value_is_nonempty_str(field, "required_experiment_field")
         self._function = function
         self._required_fields = required_experiment_fields
         super().__init__()

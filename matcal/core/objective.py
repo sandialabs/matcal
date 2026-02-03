@@ -24,7 +24,8 @@ from matcal.core.residuals import (IdentityWeighting, LogResidualCalculator,
                                    LinearDataSizeNormalizer, NominalResidualCalculator, 
                                    InvertedSqrtDataSizeNormalizer, InvertedLinearDataSizeNormalizer)
 from matcal.core.state import StateCollection
-from matcal.core.utilities import CollectionBase, check_value_is_array_like_of_reals
+from matcal.core.utilities import (CollectionBase, check_value_is_array_like_of_reals, 
+                                   check_item_is_correct_type)
 
 from matcal.core.logger import initialize_matcal_logger
 logger = initialize_matcal_logger(__name__)
@@ -344,9 +345,7 @@ class _ObjectiveBase(ABC):
         
         :param metric_function: the desired metric function to be used. 
         """
-        self._check_item_is_correct_type(
-            metric_function, _MetricFunctionBase, "metric function")
-
+        check_item_is_correct_type(metric_function, _MetricFunctionBase, "metric function")
         self._metric_function = metric_function
 
     def use_log_residual(self):
@@ -369,8 +368,7 @@ class _ObjectiveBase(ABC):
         :type field_weights: list(:class:`~matcal.core.residuals.ResidualWeightingBase`)
         """
         for field_weight in field_weights:
-            self._check_item_is_correct_type(
-                field_weight, ResidualWeightingBase, "field weight")
+            check_item_is_correct_type(field_weight, ResidualWeightingBase, "field weight")
         self._field_weights = field_weights
 
     def set_qoi_extractors(self, qoi_extractor):
@@ -380,8 +378,7 @@ class _ObjectiveBase(ABC):
         :param qoi_extractor: A valid QoI extractor from :mod:`~matcal.core.qoi_extractor`
 
         """
-        self._check_item_is_correct_type(
-            qoi_extractor, QoIExtractorBase, "QoI extractors")
+        check_item_is_correct_type(qoi_extractor, QoIExtractorBase, "QoI extractors")
         self._simulation_qoi_extractor = qoi_extractor
         self._experiment_qoi_extractor = qoi_extractor
 
@@ -392,8 +389,7 @@ class _ObjectiveBase(ABC):
         :param qoi_extractor: A valid QoI extractor from :mod:`~matcal.core.qoi_extractor`
 
         """
-        self._check_item_is_correct_type(
-            qoi_extractor, QoIExtractorBase, "simulation QoI extractor")
+        check_item_is_correct_type(qoi_extractor, QoIExtractorBase, "simulation QoI extractor")
         self._simulation_qoi_extractor = qoi_extractor
 
     def set_experiment_qoi_extractor(self, qoi_extractor):
@@ -403,8 +399,7 @@ class _ObjectiveBase(ABC):
         :param qoi_extractor: A valid QoI extractor from :mod:`~matcal.core.qoi_extractor`
 
         """
-        self._check_item_is_correct_type(
-            qoi_extractor, QoIExtractorBase, "experiment QoI extractor")
+        check_item_is_correct_type(qoi_extractor, QoIExtractorBase, "experiment QoI extractor")
         self._experiment_qoi_extractor = qoi_extractor
 
     def set_name(self, name):
@@ -415,7 +410,7 @@ class _ObjectiveBase(ABC):
         :param qoi_extractor: A valid QoI extractor from :mod:`~matcal.core.qoi_extractor`
 
         """
-        self._check_item_is_correct_type(name, str, "objective name")
+        check_item_is_correct_type(name, str, "objective name")
         self._name = name
 
     def data_specific_initialization(self, exp_data_collection):
@@ -423,12 +418,6 @@ class _ObjectiveBase(ABC):
 
     def has_fields_of_interest(self):
         return self._residual_calculator.fields_of_interest is not None
-
-    def _check_item_is_correct_type(self, item, desired_type, message):
-        if not isinstance(item, desired_type):
-            raise self.TypeError(
-                "The objective expected a {} type for the added {}, object of type {}".format(
-                    desired_type, message, type(item)))
 
     def has_independent_field(self):
         """
@@ -619,7 +608,7 @@ class Objective(_ObjectiveBase):
 
     def _check_fields_of_interest_are_correct_type(self, fields):
         for field in fields:
-            self._check_item_is_correct_type(field, str, "field of interest")
+            check_item_is_correct_type(field, str, "field of interest", call_depth=1)
 
 
 class CurveBasedInterpolatedObjective(Objective):
@@ -676,11 +665,9 @@ class CurveBasedInterpolatedObjective(Objective):
         self._required_fields.append(independent_field)
 
     def _check_fields_are_correct_type(self, independent_field, dependent_fields):
-        self._check_item_is_correct_type(
-            independent_field, str, "independent field")
+        check_item_is_correct_type(independent_field, str, "independent field", call_depth=1)
         for dependent_field in dependent_fields:
-            self._check_item_is_correct_type(
-                dependent_field, str, "dependent field")
+            check_item_is_correct_type(dependent_field, str, "dependent field", call_depth=1)
 
     def _check_numpy_interp_parameters(self, **kwargs):
         for key, val in kwargs.items():
@@ -786,8 +773,7 @@ class SimulationResultsSynchronizer(DirectCurveBasedInterpolatedObjective):
             return np.atleast_1d(independent_field_values)
         else:
             check_value_is_array_like_of_reals(independent_field_values, 
-                                               "independent_field_values", 
-                                               "SensitivityObjective")
+                                               "independent_field_values", call_depth=1)
             return independent_field_values
             
     def _generate_experimental_data_qois(self, state):
@@ -837,12 +823,10 @@ class _ObjectiveSetBase(ABC):
         self.name = "objective_set_{}".format(self._id_number)
         self._objective_collection = None
 
-        self._check_item_is_correct_type(
-            state_collection, StateCollection, "state collection")
+        check_item_is_correct_type(state_collection, StateCollection, "state collection")
         self._state_collection = state_collection
 
-        self._check_item_is_correct_type(
-            data_collection, DataCollection, "data collection")
+        check_item_is_correct_type(data_collection, DataCollection, "data collection")
         self._experiment_data_collection = data_collection
         self._experiment_qoi_collections_by_obj = OrderedDict()
         self._data_conditioners = OrderedDict()
@@ -854,12 +838,6 @@ class _ObjectiveSetBase(ABC):
 
         self.update_objective_collection(objective_collection)
 
-    def _check_item_is_correct_type(self, item, desired_type, message):
-        if not isinstance(item, desired_type):
-            raise self.TypeError(
-                f"The objective set expected a {desired_type} type for"
-                 f" the added {message}, object is of type {type(item)}")
-
     def _get_residual_length_from_results(self, results):
         return len(results.calibration_residuals)
 
@@ -867,8 +845,8 @@ class _ObjectiveSetBase(ABC):
         return list(x.name for x in self._objective_collection.values())
 
     def update_objective_collection(self, objective_collection):
-        self._check_item_is_correct_type(
-            objective_collection, ObjectiveCollection, "objective collection")
+        check_item_is_correct_type(objective_collection, ObjectiveCollection, 
+                                   "objective collection")
         self._objective_collection = objective_collection
         self._experiment_qoi_collections_by_obj = self._initialize_experiment_qois()
         self._conditioned_exp_qoi_collections_by_obj = self._create_conditioned_experiment_qois()

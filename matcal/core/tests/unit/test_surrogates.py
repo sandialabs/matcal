@@ -1,10 +1,12 @@
-
+from collections import OrderedDict
 import numpy as np
 from scipy.stats import qmc
 from sklearn.discriminant_analysis import StandardScaler
 
-from matcal.core.data import (convert_dictionary_to_data, _serialize_data)
-from matcal.core.parameters import Parameter
+
+from matcal.core.data import convert_dictionary_to_data, DataCollection
+from matcal.core.logger import matcal_print_message
+from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.parameter_studies import ParameterStudy
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.study_base import StudyResults
@@ -12,45 +14,86 @@ from matcal.core.surrogates import (_ReconstructionDecomposition,
                                     _VarianceDecomposition, _MatCalLogScaler, 
                                     _assign_decomp, 
                                     _identify_fields_of_interest, 
-                                    _import_and_interpolate, _import_parameter_hist, 
+                                    _import_parameter_hist, 
                                     _make_parameter_scaler_set,  
                                     _package_parameter_ranges, _parse_evaluation_info, 
-                                    _process_training_data, _process_interpolation_locations, 
+                                    _process_data_for_surrogate, _process_interpolation_locations, 
                                     _scale_data_for_surrogate, _score_recreation,
                                     _tune_data_decomposition, 
                                     _WorstEvaluations, _select_state_data, _select_model, 
-                                    _apply_preprocessing_function)
+                                    _apply_preprocessing_function, 
+                                    SurrogateGenerator)
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.utilities_for_tests import _generate_singe_model_single_state_mock_eval_hist
 
-
-def _generate_study_results_lhs(n_evals, parameter_dict, eval_function):
-    n_param = len(parameter_dict)
-    study_results = StudyResults()
-    eval_set = 'one_set'
-    study_results._evaluation_sets = [eval_set]
-    _generate_sample_history(n_evals, parameter_dict, n_param, study_results)
-    _populate_simulation_data(n_evals, eval_function, study_results, eval_set)
-    return study_results
-
+def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
+                                       indep_var, test_function, training_fraction=0.8,
+                                       **parameter_mod):
+    test_res = None
+    res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, n_samples,
+                                             test_function, **parameter_mod)
+    matcal_save("test_surrogate_source_data.joblib", res)
     
-def _generate_sample_history(n_evals, parameter_dict, n_param, study_results):
-    low, high = _get_param_limits(parameter_dict)
-    lhs = qmc.LatinHypercube(d=n_param, seed=10)
-    unit_samples = lhs.random(n_evals)
-    samples = qmc.scale(unit_samples, low, high)
-    for p_idx, p_name in enumerate(parameter_dict):
-        study_results._parameter_history[p_name] = samples[:, p_idx]
+    if training_fraction == 1.0:
+        test_res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, 100,
+                                                      test_function, rng=20, **parameter_mod)
+        matcal_save("test_surrogate_test_data.joblib", test_res)
+    sur_gen = SurrogateGenerator(res, indep_var, training_fraction=training_fraction,
+                                 test_eval_info=test_res)
+    
+    return sur_gen
 
 
-def _get_param_limits(parameter_dict):
-    low = []
-    high = []
-    for cur_low, cur_high in parameter_dict.values():
-        low.append(cur_low)
-        high.append(cur_high)
-    return low,high
+def _get_parameter_and_simulation_hist(p_names, p_low, p_high, n_samples, test_function,
+                                       rng=10, **parameter_mod):
+    p_hist = _generate_parameter_hist_lhs(p_names, p_low, p_high, n_samples, rng=rng)
+    for param_name, mod_func in parameter_mod.items():
+        if param_name in p_hist.keys():
+            p_hist[param_name] = mod_func(p_hist[param_name])
+    res_hist, model_name = _generate_parameter_evaluations(test_function, p_hist, p_names)
+    res = StudyResults()
+    res._update_parameter_history(p_hist, list(p_hist.keys()))
+
+    res._update_simulation_history(res_hist, model_name)
+    return res
+
+
+def _generate_parameter_hist_lhs(names, low, high, n_samples, rng=10):
+        params = OrderedDict()
+        pc = ParameterCollection('test')
+        lhs = qmc.LatinHypercube(d=len(names), seed=rng)
+        unit_samples = lhs.random(n_samples)
+        samples = qmc.scale(unit_samples, low, high)
+        for idx in range(n_samples):
+            params[f"eval_{idx}"] = OrderedDict()
+            for n_idx, param_name in enumerate(names):
+                params[f"eval_{idx}"][param_name] = samples[idx, n_idx]
+        return params 
+
+
+def _generate_parameter_evaluations(function, params_hist, param_order):
+    results_hist = DataCollection("test model results history")
+    for eval in params_hist:
+        params = params_hist[eval]
+        fun_results = function(**params)
+        results_hist.add(convert_dictionary_to_data(fun_results))
+    model_name = "simple surrogate"
+    return results_hist, model_name
+
+
+def _make_test_sets_uniform(low, high, log_indices=[]):
+    test_sets = []
+    n_sets = 50
+    for set_i in range(n_sets):
+        cur_set = []
+        for i in range(len(low)):
+            new_value = np.random.uniform(low[i], high[i])
+            if i in log_indices:
+                new_value = np.power(10, new_value)
+            cur_set.append(new_value)
+        test_sets.append(cur_set)
+    return test_sets
 
 
 class TestSurrogateFunctions(MatcalUnitTest):
@@ -107,10 +150,12 @@ class TestSurrogateFunctions(MatcalUnitTest):
                        'c':np.ones(n_pts), 
                        'd':np.ones(n_pts)})]
         goal = ['c', 'd']
-        foi = _identify_fields_of_interest(data_list, indep_field)
+        foi = _identify_fields_of_interest(data_list, indep_field, None)
         self.assertEqual(len(goal), len(foi))
         for name in goal: 
             self.assertIn(name, foi)
+        foi = _identify_fields_of_interest(data_list, indep_field, ['c'])
+        self.assertEqual(foi, ['c'])
 
     def test_parse_evaluation_from_study(self):
         p_names = ['a', 'b']
@@ -180,14 +225,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
         self.assert_close_dicts_or_data(in_hist, sr.parameter_history)
         self.assertEqual(out_goal, out_hist) 
 
-    def test_import_and_interpolate_exists(self):
-        search_string = "test_file*.json"
-        interp_locations = np.linspace(0, 1, 5)
-        interp_field = 'time'
-        fields_of_interest = ['T', 'U']
-        imported_dict = _import_and_interpolate(search_string, fields_of_interest,
-                                                 interp_field, interp_locations)
-
     def test_process_data_corpus_no_preprocessor_only_interp(self):
         param_names = ['a', 'b', 'c']
         param_mean = [1, -3, 5]
@@ -207,7 +244,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         qois_dc = study_results.simulation_history["MockModel"]
         qois = _select_state_data(None, qois_dc)
         goal_z = np.outer(np.multiply(p_hist['a'], np.multiply(p_hist['b'], p_hist['c'])), interp_mult)
-        process_data = _process_training_data(qois, ['z'], interp_times, 'time')
+        process_data = _process_data_for_surrogate(qois, ['z'], interp_times, 'time')
         self.assert_close_arrays(goal_z, process_data['z'], show_on_fail=True)
   
     def test_process_data_corpus_interp_and_preprocess(self):
@@ -239,7 +276,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         qois = _select_state_data("MockState", qois_dc)
 
         process_data = _apply_preprocessing_function(preprocess_function, qois)
-        process_data = _process_training_data(qois, ['z'], interp_times, 'time')
+        process_data = _process_data_for_surrogate(qois, ['z'], interp_times, 'time')
         self.assert_close_arrays(goal_z, process_data['z'], show_on_fail=True)
 
     def test_process_data_corpus_interp_and_preprocess_return_dict(self):
@@ -271,81 +308,8 @@ class TestSurrogateFunctions(MatcalUnitTest):
         qois = _select_state_data("MockState", qois_dc)
 
         process_data = _apply_preprocessing_function(preprocess_function, qois)
-        process_data = _process_training_data(qois, ['z'], interp_times, 'time')
+        process_data = _process_data_for_surrogate(qois, ['z'], interp_times, 'time')
         self.assert_close_arrays(goal_z, process_data['z'], show_on_fail=True)
-
-    def test_import_and_interpolate_returns_same_values_for_same_points(self):
-        search_string = "test_file*.json"
-        interp_locations = np.linspace(0, 1, 5)
-        interp_field = 'time'
-        fields_of_interest = ['T', 'U']
-        time = interp_locations
-        T = 3 * time + 5
-        U = np.exp(time)
-        goal_dict = {"time":time, "T":T, "U":U}
-        goal_data = convert_dictionary_to_data(goal_dict)
-        test_filename = "test_file0.json"
-        matcal_save(test_filename, _serialize_data(goal_data))             
-        imported_dict = _import_and_interpolate(search_string, fields_of_interest, 
-                                                interp_field, interp_locations)
-        self.assertEqual(len(imported_dict), len(fields_of_interest))
-        for field in fields_of_interest:
-            self.assert_close_arrays(imported_dict[field], goal_data[field])
-
-    def test_import_and_interpolate_returns_same_values_for_same_pattern_different_points(self):
-        search_string = "test_file*.json"
-        n_time = 5
-        interp_locations = np.linspace(0, 1, n_time)
-        interp_field = 'time'
-        fields_of_interest = ['T', 'U']
-        
-        T_goal = 3 * interp_locations + 5
-        U_goal = np.exp(interp_locations)
-        goal_dict = {"time":interp_locations, "T":T_goal, "U":U_goal}
-
-        time = np.linspace(0, 1, 3*n_time)
-        T = 3 * time + 5
-        U = np.exp(time)
-        example_dict = {"time":time, "T":T, "U":U}
-
-        example_data = convert_dictionary_to_data(example_dict)
-        test_filename = "test_file0.json"
-        matcal_save(test_filename, _serialize_data(example_data))     
-               
-        imported_dict = _import_and_interpolate(search_string, fields_of_interest,
-                                                 interp_field, interp_locations)
-        self.assertEqual(len(imported_dict), len(fields_of_interest))
-        for field in fields_of_interest:
-            self.assert_close_arrays(imported_dict[field], goal_dict[field])
-    
-    def test_import_and_interpolate_returns_same_values_for_same_pattern_different_points_n_files(self):
-        search_string = "test_file*.json"
-        n_time = 5
-        interp_locations = np.linspace(0, 1, n_time)
-        interp_field = 'time'
-        fields_of_interest = ['T', 'U']
-        
-        T_goal = 3 * interp_locations + 5
-        U_goal = np.exp(interp_locations)
-        goal_dict = {"time":interp_locations, "T":T_goal, "U":U_goal}
-
-        n_files = 7
-        for i in range(n_files):
-            time = np.linspace(0, 1, 3*np.random.randint(n_time, 10*n_time))
-            T = 3 * time + 5
-            U = np.exp(time)
-            example_dict = {"time":time, "T":T, "U":U}
-
-            example_data = convert_dictionary_to_data(example_dict)
-            test_filename = f"test_file{i}.json"
-            matcal_save(test_filename, _serialize_data(example_data))     
-               
-        imported_dict = _import_and_interpolate(search_string, fields_of_interest, 
-                                                interp_field, interp_locations)
-        self.assertEqual(len(imported_dict), len(fields_of_interest))
-        for field in fields_of_interest:
-            for f_i in range(n_files):
-                self.assert_close_arrays(imported_dict[field][f_i, :], goal_dict[field])
 
     def test_scaling_all_same_value(self):
         n_samp = 4
@@ -369,8 +333,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
         make_log = True
         scaled_array, scaling_object = _scale_data_for_surrogate(source_array, make_log)
         self.assert_close_arrays(goal_array, scaled_array)
-
-        
 
     def test_scaling_line_with_white_noise(self):
         n_samp = 100000
@@ -401,7 +363,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         imported_parameters = _import_parameter_hist(input_params)
         fields_to_log_scale = []
         pss = _make_parameter_scaler_set(imported_parameters, fields_to_log_scale)
-        scaled_parameters = pss.transform_to_array(imported_parameters)
+        scaled_parameters = pss.transform_as_array(imported_parameters)
         parameter_key_order = pss.parameter_order
         
         self.assert_close_arrays(scaled_parameters.shape, [n_eval, len(param_names)])
@@ -652,3 +614,267 @@ class TestSurrogateFunctions(MatcalUnitTest):
         with self.assertRaises(TypeError):
             scaler.fit(data_2d)
             scaler.transform(data_list)
+
+
+class TestSurrogateGenerator(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_surrogate_add_generate_preprocessor(self):
+        n_samples = 500
+        params = {"m":(0, 1), "b":(-1, 1)}
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        res_file = "test_results"
+        err_tol = 1e-2
+        n_interp = 200
+        interp_locations = np.linspace(0, 10, n_interp)
+
+        def test_function(m, b, n_features=None):
+            if n_features == None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x':x, 'y':y}
+        
+        def preprocessor_func(data):
+            for field in list(data.keys()):
+                if field != "x":
+                    data[field] *= 2.0
+            return data
+
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, 
+                                                     p_low, p_high, indep_var, test_function)
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        surrogate = sur_gen.generate('my_surrogate', preprocessing_function=preprocessor_func)
+
+        self._confirm_alignment_to_function(p_low, p_high, show_array, probes, 
+                                            err_tol, n_interp, test_function, surrogate, 2)
+        self._confirm_good_test_scores(surrogate)
+        with self.assertRaises(TypeError):        
+            sur_gen.generate('my_surrogate', preprocessing_function="not_func")
+            
+    def _confirm_good_test_scores(self, surrogate):
+        for field in surrogate.scores['test']:
+            worst_scores = surrogate.scores['test'][field]
+            if isinstance(worst_scores, (float, int)):
+                self.assertGreaterEqual(worst_scores, 0.99)
+            else:
+                for idx in range(len(worst_scores)):
+                    self.assertGreaterEqual(worst_scores[idx], 0.99)
+
+    def _confirm_alignment_to_function(self, p_low, p_high, show_array, probes, 
+                                       err_tol, n_interp, test_function, surrogate, 
+                                       scale_factor=1, log_indices=[]):
+        test_sets = _make_test_sets_uniform(p_low, p_high, log_indices)
+        surrogate.enforce_training_data_parameter_range(False)
+        self._assert_passes_fraction_of_times(test_function, show_array, probes, 
+                                              err_tol, n_interp, surrogate, 
+                                              test_sets, scale_factor)
+
+    def test_surrogate_for_line(self):
+        def test_function(m, b, n_features=None):
+            if n_features == None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x':x, 'y':y}
+
+        n_samples = 500
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        res_file = "test_results"
+        err_tol = 1e-2
+        n_interp = 200
+
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
+                                                     indep_var, test_function)
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        surrogate = sur_gen.generate('my_surrogate')
+
+        self._confirm_alignment_to_function(p_low, p_high, show_array, probes, err_tol, n_interp, 
+                                            test_function, surrogate)
+        self._confirm_good_test_scores(surrogate)
+
+    def test_surrogate_confirm_error_for_bad_calls(self):
+        def test_function(m, b, n_features=None):
+            if n_features == None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x':x, 'y':y}
+
+        n_samples = 500
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        res_file = "test_results"
+        err_tol = 1e-2
+        n_interp = 200
+
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
+                                                     indep_var, test_function)
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        surrogate = sur_gen.generate('my_surrogate')
+        with self.assertRaises(RuntimeError):
+            surrogate(-1,0)
+        with self.assertRaises(RuntimeError):
+            surrogate(0.5,2)
+        surrogate.enforce_training_data_parameter_range(False)
+        vals = surrogate(-1,0)
+        surrogate.enforce_training_data_parameter_range(True)
+
+        self.assertIsInstance(vals, OrderedDict)
+
+        # Wrong number of positional arguments (only one while two are required)
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1)  # missing second parameter
+
+        # Incomplete keyword dict (missing 'b')
+        with self.assertRaises(RuntimeError):
+            surrogate(m=0.2)
+
+        # Incorrect keyword dict 'a' != 'b')
+        with self.assertRaises(RuntimeError):
+            surrogate(m=0.2, a=0.1)
+
+        # Both positional and keyword arguments together – also invalid
+        with self.assertRaises(RuntimeError):
+            surrogate(0.1, b=0.3)
+
+        #outside of bound (-5,5) for both params
+        with self.assertRaises(RuntimeError):
+            surrogate(-10, 0)
+        with self.assertRaises(RuntimeError):
+            surrogate(0, 10)
+
+        with self.assertRaises(RuntimeError):
+            surrogate([[0, 10], [1, 0]], batch_evaluate=True)
+        #verify it takes in kwargs with lists of param values
+        res = surrogate(m=[0.1, 0.8], b=[0.1, 0.8])
+        self.assertEqual(res["y"].shape, (2,200))
+
+    def test_set_param_ranges(self):
+        def test_function(m, b, n_features=None):
+            if n_features == None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x':x, 'y':y}
+
+        n_samples = 20
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        res_file = "test_results"
+        err_tol = 1e-2
+        n_interp = 200
+
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
+                                                     indep_var, test_function)
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        surrogate = sur_gen.generate('my_surrogate')
+        surrogate.set_parameter_ranges(m=[-10, 10], b=[0, 20])
+        self.assert_close_dicts_or_data(surrogate._param_ranges, {"m": [-10, 10], "b":[0, 20]})
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(1, 1)
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(a=[1, 2], b=[1, 2])
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(m=[1, 2, 1], b=[1, 2])
+        with self.assertRaises(RuntimeError):
+            surrogate.set_parameter_ranges(b=[1, 2])
+        with self.assertRaises(TypeError):
+            surrogate.set_parameter_ranges(b=["a", 2])
+        with self.assertRaises(ValueError):
+            surrogate.set_parameter_ranges(b=[2, 1])          
+
+    def test_surrogate_for_line_training_fraction_1(self):
+        def test_function(m, b, n_features=None):
+            if n_features == None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x':x, 'y':y}
+
+        n_samples = 500
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        res_file = "test_results"
+        err_tol = 1e-2
+        n_interp = 200
+
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
+                                                     indep_var, test_function, training_fraction=1.0)
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process", 1.0)
+        surrogate = sur_gen.generate('my_surrogate')
+
+        self._confirm_alignment_to_function(p_low, p_high, show_array, probes, err_tol, n_interp, 
+                                            test_function, surrogate)
+        self._confirm_good_test_scores(surrogate)
+
+    def _assert_passes_fraction_of_times(self, test_function, show_array, 
+                                        probes, err_tol, n_interp, 
+                                        surrogate, test_sets, 
+                                        goal_scale_factor =1.0):
+        N_passed = 0
+        N_failed = 0
+        passed_record = []
+        error_record = []
+        
+        for test_set in test_sets:
+            for test_field in probes:
+                goal = test_function(*test_set, n_interp)[test_field]*goal_scale_factor
+                predictions = surrogate(np.array(test_set).reshape(1, -1), batch_evaluate=True)
+                prediction = predictions[test_field]
+                results = self.check_if_close_arrays(prediction, 
+                                                     goal, 
+                                                     1e-4, err_tol, 
+                                                     False, 
+                                                     show_array)
+                passed_set,processed_first_array, processed_second_array = results
+                delta = np.abs(processed_first_array-processed_second_array)
+                max_delta = np.max(delta)
+                location_of_max = np.argmax(delta)
+                passed_record.append(passed_set)
+                error_record.append(max_delta)
+                if passed_set:
+                    N_passed += 1
+                else:
+                    N_failed += 1
+        prediction_keys = list(predictions.keys())
+        for prediction_key in prediction_keys:
+            if prediction_key != surrogate._interpolation_field:
+                self.assertIn(prediction_key, probes)
+        passed = N_passed / (N_failed + N_passed) > .9
+        if not passed:
+            matcal_print_message("Num passed:", N_passed)
+            matcal_print_message("Num failed:", N_failed)
+            out_data = {'passed':np.array(passed_record), 'error':np.array(error_record)}
+            
+            for i_var in range(len(test_sets[0])):
+                record = []
+                for test_set in test_sets:
+                    record.append(test_set[i_var])
+                out_data[f'var_{i_var}'] = np.array(record)
+            matcal_save('passed_failed_parameters.joblib', out_data)
+        self.assertTrue(N_passed / (N_failed + N_passed) > .9)

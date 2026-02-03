@@ -28,14 +28,14 @@ high-dimensional displacement field with little information loss.
 
 Response Dimensionality Reduction 
 ---------------------------------
-Given a data matix, :math:`\mathcal{A} \in \mathbb{R}^{u \times v}`, 
+Given a data matrix, :math:`\mathcal{A} \in \mathbb{R}^{u \times v}`, 
 PCA is used to factorize the matrix into three new matrices, 
 :math:`\mathcal{A} = USV^{T}`, where :math:`U \in \mathbb{R}^{u \times r}` and 
 :math:`V^{T} \in \mathbb{R}^{r \times v}` are orthonormal bases with columns and rows, 
 respectively, containing the left and right singular vectors of :math:`\mathcal{A}`. 
 The matrix :math:`S \in \mathbb{R}^{r \times r}` is diagonal and contains the singular values, 
 and :math:`r` is the rank of :math:`\mathcal{A}`. By retaining a number of principal components 
-:math:`p \lt r`, matrix :math:`\mathcal{A}` can be expresed in a reduced-dimensional space. The 
+:math:`p < r`, matrix :math:`\mathcal{A}` can be expressed in a reduced-dimensional space. The 
 retained components are written as :math:`V^{*T} \subset V^{T}, V^{*T} in \mathbb{R}^{p times v}`.
 The reduction of :math:`\mathcal{A}` is written as 
 :math:`\mathcal{A}^{pca} = \mathcal{A}'V^{*} \in \mathbb{R}^{u \times p}` and its reconstruction by 
@@ -44,7 +44,7 @@ The reduction of :math:`\mathcal{A}` is written as
 The data matrix :math:`\mathcal{A}` is representative of a high-dimensional data set, such a full-field data. 
 The dimension :math:`u` is the number of repeat measurements, or model evaluations with different 
 parameter values, and :math:`v` is the number of measurements in each data set. 
-Generally speaking, for this application, :math:`u \lt v`.
+Generally speaking, for this application, :math:`u < v`.
 
 The scikit-learn implementation of PCA is utilized in MatCal :cite:`scikit-learn`.
 

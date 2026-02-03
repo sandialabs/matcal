@@ -1258,13 +1258,13 @@ class TestScaleDataCollection(MatcalUnitTest):
         self.assertIsInstance(new_data_collection, DataCollection)
 
     def test_bad_inputs_and_raise_error(self):
-        with self.assertRaises(Data.TypeError):
+        with self.assertRaises(TypeError):
             new_data_collection = scale_data_collection("not a dc", "value", 2)
-        with self.assertRaises(Data.TypeError):
+        with self.assertRaises(TypeError):
             new_data_collection = scale_data_collection(self._data_collection, 1, 2)
-        with self.assertRaises(Data.TypeError):
+        with self.assertRaises(TypeError):
             new_data_collection = scale_data_collection(self._data_collection, "value", 'val')
-        with self.assertRaises(Data.TypeError):
+        with self.assertRaises(TypeError):
             new_data_collection = scale_data_collection(self._data_collection, "value", 1,"1")
 
     def test_scale_results(self):
