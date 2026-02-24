@@ -102,14 +102,6 @@ Tools.
 
  .. code-block:: none
 
-
-    You are using exodus.py v 1.21.5 (seacas-py3), a python wrapper of some of the exodus library.
-
-    Copyright (c) 2013-2023 National Technology &
-    Engineering Solutions of Sandia, LLC (NTESS).  Under the terms of
-    Contract DE-NA0003525 with NTESS, the U.S. Government retains certain
-    rights in this software.
-
     Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
     Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
     Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
@@ -474,19 +466,17 @@ and all evaluation sets are added.
    multiple times. Only the extra objectives will be added 
    to the additional evaluation sets.
 
-.. GENERATED FROM PYTHON SOURCE LINES 271-280
+.. GENERATED FROM PYTHON SOURCE LINES 271-278
 
 .. code-block:: Python
 
     study = ParameterStudy(param_collection)
-    study.set_core_limit(51)
     study.add_evaluation_set(vfm_model, vfm_objective, vfm_data)
     study.add_evaluation_set(model, load_objective, synthetic_data)
     study.add_evaluation_set(model, interpolate_objective, selected_data)
     study.add_evaluation_set(model, hwd_objective, selected_data)
     study.add_evaluation_set(model, hwd_colocated_objective, selected_data)
     study.set_working_directory("objective_sensitivity_study", remove_existing=True)
-
 
 
 
@@ -503,7 +493,49 @@ and all evaluation sets are added.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 281-287
+.. GENERATED FROM PYTHON SOURCE LINES 279-283
+
+Since the processing of full-field data can be computationally expensive
+we limit the number of jobs that can be processed concurrently. 
+By setting the core limit to 10, when run on a cluster only 
+10 models will be run and post-processed concurrently. 
+
+.. GENERATED FROM PYTHON SOURCE LINES 283-285
+
+.. code-block:: Python
+
+    study.set_core_limit(10)
+
+
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 286-293
+
+Since this study is evaluating many responses with full-field data, 
+we reduce what is stored in the results objects to limit 
+the amount of memory consumed in results storage.
+We are only interested the objectives as a function 
+of the parameters and the different model responses. 
+As a result, we only store the qois and objective values
+in the results object as shown below.
+
+.. GENERATED FROM PYTHON SOURCE LINES 293-294
+
+.. code-block:: Python
+
+    study.set_results_storage_options(data=False, qois=True, residuals=False, objectives=True)
+
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 295-301
 
 The final step is to add the parameter values to be evaluated. 
 First, we add the truth values, which should be
@@ -512,7 +544,7 @@ from -5% to +5% for each parameter.
 Only one parameter is varied at a time to simplify visualization. The function 
 below adds the parameter evaluations to the study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 287-297
+.. GENERATED FROM PYTHON SOURCE LINES 301-311
 
 .. code-block:: Python
 
@@ -533,11 +565,11 @@ below adds the parameter evaluations to the study.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 298-299
+.. GENERATED FROM PYTHON SOURCE LINES 312-313
 
 Next, we launch the study and plot the results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 299-301
+.. GENERATED FROM PYTHON SOURCE LINES 313-315
 
 .. code-block:: Python
 
@@ -565,7 +597,7 @@ Next, we launch the study and plot the results.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 302-399
+.. GENERATED FROM PYTHON SOURCE LINES 316-413
 
 Several plots are output below, and 
 we summarize the results here.
@@ -665,7 +697,7 @@ loads for simulations of the material characterization
 tests. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 399-407
+.. GENERATED FROM PYTHON SOURCE LINES 413-421
 
 .. code-block:: Python
 
@@ -700,85 +732,50 @@ tests.
     *
 
       .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_005.png
-         :alt: plot a objective sensitivities
+         :alt: vfm_model: vfm_objective
          :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_005.png
          :class: sphx-glr-multi-img
 
     *
 
       .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_006.png
-         :alt: plot a objective sensitivities
+         :alt: 3D_model: load_objective
          :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_006.png
          :class: sphx-glr-multi-img
 
     *
 
       .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_007.png
-         :alt: plot a objective sensitivities
+         :alt: 3D_model: interpolate_objective
          :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_007.png
          :class: sphx-glr-multi-img
 
     *
 
       .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_008.png
-         :alt: plot a objective sensitivities
+         :alt: 3D_model: hwd_objective
          :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_008.png
          :class: sphx-glr-multi-img
 
     *
 
       .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_009.png
-         :alt: plot a objective sensitivities
+         :alt: 3D_model: hwd_colocated_objective
          :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_009.png
          :class: sphx-glr-multi-img
 
     *
 
       .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_010.png
-         :alt: vfm_model: vfm_objective
+         :alt: plot a objective sensitivities
          :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_010.png
          :class: sphx-glr-multi-img
 
     *
 
       .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_011.png
-         :alt: 3D_model: load_objective
+         :alt: plot a objective sensitivities
          :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_011.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_012.png
-         :alt: 3D_model: interpolate_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_012.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_013.png
-         :alt: 3D_model: hwd_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_013.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_014.png
-         :alt: 3D_model: hwd_colocated_objective
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_014.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_015.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_015.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_016.png
-         :alt: plot a objective sensitivities
-         :srcset: /full_field_study_verification_examples/images/sphx_glr_plot_a_objective_sensitivities_016.png
          :class: sphx-glr-multi-img
 
 
@@ -788,7 +785,7 @@ tests.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (58 minutes 20.229 seconds)
+   **Total running time of the script:** (58 minutes 31.028 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_a_objective_sensitivities.py:

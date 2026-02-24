@@ -291,7 +291,7 @@ use Matplotlib :cite:p:`matplotlib` to plot the desired data.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x1554989251d0>
+    <matplotlib.legend.Legend object at 0x155517b7fb90>
 
 
 
@@ -330,7 +330,7 @@ the model options have little effect on the results for this problem.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x1554987d9c50>
+    <matplotlib.legend.Legend object at 0x155516f11220>
 
 
 
@@ -398,7 +398,7 @@ displacement rate.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (154 minutes 25.469 seconds)
+   **Total running time of the script:** (98 minutes 21.185 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_e_tension_model_option_effects_cluster.py:

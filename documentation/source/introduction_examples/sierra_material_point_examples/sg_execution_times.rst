@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:49.310** total execution time for 4 files **from introduction_examples/sierra_material_point_examples**:
+**17:25.521** total execution time for 4 files **from introduction_examples/sierra_material_point_examples**:
 
 .. container::
 
@@ -32,15 +32,15 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py` (``plot_sierra_material_point_calibration.py``)
-     - 01:49.310
-     - 0.0
-   * - :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_uncorrected.py` (``plot_sierra_material_point_calibration_uncorrected.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_z_model_forms.py` (``plot_sierra_material_point_calibration_z_model_forms.py``)
+     - 07:36.796
      - 0.0
    * - :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_with_unloading.py` (``plot_sierra_material_point_calibration_with_unloading.py``)
-     - 00:00.000
+     - 04:04.204
      - 0.0
-   * - :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_z_model_forms.py` (``plot_sierra_material_point_calibration_z_model_forms.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_uncorrected.py` (``plot_sierra_material_point_calibration_uncorrected.py``)
+     - 04:02.526
+     - 0.0
+   * - :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py` (``plot_sierra_material_point_calibration.py``)
+     - 01:41.995
      - 0.0

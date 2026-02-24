@@ -197,14 +197,6 @@ except for some discussion on the results at the end.
 
  .. code-block:: none
 
-
-    You are using exodus.py v 1.21.5 (seacas-py3), a python wrapper of some of the exodus library.
-
-    Copyright (c) 2013-2023 National Technology &
-    Engineering Solutions of Sandia, LLC (NTESS).  Under the terms of
-    Contract DE-NA0003525 with NTESS, the U.S. Government retains certain
-    rights in this software.
-
     Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
     Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
     Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
@@ -213,12 +205,12 @@ except for some discussion on the results at the end.
     Closing exodus file: synthetic_data_files/test_mesh_surf.g
     Opening exodus file: synthetic_data_files/test_mesh_surf.g
     Closing exodus file: synthetic_data_files/test_mesh_surf.g
-    OrderedDict([('yield_stress', 205.28636836), ('A', 1796.2408272), ('n', 1.6485642543), ('R11', 0.9427554363), ('R12', 0.80097680472)])
-    Parameter yield_stress error: 2.6431841800000058
-    Parameter A error: 19.74938848
-    Parameter n error: -17.571787284999996
-    Parameter R11 error: -0.7625856526315714
-    Parameter R12 error: -5.767434738823527
+    OrderedDict({'yield_stress': 205.26957029, 'A': 1782.5516248, 'n': 1.6587624642, 'R11': 0.94325998084, 'R12': 0.80333563582})
+    Parameter yield_stress error: 2.634785144999995
+    Parameter A error: 18.83677498666666
+    Parameter n error: -17.061876789999996
+    Parameter R11 error: -0.7094757010526315
+    Parameter R12 error: -5.489925197647056
 
 
 
@@ -309,7 +301,7 @@ not accurate enough for verification purposes.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (284 minutes 18.077 seconds)
+   **Total running time of the script:** (266 minutes 55.057 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_w_gradient_interp_calibration_verification.py:

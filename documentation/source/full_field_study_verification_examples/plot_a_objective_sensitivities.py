@@ -269,14 +269,28 @@ param_collection = ParameterCollection("Hill48 in-plane", Y, A, n, R11, R12)
 #    multiple times. Only the extra objectives will be added 
 #    to the additional evaluation sets.
 study = ParameterStudy(param_collection)
-study.set_core_limit(51)
 study.add_evaluation_set(vfm_model, vfm_objective, vfm_data)
 study.add_evaluation_set(model, load_objective, synthetic_data)
 study.add_evaluation_set(model, interpolate_objective, selected_data)
 study.add_evaluation_set(model, hwd_objective, selected_data)
 study.add_evaluation_set(model, hwd_colocated_objective, selected_data)
 study.set_working_directory("objective_sensitivity_study", remove_existing=True)
+#%%
+# Since the processing of full-field data can be computationally expensive
+# we limit the number of jobs that can be processed concurrently. 
+# By setting the core limit to 10, when run on a cluster only 
+# 10 models will be run and post-processed concurrently. 
+study.set_core_limit(10)
 
+#%%
+# Since this study is evaluating many responses with full-field data, 
+# we reduce what is stored in the results objects to limit 
+# the amount of memory consumed in results storage.
+# We are only interested the objectives as a function 
+# of the parameters and the different model responses. 
+# As a result, we only store the qois and objective values
+# in the results object as shown below.
+study.set_results_storage_options(data=False, qois=True, residuals=False, objectives=True)
 #%%
 # The final step is to add the parameter values to be evaluated. 
 # First, we add the truth values, which should be

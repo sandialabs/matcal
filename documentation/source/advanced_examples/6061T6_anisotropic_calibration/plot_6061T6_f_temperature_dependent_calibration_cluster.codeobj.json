@@ -2015,8 +2015,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "io",
-   "module_short": "io",
+   "module": "_io",
+   "module_short": "_io",
    "name": "TextIOWrapper"
   }
  ],

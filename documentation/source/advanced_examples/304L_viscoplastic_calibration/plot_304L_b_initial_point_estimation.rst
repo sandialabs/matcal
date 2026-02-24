@@ -367,7 +367,7 @@ as the initial point for our full finite element model calibration.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.092 seconds)
+   **Total running time of the script:** (0 minutes 1.482 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_b_initial_point_estimation.py:

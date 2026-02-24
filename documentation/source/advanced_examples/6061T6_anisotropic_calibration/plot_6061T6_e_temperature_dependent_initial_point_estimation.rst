@@ -389,9 +389,9 @@ as the initial point for the calibration.
 
  .. code-block:: none
 
-    [1.         0.9266122  0.76412509 0.30380963]
-    [1.         0.59786569 0.10482988 0.07727676]
-    [1.         2.01872306 8.95459464 2.49730319]
+    [1.         0.92572386 0.76339252 0.30351837]
+    [1.         0.59356752 0.10407624 0.07672121]
+    [1.         2.07568307 9.20725627 2.56776675]
 
 
 
@@ -399,7 +399,7 @@ as the initial point for the calibration.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.924 seconds)
+   **Total running time of the script:** (0 minutes 0.779 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_e_temperature_dependent_initial_point_estimation.py:

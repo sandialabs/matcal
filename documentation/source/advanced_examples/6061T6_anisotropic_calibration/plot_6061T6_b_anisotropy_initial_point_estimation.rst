@@ -654,7 +654,7 @@ See :ref:`6061T6 aluminum calibration with anisotropic yield`
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.827 seconds)
+   **Total running time of the script:** (0 minutes 1.770 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_b_anisotropy_initial_point_estimation.py:

@@ -500,7 +500,7 @@ The last step is to launch the calibration study and review the results.
 
  .. code-block:: none
 
-    OrderedDict([('Y', 41.467621667), ('A', 13.5267847), ('b', 18.779674536)])
+    OrderedDict({'Y': 41.467621669, 'A': 13.526784699, 'b': 18.779674534})
 
 
 
@@ -524,7 +524,7 @@ saturation stress is around 55 ksi which agrees with the calibrated parameters o
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 49.310 seconds)
+   **Total running time of the script:** (1 minutes 41.995 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py:

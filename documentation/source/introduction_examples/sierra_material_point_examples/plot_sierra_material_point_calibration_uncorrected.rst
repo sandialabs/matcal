@@ -168,8 +168,8 @@ Finally, we launch the calibration study and review the results.
 
  .. code-block:: none
 
-    Y: 44.493154615
-    A: 4.0987943896
+    Y: 44.493153355
+    A: 4.0987957384
     b: 30.0
 
 
@@ -285,9 +285,9 @@ indicating that the algorithm completed successfully. However, from
 
  .. code-block:: none
 
-    Y: 41.746714807
-    A: 13.487676657
-    b: 17.469581346
+    Y: 41.746714905
+    A: 13.487676572
+    b: 17.469581115
 
 
 
@@ -375,7 +375,7 @@ applied true strain.
  .. code-block:: none
 
     Final applied true strain if assumed tension: 0.3685904016745512
-    Final applied true strain if assumed in compression: -0.5900407939431528
+    Final applied true strain if assumed in compression: -0.5900407939431527
 
 
 
@@ -515,9 +515,9 @@ work well and provide the desired results.
 
  .. code-block:: none
 
-    Y: 41.453715448
-    A: 13.540177284
-    b: 18.797345125
+    Y: 41.453715459
+    A: 13.540177273
+    b: 18.797345105
 
 
 
@@ -558,7 +558,7 @@ to not use NumPy interp's results padding.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (4 minutes 58.460 seconds)
+   **Total running time of the script:** (4 minutes 2.526 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_uncorrected.py:

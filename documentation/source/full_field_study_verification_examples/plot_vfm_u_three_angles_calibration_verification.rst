@@ -204,6 +204,8 @@ study results at the end.
     Opening exodus file: ../../../docs_support_files/synthetic_surf_results_90_degree.e
     Closing exodus file: ../../../docs_support_files/synthetic_surf_results_90_degree.e
     Closing exodus file: ../../../docs_support_files/synthetic_surf_results_90_degree.e
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/matcal/core/data.py:572: UserWarning: Ignoring specified arguments in this call because figure with num: 1 already exists
+      plt.figure(figure.number, constrained_layout=True)
     Opening exodus file: synthetic_data_files/test_mesh_surf.g
     Closing exodus file: synthetic_data_files/test_mesh_surf.g
     Opening exodus file: matcal_template/test_model/0_degree/test_model.g
@@ -236,10 +238,10 @@ study results at the end.
     Opening exodus file: matcal_template/test_model/90_degree/test_model_exploded.g
     Closing exodus file: matcal_template/test_model/90_degree/test_model_exploded.g
     Closing exodus file: matcal_template/test_model/90_degree/test_model.g
-    OrderedDict([('yield_stress', 198.09838152), ('A', 1449.0675242), ('n', 2.0907659417), ('R11', 0.95015067647), ('R12', 0.8513227374)])
+    OrderedDict({'yield_stress': 198.09838152, 'A': 1449.0675242, 'n': 2.0907659416, 'R11': 0.95015067647, 'R12': 0.8513227374})
     Parameter yield_stress error: -0.950809239999998
     Parameter A error: -3.3954983866666675
-    Parameter n error: 4.538297084999998
+    Parameter n error: 4.538297079999998
     Parameter R11 error: 0.01586068105263154
     Parameter R12 error: 0.15561616470588188
 
@@ -338,7 +340,7 @@ stress assumption constrain.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (515 minutes 11.830 seconds)
+   **Total running time of the script:** (152 minutes 47.502 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_vfm_u_three_angles_calibration_verification.py:

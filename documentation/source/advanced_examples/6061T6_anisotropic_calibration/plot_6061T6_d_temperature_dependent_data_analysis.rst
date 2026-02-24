@@ -572,7 +572,7 @@ for each data set in a file for each state.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.808 seconds)
+   **Total running time of the script:** (0 minutes 4.933 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_d_temperature_dependent_data_analysis.py:

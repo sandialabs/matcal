@@ -189,12 +189,12 @@ except for some discussion on the results at the end.
     Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
     Opening exodus file: synthetic_data_files/test_mesh_surf.g
     Closing exodus file: synthetic_data_files/test_mesh_surf.g
-    OrderedDict([('yield_stress', 198.22885893), ('A', 1395.6041005), ('n', 2.0538870062), ('R11', 0.97752034332), ('R12', 0.94395739394)])
-    Parameter yield_stress error: -0.8855705349999995
-    Parameter A error: -6.959726633333337
-    Parameter n error: 2.6943503100000044
-    Parameter R11 error: 2.8968782442105354
-    Parameter R12 error: 11.05381105176471
+    OrderedDict({'yield_stress': 196.17176996, 'A': 1379.0260916, 'n': 2.1086604587, 'R11': 0.97827924806, 'R12': 0.93911017046})
+    Parameter yield_stress error: -1.914115019999997
+    Parameter A error: -8.064927226666669
+    Parameter n error: 5.433022935000009
+    Parameter R11 error: 2.9767629536842146
+    Parameter R12 error: 10.483549465882357
 
 
 
@@ -285,7 +285,7 @@ see if we can obtain verification results
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (232 minutes 58.316 seconds)
+   **Total running time of the script:** (775 minutes 17.166 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_x_hwd_calibration_verification.py:

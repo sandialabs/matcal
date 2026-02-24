@@ -847,7 +847,7 @@ alone.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 52.949 seconds)
+   **Total running time of the script:** (3 minutes 51.851 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_hwd_methods_verification_not_collocated_X_specimen.py:

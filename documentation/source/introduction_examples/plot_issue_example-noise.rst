@@ -450,7 +450,7 @@ so shallow that the descent direction may be hard to determine.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.286 seconds)
+   **Total running time of the script:** (0 minutes 2.043 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_plot_issue_example-noise.py:

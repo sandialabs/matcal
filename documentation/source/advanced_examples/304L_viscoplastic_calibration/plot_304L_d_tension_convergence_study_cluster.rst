@@ -429,7 +429,7 @@ use Matplotlib :cite:p:`matplotlib` to plot the objective values versus the elem
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:261: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:261: RuntimeWarning: invalid value encountered in divide
       plt.semilogx(time_steps, objectives/finest_objective_results, 'o-')
 
     Text(18.92641051136365, 0.5, 'normalized objective value')
@@ -475,7 +475,7 @@ to the experiment strain points.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x155498ab9b10>
+    <matplotlib.legend.Legend object at 0x155259642a20>
 
 
 
@@ -533,7 +533,7 @@ to observe the effect of the weighting applied.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x15549871cb50>
+    <matplotlib.legend.Legend object at 0x155470374770>
 
 
 
@@ -589,7 +589,7 @@ the raw residuals are clearly not converging in this region.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x155498b33d10>
+    <matplotlib.legend.Legend object at 0x1555169b9220>
 
 
 
@@ -769,7 +769,7 @@ also plot the simulation data curves for each case.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:451: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:451: RuntimeWarning: invalid value encountered in divide
       plt.semilogx(time_steps, objectives/finest_objective_results, 'o-')
 
 
@@ -791,7 +791,7 @@ a recalibration using a model with element sizes of 0.005" and more than 300 tim
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (109 minutes 37.482 seconds)
+   **Total running time of the script:** (116 minutes 26.293 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_d_tension_convergence_study_cluster.py:

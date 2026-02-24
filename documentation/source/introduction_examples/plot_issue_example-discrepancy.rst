@@ -282,14 +282,14 @@ Here, with a nonlinear dependence on the parameters, the bowl does not have perf
  .. code-block:: none
 
 
-    <matplotlib.colorbar.Colorbar object at 0x155519653710>
+    <matplotlib.colorbar.Colorbar object at 0x155517b6c950>
 
 
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.864 seconds)
+   **Total running time of the script:** (0 minutes 1.221 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_plot_issue_example-discrepancy.py:

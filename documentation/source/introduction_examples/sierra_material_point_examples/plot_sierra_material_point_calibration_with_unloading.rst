@@ -243,9 +243,9 @@ but now has time as the independent variable.
  .. code-block:: none
 
     Y: 30.0
-    A: 24.624238789
+    A: 24.624238784
     b: 30.0
-    E: 21229.127112
+    E: 21229.127107
 
 
 
@@ -421,10 +421,10 @@ then launch the updated calibration.
 
  .. code-block:: none
 
-    Y: 42.005870989
-    A: 12.817113785
-    b: 19.016426887
-    E: 8177.8316988
+    Y: 42.005871044
+    A: 12.817113716
+    b: 19.016426948
+    E: 8177.8316967
 
 
 
@@ -445,7 +445,7 @@ compression data since it is well known and documented in the literature.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (4 minutes 32.229 seconds)
+   **Total running time of the script:** (4 minutes 4.204 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_with_unloading.py:

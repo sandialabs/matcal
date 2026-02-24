@@ -474,7 +474,7 @@ The goal is to see whether the objectives are converging to a common value.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/matcal_model_v_and_v/plot_coupling_verification.py:294: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_coupling_verification.py:294: RuntimeWarning: invalid value encountered in divide
       objectives/adiabatic_objective_fine, 'o-')
 
 
@@ -503,7 +503,7 @@ correct any issues and will update the models if an issue is found and resolved.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (115 minutes 49.731 seconds)
+   **Total running time of the script:** (67 minutes 29.379 seconds)
 
 
 .. _sphx_glr_download_matcal_model_v_and_v_plot_coupling_verification.py:

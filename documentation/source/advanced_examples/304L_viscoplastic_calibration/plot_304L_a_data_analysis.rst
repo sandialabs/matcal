@@ -156,8 +156,10 @@ for each of the measured rates.
 
  .. code-block:: none
 
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_a_data_analysis.py:83: SyntaxWarning: invalid escape sequence '\%'
+      'stress at 5\% strain'])
 
-    <matplotlib.legend.Legend object at 0x155443dd3050>
+    <matplotlib.legend.Legend object at 0x155516cfdaf0>
 
 
 
@@ -538,10 +540,10 @@ in the fitting process.
  .. code-block:: none
 
     JC model best fit objective: 0.004652787936813707
-    OrderedDict([('Y_0', 32.444999516), ('C', 0.039894200734)]) 
+    OrderedDict({'Y_0': 32.444999516, 'C': 0.039894200734}) 
 
     PLB model best fit objective: 0.004014596531156934
-    OrderedDict([('Y_0', 33.037043219), ('g_star', 4.0), ('m', 8.3580048779)]) 
+    OrderedDict({'Y_0': 33.037043219, 'g_star': 4.0, 'm': 8.3580048779}) 
 
 
 
@@ -748,11 +750,11 @@ With both studies complete, we can print the results for analysis.
 
  .. code-block:: none
 
-    JC sensitivity results: Y_0: [[0.47821383 0.73988047]]
-    C: [[0.26629951 0.51430298]]
-    PLB sensitivity results: Y_0: [[0.9000381  0.94700364]]
-    g_star: [[0.0365649  0.09332225]]
-    m: [[0.01135753 0.0423483 ]]
+    JC sensitivity results: Y_0: [[0.48219582 0.7043585 ]]
+    C: [[0.25280175 0.49818737]]
+    PLB sensitivity results: Y_0: [[0.85005052 0.91571222]]
+    g_star: [[0.02345957 0.10134016]]
+    m: [[0.00910786 0.04080117]]
 
 
 
@@ -791,7 +793,7 @@ use in the full finite element calibration.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (17 minutes 45.533 seconds)
+   **Total running time of the script:** (35 minutes 22.710 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_a_data_analysis.py:

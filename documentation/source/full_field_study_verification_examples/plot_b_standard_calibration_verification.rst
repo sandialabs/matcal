@@ -81,6 +81,14 @@ the Exodus data from the
 
  .. code-block:: none
 
+
+    You are using exodus.py v 1.21.6 (seacas-py3), a python wrapper of some of the exodus library.
+
+    Copyright (c) 2013-2023 National Technology &
+    Engineering Solutions of Sandia, LLC (NTESS).  Under the terms of
+    Contract DE-NA0003525 with NTESS, the U.S. Government retains certain
+    rights in this software.
+
     Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
     Opening exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
     Closing exodus file: ../../../docs_support_files/synthetic_surf_results_0_degree.e
@@ -382,12 +390,12 @@ and evaluate the error.
 
  .. code-block:: none
 
-    OrderedDict([('yield_stress', 189.84187402), ('A', 1259.197891), ('n', 2.3015639429), ('R11', 0.80004887621), ('R12', 0.93855366394)])
-    Parameter yield_stress error: -5.079062989999997
-    Parameter A error: -16.053473933333333
-    Parameter n error: 15.078197145000004
-    Parameter R11 error: -15.784328819999999
-    Parameter R12 error: 10.418078110588231
+    OrderedDict({'yield_stress': 201.38720848, 'A': 1481.7593516, 'n': 1.9106662899, 'R11': 1.099055052, 'R12': 0.95279046881})
+    Parameter yield_stress error: 0.6936042399999991
+    Parameter A error: -1.2160432266666703
+    Parameter n error: -4.466685505000001
+    Parameter R11 error: 15.690005473684213
+    Parameter R12 error: 12.092996330588234
 
 
 
@@ -452,7 +460,7 @@ full-field methods perform.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (441 minutes 8.749 seconds)
+   **Total running time of the script:** (475 minutes 17.623 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_b_standard_calibration_verification.py:

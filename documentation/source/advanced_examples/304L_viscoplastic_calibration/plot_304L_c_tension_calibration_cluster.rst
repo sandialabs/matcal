@@ -838,11 +838,11 @@ We also print and save the final parameter values.
 
  .. code-block:: none
 
-    Y_0: 33.825310505
-    A: 159.67813277
-    b: 1.9455734901
-    C: -1.4001190142
-    X: 0.95992075755
+    Y_0: 33.825309816
+    A: 159.6781326
+    b: 1.9455735196
+    C: -1.4001190093
+    X: 0.95992077358
 
 
 
@@ -880,7 +880,7 @@ parameters if used.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (13 minutes 29.157 seconds)
+   **Total running time of the script:** (10 minutes 6.843 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_c_tension_calibration_cluster.py:

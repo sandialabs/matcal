@@ -248,21 +248,21 @@
    "is_explicit": false,
    "module": "matcal.core.parameter_studies",
    "module_short": "matcal.core.parameter_studies",
-   "name": "LaplaceStudyBase"
+   "name": "_LaplaceStudyBase"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "matcal.core",
    "module_short": "matcal.core",
-   "name": "LaplaceStudyBase"
+   "name": "_LaplaceStudyBase"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "matcal",
    "module_short": "matcal",
-   "name": "LaplaceStudyBase"
+   "name": "_LaplaceStudyBase"
   },
   {
    "is_class": true,
@@ -3302,21 +3302,21 @@
    "is_explicit": false,
    "module": "matcal.core.parameter_studies",
    "module_short": "matcal.core.parameter_studies",
-   "name": "LaplaceStudyBase.add_evaluation_set"
+   "name": "_LaplaceStudyBase.add_evaluation_set"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal.core",
    "module_short": "matcal.core",
-   "name": "LaplaceStudyBase.add_evaluation_set"
+   "name": "_LaplaceStudyBase.add_evaluation_set"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal",
    "module_short": "matcal",
-   "name": "LaplaceStudyBase.add_evaluation_set"
+   "name": "_LaplaceStudyBase.add_evaluation_set"
   },
   {
    "is_class": false,
@@ -3395,21 +3395,21 @@
    "is_explicit": false,
    "module": "matcal.core.parameter_studies",
    "module_short": "matcal.core.parameter_studies",
-   "name": "LaplaceStudyBase.launch"
+   "name": "_LaplaceStudyBase.launch"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal.core",
    "module_short": "matcal.core",
-   "name": "LaplaceStudyBase.launch"
+   "name": "_LaplaceStudyBase.launch"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal",
    "module_short": "matcal",
-   "name": "LaplaceStudyBase.launch"
+   "name": "_LaplaceStudyBase.launch"
   },
   {
    "is_class": false,
@@ -3488,21 +3488,21 @@
    "is_explicit": false,
    "module": "matcal.core.parameter_studies",
    "module_short": "matcal.core.parameter_studies",
-   "name": "LaplaceStudyBase.set_core_limit"
+   "name": "_LaplaceStudyBase.set_core_limit"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal.core",
    "module_short": "matcal.core",
-   "name": "LaplaceStudyBase.set_core_limit"
+   "name": "_LaplaceStudyBase.set_core_limit"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal",
    "module_short": "matcal",
-   "name": "LaplaceStudyBase.set_core_limit"
+   "name": "_LaplaceStudyBase.set_core_limit"
   },
   {
    "is_class": false,
@@ -3581,21 +3581,21 @@
    "is_explicit": false,
    "module": "matcal.core.parameter_studies",
    "module_short": "matcal.core.parameter_studies",
-   "name": "LaplaceStudyBase.set_parameter_center"
+   "name": "_LaplaceStudyBase.set_parameter_center"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal.core",
    "module_short": "matcal.core",
-   "name": "LaplaceStudyBase.set_parameter_center"
+   "name": "_LaplaceStudyBase.set_parameter_center"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal",
    "module_short": "matcal",
-   "name": "LaplaceStudyBase.set_parameter_center"
+   "name": "_LaplaceStudyBase.set_parameter_center"
   },
   {
    "is_class": false,
@@ -3674,21 +3674,21 @@
    "is_explicit": false,
    "module": "matcal.core.parameter_studies",
    "module_short": "matcal.core.parameter_studies",
-   "name": "LaplaceStudyBase.set_working_directory"
+   "name": "_LaplaceStudyBase.set_working_directory"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal.core",
    "module_short": "matcal.core",
-   "name": "LaplaceStudyBase.set_working_directory"
+   "name": "_LaplaceStudyBase.set_working_directory"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matcal",
    "module_short": "matcal",
-   "name": "LaplaceStudyBase.set_working_directory"
+   "name": "_LaplaceStudyBase.set_working_directory"
   },
   {
    "is_class": false,
@@ -3894,9 +3894,9 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
   },
   {
    "is_class": false,

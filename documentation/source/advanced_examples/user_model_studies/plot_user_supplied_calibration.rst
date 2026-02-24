@@ -392,7 +392,7 @@ calibration results.
 
  .. code-block:: none
 
-    OrderedDict([('K_foam', 0.2243968746), ('K_steel', 40.0)])
+    OrderedDict({'K_foam': 0.2243968746, 'K_steel': 40.0})
 
 
 
@@ -400,7 +400,7 @@ calibration results.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 23.199 seconds)
+   **Total running time of the script:** (1 minutes 26.806 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_user_model_studies_plot_user_supplied_calibration.py:

@@ -364,7 +364,7 @@ can be found at :ref:`Results and Plotting`.
     4.0
 
     Access and print best as dict:
-    OrderedDict([('slope', 5.0), ('y0', 4.0)])
+    OrderedDict({'slope': 5.0, 'y0': 4.0})
 
     Access and print best as list:
     [5.0, 4.0]
@@ -375,7 +375,7 @@ can be found at :ref:`Results and Plotting`.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.479 seconds)
+   **Total running time of the script:** (0 minutes 8.160 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_plot_basic_example_walk_through.py:

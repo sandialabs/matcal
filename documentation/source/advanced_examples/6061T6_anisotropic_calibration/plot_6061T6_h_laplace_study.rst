@@ -517,13 +517,13 @@ step of this example.
  .. code-block:: none
 
     Initial covariance estimate:
-     [[ 113.74200759  -21.13860096 -422.38005402]
-     [ -21.13860096    5.70236701   71.29740466]
-     [-422.38005402   71.29740466 1607.59664067]]
+     [[ 113.66447863  -20.90050619 -422.18930642]
+     [ -20.90050619    5.62379061   70.41401601]
+     [-422.18930642   70.41401601 1607.23724872]]
     Calibrated covariance estimate:
-     [[ 113.74202157  -21.13860224 -463.21297201]
-     [ -21.13860224    5.70236696   79.2936355 ]
-     [-463.21297201   79.2936355  1933.44427648]]
+     [[ 125.77931866  -22.62114298 -485.48255954]
+     [ -22.62114298    5.84238658   77.55667787]
+     [-485.48255954   77.55667787 1915.39817462]]
 
 
 
@@ -563,21 +563,21 @@ object.
  .. code-block:: none
 
     Initial covariance estimate noise set to 1e-2:
-     [[ 113.74200759  -21.13860096 -422.38005402]
-     [ -21.13860096    5.70236701   71.29740466]
-     [-422.38005402   71.29740466 1607.59664067]]
+     [[ 113.66447863  -20.90050619 -422.18930642]
+     [ -20.90050619    5.62379061   70.41401601]
+     [-422.18930642   70.41401601 1607.23724872]]
     Calibrated covariance estimate noise set to 1e-2:
-     [[ 113.74202157  -21.13860224 -463.21297201]
-     [ -21.13860224    5.70236696   79.2936355 ]
-     [-463.21297201   79.2936355  1933.44427648]]
+     [[ 125.77931866  -22.62114298 -485.48255954]
+     [ -22.62114298    5.84238658   77.55667787]
+     [-485.48255954   77.55667787 1915.39817462]]
     Initial covariance estimate noise set to 1e-1:
-     [[ 113.74200757  -21.13860096 -422.38005398]
-     [ -21.13860096    5.702367     71.29740465]
-     [-422.38005398   71.29740465 1607.59664053]]
+     [[ 113.66447862  -20.90050619 -422.18930638]
+     [ -20.90050619    5.62379061   70.414016  ]
+     [-422.18930638   70.414016   1607.23724857]]
     Calibrated covariance estimate noise set to 1e-1:
-     [[ 120.74997769  -21.80160131 -476.01385542]
-     [ -21.80160131    5.68516383   78.37547928]
-     [-476.01385542   78.37547928 1926.73279848]]
+     [[ 116.61950646  -21.1831117  -430.32258055]
+     [ -21.1831117     5.65767236   72.91811568]
+     [-430.32258055   72.91811568 1626.45894062]]
 
 
 
@@ -622,8 +622,8 @@ KDE pair plot
 
  .. code-block:: none
 
-    /projects/aue/hpc/builds/x86_64/rhel8/ba17d7f2/anaconda3/install/linux-rhel8-x86_64/gcc-10.3.0/anaconda3-2023.09-0-zmej2r2/lib/python3.11/site-packages/seaborn/axisgrid.py:118: UserWarning: The figure layout has changed to tight
-      self._figure.tight_layout(*args, **kwargs)
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/matcal/core/parameter_studies.py:919: RuntimeWarning: covariance is not symmetric positive-semidefinite.
+      samples = rng.multivariate_normal(mean, sigma, nsamples).T
 
 
 
@@ -631,7 +631,7 @@ KDE pair plot
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (21 minutes 18.545 seconds)
+   **Total running time of the script:** (25 minutes 24.911 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_h_laplace_study.py:

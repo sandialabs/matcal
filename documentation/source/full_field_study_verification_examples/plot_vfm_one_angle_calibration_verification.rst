@@ -408,11 +408,11 @@ indicating a quality local minima has been identified
 
  .. code-block:: none
 
-    OrderedDict([('yield_stress', 193.16859529), ('A', 1526.016046), ('n', 1.7069587107), ('R11', 0.80379899326), ('R12', 1.1)])
-    Parameter yield_stress error: -3.4157023549999934
-    Parameter A error: 1.734403066666664
-    Parameter n error: -14.652064465000002
-    Parameter R11 error: -15.389579656842098
+    OrderedDict({'yield_stress': 193.16830661, 'A': 1526.0136645, 'n': 1.7069568852, 'R11': 0.80379719168, 'R12': 1.1})
+    Parameter yield_stress error: -3.4158466949999995
+    Parameter A error: 1.7342443000000003
+    Parameter n error: -14.652155739999994
+    Parameter R11 error: -15.389769296842104
     Parameter R12 error: 29.411764705882366
 
 
@@ -485,7 +485,7 @@ we see improved results.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (228 minutes 14.107 seconds)
+   **Total running time of the script:** (281 minutes 36.801 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_vfm_one_angle_calibration_verification.py:

@@ -285,11 +285,11 @@ review the results.
 
  .. code-block:: none
 
-    Y: 36.448349184
-    A1: 12.646207559
-    b1: 17.175431464
-    A2: 5.969872019
-    b2: 541.93038559
+    Y: 36.448349449
+    A1: 12.646207535
+    b1: 17.175431422
+    A2: 5.9698717802
+    b2: 541.93033883
 
 
 
@@ -355,8 +355,8 @@ be more predictive than the single Voce model.
  .. code-block:: none
 
     Y: 30.0
-    A: 29.687267431
-    n: 0.13423693231
+    A: 29.687098179
+    n: 0.13423214405
 
 
 
@@ -427,9 +427,9 @@ would likely over predict plastic strains.
  .. code-block:: none
 
     Y: 42.443961545
-    A: 16.569606628
-    n: 0.21517177518
-    epsilon_l: 0.014951665737
+    A: 16.56960652
+    n: 0.2151717716
+    epsilon_l: 0.014951666047
 
 
 
@@ -460,7 +460,7 @@ and hopefully some validation experiments and simulations to choose a final mate
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (8 minutes 37.616 seconds)
+   **Total running time of the script:** (7 minutes 36.796 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_z_model_forms.py:

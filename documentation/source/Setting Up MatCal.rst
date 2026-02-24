@@ -402,6 +402,7 @@ the value of the decay constant(k) is assigned using jinja in the file we will u
 this case. 
 
 .. code-block:: python
+    
     # Content of solve_decay.py
     import numpy as np
     from scipy.integrate import odeint

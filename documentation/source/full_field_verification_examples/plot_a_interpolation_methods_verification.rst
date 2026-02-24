@@ -535,7 +535,7 @@ but the search radius can be increase significantly.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 22.591 seconds)
+   **Total running time of the script:** (1 minutes 50.205 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_a_interpolation_methods_verification.py:

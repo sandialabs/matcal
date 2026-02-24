@@ -183,7 +183,7 @@ class BatchRestartCSV(BatchRestartBase):
             self._restart_file = open(full_path_restart_filename, write_or_append)
         except FileNotFoundError:
             raise FileNotFoundError(f"The restart file \"{full_path_restart_filename}\" "+
-                                    "does not exist. Check input.")
+                                    "cannot be opened. Check input.")
 
     def _get_finished_jobs_info(self, full_path_restart_filename):
         finished_jobs = {}

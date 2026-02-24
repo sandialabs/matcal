@@ -6,7 +6,7 @@ import unittest
 
 from matcal.core.adaptive_surrogates import (
     SparseGridAdaptiveSurrogateStudy,
-    _get_parameter_bounds, AdaptiveSurrogate, SparseGridAdaptiveSurrogate,
+    _get_parameter_bounds, SparseGridAdaptiveSurrogate,
     VoronoiAdaptiveSurrogateStudy, VoronoiTessellation, 
     LeaveOneOutCrossValidation, KFoldCrossValidation)
 from matcal.core.data import convert_dictionary_to_data
@@ -209,7 +209,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         test_dir = os.path.abspath("test_samples")
         self.assertTrue(os.path.isdir(test_dir))
 
-        self.study._reset_study_after_test_sampling_generation(None)
+        self.study._reset_study_after_test_sampling_generation(None, True)
         self.study.set_working_directory("work")
         test_dir = os.path.abspath("work_test_samples")
         self.study.launch()
@@ -503,6 +503,52 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertEqual(self.study.surrogate_save_filename, "my_surrogate_name.joblib")
 
 
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_study_set_test_data_as_study_result(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        self.simple_parameters =(p1, p2)
+        self.test_study = HaltonStudy(*self.simple_parameters)
+        self.test_study.set_number_of_samples(50)
+        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
+
+        results = self.test_study.launch()
+        self.study.set_test_data(results)
+        results = self.study.launch()
+        self.assertFalse(os.path.exists("test_samples"))
+        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_study_set_test_data_as_string(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        self.simple_parameters =(p1, p2)
+        self.test_study = HaltonStudy(*self.simple_parameters)
+        self.test_study.set_number_of_samples(50)
+        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
+
+        results = self.test_study.launch()
+        self.study.set_test_data("final_results.joblib")
+        results = self.study.launch()
+        self.assertFalse(os.path.exists("test_samples"))
+        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+
+
+
 class IdentityTransformer:
     """
     Minimal transformer that implements the two methods used by AdaptiveSurrogate.
@@ -792,6 +838,7 @@ class _FakeSurrogate:
     def __init__(self):
         self._average_errors = []   # filled by the test
         self._max_errors = []       # filled by the test
+        self._r2_scores = []
 
     @property
     def average_error_history(self):
@@ -800,6 +847,9 @@ class _FakeSurrogate:
     @property
     def max_error_history(self):
         return self._max_errors
+
+    def score(self, index=-1):
+        return self._r2_scores[index]
 
 
 class _FakeResults:
@@ -841,14 +891,17 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         # populate error histories with values *below* the goals – they must be ignored
         self.study._surrogate._average_errors = [0.0]   # below 1e‑2
         self.study._surrogate._max_errors = [0.0]       # below 1e‑1
+        self.study._surrogate._r2_scores = [0.0]
         self.study._results.number_of_evaluations = 0   # far below max_training_samples
 
-        should_stop = self.study._stopping_criterion_met(training_batch_number=1)
+        should_stop = self.study._stopping_criterion_met(training_batch_number=0)
         self.assertFalse(should_stop, "Stopping should NOT be triggered on the first batch")
 
     def test_stop_on_average_l2_error(self):
         self.study._surrogate._average_errors = [5e-3]   # < 1e‑2 goal
         self.study._surrogate._max_errors = [0.5]       # > goal (irrelevant)
+        self.study._surrogate._r2_scores = [0.5]
+
         self.study._results.number_of_evaluations = 0
 
         should_stop = self.study._stopping_criterion_met(training_batch_number=2)
@@ -858,6 +911,8 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
     def test_stop_on_max_absolute_error(self):
         self.study._surrogate._average_errors = [0.5]   # > goal (doesn't matter)
         self.study._surrogate._max_errors = [5e-2]      # < 1e‑1 goal
+        self.study._surrogate._r2_scores = [0.5]
+
         self.study._results.number_of_evaluations = 0
 
         should_stop = self.study._stopping_criterion_met(training_batch_number=3)
@@ -868,6 +923,8 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         # Set error histories to values that would *not* normally trigger a stop
         self.study._surrogate._average_errors = [1.0]   # > goal
         self.study._surrogate._max_errors = [1.0]      # > goal
+        self.study._surrogate._r2_scores = [0.5]
+
 
         # Simulate that the study has already used more samples than allowed.
         # The parent class stores the limit in `_max_training_samples`; we set it
@@ -883,6 +940,7 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
     def test_no_stop_when_all_conditions_fail(self):
         self.study._surrogate._average_errors = [0.2]   # > 1e‑2
         self.study._surrogate._max_errors = [0.3]      # > 1e‑1
+        self.study._surrogate._r2_scores = [0.5]
         self.study._max_training_samples = 1000
         self.study._results.number_of_evaluations = 500   # below limit
 
@@ -1464,7 +1522,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         
     def test_initialization(self):
         self.kfold = KFoldCrossValidation(5, False, 'x', [0,1], None, 'rmse', 
-                                          None)
+                                         'y', None, {})
 
         self.assertEqual(self.kfold.nsplits, 5)
         self.assertFalse(self.kfold.group_kfold)
@@ -1478,7 +1536,9 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                         'scale': 'cbrt', 'metric':'nlpd',
                         'interpolation_field': 'x',
                         'interpolation_values':self.test_points,                         
-                        'param_names': ['a', 'b']
+                        'param_names': ['a', 'b'],
+                        'target_field':'f', 
+                        'surrogate_options':{}
                         }
         self.kfold = KFoldCrossValidation(**kfcv_options)
         self.assertEqual(self.kfold.nsplits, 4)
@@ -1493,7 +1553,9 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                         'scale': 'cbrt', 'metric':'nlpd',
                         'interpolation_field': 'x',
                         'interpolation_values':self.test_points,                         
-                        'param_names': ['a', 'b']
+                        'param_names': ['a', 'b'],
+                        'target_field':'f', 
+                        'surrogate_options':{}
                         } 
         self.kfold = KFoldCrossValidation(**kfcv_options)
         self.kfold._check_npslits(np.zeros((5,2)))
@@ -1511,7 +1573,9 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                         'metric': 'rmse',
                         'interpolation_field': 'x',
                         'interpolation_values':self.test_points,                         
-                        'param_names': ['a', 'b']}  
+                        'param_names': ['a', 'b'],
+                        'target_field':'f', 
+                        'surrogate_options':{}}  
         self.kfold = KFoldCrossValidation(**kfcv_options)
         kf_results = self.kfold.perform_kfold_cv(self.X, self.y, groups)
         self.assertTrue(len(kf_results) == nsplits)
@@ -1523,7 +1587,9 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                         'metric': 'rmse',
                         'interpolation_field':'x',
                         'interpolation_values':self.test_points,                         
-                        'param_names':['a', 'b']}
+                        'param_names':['a', 'b'],
+                        'target_field':'f', 
+                        'surrogate_options':{}}
         self.kfold = KFoldCrossValidation(**kfcv_options)
         kf_results = self.kfold.perform_kfold_cv(self.X, self.y, None)
        
@@ -1552,7 +1618,9 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                         'metric': 'rmse',
                         'interpolation_field':'x',
                         'interpolation_values':self.test_points,                         
-                        'param_names':['a', 'b']}
+                        'param_names':['a', 'b'], 
+                        'target_field':'f', 
+                        'surrogate_options':{}}
         self.kfold = KFoldCrossValidation(**kfcv_options)
         self.kfold.X = self.X
         self.kfold.y = self.y
@@ -1575,7 +1643,9 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         loocv_options = {'scale': None, 'metric':'rmse',
                         'interpolation_field': 'x',
                         'interpolation_values':self.test_points, 
-                        'par_names': None
+                        'par_names': None, 
+                        'target_field':'f', 
+                        'surrogate_options':{}
                         }
         self.loocv = LeaveOneOutCrossValidation(**loocv_options)
         self.assertIsNone(self.loocv.scale)
@@ -1599,7 +1669,9 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         loocv_options = {'scale': None, 'metric':'nlpd',
                     'interpolation_field': 'x',
                         'interpolation_values':self.test_points, 
-                        'par_names': ['a', 'b']
+                        'par_names': ['a', 'b'],
+                        'target_field':'f', 
+                        'surrogate_options':{}
                         }
         self.loocv = LeaveOneOutCrossValidation(**loocv_options)
         loo_results = self.loocv.perform_loocv(self.X, self.y, indices)

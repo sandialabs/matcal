@@ -677,7 +677,7 @@ colocated HWD is the default HWD method in MatCal.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (20 minutes 24.090 seconds)
+   **Total running time of the script:** (109 minutes 39.874 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_j_hwd_methods_verification.py:

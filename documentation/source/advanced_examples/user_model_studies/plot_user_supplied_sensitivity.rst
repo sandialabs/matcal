@@ -232,13 +232,13 @@ Now all that is left to do is to launch the study and wait for our results.
  .. code-block:: none
 
     Pearson coefficients
-     K_foam: [     nan 0.999576 0.995996 0.992275 0.988922 0.986295 0.984284 0.982768
-     0.981679 0.980925 0.980216      nan 0.999569 0.995994 0.992268 0.988906
-     0.986269 0.984248 0.982721 0.981622 0.980858 0.980139]
-    K_steel: [       nan -0.0759919  0.0808674  0.0978889  0.103245   0.104357
-      0.103263   0.100556   0.0963701  0.0908706  0.0844149        nan
-      0.240939   0.16384    0.157297   0.157191   0.159018   0.161274
-      0.163555   0.165676   0.167387   0.169073 ]
+     K_foam: [     nan 0.999528 0.995936 0.992279 0.989029 0.986511 0.984599 0.983165
+     0.982134 0.981413 0.980732      nan 0.999548 0.995984 0.992346 0.989114
+     0.986616 0.984725 0.983314 0.982309 0.981615 0.980965]
+    K_steel: [       nan -0.200358  -0.133949  -0.132451  -0.137034  -0.143376
+     -0.150147  -0.157224  -0.164632  -0.172227  -0.180501         nan
+      0.0855372 -0.0546177 -0.0747372 -0.084218  -0.0896342 -0.0929785
+     -0.0950772 -0.0962743 -0.0968421 -0.0972399]
 
 
 
@@ -494,7 +494,7 @@ another set of data to help us study the steel.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (33 minutes 40.050 seconds)
+   **Total running time of the script:** (19 minutes 29.609 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_user_model_studies_plot_user_supplied_sensitivity.py:

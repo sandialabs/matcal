@@ -826,7 +826,7 @@ and written to a file after it finished.
 
  .. code-block:: none
 
-    OrderedDict([('yield_stress', 43.466890299), ('hardening', 11.540764702), ('b', 12.397622148), ('R22', 1.0168755292), ('R33', 0.97813235629), ('R12', 0.96795111031), ('R23', 0.92103510217), ('R31', 0.91096387184)])
+    OrderedDict({'yield_stress': 43.468473637, 'hardening': 11.542110358, 'b': 12.38787657, 'R22': 1.0168744902, 'R33': 0.97813744911, 'R12': 0.96795492909, 'R23': 0.92103910221, 'R31': 0.91096757893})
 
 
 
@@ -917,7 +917,7 @@ calibration has been achieved.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (116 minutes 38.494 seconds)
+   **Total running time of the script:** (79 minutes 57.420 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_c_anisotropy_calibration_cluster.py:

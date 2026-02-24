@@ -18,6 +18,7 @@ from matcal.core.surrogates import (_ReconstructionDecomposition,
                                     _make_parameter_scaler_set,  
                                     _package_parameter_ranges, _parse_evaluation_info, 
                                     _process_data_for_surrogate, _process_interpolation_locations, 
+                                    _process_surrogate_args_call,
                                     _scale_data_for_surrogate, _score_recreation,
                                     _tune_data_decomposition, 
                                     _WorstEvaluations, _select_state_data, _select_model, 
@@ -878,3 +879,57 @@ class TestSurrogateGenerator(MatcalUnitTest):
                 out_data[f'var_{i_var}'] = np.array(record)
             matcal_save('passed_failed_parameters.joblib', out_data)
         self.assertTrue(N_passed / (N_failed + N_passed) > .9)
+
+
+class TestProcessSurrogateArgsCall(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_batch_evaluate_array(self):
+        """batch_evaluate=True should return the input array unchanged (as float)."""
+        arr = np.array([[1, 2], [3, 4]], dtype=float)
+        out = _process_surrogate_args_call(['a', 'b'], arr, batch_evaluate=True)
+        np.testing.assert_array_equal(out, arr)
+
+    def test_dict_argument_respects_order(self):
+        """When a single dict is passed, the resulting array must follow `param_names` order."""
+        param_names = ['alpha', 'beta']
+        data = {'beta': [10, 20], 'alpha': [1, 2]}  # order intentionally swapped
+        out = _process_surrogate_args_call(param_names, data)
+        expected = np.array([[1, 10],
+                             [2, 20]], dtype=float)
+        np.testing.assert_array_equal(out, expected)
+
+    def test_positional_arguments_match_param_names(self):
+        """Exact positional arguments equal to the number of parameters should be returned."""
+        param_names = ['x', 'y', 'z']
+        out = _process_surrogate_args_call(param_names, 1, 2, 3)
+        expected = np.array([1, 2, 3], dtype=float)
+        np.testing.assert_array_equal(out, expected)
+
+    def test_keyword_arguments_match_param_names(self):
+        """All parameters supplied as keywords should be converted to the correct array."""
+        param_names = ['x', 'y', 'z']
+        out = _process_surrogate_args_call(param_names, x=1, y=2, z=3)
+        expected = np.array([1, 2, 3], dtype=float)
+        np.testing.assert_array_equal(out, expected)
+
+    def test_invalid_mixed_positional_and_kwargs(self):
+        """Providing a mix of positional args and kwargs should raise RuntimeError."""
+        param_names = ['x', 'y', 'z']
+        with self.assertRaises(RuntimeError):
+            _process_surrogate_args_call(param_names, 1, 2, y=3)
+
+    def test_invalid_wrong_number_of_positional(self):
+        """Supplying fewer positional arguments than required should raise RuntimeError."""
+        param_names = ['a', 'b', 'c']
+        with self.assertRaises(RuntimeError):
+            _process_surrogate_args_call(param_names, 1, 2)  # only two values provided
+
+    def test_dict_missing_parameter(self):
+        """A dict missing any of the required parameter names should raise RuntimeError."""
+        param_names = ['a', 'b']
+        data = {'a': [1, 2]}  # 'b' is missing
+        with self.assertRaises(RuntimeError):
+            _process_surrogate_args_call(param_names, data)

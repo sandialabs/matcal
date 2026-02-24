@@ -253,7 +253,7 @@ The contour plot depicts the change in error.
  .. code-block:: none
 
 
-    <matplotlib.colorbar.Colorbar object at 0x1555195b2fd0>
+    <matplotlib.colorbar.Colorbar object at 0x155517c05ee0>
 
 
 
@@ -309,8 +309,8 @@ that a different value of Y has been provided.
 
  .. code-block:: none
 
-    Initial best: OrderedDict([('Y', 0.5), ('H', 1.5)])
-    Updated best: OrderedDict([('Y', 0.1), ('H', 1.5)])
+    Initial best: OrderedDict({'Y': 0.5, 'H': 1.5})
+    Updated best: OrderedDict({'Y': 0.1, 'H': 1.5})
 
 
 
@@ -376,8 +376,8 @@ the hessian with respect to Y is essentially zero at this point.
  .. code-block:: none
 
     ['Y', 'H']
-    [[-3.01729085e-26 -2.08166817e-14]
-     [-2.08166817e-14  2.45934013e-01]]
+    [[1.04372529e-17 5.76634997e-10]
+     [5.76634997e-10 2.45934010e-01]]
 
 
 
@@ -424,7 +424,7 @@ We have to find the new minimum before evaluating at the hessian.
 
  .. code-block:: none
 
-    OrderedDict([('Y', 0.88570574171), ('H', 1.5953968607)])
+    OrderedDict({'Y': 0.88570574171, 'H': 1.5953968607})
 
 
 
@@ -461,10 +461,10 @@ and inspect the new results.
  .. code-block:: none
 
     ['Y', 'H']
-    [[ 0.00121663 -0.00386305]
-     [-0.00386305  0.01880229]]
-    (array([0.00040545, 0.01961348]), array([[-0.97865652,  0.20550281],
-           [-0.20550281, -0.97865652]]))
+    [[ 0.00195312 -0.00439453]
+     [-0.00439453  0.02246094]]
+    EigResult(eigenvalues=array([0.00105111, 0.02336295]), eigenvectors=array([[-0.97957772,  0.20106587],
+           [-0.20106587, -0.97957772]]))
 
 
 
@@ -486,7 +486,7 @@ the one shown here.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.241 seconds)
+   **Total running time of the script:** (0 minutes 3.187 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_plot_issue_example-identifiability.py:

@@ -48,7 +48,7 @@ simultaneous batches.
 To generate a surrogate that predicts the heating behavior for a given set of boundary conditions,
 we start this example by importing MatCal and numpy.
 """
-# sphinx_gallery_thumbnail_number = 6
+# sphinx_gallery_thumbnail_number = 3
 import matcal as mc
 import numpy as np
 
@@ -100,11 +100,14 @@ my_objective = mc.SimulationResultsSynchronizer('time', indep_field_vals,
 my_hifi_model = mc.UserDefinedSierraModel('aria', "aria_model/metal_foam_layers.i", 
                                           "aria_model/test_block.g", "aria_model/include")
 my_hifi_model.set_results_filename("results/results.csv")
-my_hifi_model.set_number_of_cores(12)
+my_hifi_model.set_number_of_cores(2)
 from site_matcal.sandia.tests.utilities import MATCAL_WCID
+from site_matcal.sandia.computing_platforms import is_sandia_cluster
+if is_sandia_cluster():
+    my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
+    my_hifi_model.continue_when_simulation_fails()
+    my_hifi_model.set_number_of_cores(12)
 
-my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
-my_hifi_model.continue_when_simulation_fails()
 #%%
 # Now we have all of our necessary components for a LHS study. We pass our 
 # model and objective into the study. We then tell our study 
@@ -113,9 +116,13 @@ my_hifi_model.continue_when_simulation_fails()
 # and runs in a reasonable amount of time. Depending on the complexity of your problem, 
 # a larger sample set may be required (1000-10000). 
 sampling_study.add_evaluation_set(my_hifi_model, my_objective)
-sampling_study.set_core_limit(250)
+if is_sandia_cluster():
+    sampling_study.set_core_limit(250)
+else:
+    sampling_study.set_core_limit(112)
 sampling_study.set_number_of_samples(500)
 sampling_study.set_seed(12345)
+sampling_study.set_working_directory("standard_surrogate_training", remove_existing=True)
 
 #%%
 # With our study defined, we run it and wait for it to complete. 
@@ -211,16 +218,47 @@ print('Test scores:\n', surrogate.scores['test'])
 #    
 # Now we use the surrogate to make predictions of the model 
 # responses. 
-# To do so, we pass in an array of parameters that we want evaluated.
+# To do so, we pass in an argument list or 
+# keyword argument list for the parameters that we want evaluated.
 # The surrogate will return a dictionary of predictions.  
 # The order of the parameters is the same order that they were 
 # passed into the the parameter collection or study, but this can be verified by 
 # calling :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.parameter_order`.
+# If keyword arguments are used, the keywords must match the parameter names 
+# assigned in the :class:`~matcal.core.parameters.Parameter` object inits.
 H = 10
 T_inf = 600
 T_air = 400
 
-prediction = surrogate([H, T_inf, T_air])
+#%%
+# By default, the surrogates will not allow evaluations outside of the 
+# parameter space ranges provided in the combined test and training data sets.
+# Usually, the specified parameter bounds will not be included in the samples
+# generated from a parameter sampling study as done above. To permit evaluations at the bounds, 
+# you can update the permissible parameter ranges using 
+# :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.set_parameter_ranges`
+# as we do below. Since we modified the surrogate, we also have to 
+# save the surrogate so that the changes are in the stored surrogate
+# just in case we attempt to use it later.
+surrogate.set_parameter_ranges(H=[conv_heat_transfer_coeff.get_lower_bound(), 
+                                  conv_heat_transfer_coeff.get_upper_bound()], 
+                               T_inf=[far_field_temperature.get_lower_bound(), 
+                                      far_field_temperature.get_upper_bound()],
+                               T_air=[air_temperature.get_lower_bound(), 
+                                      air_temperature.get_upper_bound()])
+#%%
+# Since we modified the surrogate, we must 
+# save the surrogate so that the changes are in the stored surrogate
+# just in case we attempt to use it later.
+# It is saved using the :func:`~matcal.core.serializer_wrapper.matcal_save`
+# function.
+mc.matcal_save("layered_metal_bc_surrogate.joblib", surrogate)
+#%%
+# With the parameter ranges updated, we can no evaluate 
+# the surrogate with our desired parameters. 
+# This evaluation includes T_air = 400, which 
+# was the user specified bound for the training data study.
+prediction = surrogate(H, T_inf, T_air)
 
 import matplotlib.pyplot as plt
 plt.close('all')
@@ -236,16 +274,13 @@ plt.show()
 #%% 
 # Multiple sets of parameters can be evaluated simultaneously. 
 # Each field in the returned prediction will have a number of rows equal to 
-# the number of passed parameter sets.
-H = 10
-T_inf = 600
-T_air = 400
-
+# the number of passed parameter sets. To evaluate multiple parameter sets, 
+# pass the `batch_evaluate=True` keyword argument
 H2 = 20
 T_inf2 = 815
 T_air2 = 634
 
-prediction2 = surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]])
+prediction2 = surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]], batch_evaluate=True)
 
 #%%
 # We can also run the actual model for these parameters for comparison 
@@ -257,8 +292,8 @@ param_study = mc.ParameterStudy(conv_heat_transfer_coeff, far_field_temperature,
                                  air_temperature)
 param_study.add_evaluation_set(my_hifi_model, my_objective)
 param_study.set_core_limit(16)
-param_study.add_parameter_evaluation(H=10, T_inf=600, T_air=400)
-param_study.add_parameter_evaluation(H=20, T_inf=815, T_air=634)
+param_study.add_parameter_evaluation(H=H, T_inf=T_inf, T_air=T_air)
+param_study.add_parameter_evaluation(H=H2, T_inf=T_inf2, T_air=T_air2)
 results = param_study.launch()
 
 #%% 
@@ -342,8 +377,30 @@ plt.show()
 # If needed, we can load this surrogate again for future use by constructing a 
 # :class:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate`, with the saved filename
 # created during the surrogate's generation. 
-from matcal.core.surrogates import load_matcal_surrogate
-loaded_surrogate = load_matcal_surrogate("layered_metal_bc_surrogate.joblib")
+loaded_surrogate = mc.matcal_load("layered_metal_bc_surrogate.joblib")
+loaded_prediction2 = loaded_surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]], 
+                                      batch_evaluate=True)
+
+#%%
+# In the follow-on examples, we compare this surrogate to adaptive surrogates. 
+# To do so, we evaluate the surrogate over a Halton sampling of the 
+# parameter space with a given seed. We then compare the maximum average error
+# in the surrogate give 500 non-adaptive training samples to the adaptive surrogates
+# in the other examples.
+test_study = mc.HaltonStudy(conv_heat_transfer_coeff, far_field_temperature, 
+                                        air_temperature)
+test_study.add_evaluation_set(my_hifi_model, my_objective)
+test_study.set_core_limit(250)
+test_study.set_number_of_samples(30)
+test_study.set_seed(12345)
+test_study.set_working_directory("standard_surrogate_test", remove_existing=True)
+test_results = test_study.launch()
+
+#%%
+# 
+surrogate_generator.set_surrogate_details(training_fraction=1.0, test_eval_info=test_results)
+surrogate = surrogate_generator.generate("layered_metal_bc_surrogate")
+print(surrogate.max_errors)
 
 #%%
 # Lastly, the surrogate can be investigated in an interactive manner using 

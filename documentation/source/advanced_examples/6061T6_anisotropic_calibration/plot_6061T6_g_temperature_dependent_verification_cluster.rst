@@ -385,7 +385,7 @@ as was done in :ref:`6061T6 aluminum temperature dependent calibration`.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_g_temperature_dependent_verification_cluster.py:227: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_g_temperature_dependent_verification_cluster.py:227: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
       cmap = cm.get_cmap("RdYlBu")
     No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
     No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
@@ -457,7 +457,7 @@ for most circumstances.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (5 minutes 10.675 seconds)
+   **Total running time of the script:** (7 minutes 58.263 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_g_temperature_dependent_verification_cluster.py:

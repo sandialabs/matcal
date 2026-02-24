@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:36.655** total execution time for 6 files **from introduction_examples**:
+**00:46.381** total execution time for 6 files **from introduction_examples**:
 
 .. container::
 
@@ -33,19 +33,19 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_introduction_examples_plot_parameter_uncertainty_quantification.py` (``plot_parameter_uncertainty_quantification.py``)
-     - 00:24.784
+     - 00:31.769
      - 0.0
    * - :ref:`sphx_glr_introduction_examples_plot_basic_example_walk_through.py` (``plot_basic_example_walk_through.py``)
-     - 00:08.479
-     - 0.0
-   * - :ref:`sphx_glr_introduction_examples_plot_issue_example-noise.py` (``plot_issue_example-noise.py``)
-     - 00:01.286
+     - 00:08.160
      - 0.0
    * - :ref:`sphx_glr_introduction_examples_plot_issue_example-identifiability.py` (``plot_issue_example-identifiability.py``)
-     - 00:01.241
+     - 00:03.187
+     - 0.0
+   * - :ref:`sphx_glr_introduction_examples_plot_issue_example-noise.py` (``plot_issue_example-noise.py``)
+     - 00:02.043
      - 0.0
    * - :ref:`sphx_glr_introduction_examples_plot_issue_example-discrepancy.py` (``plot_issue_example-discrepancy.py``)
-     - 00:00.864
+     - 00:01.221
      - 0.0
    * - :ref:`sphx_glr_introduction_examples_a_python_primer.py` (``a_python_primer.py``)
      - 00:00.000

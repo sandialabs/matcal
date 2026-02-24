@@ -712,7 +712,7 @@ planned for future releases.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (20 minutes 10.236 seconds)
+   **Total running time of the script:** (20 minutes 21.106 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_hwd_methods_verification_not_collocated.py:

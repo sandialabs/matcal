@@ -426,6 +426,8 @@ the engineering stress at 3% strain.
 
  .. code-block:: none
 
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_a_anisotropy_data_analysis.py:252: SyntaxWarning: invalid escape sequence '\%'
+      plt.ylabel("stress at 3\% strain (psi)")
     0.026156214170045298
 
 
@@ -488,7 +490,7 @@ finite element calibration for the material model.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.817 seconds)
+   **Total running time of the script:** (0 minutes 4.212 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_a_anisotropy_data_analysis.py:

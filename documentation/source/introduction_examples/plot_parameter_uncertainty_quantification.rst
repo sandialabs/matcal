@@ -511,7 +511,7 @@ for the .
     [[5e-05, 0.0], [0.0, 5e-05]]
 
 
-    % Error: 277.57929617175
+    % Error: 277.5792961717505
 
 
 
@@ -565,7 +565,7 @@ on the predicted parameter uncertainty..
     [[5e-05, 0.0], [0.0, 5e-05]]
 
 
-    % Error: 3.5796769584688963
+    % Error: 3.5796769584691197
 
 
 
@@ -583,7 +583,7 @@ is approaching the expected value.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 24.784 seconds)
+   **Total running time of the script:** (0 minutes 31.769 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_plot_parameter_uncertainty_quantification.py:

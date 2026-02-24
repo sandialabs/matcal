@@ -149,7 +149,7 @@ over the temperature range that we have data (533 - 1032 R).
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_f_temperature_dependent_calibration_cluster.py:73: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/6061T6_anisotropic_calibration/plot_6061T6_f_temperature_dependent_calibration_cluster.py:73: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed two minor releases later. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap(obj)`` instead.
       cmap = cm.get_cmap("RdYlBu")
 
 
@@ -920,9 +920,9 @@ values from the calibration results.
 
  .. code-block:: none
 
-    [1, 0.93321645989, 0.8078488056, 0.29267333282]
-    [1, 0.74212888133, 0.10733859627, 0.070436045887]
-    [1, 1.2341267531, 0.95011947686, 4.9946063722]
+    [1, 0.93311096465, 0.78391735862, 0.29237817182]
+    [1, 0.74204985974, 0.20815247653, 0.071345901932]
+    [1, 1.2367852356, 1.0123458802, 5.1355335093]
 
 
 
@@ -1126,7 +1126,7 @@ is technically not calibrated.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (76 minutes 55.450 seconds)
+   **Total running time of the script:** (37 minutes 55.315 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_f_temperature_dependent_calibration_cluster.py:

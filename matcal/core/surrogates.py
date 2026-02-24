@@ -34,8 +34,9 @@ class _VarianceDecomposition:
     def __init__(self, goal_variance):
         self._goal_variance = goal_variance
         
-    def generate(self, source_data, make_log_scale):
-        return _convert_data_and_make_basis(source_data, self._goal_variance, make_log_scale)
+    def generate(self, source_data, make_log_scale, logger_on=True):
+        return _convert_data_and_make_basis(source_data, self._goal_variance, make_log_scale, 
+                                            logger_on)
     
 
 class _ReconstructionDecomposition:
@@ -43,8 +44,9 @@ class _ReconstructionDecomposition:
     def __init__(self, reconstruction_tol:float):
         self._reconstruction_tol = reconstruction_tol
         
-    def generate(self, source_data, make_log_scale):
-        return _tune_data_decomposition(source_data, make_log_scale,  self._reconstruction_tol)
+    def generate(self, source_data, make_log_scale, logger_on=True):
+        return _tune_data_decomposition(source_data, make_log_scale,  self._reconstruction_tol, 
+                                        logger_on)
 
 
 class SurrogateGenerator:
@@ -493,9 +495,8 @@ def _process_data_for_surrogate(source_data_list, fields_of_interest,
         for field in fields_of_interest:
             data_field = data[field]
             if interpolation_locations is not None and interpolation_field is not None:
-                data_field =  _time_interpolate(interpolation_locations, 
-                                                data[interpolation_field], 
-                                                data_field)
+                data_field =  np.interp(interpolation_locations, 
+                                        data[interpolation_field], data_field)
             processed_data[field][idx, :] = data_field
     return processed_data
 
@@ -579,30 +580,30 @@ def _scale_data_for_surrogate(data_array, make_log=False):
     return scaled_data, scaler
 
 
-def _decompose_with_pca(data, var_tol):
+def _decompose_with_pca(data, var_tol, logger_on=True):
     """
     Expects data as n_samples x n_features
     """
     from sklearn.decomposition import PCA
     pca = PCA(n_components=var_tol, svd_solver='full')
     transformed_data = pca.fit_transform(data)
-    if isinstance(var_tol, Integral):
+    if isinstance(var_tol, Integral) and logger_on:
         logger.info(f"\tGenerated PCA decomposition with {pca.n_components_} components.")
-    elif isinstance(var_tol, Real):
+    elif isinstance(var_tol, Real) and logger_on:
         logger.info(f"\tGenerated PCA decomposition with {pca.n_components_}"
                     f" components using {var_tol} variance explanation.")
-    else:
+    elif logger_on:
         logger.info(f"\tGenerated PCA decomposition with {pca.n_components_}"
                     f" components using option \'{var_tol}\'.")
     return transformed_data, pca
 
 
-def _use_pca_to_decompose_if_many_features(data, var_tol=.99):
+def _use_pca_to_decompose_if_many_features(data, var_tol=.99, logger_on=True):
     """
     Expects data as n_samples x n_features
     """
     if data.shape[1] > 15:
-        return _decompose_with_pca(data, var_tol)
+        return _decompose_with_pca(data, var_tol, logger_on)
     else:
         return data, _DoNothingDataTransformer()
 
@@ -618,23 +619,25 @@ def _package_parameter_ranges(param_history):
     return out_dict
 
 
-def _convert_data_and_make_basis(source_data, decomp_variance, make_log_scale):
+def _convert_data_and_make_basis(source_data, decomp_variance, make_log_scale, logger_on=True):
     scaled_data, data_scaler = _scale_data_for_surrogate(source_data, make_log_scale)
-    latent_data, decomposer = _use_pca_to_decompose_if_many_features(scaled_data, decomp_variance)
+    latent_data, decomposer = _use_pca_to_decompose_if_many_features(scaled_data, decomp_variance, 
+                                                                     logger_on)
     latent_data = _ensure_2d_array(latent_data)
     scaled_latent_data, latent_scaler = _scale_data_for_surrogate(latent_data)
     return data_scaler,decomposer,scaled_latent_data,latent_scaler
 
 
 def _tune_data_decomposition(source_data, make_log_scale, reconstruction_error_tol:float=1e-3, 
-                             max_modes:int=10):
+                             max_modes:int=10, logger_on=True):
     scaled_data, data_scaler = _scale_data_for_surrogate(source_data, make_log_scale)
     logger.info("  Tuning decomposition to meet recreation error tolerance of "+
                 f"{reconstruction_error_tol}, up to a limit of {max_modes} modes")
     for mode_count in range(max_modes):
         kept_modes = mode_count + 1
         logger.info(f"    Analyzing {kept_modes} mode decomposition")
-        latent_data, decomposer = _use_pca_to_decompose_if_many_features(scaled_data, kept_modes)
+        latent_data, decomposer = _use_pca_to_decompose_if_many_features(scaled_data, kept_modes, 
+                                                                         logger_on)
         recreated_data = decomposer.inverse_transform(latent_data)
         error = scaled_data - recreated_data
         max_error_rel = np.amax(error) / np.amax(scaled_data)
@@ -680,8 +683,19 @@ class MatCalSurrogateBase(ABC):
     
     @property
     def scores(self):
+        """
+        The test and train R2 scores for the surrogate.
+        """
         return self._r2_scores
-        
+
+    @property
+    def max_errors(self):
+        """
+        The test and train max errors for the surrogate in 
+        the given field's units.
+        """
+        return self._max_scores
+
     @abstractmethod
     def __call__(self, parameters)-> OrderedDict:
         """"""
@@ -804,9 +818,9 @@ class MatCalSurrogateBase(ABC):
                                    f"Received ranges for parameters {list(param_ranges.keys())}.")
         self._param_ranges = param_ranges
 
-def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_tool):
+def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_tool, logger_on=True):
     combined_data = np.vstack([train_data, test_data])
-    decomp_results = decomposition_tool.generate(combined_data, make_log_scale)
+    decomp_results = decomposition_tool.generate(combined_data, make_log_scale, logger_on)
     data_scaler, decomposer, scaled_latent_data, latent_scaler = decomp_results
     scaled_latent_test_data = _apply_decomposing_and_scaling_to_data(test_data, data_scaler, 
                                                                      decomposer, latent_scaler)
@@ -1084,7 +1098,8 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                 logger.info(f"\nGenerating Surrogate for {field}")
             make_log_scale = field in fields_to_log_scale
             decomp_results = _get_decomp_results(train_data[field], test_data[field], 
-                                                 make_log_scale, decomposition_tool)
+                                                 make_log_scale, decomposition_tool, 
+                                                 logger_on=logger_on)
             scaled_latent_test_data, scaled_latent_train_data = decomp_results[0:2]
             data_scaler, decomposer, latent_scaler = decomp_results[2:5]
             decomposers[field] = decomposer
@@ -1107,7 +1122,6 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
             latent_scores = _calculate_additional_score_metrics(latent_scores[0], latent_scores[1])
             latent_train_scores[field], latent_test_scores[field] = latent_scores
         latent_scores = [latent_train_scores, latent_test_scores]
-
         surrogate = surrogate_class(latent_scores, fields_to_log_scale, 
                                     surrogate_generator._interpolation_field, 
                                     surrogate_generator._interpolation_locations, 
@@ -1126,34 +1140,39 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
 def _process_surrogate_args_call(param_names, *args,  
                                  batch_evaluate=False, transpose=False, **kwargs,):
     if batch_evaluate:
-        processed_args = np.asarray(args[0])
+        processed_args = np.asarray(args[0], dtype=float)
         if transpose:
             processed_args = processed_args.T
     elif len(args)==1 and isinstance(args[0], dict or OrderedDict):
-        params = _convert_param_dict_to_array(args[0], param_names)
+        if _all_params_exist_dict(param_names, args[0]):
+            params = _convert_param_dict_to_array(args[0], param_names)
         batch_evaluate=True
         return _process_surrogate_args_call( param_names, params, batch_evaluate=batch_evaluate, 
                                             transpose=transpose)
     elif len(args) == len(param_names) and len(kwargs) == 0:
-        processed_args =  np.asarray(args)
+        processed_args =  np.asarray(args, dtype=float)
         if transpose:
             processed_args = processed_args.T
     elif len(args) == 0 and len(kwargs) == len(param_names):
         param_ordered_list = []
-        for param_name in param_names:
-            if param_name not in kwargs:
-                error_message = (f"All required parameters were not passed to the surrogate."+
-                    f"Required parameters:\n{param_names}\n"+
-                    f"Received parameters:\n{kwargs.keys()}")
-                raise RuntimeError(error_message)
-            param_ordered_list.append(kwargs[param_name])        
+        if _all_params_exist_dict(param_names, kwargs):
+            for param_name in param_names:
+                param_ordered_list.append(kwargs[param_name])        
         return _process_surrogate_args_call(param_names, *param_ordered_list,  transpose=transpose)
-
     else:
         raise RuntimeError("Surrogate model was not called correctly. The input parameters "+
                             "are likely of the incorrect format. Check input")
     return processed_args
 
+
+def _all_params_exist_dict(param_names, data_dict):
+    for param_name in param_names:
+        if param_name not in data_dict:
+            error_message = (f"All required parameters were not passed to the surrogate. "+
+                f"Required parameters include:\n{param_names}\n"+
+                f"Received parameters include:\n{data_dict.keys()}")
+            raise RuntimeError(error_message)
+    return True
 
 def _check_params_in_range( params_dict, param_ranges, enforce_range=True):
     if not isinstance(param_ranges, (dict, OrderedDict)):
@@ -1180,12 +1199,9 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
                                         _average_l2_error_norm)
     max_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _max_error_inf_norm)
-    num_evals = _get_eval_count(test_params)
-    if num_evals > 1:
-        #r2 not valid for only 1 eval
-        r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score)
-    else:
-        r2_test_score = None
+    r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score, 
+                                          needs_length=True)
+
 
     average_scores = (average_train_score, average_test_score)
     max_scores = (max_train_score, max_test_score)
@@ -1193,12 +1209,22 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
     return average_scores, max_scores, r2_scores
 
 
-def _get_field_scores(surrogate, params, data, score_function):
+def _get_field_scores(surrogate, params, data, score_function, needs_length=False):
     surrogate_data = surrogate(params)
     scores = OrderedDict()
+    eval_score=True
     for field in surrogate_data:
+        surogate_data_field = np.atleast_2d(surrogate_data[field])
+        if needs_length:
+            if len(surogate_data_field) > 1:
+                eval_score = surogate_data_field.shape[1] > 1
+            else:
+                eval_score = len(surogate_data_field) > 1
         if field != surrogate._interpolation_field:
-            scores[field] = score_function(data[field], surrogate_data[field])
+            if eval_score:
+                scores[field] = score_function(data[field], surogate_data_field)
+            else:
+                scores[field] = np.nan
     return scores
 
 
@@ -1451,6 +1477,7 @@ def _convert_param_dict_to_array(passed_params_dict, parameter_order):
         array[:,param_i] = passed_params_dict[param_name]
     return array
 
+
 def _average_l2_error_norm(test_values, surrogate_values):
     #expects arrays to be sized (n_samples, n_qois)
     return (np.linalg.norm(test_values - surrogate_values)
@@ -1459,4 +1486,4 @@ def _average_l2_error_norm(test_values, surrogate_values):
 
 def _max_error_inf_norm(test_values, surrogate_values):
     #expects arrays to be sized (n_samples, n_qois)
-    return np.linalg.norm(test_values - surrogate_values, ord=np.inf)
+    return np.linalg.norm((test_values - surrogate_values).flatten(), ord=np.inf)

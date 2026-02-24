@@ -292,10 +292,20 @@ We also plot the raw simulation stress-strain curves.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_oss/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:195: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:200: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(mesh_method_1_curves["engineering_strain"], mesh_method_1_curves["engineering_stress"], label="$mesh\_method = 1$")
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:201: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(mesh_method_2_curves["engineering_strain"], mesh_method_2_curves["engineering_stress"], label="$mesh\_method = 2$")
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:202: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(mesh_method_3_curves["engineering_strain"], mesh_method_3_curves["engineering_stress"], label="$mesh\_method = 3$")
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:203: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(mesh_method_4_curves["engineering_strain"], mesh_method_4_curves["engineering_stress"], label="$mesh\_method = 4$")
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:204: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(mesh_method_5_curves["engineering_strain"], mesh_method_5_curves["engineering_stress"], label="$mesh\_method = 5$")
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:195: RuntimeWarning: invalid value encountered in divide
       plt.plot(methods, objectives/mesh_method_1_objective_results, 'o-')
 
-    <matplotlib.legend.Legend object at 0x15543c0cb050>
+    <matplotlib.legend.Legend object at 0x15551706d610>
 
 
 
@@ -371,6 +381,17 @@ to the previous *mesh_method* = 5 model results and the *mesh_method* = 1 model 
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:244: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(mesh_method_1_curves["engineering_strain"], mesh_method_1_curves["engineering_stress"], label="$mesh\_method = 1$")
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:245: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(mesh_method_5_curves["engineering_strain"], mesh_method_5_curves["engineering_stress"], label="$mesh\_method = 5$")
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:246: SyntaxWarning: invalid escape sequence '\_'
+      plt.plot(updated_mesh_method_5_results["engineering_strain"], updated_mesh_method_5_results["engineering_stress"], label="updated $mesh\_method = 5$")
+
 
 
 
@@ -387,7 +408,7 @@ for this study is not negligible.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (76 minutes 50.191 seconds)
+   **Total running time of the script:** (58 minutes 58.964 seconds)
 
 
 .. _sphx_glr_download_matcal_model_v_and_v_plot_round_tension_mesh_method_effects.py:

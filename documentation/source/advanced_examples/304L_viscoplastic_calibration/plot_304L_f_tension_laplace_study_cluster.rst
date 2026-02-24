@@ -295,15 +295,15 @@ and launch the study.
  .. code-block:: none
 
     Initial covariance estimate:
-     [[ 1.32357677e+01  4.53139620e+01 -9.89798700e-01 -1.01783736e+00]
-     [ 4.53139620e+01  2.66267034e+02 -5.43965571e+00 -4.03476708e+00]
-     [-9.89798700e-01 -5.43965571e+00  1.13314900e-01  8.52505958e-02]
-     [-1.01783736e+00 -4.03476708e+00  8.52505958e-02  8.18732729e-02]]
+     [[ 1.32206295e+01  4.61503937e+01 -1.00040615e+00 -1.02410482e+00]
+     [ 4.61503937e+01  2.67218328e+02 -5.48895739e+00 -4.06271016e+00]
+     [-1.00040615e+00 -5.48895739e+00  1.14441479e-01  8.59005082e-02]
+     [-1.02410482e+00 -4.06271016e+00  8.59005082e-02  8.22479560e-02]]
     Calibrated covariance estimate:
-     [[ 1.28891310e+01  4.80051628e+01 -1.02330264e+00 -1.02768292e+00]
-     [ 4.80051628e+01  3.00747466e+02 -5.99599467e+00 -4.42177079e+00]
-     [-1.02330264e+00 -5.99599467e+00  1.21952562e-01  9.11270764e-02]
-     [-1.02768292e+00 -4.42177079e+00  9.11270764e-02  8.57130861e-02]]
+     [[ 1.29937471e+01  4.45713339e+01 -9.88097666e-01 -1.01570212e+00]
+     [ 4.45713339e+01  2.58039510e+02 -5.35164456e+00 -4.03844028e+00]
+     [-9.88097666e-01 -5.35164456e+00  1.12591672e-01  8.54194087e-02]
+     [-1.01570212e+00 -4.03844028e+00  8.54194087e-02  8.22158214e-02]]
 
 
 
@@ -349,8 +349,8 @@ KDE pair plot
 
  .. code-block:: none
 
-    /projects/aue/hpc/builds/x86_64/rhel8/ba17d7f2/anaconda3/install/linux-rhel8-x86_64/gcc-10.3.0/anaconda3-2023.09-0-zmej2r2/lib/python3.11/site-packages/seaborn/axisgrid.py:118: UserWarning: The figure layout has changed to tight
-      self._figure.tight_layout(*args, **kwargs)
+    /gpfs/knkarls/projects/matcal-stable/external_matcal/matcal/core/parameter_studies.py:919: RuntimeWarning: covariance is not symmetric positive-semidefinite.
+      samples = rng.multivariate_normal(mean, sigma, nsamples).T
 
 
 
@@ -358,7 +358,7 @@ KDE pair plot
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (5 minutes 44.197 seconds)
+   **Total running time of the script:** (3 minutes 27.262 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py:

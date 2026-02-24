@@ -1,7 +1,7 @@
 
 __all__ = []
 
-from .adaptive_surrogates import SparseGridAdaptiveSurrogateStudy
+from .adaptive_surrogates import SparseGridAdaptiveSurrogateStudy, VoronoiAdaptiveSurrogateStudy
 from .calibration_studies import ScipyLeastSquaresStudy, ScipyMinimizeStudy
 from .data import (Data, DataCollection, scale_data_collection, Scaling,
     convert_data_to_dictionary, convert_dictionary_to_data, MaxAbsDataConditioner, 
@@ -20,7 +20,7 @@ from .objective_results import ObjectiveResults
 from .parameters import (Parameter, ParameterCollection, 
                          UserDefinedParameterPreprocessor)
 from .parameter_studies import (ParameterStudy, LaplaceStudy, ClassicLaplaceStudy, 
-                                sample_multivariate_normal)
+                                sample_multivariate_normal, HaltonStudy)
 from .qoi_extractor import (MaxExtractor, InterpolatingExtractor, 
                             UserDefinedExtractor)
 from .plotting import make_standard_plots 
@@ -30,7 +30,7 @@ from .residuals import UserFunctionWeighting, NoiseWeightingFromFile, \
 from .surrogates import SurrogateGenerator
 from .serializer_wrapper import matcal_save, matcal_load
 
-__all__ += ["SparseGridAdaptiveSurrogateStudy"]
+__all__ += ["SparseGridAdaptiveSurrogateStudy", "VoronoiAdaptiveSurrogateStudy"]
 __all__ += ["ScipyLeastSquaresStudy", "ScipyMinimizeStudy"]
 __all__ += ["use_jinja_preprocessor"]
 __all__ += ["Data", "FileData", "determine_pt2_offset_yield"]
@@ -44,7 +44,8 @@ __all__ += ["L1NormMetricFunction", "L2NormMetricFunction", "SumSquaresMetricFun
 __all__ += ["State", "StateCollection", "SolitaryState"]
 __all__ += ["Parameter", "ParameterCollection", "UserDefinedParameterPreprocessor"]
 __all__ += ["ParameterStudy", "LaplaceStudy", "ClassicLaplaceStudy", 
-            "PythonModel", "MatCalSurrogateModel", "sample_multivariate_normal"]
+            "PythonModel", "MatCalSurrogateModel", "sample_multivariate_normal", 
+            "HaltonStudy"]
 __all__ += ["UserFunctionWeighting", "NoiseWeightingFromFile",
             "ConstantFactorWeighting", "NoiseWeightingConstant"]
 __all__ += ["MaxExtractor", "InterpolatingExtractor", "UserDefinedExtractor"]

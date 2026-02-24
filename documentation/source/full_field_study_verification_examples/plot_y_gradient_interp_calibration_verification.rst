@@ -207,12 +207,12 @@ except for some discussion on the results at the end.
     Closing exodus file: synthetic_data_files/test_mesh_surf.g
     Opening exodus file: synthetic_data_files/test_mesh_surf.g
     Closing exodus file: synthetic_data_files/test_mesh_surf.g
-    OrderedDict([('yield_stress', 199.9905402), ('A', 1499.835938), ('n', 2.0002880732), ('R11', 0.95001244963), ('R12', 0.85003007284)])
-    Parameter yield_stress error: -0.004729900000000953
-    Parameter A error: -0.01093746666667054
-    Parameter n error: 0.014403660000006369
-    Parameter R11 error: 0.0013104873684233772
-    Parameter R12 error: 0.0035379811764713054
+    OrderedDict({'yield_stress': 199.99658235, 'A': 1499.9887296, 'n': 2.0000287356, 'R11': 0.95000878217, 'R12': 0.85000757337})
+    Parameter yield_stress error: -0.0017088249999943628
+    Parameter A error: -0.0007513600000038423
+    Parameter n error: 0.0014367799999970288
+    Parameter R11 error: 0.0009244389473683195
+    Parameter R12 error: 0.0008909847058839492
 
 
 
@@ -295,7 +295,7 @@ and stagnates quickly.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (164 minutes 15.782 seconds)
+   **Total running time of the script:** (103 minutes 12.456 seconds)
 
 
 .. _sphx_glr_download_full_field_study_verification_examples_plot_y_gradient_interp_calibration_verification.py:

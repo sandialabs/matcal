@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**06:58.673** total execution time for 1 file **from introduction_examples/surrogate_studies**:
+**20:55.681** total execution time for 2 files **from introduction_examples/surrogate_studies**:
 
 .. container::
 
@@ -32,6 +32,9 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_introduction_examples_surrogate_studies_plot_generate_surrogate.py` (``plot_generate_surrogate.py``)
-     - 06:58.673
+   * - :ref:`sphx_glr_introduction_examples_surrogate_studies_plot_generate_surrogate_c_adaptive_sparse_grid.py` (``plot_generate_surrogate_c_adaptive_sparse_grid.py``)
+     - 20:55.681
+     - 0.0
+   * - :ref:`sphx_glr_introduction_examples_surrogate_studies_plot_generate_surrogate_a_standard.py` (``plot_generate_surrogate_a_standard.py``)
+     - 00:00.000
      - 0.0
