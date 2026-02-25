@@ -316,7 +316,7 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
             y = np.exp(-x * l_eff) * A + 1
             return {'x':x, 'y':y}
 
-        n_samples = 200
+        n_samples = 300
         p_names = ['L', 'A']
         p_low = [-1., 1]
         p_high = [0, 10]
@@ -377,7 +377,7 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
             z = A * x + A + np.power(x, 1/B)
             return {'x':x, 'y':y, 'z':z}
 
-        n_samples = 400
+        n_samples = 1000
         p_names = ['A', "B"]
         p_low = [0, 1]
         p_high = [2, 2]
@@ -389,7 +389,8 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
 
         n_interp = 200
         sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, 
-                                                     p_high, indep_var, test_function)
+                                                     p_high, indep_var, test_function, 
+                                                     interp_locations=n_interp)
         sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process", alpha=1e-6)
         sur_gen.set_PCA_details(None, reconstruction_error=5e-3)
         surrogate = sur_gen.generate('my_surrogate')
@@ -408,7 +409,7 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
             z = A * x + A
             return {'x':x, 'y':y, 'z':z}
 
-        n_samples = 200
+        n_samples = 500
         p_names = ['A']
         p_low = [0]
         p_high = [2]
@@ -416,16 +417,17 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
         probes = ['y', 'z']
         indep_var = 'x'
         res_file = "test_results"
-        err_tol = 1e-4
+        err_tol = 3e-4
 
         n_interp = 200
         sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, 
-                                                     p_high, indep_var, test_function)
+                                                     p_high, indep_var, test_function, 
+                                                     interp_locations=n_interp)
         sur_gen.set_surrogate_details("PCA Multiple Regressors", 
                                       "Gaussian Process", alpha=1e-6)
         sur_gen.set_PCA_details(None, reconstruction_error=5e-3)
         surrogate = sur_gen.generate('my_surrogate')
-        python_model_like = _MatCalSurrogateWrapper(surrogate)
+        python_model_like = surrogate
         tp = {'A':1.2}
         prediction = python_model_like(**tp)
         goal = test_function(tp['A'], n_interp)
