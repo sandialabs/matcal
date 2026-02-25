@@ -29,7 +29,7 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.utilities_for_tests import _generate_singe_model_single_state_mock_eval_hist
 
 def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
-                                       indep_var, test_function, training_fraction=0.8,
+                                       indep_var, test_function, interp_locations=200, training_fraction=0.8,
                                        **parameter_mod):
     test_res = None
     res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, n_samples,
@@ -40,7 +40,8 @@ def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high,
         test_res = _get_parameter_and_simulation_hist(p_names, p_low, p_high, 100,
                                                       test_function, rng=20, **parameter_mod)
         matcal_save("test_surrogate_test_data.joblib", test_res)
-    sur_gen = SurrogateGenerator(res, indep_var, training_fraction=training_fraction,
+    sur_gen = SurrogateGenerator(res, indep_var, training_fraction=training_fraction, 
+                                 interpolation_locations=interp_locations,
                                  test_eval_info=test_res)
     
     return sur_gen

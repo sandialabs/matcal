@@ -46,7 +46,7 @@ class _ReconstructionDecomposition:
         
     def generate(self, source_data, make_log_scale, logger_on=True):
         return _tune_data_decomposition(source_data, make_log_scale,  self._reconstruction_tol, 
-                                        logger_on)
+                                        logger_on=logger_on)
 
 
 class SurrogateGenerator:
@@ -647,7 +647,7 @@ def _tune_data_decomposition(source_data, make_log_scale, reconstruction_error_t
             break
         elif kept_modes == max_modes:
             message = (f"      Recreation error tolerance not met, but max modes reached, "+
-                       "using {max_modes} mode decomposition")
+                       f"using {max_modes} mode decomposition")
             logger.info(message)
         else:
             logger.info("      Recreation error tolerance not met.\n")
