@@ -1285,7 +1285,7 @@ def _ensure_2d_array(active_array):
         #Reshape 1D vector to be column vector (nsamples, 1) - single feature
         active_array = active_array.reshape(-1, 1)
     return np.atleast_2d(active_array)
-
+   
 
 class _MatCalSurrogateWrapper:
     
@@ -1294,10 +1294,8 @@ class _MatCalSurrogateWrapper:
     
     def __call__(self, **parameters):
         results = self._surrogate(parameters)
-        for key, value in results.items():
-            results[key] = value.flatten()
         return results 
-   
+
     
 def _score_recreation(sur_values, source_values):
     from sklearn.preprocessing import StandardScaler

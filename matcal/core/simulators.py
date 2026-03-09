@@ -298,7 +298,8 @@ class PythonSimulator(Simulator):
     """
 
     def __init__(self, name, compute_information, results_information, state, 
-                 model, field_coordinates=None, pass_evaluation_number=False):
+                 model, field_coordinates=None, pass_evaluation_number=False, 
+                 pass_params_by_category=False):
         super().__init__(name, compute_information, results_information, state)
         self._workdir = None
         self._orig_stdout = None
@@ -307,6 +308,7 @@ class PythonSimulator(Simulator):
         self._field_coordinates = field_coordinates
         self._archive_name = None
         self._pass_evaluation_number=pass_evaluation_number
+        self._pass_params_by_category=pass_params_by_category
         self._save_dir = "matcal_python_results_archive"
         if not os.path.exists(self._save_dir):
             os.mkdir(self._save_dir)
@@ -352,9 +354,8 @@ class PythonSimulator(Simulator):
         matcal_save(self._archive_name, results)
 
     def _run_python_simulation(self, parameters, working_dir):
-        run_variables = {**self._state.params}
-        run_variables.update(self._model.get_model_constants(self._state))
-        run_variables.update(parameters)
+        model_constants = self._model.get_model_constants(self._state)
+        run_variables = parameters
         if working_dir is not None and self._pass_evaluation_number:
             if MATCAL_WORKDIR_STR in working_dir:
                 run_variables["evaluation_number"] = int(working_dir.split(MATCAL_WORKDIR_STR
@@ -362,8 +363,14 @@ class PythonSimulator(Simulator):
             else:
                 logger.debug(f"No  \"{MATCAL_WORKDIR_STR}\". Evaluation number not identified.")
         logger.debug("{}".format(run_variables))
-
-        results = self._python_function(**run_variables)
+        if not self._pass_params_by_category:
+            params = _get_parameters_according_to_precedence(self._state, model_constants, 
+                                                             run_variables)
+            results = self._python_function(**params)
+        else:
+            results = self._python_function(model_parameters=run_variables, 
+                                            model_constants=model_constants, 
+                                            state_parameters=self._state.params)
         results = self._convert_to_data(results)
         results.set_state(self._state)
         return results
