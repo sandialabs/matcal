@@ -818,6 +818,7 @@ class MatCalSurrogateBase(ABC):
                                    f"Received ranges for parameters {list(param_ranges.keys())}.")
         self._param_ranges = param_ranges
 
+
 def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_tool, logger_on=True):
     combined_data = np.vstack([train_data, test_data])
     decomp_results = decomposition_tool.generate(combined_data, make_log_scale, logger_on)
@@ -891,6 +892,7 @@ def _print_scores(latent_train_score, latent_test_score, native_train_score, nat
         score_message += f"\t\tlatent space score: {latent_test_score[field]['score']}\n"    
         score_message += f"\t\tnative space score: {native_test_score[field]}\n"    
         logger.info(score_message)
+
 
 def _calculate_additional_score_metrics(train_score, test_score):
     train_score = _convert_instances_to_stats(train_score)
