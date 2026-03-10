@@ -85,8 +85,10 @@ class VFMCalibrationTestsBase():
 
             vfm_model = self._VFM_model_type(mat, self.shell_mesh_filename, thickness)
             vfm_model.add_boundary_condition_data(field_data)
+            plasticity_props = MatcalGeneratedModelForTestsBase.get_material_parameter_collection().get_current_value_dict()
             mat_props = MatcalGeneratedModelForTestsBase.get_elastic_material_parameter_collection().get_current_value_dict()
             mat_props.update(MatcalGeneratedModelForTestsBase.get_material_properties())
+            mat_props.update(plasticity_props)
             goal_E = mat_props.pop('elastic_modulus')
             goal_nu = mat_props.pop('nu')
             vfm_model.add_constants(**mat_props, coupling="uncoupled")
