@@ -107,7 +107,6 @@ class BatchRestartHDF5(BatchRestartBase):
         if not isinstance(results_filename, str):
             return None
         group_name = self._create_h5_group(job_keys)
-        print(group_name)
         g = self._restart_file_handle.create_group(group_name)
         g.create_dataset('results', data=[results_filename])
 

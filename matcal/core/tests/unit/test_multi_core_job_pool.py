@@ -1,6 +1,5 @@
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from copy import deepcopy
-from matcal.core.parameter_batch_evaluator import BatchRestartCSV
 import numpy as np
 import os
 import time
@@ -15,6 +14,7 @@ from matcal.core.objective import (CurveBasedInterpolatedObjective, ObjectiveCol
                                    ObjectiveSet)
 from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.models import PythonModel
+from matcal.core.restart_file import BatchRestartCSV
 from matcal.core.state import SolitaryState, State, StateCollection
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.utilities_for_tests import MockExecutableModel

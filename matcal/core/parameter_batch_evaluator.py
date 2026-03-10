@@ -263,10 +263,3 @@ def _combine_residual_results(results_dict):
             combined_residuals = np.append(combined_residuals,
                                            np.asarray(result.calibration_residuals))
     return combined_residuals
-
-
-class MissingKeyError(RuntimeError):
-
-    def __init__(self, missing_key):
-        message = f"ERROR :: Missing Key: {missing_key}"
-        super().__init__(message)
