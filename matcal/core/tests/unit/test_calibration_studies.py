@@ -7,6 +7,7 @@ from matcal.core.data import convert_dictionary_to_data
 from matcal.core.models import PythonModel
 from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.objective import CurveBasedInterpolatedObjective
+from matcal.core.restart_file import BatchRestartNone
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests
 
@@ -296,6 +297,8 @@ class TestScipyMinimizeStudy(StudyBaseUnitTests.CommonTests):
         self.assertEqual(study._get_current_gradient_value(x), None)
         
         objective = CurveBasedInterpolatedObjective("x", "y")
+        study._restart_obj = BatchRestartNone(None, None)
+
         study.add_evaluation_set(model, objective, curve_data)
         study._determine_jacobian_argument()
         study._initialize_study_and_batch_evaluator()
@@ -314,6 +317,7 @@ class TestScipyMinimizeStudy(StudyBaseUnitTests.CommonTests):
         self.assertEqual(study._get_current_hessian_value(x), None)
         
         objective = CurveBasedInterpolatedObjective("x", "y")
+        study._restart_obj = BatchRestartNone(None, None)
         study.add_evaluation_set(model, objective, curve_data)
         study._determine_jacobian_argument()
         study._update_kwargs_with_hessian_argument(study._kwargs)
@@ -396,6 +400,8 @@ class TestScipyLeastSquaresStudy(StudyBaseUnitTests.CommonTests):
         x =  np.array([2.0])
         self.assertEqual(study._get_current_gradient_value(x), None)
         objective = CurveBasedInterpolatedObjective("x", "y")
+        study._restart_obj = BatchRestartNone(None, None)
+
         study.add_evaluation_set(model, objective, curve_data)
         study.use_three_point_finite_difference()
         study._determine_jacobian_argument()

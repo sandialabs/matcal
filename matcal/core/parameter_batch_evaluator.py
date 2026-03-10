@@ -101,15 +101,10 @@ class ParameterBatchEvaluator():
             study_objective_qois[eval_set.model.name] = eval_set_objective_qois
         return study_objective_results, study_objective_qois
 
-    def run(self, parameter_sets, is_residual_study):
+    def run_for_tests(self, parameter_sets, is_residual_study, batch_restart):
         objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, 
-                                                                           is_residual_study, False)
-        return self.default_results_formatter(objectives, total_objectives, 
-                                              parameter_sets, qois)
-
-    def restart_run(self, parameter_sets, is_residual_study):
-        objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, 
-                                                                           is_residual_study, True)
+                                                                           is_residual_study, 
+                                                                           batch_restart)
         return self.default_results_formatter(objectives, total_objectives, 
                                               parameter_sets, qois)
     
@@ -123,8 +118,8 @@ class ParameterBatchEvaluator():
         return results
 
     def evaluate_parameter_batch(self, parameter_sets, is_residual_study, 
-                                       batch_restart, is_restart):
-        bill_of_jobs = self._assemble_jobs(parameter_sets, is_restart)
+                                       batch_restart):
+        bill_of_jobs = self._assemble_jobs(parameter_sets, batch_restart.restart)
         job_results = self._run_bill_of_jobs(bill_of_jobs, batch_restart)
         objectives, qois, total_objectives = self._process_job_results(parameter_sets, 
                                                                        is_residual_study, 

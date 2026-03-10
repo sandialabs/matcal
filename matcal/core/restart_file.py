@@ -50,6 +50,10 @@ class BatchRestartBase(ABC):
             return self.default_lookup_return
         return self._retrieve_results_file_impl(job_keys)
 
+    @property
+    def restart(self):
+        return self._restart
+
 
 class BatchRestartCSV(BatchRestartBase):
 
@@ -110,6 +114,21 @@ class BatchRestartHDF5(BatchRestartBase):
     def get_open_command():
         import h5py
         return h5py.File
-    
-    
+
+
+class BatchRestartNone(BatchRestartBase):
+    # Used to turn off file saving for testing
+    file_extension = None
+
+    def record(self, job_keys, results_filename):
+        """do nothing, return nothing"""
+
+    def _retrieve_results_file_impl(self, job_keys):
+        """do nothing, return nothing"""
+
+    @staticmethod
+    def get_open_command():
+        return None
+
+
 SelectedBatchRestartClass = BatchRestartHDF5

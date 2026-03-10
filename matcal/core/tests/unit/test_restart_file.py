@@ -2,7 +2,8 @@ import gc
 import os
 
 from matcal.core.constants import BATCH_RESTART_FILENAME
-from matcal.core.restart_file import (BatchRestartCSV, BatchRestartHDF5)
+from matcal.core.restart_file import (BatchRestartCSV, BatchRestartHDF5, 
+                                      BatchRestartNone)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -23,7 +24,7 @@ class BatchRestartTests(MatcalUnitTest):
 
     class CommonTests(CommonSetUp):
 
-        def test_instantiation_and_no_file_created(self):
+        def test_instantiation_and_file_created(self):
             # The file should not exist before we open it
             self.assertFalse(os.path.exists(self._restart_filename))
 
@@ -33,6 +34,17 @@ class BatchRestartTests(MatcalUnitTest):
 
             # Even after closing the handle the file should exist
             self.assertTrue(os.path.isfile(self._restart_filename))
+    
+        def test_restart_property(self):
+            with self._open_method(self._restart_filename, "w") as fh:
+                br = self._batch_restart_class(fh, restart=False)
+                self.assertIsInstance(br, self._batch_restart_class)
+                self.assertFalse(br.restart)
+
+            with self._open_method(self._restart_filename, "r+") as fh:
+                br = self._batch_restart_class(fh, restart=True)
+                self.assertIsInstance(br, self._batch_restart_class)
+                self.assertTrue(br.restart)
 
         def test_record_and_retrieve_if_exists_else_None_when_restart_run(self):
             with self._open_method(self._restart_filename, "w") as restart_file_handle:
@@ -129,6 +141,7 @@ class TestBatchRestartHDF5(BatchRestartTests.CommonTests):
         import h5py
         self.assertIs(self._batch_restart_class.get_open_command(), h5py.File)
 
+
 class TestBatchRestartCSV(BatchRestartTests.CommonTests):
 
     _batch_restart_class = BatchRestartCSV
@@ -136,3 +149,28 @@ class TestBatchRestartCSV(BatchRestartTests.CommonTests):
     def test_get_open_command_returns_correct_callable(self):
         self.assertIs(self._batch_restart_class.get_open_command(), open)
 
+
+class TestBatchRestartNone(MatcalUnitTest):
+
+    _batch_restart_class = BatchRestartNone
+
+    def setUp(self):
+        super().setUp(__file__)
+        self._restart_filename = BATCH_RESTART_FILENAME
+        file_extension = self._batch_restart_class.file_extension
+        if file_extension is not None:
+            self._restart_filename += file_extension
+        
+    def test_get_open_command_returns_None(self):
+        self.assertIsNone(self._batch_restart_class.get_open_command())
+
+    def test_file_extension_returns_None(self):
+        self.assertIsNone(self._batch_restart_class.file_extension)
+
+    def test_record_returns_None(self):
+        br = self._batch_restart_class(None,None)
+        self.assertIsNone(br.record([], "test.csv"))
+
+    def test_retrieve_results_file_impl_None(self):
+        br = self._batch_restart_class(None,None)
+        self.assertIsNone(br._retrieve_results_file_impl([]))

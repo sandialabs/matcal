@@ -730,13 +730,12 @@ class StudyBase(ABC):
         self._remove_existing_working_directory = remove_existing
 
     def _matcal_evaluate_parameter_sets_batch(self, parameter_sets, 
-                                              is_finite_difference_eval=False,
-                                              is_restart=False):
+                                              is_finite_difference_eval=False):
         formatted_parameter_sets = self._prepare_parameter_sets_to_evaluate(parameter_sets)
         evaluator_func = self._parameter_batch_evaluator.evaluate_parameter_batch
         batch_results = evaluator_func(formatted_parameter_sets, 
                                        self._needs_residuals, 
-                                       self._restart_obj, is_restart)
+                                       self._restart_obj)
         batch_raw_objectives, total_objectives, batch_qois = _unpack_evaluation(batch_results)
         
         _record_results(self._results, formatted_parameter_sets, batch_raw_objectives, 

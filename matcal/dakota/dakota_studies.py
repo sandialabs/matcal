@@ -103,9 +103,6 @@ class DakotaStudyBase(StudyBase):
         if self.__testing_fail:
             matcal_callback_dict = {'matcal_interface_batch':
                                     self._fail_matcal_evaluate_parameter_sets_batch}
-        elif self._restart:
-            matcal_callback_dict = {'matcal_interface_batch':
-                                    self._restart_matcal_evaluate_parameter_sets_batch}
         else:
             matcal_callback_dict = {'matcal_interface_batch':
                                     self._fresh_matcal_evaluate_parameter_sets_batch}
@@ -122,20 +119,13 @@ class DakotaStudyBase(StudyBase):
 
     def _fresh_matcal_evaluate_parameter_sets_batch(self, parameter_sets):
         return self._matcal_evaluate_parameter_sets_batch(parameter_sets, 
-                                                          is_finite_difference_eval=False, 
-                                                          is_restart=False)
+                                                          is_finite_difference_eval=False)
 
     def _fail_matcal_evaluate_parameter_sets_batch(self, parameter_sets):
         batch_results = self._matcal_evaluate_parameter_sets_batch(parameter_sets, 
-                                                                   is_finite_difference_eval=False, 
-                                                                   is_restart=False)
-        raise RuntimeError("Intentional Testing Faulure-- "+
-                           "Envoked:_for_testing_fail_after_first_batch")
-
-    def _restart_matcal_evaluate_parameter_sets_batch(self, parameter_sets):
-        return self._matcal_evaluate_parameter_sets_batch(parameter_sets, 
-                                                          is_finite_difference_eval=False, 
-                                                          is_restart=True)
+                                                                   is_finite_difference_eval=False)
+        raise RuntimeError("Intentional Testing Failure-- "+
+                           "Invoked:_for_testing_fail_after_first_batch")
 
     def _initialize_parameters_if_skipped_by_dakota(self):
         if len(self._results.parameter_history) < 1: 

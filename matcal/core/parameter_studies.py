@@ -86,8 +86,7 @@ class ParameterStudy(StudyBase):
         exit_status = 0
         err_msg=""
         try:
-            self._batch_results = self._matcal_evaluate_parameter_sets_batch(param_sets, 
-                                                                             is_restart=self._restart)
+            self._batch_results = self._matcal_evaluate_parameter_sets_batch(param_sets)
         except Exception as e:
             success = False
             exit_status = -1
