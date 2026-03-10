@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from matcal.core.constants import (IN_PROGRESS_RESULTS_FILENAME, EVALUATION_EXTENSION)
+from matcal.core.restart_file import BatchRestartNone
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests
 
 
@@ -120,6 +121,7 @@ class TestDakotaStudyBase:
             study = self._study_class(self.parameter_collection)
             study.add_evaluation_set(self.mock_model, self.objective, self.gold_results)
             study._parameter_batch_evaluator = study._initialize_study_and_batch_evaluator()
+            study._restart_obj = BatchRestartNone(None, None)
             unprocessed_params_input = {"functions":6, "variables":1, "cv":[0.0], "cv_labels":["a"]}
 
             results = study._matcal_evaluate_parameter_sets_batch(unprocessed_params_input)
