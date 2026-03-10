@@ -287,12 +287,14 @@ class TestResultsInformation(MatcalUnitTest):
                 line = f"{i},{2*i}\n"
                 f.write(line)
 
+
 def linear_python_model(slope, intercept):
     time_max = 10
     num_time_steps = 100
     time = np.linspace(0, time_max, num_time_steps)
     values = slope * time + intercept
     return {'time': time, "Y": values}
+
 
 def linear_python_model_constants(slope, intercept, a, b, element):
     time_max = 10
@@ -301,12 +303,38 @@ def linear_python_model_constants(slope, intercept, a, b, element):
     values = slope * time + intercept
     return {'time': time, "Y": values}
 
+
 def linear_python_model_more_constants(slope, intercept, a, b, c, d, element):
     time_max = 10
     num_time_steps = 100
     time = np.linspace(0, time_max, num_time_steps)
     values = slope * time + intercept
     return {'time': time, "Y": values, "d":np.ones(num_time_steps)*d}
+
+
+def linear_python_model_more_constants_params_by_category(model_parameters, model_constants, 
+                                                           state_parameters):
+    time_max = 10
+    num_time_steps = 100
+    time = np.linspace(0, time_max, num_time_steps)
+    values = model_parameters['slope'] * time + model_parameters['intercept']
+    if "d" in model_parameters:
+        d = model_parameters['d']
+    elif "d" in model_constants:
+        d=model_constants['d']
+    else:
+        d= state_parameters['d']
+    return {'time': time, "Y": values, "d":np.ones(num_time_steps)*d}
+
+
+
+def fail_if_above_0(**parameters):
+    n = 3
+    if parameters['switch'] < 0:
+        return {'time':[0,1,2], 'a':np.ones(n)}
+    else:
+        raise RuntimeError('bad val')
+
 
 class _simple_params:
     
@@ -413,8 +441,10 @@ def build_basic():
     
     return surrogate
 
+
 def return_dict(**params):
     return {"Y":np.zeros(10)}
+
 
 class SurrogateModelForTests(ModelForTestsBase):
     _model_class = MatCalSurrogateModel
@@ -427,8 +457,6 @@ class SurrogateModelForTests(ModelForTestsBase):
             BASIC_SURROGATE = return_dict
         return self._model_class(BASIC_SURROGATE)
     
-
-
 
 class TestPythonModel(ModelTestBase.CommonTests, PythonModelForTests):
 
@@ -541,17 +569,22 @@ class TestPythonModel(ModelTestBase.CommonTests, PythonModelForTests):
         model.add_state_constants(state1, a=3, c=4)
         model.add_state_constants(state2, b=3, d=3, c=5)
 
-        self.assertEqual(model.get_model_constants(state1), {'a':3, 'b':2, 'element':"SD", 'c':4})
-        self.assertEqual(model.get_model_constants(state2), {'a':1, 'b':3, 'd':3, 'element':"SD", 'c':5})
+        self.assertEqual(model.get_model_constants(state1), 
+                         {'a':3, 'b':2, 'element':"SD", 'c':4})
+        self.assertEqual(model.get_model_constants(state2),
+                         {'a':1, 'b':3, 'd':3, 'element':"SD", 'c':5})
         
         slope = Parameter('slope', 0, 2)
         intercept = Parameter('intercept', 0, 2)
         
         results = model.run(state1, ParameterCollection('pc', slope, intercept))
         self.assertEqual(results.results_data.state.params, {'d':1 })
+        self.assertEqual(results.results_data["d"][0], 1)
+
 
         results = model.run(state2, ParameterCollection('pc', slope, intercept))
         self.assertEqual(results.results_data.state.params, {"d":2})
+        self.assertEqual(results.results_data["d"][0], 3)
 
         d = Parameter("d", 0, 20, 10)
         results = model.run(state2, ParameterCollection('pc', slope, intercept, d))
@@ -559,14 +592,7 @@ class TestPythonModel(ModelTestBase.CommonTests, PythonModelForTests):
         self.assertEqual(results.results_data["d"][0], 10)
 
     def test_simulation_fails_half_the_time_complete_the_study(self):
-        def fail_if_above_0(**parameters):
-            import numpy as np
-            n = 3
-            if parameters['switch'] < 0:
-                return {'time':[0,1,2], 'a':np.ones(n)}
-            else:
-                raise RuntimeError('bad val')
-        
+       
         model = PythonModel(fail_if_above_0)
         model.continue_when_simulation_fails()
         obj = CurveBasedInterpolatedObjective('time', 'a')
@@ -598,7 +624,47 @@ class TestPythonModel(ModelTestBase.CommonTests, PythonModelForTests):
         self.assertTrue(model._pass_evaluation_number)
 
         inputs = model._get_simulator_class_inputs(SolitaryState())
+        self.assertTrue(inputs[0][-2])
+
+    def test_pass_params_by_category(self):
+        model = PythonModel(linear_python_model_constants, 
+                            pass_params_by_category=True)
+        self.assertTrue(model._pass_params_by_category)
+
+        inputs = model._get_simulator_class_inputs(SolitaryState())
         self.assertTrue(inputs[0][-1])
+
+    def test_pass_params_by_category_run_model(self):
+        model = PythonModel(linear_python_model_more_constants_params_by_category, 
+                            pass_params_by_category=True)
+        state1 = State("state1", d=1)
+        state2 = State("state2", d=2)
+
+        model.add_constants(a=1, b=2)
+        model.add_constants(element="SD")
+
+        model.add_state_constants(state1, a=3, c=4)
+        model.add_state_constants(state2, b=3, d=3, c=5)
+
+        self.assertEqual(model.get_model_constants(state1), {'a':3, 'b':2, 'element':"SD", 'c':4})
+        self.assertEqual(model.get_model_constants(state2), 
+                         {'a':1, 'b':3, 'd':3, 'element':"SD", 'c':5})
+        
+        slope = Parameter('slope', 0, 2)
+        intercept = Parameter('intercept', 0, 2)
+        
+        results = model.run(state1, ParameterCollection('pc', slope, intercept))
+        self.assertEqual(results.results_data.state.params, {'d':1 })
+        self.assertEqual(results.results_data["d"][0], 1)
+
+        results = model.run(state2, ParameterCollection('pc', slope, intercept))
+        self.assertEqual(results.results_data.state.params, {"d":2})
+        self.assertEqual(results.results_data["d"][0], 3)
+
+        d = Parameter("d", 0, 20, 10)
+        results = model.run(state2, ParameterCollection('pc', slope, intercept, d))
+        self.assertEqual(results.results_data.state.params, {"d":2})
+        self.assertEqual(results.results_data["d"][0], 10)
 
 
 class TestMatCalSurrogateModel(ModelTestBase.CommonTests, SurrogateModelForTests):

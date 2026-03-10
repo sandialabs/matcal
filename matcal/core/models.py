@@ -672,19 +672,45 @@ class PythonModel(ModelBase):
     :param filename: Name of the file where the function is defined if not in 
         the MatCal python input file.
     :type filename: str
+    
+    :param field_coordinates: Provide the coordinate locations for field data. The coordinates
+        must be in the experimental data coordinate system.
+    :type field_coordinates: dict 
+    :param pass_evaluation_number: If ``True``, the current evaluation number
+        is passed to the user function as the keyword argument
+        ``evaluation_number``.
+    :type pass_evaluation_number: bool
+    :param pass_params_by_category: If ``True``, the parameters are passed in as dictionaries
+        according to parameter category. To read in the parameters the python function 
+        should expect the three keyword arguments ``model_parameters``, ``model_constants`` 
+        and ``state_parameters``. These will be three dictionaries where ``model_parameters`` are 
+        the study parameters and the other are parameters as described by their keywords. Otherwise
+        each parameter is passed as keyword arguments as follows
+        ``model_param_1=mpvalue_1, ... , model_const_1=mcvalue_1, ... , state_param_1=svalue_1``
+        and order is not guaranteed. 
+    :type pass_params_by_category: bool
+
+    .. warning::
+        When ``pass_params_by_category=True`` the MatCal parameter‑type
+        precedence logic (which determines whether a value comes from a
+        study parameter, a state variable, or a model constant) **is not
+        applied**.  Consequently, any user‑provided constants may override
+        study parameters without the usual precedence checks.
     """
     model_type = "python"
     _simulator_class = PythonSimulator
     _input_file = None
 
     def __init__(self, python_function, filename=None, field_coordinates=None, 
-                 pass_evaluation_number=False):
+                 pass_evaluation_number=False, pass_params_by_category=False):
         super().__init__(executable="python")
         self._field_coordinates = field_coordinates
         self._function_importer = python_function_importer(python_function, 
                                                            filename)
         check_value_is_bool(pass_evaluation_number, "pass_evaluation_number")
+        check_value_is_bool(pass_params_by_category, "pass_params_by_category")
         self._pass_evaluation_number=pass_evaluation_number
+        self._pass_params_by_category=pass_params_by_category
         self._results_information.results_filename = None
         self._set_results_reader_object(_python_model_results_reader)
 
@@ -694,7 +720,8 @@ class PythonModel(ModelBase):
 
     def _get_simulator_class_inputs(self, state):
         args = [self.name, self._simulation_information, self._results_information, 
-                state, self, self._field_coordinates, self._pass_evaluation_number]
+                state, self, self._field_coordinates, self._pass_evaluation_number, 
+                self._pass_params_by_category]
         kwargs = {}
 
         return args, kwargs
