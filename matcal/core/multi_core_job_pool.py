@@ -243,7 +243,6 @@ class Dispatcher:
         try:
             job_result = dispatched_job.result()
         except Exception as e:
-            self._batch_restart.close()
             raise e
 
         logger.debug(job_result.stdout)
