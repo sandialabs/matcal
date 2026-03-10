@@ -1200,7 +1200,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 logger.info(f"Score delta: {np.abs(this_score - last_score)}")
                 logger.info(f"Score delta convergence criteria: {self._eps}\n")
                 
-                stp = True
+                stop = True
         return super()._stopping_criterion_met(training_batch_number, stop)
 
     def _run_initial_training_samples(self):

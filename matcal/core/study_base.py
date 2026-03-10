@@ -435,7 +435,7 @@ class StudyBase(ABC):
         self._purge_unused_data()
         restart_filename = self._get_restart_filename()
         write_or_append = self._get_write_or_append(restart_filename)
-        open_meth = SelectedBatchRestartClass.open_restart_file()
+        open_meth = SelectedBatchRestartClass.get_open_command()
         with open_meth(restart_filename, write_or_append) as restart_file_handle:
             self._restart_obj = SelectedBatchRestartClass(restart_file_handle, 
                                                           self._restart)
@@ -454,7 +454,7 @@ class StudyBase(ABC):
         return self._results
 
     def _get_restart_filename(self):
-        restart_filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension()
+        restart_filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
         return restart_filename
 
     def _get_write_or_append(self, restart_filename):

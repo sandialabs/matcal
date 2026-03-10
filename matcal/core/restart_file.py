@@ -17,12 +17,14 @@ class BatchRestartBase(ABC):
     def _retrieve_results_file_impl(self, job_keys:list)->str:
         """"""
 
+    @property
     @abstractmethod
     def file_extension(self)->str:
         """"""
 
+    @property
     @abstractmethod
-    def open_restart_file(self)->IOBase:
+    def get_open_command(self)->IOBase:
         """"""
 
     def __init__(self, restart_file_handle:str, restart:bool):
@@ -30,6 +32,7 @@ class BatchRestartBase(ABC):
         self._restart_file_handle = restart_file_handle
         self._finished_jobs = {}
 
+    @classmethod
     def _create_h5_group(self, job_keys:list)->str:
         group_name = ""
         for i, key_element in enumerate(job_keys):
@@ -48,21 +51,9 @@ class BatchRestartBase(ABC):
         return self._retrieve_results_file_impl(job_keys)
 
 
-class BatchRestartNone(BatchRestartBase):
-    # Used to turn off file saving which may interfere with 3rd party libraries. 
-
-    def record(self, job_keys, results_filename):
-        print("Batch Restart Recording")
-
-    def _retrieve_results_file_impl(self, job_keys):
-        print("Batch Restart Retrieving")
-        return self.default_lookup_return
-
-    def file_extension():
-        return None
-
-
 class BatchRestartCSV(BatchRestartBase):
+
+    file_extension = ".csv"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -93,15 +84,12 @@ class BatchRestartCSV(BatchRestartBase):
         return res_filename
 
     @staticmethod
-    def file_extension():
-        return ".csv"
-
-    @staticmethod
-    def open_restart_file():
+    def get_open_command():
         return open
 
-
 class BatchRestartHDF5(BatchRestartBase):
+
+    file_extension = ".h5"
 
     def record(self, job_keys:list, results_filename:str)->None:
         if not isinstance(results_filename, str):
@@ -117,13 +105,9 @@ class BatchRestartHDF5(BatchRestartBase):
         else:
             res_filename = self.default_lookup_return
         return res_filename
-
-    @staticmethod
-    def file_extension():
-        return ".h5"
     
     @staticmethod
-    def open_restart_file():
+    def get_open_command():
         import h5py
         return h5py.File
     

@@ -82,9 +82,11 @@ def run_jobs_serial(bill_of_jobs, batch_restart):
     for job_key, job in bill_of_jobs:
         previous_results_filename = batch_restart.retrieve_results_file(job_key)
         if previous_results_filename is None:
+            logger.info("  Dispatched job: "+ _string_key(job_key))
             run_results = job.run()
             if run_results.source_filename is not None:
                 batch_restart.record(job_key, run_results.source_filename)
+            logger.info(f"  Finished job: {_string_key(job_key)}\n")
         else:
             run_results = _retrieve_restart_results(job_key, previous_results_filename, job.task)
         raw_results.append((job_key, run_results))

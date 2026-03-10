@@ -331,7 +331,7 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=False)
         params = {"eval.1":{"a":0.0, "b":0.0}, 'eval.2':{'a':1.1, "b":-1.}}
         results = pbe.run(params, False)
-        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension())
+        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension)
         job_keys = [['eval.1', model.name, 'matcal_default_state'],
                 ['eval.2', model.name, 'matcal_default_state']]
         goals = [ os.path.join("matcal_python_results_archive",model.name+'_a=0.0_b=0.0.joblib'),
@@ -348,7 +348,7 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=False)
         params = {"eval.1":{"a":2.0, "b":0.0}, 'eval.2':{'a':-1.1, "b":-1.},'eval.3':{'a':1.1, "b":-1.}}
         results = pbe.run(params, False)
-        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension())
+        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension)
         job_keys = [['eval.1', model.name, 'matcal_default_state'],
                 ['eval.2', model.name, 'matcal_default_state'],
                 ['eval.3', model.name, 'matcal_default_state']]
@@ -368,7 +368,7 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=True)
         params = {"eval.1":{"a":2.0, "b":0.0}, 'eval.2':{'a':-1.1, "b":-1.},'eval.3':{'a':1.1, "b":-1.}}
         results = pbe.run(params, False)
-        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension())
+        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension)
         job_keys = [['eval.1', model.name, 'matcal_default_state'],
                 ['eval.2', model.name, 'matcal_default_state'],
                 ['eval.3', model.name, 'matcal_default_state']]

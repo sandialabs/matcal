@@ -1,4 +1,3 @@
-import functools
 import matcal as mc
 import numpy as np
 import time
@@ -8,40 +7,36 @@ from matcal.core.surrogates import (SurrogateGenerator, _package_parameter_range
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
-def my_function( n_pts=25, **param_dict):
-    import numpy as np
+def my_function(n_pts=25, eval_kill=49, **param_dict):
+    time.sleep(0.6)
     x = np.linspace(0, 1, n_pts)
     y = param_dict['a'] * x - param_dict['b'] * x
+    if param_dict["evaluation_number"] > eval_kill:
+        raise ValueError("Exiting based on eval number")
     return {"x": x, "y": y}
 
 
-def terminate_decorator(func):
-    @functools.wraps(func)
-    def run_or_not(*args, **kwargs):
-        run_or_not.calls += 1
-        if run_or_not.calls >= 48:
-            raise RuntimeError("no run")
-        else:
-            return func(*args, **kwargs)
-    run_or_not.calls = 0
-    return run_or_not
+def linear_model_func(a,s):
+    x = np.linspace(0,5,5)
+    y=s*a*x
+    w = -s*a*x
+    return {'x':x, 'y':y, 'w':w}
 
 
-@terminate_decorator
-def my_function_term(**param_dict):
-    time.sleep(.1)
-    return my_function(**param_dict)
+def exponential_model_func(a,s):
+    x = np.linspace(1, 5,5)
+    z=np.exp(x**(a*s))
+    return {'x':x, 'z':z}
 
 
 def my_linear_function(**param_dict):
-    import numpy as np
     x = np.linspace(0, 1, 20)
     y = param_dict['a'] * x + param_dict['b']
     return {"x":x, "y":y}
 
 
 def get_goal_data():
-    return mc.convert_dictionary_to_data(my_function(a=2, b=0, n_pts=5))
+    return mc.convert_dictionary_to_data(my_function(a=2, b=0, n_pts=5, evaluation_number=0))
 
 
 class PythonSensitivities(MatcalUnitTest):
@@ -56,7 +51,8 @@ class PythonSensitivities(MatcalUnitTest):
 
         curve_data = get_goal_data()
 
-        model = mc.PythonModel(my_function)
+        model = mc.PythonModel(my_function, pass_evaluation_number=True)
+        model.add_constants(eval_kill=100000000)
 
         study = mc.LhsSensitivityStudy(parameter_collection)
         objective = mc.CurveBasedInterpolatedObjective("x", "y")
@@ -77,7 +73,7 @@ class PythonSensitivities(MatcalUnitTest):
         parameter_collection = mc.ParameterCollection("two_parameter", slope, intercept)
 
         curve_data = get_goal_data()
-        model = mc.PythonModel(my_function_term)
+        model = mc.PythonModel(my_function, pass_evaluation_number=True)
         model.set_name('py_model')
         
         study = mc.LhsSensitivityStudy(parameter_collection)
@@ -85,14 +81,26 @@ class PythonSensitivities(MatcalUnitTest):
         study.add_evaluation_set(model, objective, curve_data)
         study.set_number_of_samples(50)
         study.set_random_seed(8555)
-
         base_start = time.time()
         try:
             base_results = study.launch()
         except Exception:
             pass
         base_delta = time.time() - base_start
-        
+
+        study = mc.LhsSensitivityStudy(parameter_collection)
+        study.add_evaluation_set(model, objective, curve_data)
+        study.set_number_of_samples(50)
+        study.set_random_seed(8555)
+        study.restart()
+
+        restart_start = time.time()
+        try:
+            restart_results = study.launch()
+        except Exception:
+            pass        
+        restart_delta = time.time() - restart_start
+
         # Garbage collection is necessary because h5py close is not fully releasing
         # the lock on the hdf5 file. Calling garbage collection fixes this problem. 
         # Calling collect in the close method does not seem to work. However, because
@@ -100,24 +108,16 @@ class PythonSensitivities(MatcalUnitTest):
         import gc
         gc.collect()
 
-        model = mc.PythonModel(my_function)
-        model.set_name('py_model')
-
+        time_ratio = base_delta / restart_delta
+        min_ratio = 3
+        model.add_constants(eval_kill=100)
+        self.assertGreaterEqual(time_ratio, min_ratio)
         study = mc.LhsSensitivityStudy(parameter_collection)
-        objective = mc.CurveBasedInterpolatedObjective("x", "y")
         study.add_evaluation_set(model, objective, curve_data)
         study.set_number_of_samples(50)
         study.set_random_seed(8555)
         study.restart()
-
-        restart_start = time.time()
         restart_results = study.launch()
-        restart_delta = time.time() - restart_start
-
-        time_ratio = base_delta / restart_delta
-        min_ratio = 3
-        print(time_ratio)
-        self.assertGreaterEqual(time_ratio, min_ratio)
 
         goal  = {'a':np.array([np.nan] +4*[1], dtype=float), 'b':np.array([np.nan]+4*[-1],
                                                                            dtype=float)}
@@ -130,7 +130,7 @@ class PythonSensitivities(MatcalUnitTest):
         parameter_collection = mc.ParameterCollection("two_parameter", slope, intercept)
 
         curve_data = get_goal_data()
-        model = mc.PythonModel(my_function_term)
+        model = mc.PythonModel(my_function, pass_evaluation_number=True)
         model.set_name('py_model')
         
         study = mc.LhsSensitivityStudy(parameter_collection)
@@ -146,17 +146,8 @@ class PythonSensitivities(MatcalUnitTest):
         except Exception:
             pass
         base_delta = time.time() - base_start
-        
-        # Garbage collection is necessary becuase h5py close is not fully releaseing
-        # the lock on the hdf5 file. Calling garbage collection fixes this problem. 
-        import gc
-        gc.collect()
-
-        model = mc.PythonModel(my_function)
-        model.set_name('py_model')
 
         study = mc.LhsSensitivityStudy(parameter_collection)
-        objective = mc.CurveBasedInterpolatedObjective("x", "y")
         study.add_evaluation_set(model, objective, curve_data)
         study.set_number_of_samples(50)
         study.set_random_seed(8555)
@@ -164,12 +155,23 @@ class PythonSensitivities(MatcalUnitTest):
         study.run_in_serial()
 
         restart_start = time.time()
-        restart_results = study.launch()
+        try:
+            restart_results = study.launch()
+        except Exception:
+            pass        
         restart_delta = time.time() - restart_start
 
         time_ratio = base_delta / restart_delta
         min_ratio = 3
         self.assertGreaterEqual(time_ratio, min_ratio)
+        model.add_constants(eval_kill=100)
+        study = mc.LhsSensitivityStudy(parameter_collection)
+        study.add_evaluation_set(model, objective, curve_data)
+        study.set_number_of_samples(50)
+        study.set_random_seed(8555)
+        study.restart()
+        study.run_in_serial()
+        restart_results = study.launch()
 
         goal  = {'a':np.array([np.nan] +4*[1], dtype=float), 'b':np.array([np.nan]+4*[-1],
                                                                            dtype=float)}
@@ -179,20 +181,6 @@ class PythonSensitivities(MatcalUnitTest):
     def test_pearson_multiple_objective_overall(self):
         state_1 = mc.State("s1", s=1)
         state_2 = mc.State("s2", s=-1)
-
-        def linear_model_func(a,s):
-            import numpy as np
-            x = np.linspace(0,5,5)
-            y=s*a*x
-            w = -s*a*x
-            return {'x':x, 'y':y, 'w':w}
-
-        def exponential_model_func(a,s):
-            import numpy as np
-            x = np.linspace(1, 5,5)
-            z=np.exp(x**(a*s))
-
-            return {'x':x, 'z':z}
 
         a = mc.Parameter("a", 0, 4, distribution="uniform_uncertain")
      
@@ -237,21 +225,6 @@ class PythonSensitivities(MatcalUnitTest):
     def test_pearson_multiple_objective(self):
         state_1 = mc.State("s1", s=1)
         state_2 = mc.State("s2", s=-1)
-
-        def linear_model_func(a,s):
-            import numpy as np
-            x = np.linspace(0,5,5)
-            y=s*a*x
-            w = -s*a*x
-            return {'x':x, 'y':y, 'w':w}
-
-
-        def exponential_model_func(a,s):
-            import numpy as np
-            x = np.linspace(1, 5,5)
-            z=np.exp(x**(a*s))
-
-            return {'x':x, 'z':z}
 
         a = mc.Parameter("a", 0, 4, distribution="uniform_uncertain")
      
@@ -329,8 +302,8 @@ class PythonSensitivities(MatcalUnitTest):
 
         curve_data = get_goal_data()
 
-        model = mc.PythonModel(my_function)
-
+        model = mc.PythonModel(my_function, pass_evaluation_number=True)
+        model.add_constants(eval_kill=100000000)
         study = mc.LhsSensitivityStudy(parameter_collection)
         study.make_sobol_index_study()
         objective = mc.CurveBasedInterpolatedObjective("x", "y")
@@ -358,7 +331,8 @@ class PythonSensitivities(MatcalUnitTest):
 
         curve_data = get_goal_data()
 
-        model = mc.PythonModel(my_function)
+        model = mc.PythonModel(my_function, pass_evaluation_number=True)
+        model.add_constants(eval_kill=100000000)
 
         study = mc.LhsSensitivityStudy(parameter_collection)
         study.use_overall_objective()
