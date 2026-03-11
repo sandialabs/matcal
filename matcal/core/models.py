@@ -678,7 +678,7 @@ class PythonModel(ModelBase):
     :type field_coordinates: dict 
     :param pass_evaluation_number: If ``True``, the current evaluation number
         is passed to the user function as the keyword argument
-        ``evaluation_number``.
+        ``evaluation_number``. 
     :type pass_evaluation_number: bool
     :param pass_params_by_category: If ``True``, the parameters are passed in as dictionaries
         according to parameter category. To read in the parameters the python function 

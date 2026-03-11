@@ -1390,8 +1390,9 @@ class StudyResults:
             self._initialize_parameter_history(batch_parameters, eval_order)
         for idx, key in enumerate(eval_order):
             if idx % self._save_freq == 0:
-                for p_name, p_val in batch_parameters[key].items(): 
-                    self._parameter_history[p_name].append(p_val)
+                for p_name, p_val in batch_parameters[key].items():
+                    if p_name in self._parameter_history: 
+                        self._parameter_history[p_name].append(p_val)
 
     def _update_simulation_history(self, simulation_results_dc, model_name):
         if self._record_data:
