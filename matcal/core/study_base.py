@@ -440,9 +440,13 @@ class StudyBase(ABC):
             self._restart_obj = SelectedBatchRestartClass(restart_file_handle, 
                                                           self._restart)
             logger.info("Launching study...\n")
-            self._results = self._run_study()
-        logger.info("Study complete!\n")
-
+            try: 
+                self._results = self._run_study()
+                logger.info("Study complete!\n")
+            except Exception as e:
+                logger.error(f"MatCal study.launch() failed with error {repr(e)}. Exiting.")
+                raise e
+                
         self._study_specific_postprocessing()
         logger.enable_traceback()
         self._purge_unneeded_matcal_information()
@@ -529,7 +533,7 @@ class StudyBase(ABC):
 
     def _check_restart(self):
         if self._use_threads and self._restart:
-            raise RuntimeError("Use of Threads and Restart functionality currently does not work."+
+            raise RuntimeError("Use of Threads and Restart functionality currently does not work. "+
             "Please do not invoke 'set_use_threads' with restarts.")
 
     def _initialize_results(self):

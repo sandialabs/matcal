@@ -8,7 +8,7 @@ from matcal.core.computing_platforms import local_computer
 from matcal.core.data import DataCollection, convert_dictionary_to_data
 from matcal.core.evaluation_set import StudyEvaluationSet
 from matcal.core.multi_core_job_pool import (Dispatcher, Job, TooManyJobCoresError, 
-    _create_job_dispatcher, dispatch_jobs, prepare_parameter_evaluation_jobs, run_jobs_serial, 
+    _create_job_dispatcher, prepare_parameter_evaluation_jobs, run_jobs_serial, 
     _retrieve_restart_results)
 from matcal.core.objective import (CurveBasedInterpolatedObjective, ObjectiveCollection, 
                                    ObjectiveSet)
@@ -139,7 +139,8 @@ class TestJobDispatch:
             max_cores = 20
             with open("test_file.restart", "w+") as fh:
                 br = BatchRestartCSV(fh, True)
-                job_results = dispatch_jobs(jobs, max_cores, br)
+                dispatcher = _create_job_dispatcher(max_cores, self._use_threads, br)
+                job_results = dispatcher.dispatch_jobs(jobs)
                 for key, val in goal.items():
                     result = job_results[key]
                     self.assertEqual(result.stdout, val.stdout)
@@ -166,7 +167,8 @@ class TestJobDispatch:
             with self.assertRaises(TooManyJobCoresError):
                 with open("test_file.restart", "w+") as fh:
                     br = BatchRestartCSV(fh, True)
-                    results = dispatch_jobs(jobs, 10,  br)
+                    dispatcher = _create_job_dispatcher(10, self._use_threads, br)
+                    results = dispatcher.dispatch_jobs(jobs)
 
         def _make_all_jobs(self):
             jobs = []
@@ -180,7 +182,7 @@ class TestJobDispatch:
             with open("test_file.restart", "w+") as fh:
                 br = BatchRestartCSV(fh, True)
                 dispathcer = _create_job_dispatcher(max_cores, self._use_threads, br)
-                self.assertEqual(isinstance(dispathcer.pool, ThreadPoolExecutor), self._use_threads)
+                self.assertEqual(dispathcer.pool_type == ThreadPoolExecutor, self._use_threads)
 
 
         class DispatcherSpy(Dispatcher):

@@ -111,20 +111,6 @@ def _retrieve_restart_results(job_key, previous_results_filename, simulator):
     return run_results
 
 
-def dispatch_jobs(bill_of_jobs, max_cores, batch_restart, use_threads=False, 
-                  always_use_threads=False):
-    _check_cores_in_jobs(bill_of_jobs, max_cores)
-    if use_threads:
-        use_threads = _use_threads(bill_of_jobs, max_cores, always_use_threads=always_use_threads)
-
-    dispatcher = _create_job_dispatcher(max_cores, use_threads, batch_restart)
-    for job_key, job in bill_of_jobs:
-        dispatcher.dispatch_job_when_available(job_key, job)
-    raw_results = dispatcher.get_results_when_finished()
-    results = _convert_tuple_to_dict(raw_results)
-    return results
-
-
 def _use_threads(bill_of_jobs, max_cores_available, always_use_threads=False):
     if always_use_threads:
         return True
@@ -141,7 +127,7 @@ def _check_cores_in_jobs(jobs, max_cores):
     for job_key, job in jobs:
         if job.cores > max_cores:
             message = f"The job ({job}) requires {job.cores} cores. "
-            message += "This is more cores than the {max_cores} available cores."
+            message += f"This is more cores than the {max_cores} available cores."
             raise TooManyJobCoresError(message)
 
 
@@ -180,12 +166,22 @@ class Dispatcher:
     def __init__(self, max_cores, pool_type, batch_restart):
         self.max_cores = max_cores
         self.current_core_use = 0
-        self.pool = pool_type(max_cores)
+        self.pool_type = pool_type
+        self.pool=None
         self._running_jobs = []
         self._job_results = []
         self._finished = False
         self._batch_restart = batch_restart
-    
+
+    def dispatch_jobs(self, bill_of_jobs):
+        _check_cores_in_jobs(bill_of_jobs, self.max_cores)
+        with self.pool_type(self.max_cores) as self.pool:
+            for job_key, job in bill_of_jobs:
+                self.dispatch_job_when_available(job_key, job)
+            raw_results = self.get_results_when_finished()
+        results = _convert_tuple_to_dict(raw_results)
+        return results
+
     def dispatch_job_when_available(self, job_key, job):
         self._confirm_not_finished()
         job_dispatched = False
@@ -259,6 +255,7 @@ class Dispatcher:
 
     def _finish(self):
         self._finished = True
+
 
     class ClosedDispatchError(RuntimeError):
 

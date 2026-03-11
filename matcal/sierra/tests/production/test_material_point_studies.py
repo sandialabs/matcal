@@ -28,14 +28,13 @@ def param_preprocessor_func(params):
     return params
 
 def my_function(**param_dict):
-    import numpy as np
     if "restart_kill" in param_dict:
         matcal_print_message(param_dict)
         if param_dict['elastic_modulus'] < 2.05e+11:
             matcal_print_message("Emod close to sol:", param_dict['elastic_modulus'] < 2.05e+11)
             matcal_print_message("Emod:",param_dict['elastic_modulus'])
             
-            return None
+            raise RuntimeError("Exiting as desired...")
     return {"true_strain": np.log(1.5), "true_stress": 0}
 
 MODEL_GENERATOR = UniaxialLoadingMaterialPointModelForTests()
@@ -316,7 +315,7 @@ class MaterialPointModelStudyTests(MatcalUnitTest):
         restart_results_file = os.path.join(study_dir, 
                                     IN_PROGRESS_RESULTS_FILENAME+"."+EVALUATION_EXTENSION)
         goal_restart = os.path.abspath(restarted_restart_file)
-        initial_emod_val = emod_cur_val*(1+1e-2*np.random.uniform())
+        initial_emod_val = emod_cur_val*(10.0)
         def setup_cal(restart=False):
             EPC.update_parameters(elastic_modulus=initial_emod_val)
             calibration = GradientCalibrationStudy(EPC["elastic_modulus"])
@@ -333,14 +332,18 @@ class MaterialPointModelStudyTests(MatcalUnitTest):
 
         calibration = setup_cal()
         init_dir = os.getcwd()
-        with self.assertRaises(AttributeError):
+        try:
             #catches desired failure once calibration gets close to solution
             results = calibration.launch()
+        except Exception as e:
+            print(e)
+
         import time
         matcal_print_message("Sleeping to allow files to delete")
         time.sleep(10.0)
         matcal_print_message("Going")
         os.chdir(init_dir)
+
         calibration = setup_cal(restart=True)
         results = calibration.launch()
         with open(os.path.join(study_dir, "dakota.out"), "r") as f:

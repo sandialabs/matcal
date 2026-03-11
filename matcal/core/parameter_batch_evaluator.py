@@ -8,7 +8,8 @@ from matcal.core.constants import (DESIGN_PARAMETER_FILE,
                                    MATCAL_TEMPLATE_DIRECTORY)
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.multi_core_job_pool import (convert_results_to_dict_of_data_collections, 
-     dispatch_jobs, prepare_parameter_evaluation_jobs, run_jobs_serial)
+     prepare_parameter_evaluation_jobs, run_jobs_serial, _use_threads, 
+     _create_job_dispatcher)
 from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.utilities import remove_directory
 
@@ -149,8 +150,13 @@ class ParameterBatchEvaluator():
 
     def _run_jobs(self, jobs_to_run, batch_restart):
         if self._run_async:
-            job_results = dispatch_jobs(jobs_to_run, self._total_study_cores, batch_restart,
-                                        self._use_threads, self._always_use_threads)
+            use_threads=False
+            if self._use_threads:
+                use_threads = _use_threads(jobs_to_run, self._total_study_cores, 
+                                           always_use_threads=self._always_use_threads)
+            dispatcher = _create_job_dispatcher(self._total_study_cores, use_threads, 
+                                                batch_restart)
+            job_results = dispatcher.dispatch_jobs(jobs_to_run)
         else:
             job_results = run_jobs_serial(jobs_to_run, batch_restart)
         return job_results
