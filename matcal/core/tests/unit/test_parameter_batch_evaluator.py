@@ -1,7 +1,7 @@
 from collections import OrderedDict
 import numpy as np
 import os
-import h5py
+
 
 from matcal.core.constants import (BATCH_RESTART_FILENAME, 
                                    DESIGN_PARAMETER_FILE)
@@ -11,8 +11,7 @@ from matcal.core.models import PythonModel
 from matcal.core.objective import (CurveBasedInterpolatedObjective, 
                                    ObjectiveCollection, ObjectiveSet)
 from matcal.core.objective_results import ObjectiveResults
-from matcal.core.parameter_batch_evaluator import (BatchRestartHDF5, MissingKeyError, 
-                                                   ParameterBatchEvaluator, BatchRestartCSV, SelectedBatchRestartClass,
+from matcal.core.parameter_batch_evaluator import (ParameterBatchEvaluator, 
                                                     _calculate_total_objective, 
                                                     _combine_objective_results, 
                                                     _combine_residual_results, _setup_workdir, 
@@ -20,15 +19,18 @@ from matcal.core.parameter_batch_evaluator import (BatchRestartHDF5, MissingKeyE
                                                     write_parameter_include_file,
                                                     EvaluationFailureDefaults)
 from matcal.core.reporter import matcal_parameter_reporter_identifier
+from matcal.core.restart_file import (SelectedBatchRestartClass)
+
 from matcal.core.state import SolitaryState, State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
-import gc
+
 
 def line(**parameters):
     x = 1
     y = parameters['a'] * x + parameters['b']
     out = {'x':[0,1], 'y':[parameters['b'],y]}
     return out 
+
 
 def line_with_failure(**parameters):
     if parameters['a'] < 0:
@@ -38,8 +40,8 @@ def line_with_failure(**parameters):
     out = {'x':[0,1], 'y':[parameters['b'],y]}
     return out 
 
+
 def quad(**parameters):
-    import numpy as np
     time = np.array([0,1,2,3])
     temp = 273 + parameters['a'] * time
     disp = np.power(time, parameters['b'])/10
@@ -67,141 +69,6 @@ def _make_linear_data(line_func=line, count_on_failure=False):
     eval_set.prepare_model_and_simulators(template_dir)
     eval_sets = {model:eval_set}
     return exp_data,n_cores,model,eval_sets
-
-
-def _make_quadratic_data():
-    template_dir = "matcal_template"
-    if not os.path.exists(template_dir):
-        os.mkdir(template_dir)
-
-    data_dict = {"time":[0, 1, 2, 3], 
-                 "temp":[273, 283, 293, 303], 
-                 "disp":[0.0, 0.1, 0.4, 0.9]
-                 }
-    exp_data = convert_dictionary_to_data(data_dict)
-    dc = DataCollection('test', exp_data)
-    objective = CurveBasedInterpolatedObjective("time", "temp", 'disp')
-    n_cores = 2
-    model = PythonModel(quad)
-    eval_set = StudyEvaluationSet(model, ObjectiveSet(ObjectiveCollection("one_obj", objective),
-                                                       dc, dc.states))
-    eval_set.prepare_model_and_simulators(template_dir)
-    return n_cores,model,{model:eval_set}
-
-
-def _make_more_linear_data(npts=2):
-    template_dir = "matcal_template"
-    if not os.path.exists(template_dir):
-        os.mkdir(template_dir)
-
-    data_dict = {"x":np.linspace(0,1, npts), "y":np.linspace(1,2, npts)}
-    exp_data1 = convert_dictionary_to_data(data_dict)
-
-    data_dict2 = {"x":np.linspace(0,1, npts), "y": np.linspace(1.01, 2.02, npts)}
-    exp_data2 = convert_dictionary_to_data(data_dict2)
-    dc = DataCollection('test', exp_data1, exp_data2)
-    objective = CurveBasedInterpolatedObjective("x", "y")
-    n_cores = 2
-    model = PythonModel(line)
-    eval_set = StudyEvaluationSet(model, ObjectiveSet(ObjectiveCollection("one_obj", objective), 
-                                                      dc, dc.states))
-    eval_set.prepare_model_and_simulators(template_dir)
-    return n_cores,model,{model:eval_set}
-
-
-class BatchRestartTests(MatcalUnitTest):
-
-    class CommonSetUp(MatcalUnitTest):
-
-        @property
-        def _batch_restart_class(self):
-            """"""
-
-        def setUp(self):
-            super().setUp(__file__)
-
-    class CommonTests(CommonSetUp):
-
-        def test_init(self):
-            save_only = True
-            br = self._batch_restart_class(save_only)
-            br.close()
-
-        def test_record_and_retrieve_if_exists_else_None_and_not_save_only(self):
-            empty_br = self._batch_restart_class(True)
-            empty_br.close()
-            gc.collect()
-
-            save_only = False
-            br = self._batch_restart_class(save_only)
-            eval_name = 'eval.1'
-            model_name = 'model'
-            state_name = 'matcal_default_state'
-            results_filename = 'results.csv'
-            job_key = [eval_name, model_name, state_name]
-            none_job_key = ['eval.2', model_name, state_name]
-            goal_file= results_filename
-            br.record(job_key, results_filename)
-            self.assertEqual(br.retrieve_results_file(job_key), goal_file)
-            self.assertIsNone(br.retrieve_results_file(none_job_key))
-            br.close()
-
-        def test_if_save_only_retrieve_returns_None_always(self):
-            save_only = True
-            br = self._batch_restart_class(save_only)
-            eval_name = 'eval.1'
-            model_name = 'model'
-            state_name = 'matcal_default_state'
-            results_filename = 'results.csv'
-            job_key = [eval_name, model_name, state_name]
-            none_job_key = ['eval.2', model_name, state_name]
-            goal_file= results_filename
-            br.record(job_key, results_filename)
-            self.assertIsNone(br.retrieve_results_file(job_key), goal_file)
-            self.assertIsNone(br.retrieve_results_file(none_job_key))
-            br.close()
-
-        def test_None_filename_does_not_get_written(self):
-            save_only = True
-            br = self._batch_restart_class(save_only)
-
-            restart_file = f"{BATCH_RESTART_FILENAME}"+br.file_extension()
-            old_file_size = os.path.getsize(restart_file)
-
-            br.record(['a', 'b', 'c'], None)
-            self.assertIsNone(br.retrieve_results_file(['a', 'b', 'c']))
-            os.path.getsize(restart_file)
-            new_file_szie = os.path.getsize(restart_file)
-            self.assertEqual(new_file_szie, old_file_size)
-
-        def test_write_to_file_durring_a_record(self):
-            save_only = True
-            br = self._batch_restart_class(save_only)
-            restart_file = f"{BATCH_RESTART_FILENAME}"+br.file_extension()
-
-            old_file_size = os.path.getsize(restart_file)
-            br.record(['a', 'b', 'c'], 'a.txt')
-            new_file_size = os.path.getsize(restart_file)
-            self.assertGreater(new_file_size, old_file_size)
-            old_file_size = new_file_size
-            br.record(['a', 'b', 'd'], 'b.txt')
-            new_file_size = os.path.getsize(restart_file)
-            self.assertGreater(new_file_size, old_file_size)
-            old_file_size = new_file_size
-            br.record(['a', 'b', '3'], 'c.txt')
-            new_file_size = os.path.getsize(restart_file)
-            self.assertGreater(new_file_size, old_file_size)
-            old_file_size = new_file_size
-
-
-class TestBatchRestartHDF5(BatchRestartTests.CommonTests):
-
-    _batch_restart_class = BatchRestartHDF5
-
-
-class TestBatchRestartCSV(BatchRestartTests.CommonTests):
-
-    _batch_restart_class = BatchRestartCSV
 
 
 class TestFailureDefaults(MatcalUnitTest):
@@ -315,6 +182,7 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         super().setUp(__file__)
         matcal_parameter_reporter_identifier._registry = {}
 
+
     def test_write_parameter_include_file(self):
         parameters = {"Y":1.0, "CAT":102.0, "cheese":-7.2}
         write_parameter_include_file(parameters, ".")
@@ -332,7 +200,11 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         obj_name = list(eval_set._objective_sets[-1].objectives.values())[-1].name
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
         params = {"eval.1":{"a":0.0, "b":0.0}}
-        results = pbe.run(params, False)
+        filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
+        open_meth = SelectedBatchRestartClass.get_open_command()
+        with open_meth(filename, "w") as f:
+            batch_restart = SelectedBatchRestartClass(f, False)
+            results = pbe.run_for_tests(params, False, batch_restart)
         residual_dict = results['objectives'][0][model.name][obj_name].residuals[exp_data.state]
         residual = residual_dict[0]['y']
         goal_residual  = np.array([-1, -2])
@@ -344,7 +216,11 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         obj_name = list(eval_set._objective_sets[-1].objectives.values())[-1].name
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=False)
         params = {"eval.1":{"a":0.0, "b":0.0}}
-        results = pbe.run(params, False)
+        filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
+        open_meth = SelectedBatchRestartClass.get_open_command()
+        with open_meth(filename, "w") as f:
+            batch_restart = SelectedBatchRestartClass(f, False)
+            results = pbe.run_for_tests(params, False, batch_restart)
         residual_dict = results['objectives'][0][model.name][obj_name].residuals[exp_data.state]
         residual = residual_dict[0]['y']
         goal_residual  = np.array([-1, -2])
@@ -424,16 +300,20 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         obj_name = list(eval_set._objective_sets[-1].objectives.values())[-1].name
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=False)
         params = {"eval.1":{"a":0.0, "b":0.0}, 'eval.2':{'a':1.1, "b":-1.}}
-        results = pbe.run(params, False)
-        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension())
+        filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
+        open_meth = SelectedBatchRestartClass.get_open_command()
+        with open_meth(filename, "w") as f:
+            batch_restart = SelectedBatchRestartClass(f, False)
+            results = pbe.run_for_tests(params, False, batch_restart)
+        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension)
         job_keys = [['eval.1', model.name, 'matcal_default_state'],
                 ['eval.2', model.name, 'matcal_default_state']]
         goals = [ os.path.join("matcal_python_results_archive",model.name+'_a=0.0_b=0.0.joblib'),
                  os.path.join("matcal_python_results_archive",model.name+'_a=1.1_b=-1.0.joblib')]
-        br = SelectedBatchRestartClass(False)
-        for key, goal in zip(job_keys, goals):
-            self.assertEqual(br.retrieve_results_file(key), goal)
-        br.close()
+        with open_meth(filename, "r+") as f:
+            batch_restart = SelectedBatchRestartClass(f, True)
+            for key, goal in zip(job_keys, goals):
+                self.assertEqual(batch_restart.retrieve_results_file(key), goal)
 
     def test_restarts_are_not_written_on_failures_serial(self):
         exp_data, n_cores, model, eval_sets = _make_linear_data(line_with_failure, True)
@@ -441,19 +321,21 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         obj_name = list(eval_set._objective_sets[-1].objectives.values())[-1].name
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=False)
         params = {"eval.1":{"a":2.0, "b":0.0}, 'eval.2':{'a':-1.1, "b":-1.},'eval.3':{'a':1.1, "b":-1.}}
-        results = pbe.run(params, False)
-        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension())
+        filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
+        open_meth = SelectedBatchRestartClass.get_open_command()
+        with open_meth(filename, "w") as f:
+            batch_restart = SelectedBatchRestartClass(f, False)
+            results = pbe.run_for_tests(params, False, batch_restart)
+        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension)
         job_keys = [['eval.1', model.name, 'matcal_default_state'],
                 ['eval.2', model.name, 'matcal_default_state'],
                 ['eval.3', model.name, 'matcal_default_state']]
         goals = [ os.path.join("matcal_python_results_archive", model.name+'_a=2.0_b=0.0.joblib'), None,
                  os.path.join("matcal_python_results_archive",model.name+'_a=1.1_b=-1.0.joblib')]
-        br = SelectedBatchRestartClass(False)
-        for key, goal in zip(job_keys, goals):
-            print(key, br.retrieve_results_file(key))
-        for key, goal in zip(job_keys, goals):
-            self.assertEqual(br.retrieve_results_file(key), goal)
-        br.close()
+        with open_meth(filename, "r+") as f:
+            batch_restart = SelectedBatchRestartClass(f, True)
+            for key, goal in zip(job_keys, goals):
+                self.assertEqual(batch_restart.retrieve_results_file(key), goal)
 
     def test_restarts_are_not_written_on_failures_async(self):
         exp_data, n_cores, model, eval_sets = _make_linear_data(line_with_failure, True)
@@ -461,17 +343,21 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         obj_name = list(eval_set._objective_sets[-1].objectives.values())[-1].name
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=True)
         params = {"eval.1":{"a":2.0, "b":0.0}, 'eval.2':{'a':-1.1, "b":-1.},'eval.3':{'a':1.1, "b":-1.}}
-        results = pbe.run(params, False)
-        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension())
+        filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
+        open_meth = SelectedBatchRestartClass.get_open_command()
+        with open_meth(filename, "w") as f:
+            batch_restart = SelectedBatchRestartClass(f, False)
+            results = pbe.run_for_tests(params, False, batch_restart)
+        self.assert_file_exists(BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension)
         job_keys = [['eval.1', model.name, 'matcal_default_state'],
                 ['eval.2', model.name, 'matcal_default_state'],
                 ['eval.3', model.name, 'matcal_default_state']]
         goals = [ os.path.join("matcal_python_results_archive",model.name+'_a=2.0_b=0.0.joblib'), None,
                  os.path.join("matcal_python_results_archive",model.name+'_a=1.1_b=-1.0.joblib')]
-        br = SelectedBatchRestartClass(False)
-        for key, goal in zip(job_keys, goals):
-            self.assertEqual(br.retrieve_results_file(key), goal)
-        br.close()
+        with open_meth(filename, "r+") as f:
+            batch_restart = SelectedBatchRestartClass(f, True)    
+            for key, goal in zip(job_keys, goals):
+                self.assertEqual(batch_restart.retrieve_results_file(key), goal)
 
     def test_create_restart_run_only_reads(self):
         exp_data, n_cores, model, eval_sets = _make_linear_data()
@@ -479,8 +365,15 @@ class TestParameterBatchEvaluator(MatcalUnitTest):
         obj_name = list(eval_set._objective_sets[-1].objectives.values())[-1].name
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False, run_async=False)
         params = {"eval.1":{"a":0.0, "b":0.0}, 'eval.2':{'a':1.1, "b":-1.}}
-        results = pbe.run(params, False)
-        restart_results = pbe.restart_run(params, False)
+        filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
+        open_meth = SelectedBatchRestartClass.get_open_command()
+        with open_meth(filename, "w") as f:
+            batch_restart = SelectedBatchRestartClass(f, False)
+            results = pbe.run_for_tests(params, False, batch_restart) 
+            
+        with open_meth(filename, "r+") as f:
+            batch_restart = SelectedBatchRestartClass(f, True)
+            restart_results = pbe.run_for_tests(params, False, batch_restart)
         for eval_name, eval_params in results['parameters'].items():
             restart_params = restart_results['parameters'][eval_name]
             self.assert_close_dicts_or_data(eval_params, restart_params)

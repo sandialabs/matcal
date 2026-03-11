@@ -16,7 +16,8 @@ from sys import argv
 
 from matcal.core.constants import (FINAL_RESULTS_FILENAME, IN_PROGRESS_RESULTS_FILENAME, 
                                    MATCAL_WORKDIR_STR, STATE_PARAMETER_FILE, 
-                                   MATCAL_TEMPLATE_DIRECTORY, MATCAL_MESH_TEMPLATE_DIRECTORY)
+                                   MATCAL_TEMPLATE_DIRECTORY, MATCAL_MESH_TEMPLATE_DIRECTORY, 
+                                   BATCH_RESTART_FILENAME)
 from matcal.core.data import (DataCollection, MaxAbsDataConditioner,
                                DataConditionerBase)
 from matcal.core.evaluation_set import StudyEvaluationSet
@@ -30,6 +31,7 @@ from matcal.core.parameter_batch_evaluator import (ParameterBatchEvaluator,
                                                    flatten_evaluation_batch_results) 
 from matcal.core.plotting import _NullPlotter, StandardAutoPlotter
 from matcal.core.pruner import DirectoryPrunerKeepAll, DirectoryPrunerBase, Eliminator
+from matcal.core.restart_file import SelectedBatchRestartClass
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.state import StateCollection, SolitaryState
 from matcal.core.utilities import (_sort_workdirs, check_value_is_bool, 
@@ -117,6 +119,7 @@ class StudyBase(ABC):
         self._plotter = _NullPlotter()
 
         self._restart = False
+        self._restart_obj = None
         self._perform_data_purge = True
 
         self._assessor = DirectoryPrunerKeepAll()
@@ -430,11 +433,20 @@ class StudyBase(ABC):
         self._initialize_study_and_batch_evaluator()
         
         self._purge_unused_data()
-        logger.info("Launching study...\n")
-        
-        self._results = self._run_study()
-        logger.info("Study complete!\n")
-
+        restart_filename = self._get_restart_filename()
+        write_or_append = self._get_write_or_append(restart_filename)
+        open_meth = SelectedBatchRestartClass.get_open_command()
+        with open_meth(restart_filename, write_or_append) as restart_file_handle:
+            self._restart_obj = SelectedBatchRestartClass(restart_file_handle, 
+                                                          self._restart)
+            logger.info("Launching study...\n")
+            try: 
+                self._results = self._run_study()
+                logger.info("Study complete!\n")
+            except Exception as e:
+                logger.error(f"MatCal study.launch() failed with error {repr(e)}. Exiting.")
+                raise e
+                
         self._study_specific_postprocessing()
         logger.enable_traceback()
         self._purge_unneeded_matcal_information()
@@ -444,6 +456,16 @@ class StudyBase(ABC):
         date_time_str = datetime.today().strftime('%m/%d/%Y at %I:%M:%S %p')
         logger.info(f"MatCal completed at: {date_time_str}")
         return self._results
+
+    def _get_restart_filename(self):
+        restart_filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
+        return restart_filename
+
+    def _get_write_or_append(self, restart_filename):
+        if self._restart and os.path.exists(restart_filename):
+            return "r+"
+        else:
+            return "w"
 
     def _export_final_results(self):
         self._set_final_results_name()
@@ -484,6 +506,7 @@ class StudyBase(ABC):
         else:
             self._go_to_working_directory()
             self._delete_old_study_files()
+        
         self._initialize_evaluation_sets()
         parameter_batch_evaluator = ParameterBatchEvaluator(self._total_cores_available, 
                                                             self._evaluation_sets,
@@ -510,7 +533,7 @@ class StudyBase(ABC):
 
     def _check_restart(self):
         if self._use_threads and self._restart:
-            raise RuntimeError("Use of Threads and Restart functionality currently does not work."+
+            raise RuntimeError("Use of Threads and Restart functionality currently does not work. "+
             "Please do not invoke 'set_use_threads' with restarts.")
 
     def _initialize_results(self):
@@ -711,14 +734,12 @@ class StudyBase(ABC):
         self._remove_existing_working_directory = remove_existing
 
     def _matcal_evaluate_parameter_sets_batch(self, parameter_sets, 
-                                              is_finite_difference_eval=False,
-                                              is_restart=False, 
-                                              ignore_missing_restart_file=False):
+                                              is_finite_difference_eval=False):
         formatted_parameter_sets = self._prepare_parameter_sets_to_evaluate(parameter_sets)
         evaluator_func = self._parameter_batch_evaluator.evaluate_parameter_batch
         batch_results = evaluator_func(formatted_parameter_sets, 
-                                       self._needs_residuals, is_restart, 
-                                       ignore_missing_restart_file)
+                                       self._needs_residuals, 
+                                       self._restart_obj)
         batch_raw_objectives, total_objectives, batch_qois = _unpack_evaluation(batch_results)
         
         _record_results(self._results, formatted_parameter_sets, batch_raw_objectives, 
@@ -1369,8 +1390,9 @@ class StudyResults:
             self._initialize_parameter_history(batch_parameters, eval_order)
         for idx, key in enumerate(eval_order):
             if idx % self._save_freq == 0:
-                for p_name, p_val in batch_parameters[key].items(): 
-                    self._parameter_history[p_name].append(p_val)
+                for p_name, p_val in batch_parameters[key].items():
+                    if p_name in self._parameter_history: 
+                        self._parameter_history[p_name].append(p_val)
 
     def _update_simulation_history(self, simulation_results_dc, model_name):
         if self._record_data:

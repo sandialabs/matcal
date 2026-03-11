@@ -792,6 +792,15 @@ class StudyResultsBaseUnitTests(object):
             
             self.assertEqual(len(sr.total_objective_history), n_eval)
 
+        def test_update_parameter_history(self):
+            n_eval = 5
+            sr = self._random_init(n_eval)
+            batch_parameters = {"test1":{'a':1, 'b':1, 'c':1}}
+            sr._update_parameter_history(batch_parameters, ['test1'])
+            self.assertIn('a',sr.parameter_history.keys())
+            self.assertIn('b',sr.parameter_history.keys())
+            self.assertNotIn('c',sr.parameter_history.keys())
+
         def test_results_save_frequency(self):
             neval = 26
             sr = self._random_init(neval, results_save_frequency=5)

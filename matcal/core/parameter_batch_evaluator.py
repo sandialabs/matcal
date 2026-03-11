@@ -1,19 +1,21 @@
-from abc import ABC, abstractmethod
 from collections import OrderedDict
 from matcal.core.data import convert_dictionary_to_data
 import numpy as np
 import os
 import shutil
 
-from matcal.core.constants import (BATCH_RESTART_FILENAME, DESIGN_PARAMETER_FILE,  
+from matcal.core.constants import (DESIGN_PARAMETER_FILE,  
                                    MATCAL_TEMPLATE_DIRECTORY)
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.multi_core_job_pool import (convert_results_to_dict_of_data_collections, 
-     dispatch_jobs, prepare_parameter_evaluation_jobs, run_jobs_serial)
+     prepare_parameter_evaluation_jobs, run_jobs_serial, _use_threads, 
+     _create_job_dispatcher)
 from matcal.core.reporter import matcal_parameter_reporter_identifier
 from matcal.core.utilities import remove_directory
 
+
 logger = initialize_matcal_logger(__name__)
+
 
 def append_unique_to_list(values, base_list):
     for val in values:
@@ -73,157 +75,6 @@ class EvaluationFailureDefaults():
             self.model_specific_fallbacks[model.name] = model.on_failure_values()
 
 
-class BatchRestartBase(ABC):
-
-    @abstractmethod
-    def record(self, job_keys:list, results_filename:str)->None:
-        """"""
-    
-    @abstractmethod
-    def _retrieve_results_file_impl(self, job_keys:list)->str:
-        """"""
-
-    @abstractmethod
-    def close(self)->None:
-        """"""
-
-    @abstractmethod
-    def file_extension(self)->str:
-        """"""
-
-    def __init__(self, save_only:bool, ignore_missing_file=False):
-        self._save_only = save_only
-        self._ignore_missing_file=ignore_missing_file
-    def _create_h5_group(self, job_keys:list)->str:
-        group_name = ""
-        for i, key_element in enumerate(job_keys):
-            if i > 0:
-                group_name += "/"
-            group_name += f"{key_element}"
-        return group_name
-    
-    @property
-    def default_lookup_return(self):
-        return None
-        
-    def retrieve_results_file(self, job_keys:list)->str:
-        if self._save_only:
-            return self.default_lookup_return
-        return self._retrieve_results_file_impl(job_keys)
-
-
-class BatchRestartNone(BatchRestartBase):
-    # Used to turn off file saving which may interfere with 3rd party libraries. 
-
-    def record(self, job_keys, results_filename):
-        print("Batch Restart Recording")
-
-    def _retrieve_results_file_impl(self, job_keys):
-        print("Batch Restart Retrieving")
-        return self.default_lookup_return
-
-    def file_extension():
-        return None
-
-    def close(self):
-        print("Batch Restart Closing")
-
-
-class BatchRestartHDF5(BatchRestartBase):
-
-    def __init__(self, save_only:bool)->None:
-        import h5py
-        super().__init__(save_only)
-        if save_only:
-            write_or_append = "w"
-        else:
-            write_or_append = "r+" #r+ is read/write/append, will not make a new file
-        self._restart_file = h5py.File(BATCH_RESTART_FILENAME+self.file_extension(),
-                                       write_or_append)
-
-    def record(self, job_keys:list, results_filename:str)->None:
-        if not isinstance(results_filename, str):
-            return None
-        group_name = self._create_h5_group(job_keys)
-        self._restart_file.create_group(group_name)
-        self._restart_file[group_name].create_dataset('results', data=[results_filename])
-
-    def _retrieve_results_file_impl(self, job_keys:list)->str:
-        group_name = self._create_h5_group(job_keys)
-        if group_name in self._restart_file:
-            res_filename = self._restart_file[group_name]['results'][0].decode('ascii')
-        else:
-            res_filename = self.default_lookup_return
-        return res_filename
-
-    def close(self):
-        self._restart_file.close()
-
-    @staticmethod
-    def file_extension():
-        return ".h5"
-
-
-class BatchRestartCSV(BatchRestartBase):
-
-    def __init__(self, save_only, ignore_missing_file=False):
-        super().__init__(save_only, ignore_missing_file)
-        current_dir = os.getcwd()
-        full_path_restart_filename = os.path.join(current_dir, 
-                                                  BATCH_RESTART_FILENAME+self.file_extension())
-        self._finished_jobs = {}
-        ignore_missing_file_and_make_new = (self._ignore_missing_file and 
-                                            not os.path.exists(full_path_restart_filename))
-        if save_only or ignore_missing_file_and_make_new:
-            write_or_append = "w"
-        else:
-            write_or_append = "a" 
-            self._finished_jobs = self._get_finished_jobs_info(full_path_restart_filename)
-        try:
-            self._restart_file = open(full_path_restart_filename, write_or_append)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"The restart file \"{full_path_restart_filename}\" "+
-                                    "cannot be opened. Check input.")
-
-    def _get_finished_jobs_info(self, full_path_restart_filename):
-        finished_jobs = {}
-        try:
-            with open(full_path_restart_filename, "r") as f:
-                for line in f.readlines():
-                    job_key, results_filename = line.split(",")
-                    finished_jobs[job_key] = results_filename.strip()
-        except FileNotFoundError:
-            raise FileNotFoundError(f"The restart file \"{full_path_restart_filename}\" "+
-                                    "does not exist. Check input.")          
-        return finished_jobs
-    
-    def record(self, job_keys:list, results_filename:str)->None:
-        if not isinstance(results_filename, str):
-            return None
-        group_name = self._create_h5_group(job_keys)
-        self._finished_jobs[group_name] = results_filename
-        self._restart_file.write(f'{group_name},{results_filename}\n') 
-        self._restart_file.flush()
-
-    def _retrieve_results_file_impl(self, job_keys:list)->str:
-        group_name = self._create_h5_group(job_keys)
-        if group_name in self._finished_jobs:
-            res_filename = self._finished_jobs[group_name]
-        else:
-            res_filename = self.default_lookup_return
-        return res_filename
-
-    def close(self):
-        self._restart_file.close()
-
-    @staticmethod
-    def file_extension():
-        return ".csv"
-
-
-SelectedBatchRestartClass = BatchRestartCSV
-
-
 class ParameterBatchEvaluator():
     """
     Class in charge of running the requested parameter evaluations for a parameter study. 
@@ -251,15 +102,10 @@ class ParameterBatchEvaluator():
             study_objective_qois[eval_set.model.name] = eval_set_objective_qois
         return study_objective_results, study_objective_qois
 
-    def run(self, parameter_sets, is_residual_study):
+    def run_for_tests(self, parameter_sets, is_residual_study, batch_restart):
         objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, 
-                                                                           is_residual_study, False)
-        return self.default_results_formatter(objectives, total_objectives, 
-                                              parameter_sets, qois)
-
-    def restart_run(self, parameter_sets, is_residual_study):
-        objectives, total_objectives, qois = self.evaluate_parameter_batch(parameter_sets, 
-                                                                           is_residual_study, True)
+                                                                           is_residual_study, 
+                                                                           batch_restart)
         return self.default_results_formatter(objectives, total_objectives, 
                                               parameter_sets, qois)
     
@@ -272,20 +118,9 @@ class ParameterBatchEvaluator():
                    'qois':list(qois.values())}
         return results
 
-    def evaluate_parameter_batch(self, parameter_sets, is_residual_study, is_restart=False, 
-                                 ignore_missing_restart_file=False):
-        save_only = not is_restart
-        batch_restart = SelectedBatchRestartClass(save_only, ignore_missing_restart_file)
-        objectives, total_objectives, qois = self._evaluate_parameter_batch_impl(parameter_sets, 
-                                                    is_residual_study, batch_restart, 
-                                                    is_restart)
-        batch_restart.close()
-
-        return objectives, total_objectives, qois
-
-    def _evaluate_parameter_batch_impl(self, parameter_sets, is_residual_study, 
-                                       batch_restart, is_restart):
-        bill_of_jobs = self._assemble_jobs(parameter_sets, is_restart)
+    def evaluate_parameter_batch(self, parameter_sets, is_residual_study, 
+                                       batch_restart):
+        bill_of_jobs = self._assemble_jobs(parameter_sets, batch_restart.restart)
         job_results = self._run_bill_of_jobs(bill_of_jobs, batch_restart)
         objectives, qois, total_objectives = self._process_job_results(parameter_sets, 
                                                                        is_residual_study, 
@@ -315,8 +150,13 @@ class ParameterBatchEvaluator():
 
     def _run_jobs(self, jobs_to_run, batch_restart):
         if self._run_async:
-            job_results = dispatch_jobs(jobs_to_run, self._total_study_cores, batch_restart,
-                                        self._use_threads, self._always_use_threads)
+            use_threads=False
+            if self._use_threads:
+                use_threads = _use_threads(jobs_to_run, self._total_study_cores, 
+                                           always_use_threads=self._always_use_threads)
+            dispatcher = _create_job_dispatcher(self._total_study_cores, use_threads, 
+                                                batch_restart)
+            job_results = dispatcher.dispatch_jobs(jobs_to_run)
         else:
             job_results = run_jobs_serial(jobs_to_run, batch_restart)
         return job_results
@@ -424,10 +264,3 @@ def _combine_residual_results(results_dict):
             combined_residuals = np.append(combined_residuals,
                                            np.asarray(result.calibration_residuals))
     return combined_residuals
-
-
-class MissingKeyError(RuntimeError):
-
-    def __init__(self, missing_key):
-        message = f"ERROR :: Missing Key: {missing_key}"
-        super().__init__(message)

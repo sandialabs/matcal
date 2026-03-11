@@ -746,8 +746,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                         f"{self._surrogate.sample_count_history[-1]} samples.")
         logger.info("................................................................")
         eval_meth = super()._matcal_evaluate_parameter_sets_batch
-        batch_results = eval_meth(self._parameter_sets_to_evaluate, 
-                                  is_restart=self._restart, ignore_missing_restart_file=True)
+        batch_results = eval_meth(self._parameter_sets_to_evaluate)
         return self._format_batch_results(batch_results, parameter_sets)
 
     def _add_parameter_evaluation(self, **p):
@@ -1183,9 +1182,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                                                                           training_params, 
                                                                           training_data)
             self._populate_parameter_evaluations(new_points)
-            self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate, 
-                                                       is_restart=self._restart, 
-                                                       ignore_missing_restart_file=True)
+            self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate)
             training_params, training_data = self._train_surrogate_with_current_results()
             batch_number += 1
         return self._results
@@ -1208,8 +1205,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _run_initial_training_samples(self):
         super().set_number_of_samples(self._num_initial_samples)
         super()._generate_samples(self._num_initial_samples, self._skip)
-        self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate, 
-                                                       is_restart=self._restart)        
+        self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate)        
         return self._train_surrogate_with_current_results()
     
     def _train_surrogate_with_current_results(self):

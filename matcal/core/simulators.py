@@ -3,9 +3,9 @@ The simulator module contains classes that launch models and
 process results to be passed back to MatCal after being run. 
 The only user facing class is the SimulatorResults class.
 """
-
-import os
 from abc import ABC, abstractmethod
+import os
+from collections import OrderedDict
 
 from matcal.core.constants import DESIGN_PARAMETER_FILE, STATE_PARAMETER_FILE, MATCAL_WORKDIR_STR
 from matcal.core.data import convert_dictionary_to_data
@@ -356,25 +356,32 @@ class PythonSimulator(Simulator):
     def _run_python_simulation(self, parameters, working_dir):
         model_constants = self._model.get_model_constants(self._state)
         run_variables = parameters
-        if working_dir is not None and self._pass_evaluation_number:
-            if MATCAL_WORKDIR_STR in working_dir:
-                run_variables["evaluation_number"] = int(working_dir.split(MATCAL_WORKDIR_STR
-                                                                           +".")[-1])
-            else:
-                logger.debug(f"No  \"{MATCAL_WORKDIR_STR}\". Evaluation number not identified.")
+        eval_number = self._get_eval_number(working_dir)
         logger.debug("{}".format(run_variables))
+        kwargs = OrderedDict()
         if not self._pass_params_by_category:
-            params = _get_parameters_according_to_precedence(self._state, model_constants, 
+            kwargs = _get_parameters_according_to_precedence(self._state, model_constants, 
                                                              run_variables)
-            results = self._python_function(**params)
         else:
-            results = self._python_function(model_parameters=run_variables, 
-                                            model_constants=model_constants, 
-                                            state_parameters=self._state.params)
+            kwargs["model_parameters"] = run_variables
+            kwargs["model_constants"] = model_constants
+            kwargs["state_parameters"] = self._state.params
+        if eval_number is not None:
+            kwargs["evaluation_number"] = eval_number
+        results = self._python_function(**kwargs)
         results = self._convert_to_data(results)
         results.set_state(self._state)
         return results
 
+    def _get_eval_number(self, working_dir):
+        eval_number = None
+        if working_dir is not None and self._pass_evaluation_number:
+            if MATCAL_WORKDIR_STR in working_dir:
+                eval_number = int(working_dir.split(MATCAL_WORKDIR_STR+".")[-1])
+            else:
+                logger.debug(f"No  \"{MATCAL_WORKDIR_STR}\". Evaluation number not identified.")
+        return eval_number
+    
     def _convert_to_data(self, results):
         converter = matcal_data_reader_factory.create(self._is_field_simulation(),
             self._field_coordinates)

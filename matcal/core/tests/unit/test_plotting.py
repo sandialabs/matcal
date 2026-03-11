@@ -1,17 +1,73 @@
-from matcal.core.state import SolitaryState
-from matcal.core.study_base import StudyResults, _record_results, _unpack_evaluation
-import numpy as np
 from glob import glob
+import numpy as np
 import os
 
+from matcal.core.data import DataCollection, convert_dictionary_to_data
+from matcal.core.evaluation_set import StudyEvaluationSet
+from matcal.core.models import PythonModel
+from matcal.core.objective import (CurveBasedInterpolatedObjective, 
+                                   ObjectiveCollection, ObjectiveSet)
 from matcal.core.parameter_batch_evaluator import (ParameterBatchEvaluator)
 from matcal.core.plotting import (_NullPlotter, _UserAutoPlotter, 
                                   StandardAutoPlotter, 
                                   make_standard_plots)
+from matcal.core.restart_file import BatchRestartNone
+from matcal.core.study_base import StudyResults, _record_results, _unpack_evaluation
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
-from matcal.core.tests.unit.test_parameter_batch_evaluator import (_make_more_linear_data, 
-                                                                   _make_quadratic_data)
+
+def line(**parameters):
+    x = 1
+    y = parameters['a'] * x + parameters['b']
+    out = {'x':[0,1], 'y':[parameters['b'],y]}
+    return out 
+
+
+def quad(**parameters):
+    time = np.array([0,1,2,3])
+    temp = 273 + parameters['a'] * time
+    disp = np.power(time, parameters['b'])/10
+    return {"time":time, "temp":temp, "disp": disp}
+
+
+def _make_quadratic_data():
+    template_dir = "matcal_template"
+    if not os.path.exists(template_dir):
+        os.mkdir(template_dir)
+
+    data_dict = {"time":[0, 1, 2, 3], 
+                 "temp":[273, 283, 293, 303], 
+                 "disp":[0.0, 0.1, 0.4, 0.9]
+                 }
+    exp_data = convert_dictionary_to_data(data_dict)
+    dc = DataCollection('test', exp_data)
+    objective = CurveBasedInterpolatedObjective("time", "temp", 'disp')
+    n_cores = 2
+    model = PythonModel(quad)
+    eval_set = StudyEvaluationSet(model, ObjectiveSet(ObjectiveCollection("one_obj", objective),
+                                                       dc, dc.states))
+    eval_set.prepare_model_and_simulators(template_dir)
+    return n_cores,model,{model:eval_set}
+
+
+def _make_more_linear_data(npts=2):
+    template_dir = "matcal_template"
+    if not os.path.exists(template_dir):
+        os.mkdir(template_dir)
+
+    data_dict = {"x":np.linspace(0,1, npts), "y":np.linspace(1,2, npts)}
+    exp_data1 = convert_dictionary_to_data(data_dict)
+
+    data_dict2 = {"x":np.linspace(0,1, npts), "y": np.linspace(1.01, 2.02, npts)}
+    exp_data2 = convert_dictionary_to_data(data_dict2)
+    dc = DataCollection('test', exp_data1, exp_data2)
+    objective = CurveBasedInterpolatedObjective("x", "y")
+    n_cores = 2
+    model = PythonModel(line)
+    eval_set = StudyEvaluationSet(model, ObjectiveSet(ObjectiveCollection("one_obj", objective), 
+                                                      dc, dc.states))
+    eval_set.prepare_model_and_simulators(template_dir)
+    return n_cores,model,{model:eval_set}
 
 
 class TestNullPlotter(MatcalUnitTest):
@@ -31,6 +87,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
+        self._batch_restart = BatchRestartNone(None, None)
 
     def test_standard_plot_jobs(self):
         sap = StandardAutoPlotter()
@@ -56,7 +113,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
             param_evals[f"eval.{index}"] = pt
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -79,7 +136,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
             param_evals[f"eval.{index}"] = pt
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -99,7 +156,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -121,7 +178,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -143,7 +200,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults(record_qois=False, record_residuals=False)
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -165,7 +222,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -187,7 +244,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -209,7 +266,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults(record_qois=False, record_residuals=False)
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -231,7 +288,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults(record_qois=False, record_residuals=False, record_data=False)
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -253,7 +310,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -275,7 +332,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -295,7 +352,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults(results_save_frequency=5)
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -318,7 +375,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
 
         n_cores, model, eval_sets = _make_more_linear_data()
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -340,7 +397,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
         n_cores, model, eval_sets = _make_more_linear_data(npts=30)
 
         pbe = ParameterBatchEvaluator(n_cores, eval_sets, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)
@@ -388,7 +445,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
         eval_sets.update(eval_sets_quadratic)
 
         pbe = ParameterBatchEvaluator(n_cores, eval_sets_linear, False)
-        batch_results = pbe.evaluate_parameter_batch(param_evals, False)
+        batch_results = pbe.evaluate_parameter_batch(param_evals, False, self._batch_restart)
         raw_obj, total_obj, qoi = _unpack_evaluation(batch_results)
         sr = StudyResults()
         _record_results(sr, param_evals, raw_obj, total_obj, qoi, False)

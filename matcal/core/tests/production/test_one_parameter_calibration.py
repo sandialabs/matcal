@@ -1,11 +1,9 @@
-
-
 from matcal.core import *
-from matcal.core.objective import SumSquaresMetricFunction
 from matcal.core.calibration_studies import (ScipyLeastSquaresStudy)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_calibration_studies import (run_serial_study_for_method, 
                                                              run_study_for_method)
+
 
 class ScipyMinimizeOneParameterPythonTest(MatcalUnitTest):
 
