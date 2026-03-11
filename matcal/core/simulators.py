@@ -367,7 +367,7 @@ class PythonSimulator(Simulator):
             kwargs["model_constants"] = model_constants
             kwargs["state_parameters"] = self._state.params
         if eval_number is not None:
-            kwargs["evaluation_number"]
+            kwargs["evaluation_number"] = eval_number
         results = self._python_function(**kwargs)
         results = self._convert_to_data(results)
         results.set_state(self._state)
