@@ -111,11 +111,11 @@ two tension specimens in :numref:`round_notched_tension_model_geo`.
 
 The applied function is determined using the 
 :meth:`~matcal.sierra.models.RoundNotchedTensionModel.add_boundary_condition_data`. 
-This method must be supplied a :class:`~matcal.core.data.Data` or 
-:class:`~matcal.core.data.DataCollection` class that contains 
-at a "displacement" field for the 
-states of interest for the model. They can also optionally include 
-a "time" field. The 
+This method must be supplied a :class:`~matcal.core.data.Data` or
+:class:`~matcal.core.data.DataCollection` class that contains either a
+"displacement" field or an "engineering_strain" field for the
+states of interest for the model. They can also optionally include
+a "time" field.  The 
 :meth:`~matcal.sierra.models.RoundNotchedTensionModel.add_boundary_condition_data` 
 method determines the boundary condition function to be applied 
 to the specimen according to the following 
@@ -123,9 +123,19 @@ algorithm:
 
 #. Determine the boundary condition by state since maximum deformation, 
    material behavior and experiment setup can vary significantly over different states.
-#. For each state, find the data set with the largest displacement and use it for 
-   boundary condition generation.
-#. Perform no scaling on the displacement. This assumes 
+#. For each state, determine the driving field for boundary condition generation:
+
+   * If "displacement" is present, use displacement.
+   * Else if "engineering_strain" is present, convert to an equivalent displacement using
+
+     .. math::
+
+        \text{displacement} = \varepsilon_{\text{eng}} \cdot \text{extensometer\_length}
+
+#. For each state, find the data set with the largest resulting displacement
+   (either the provided displacement directly, or the displacement converted from
+   engineering strain as described above) and use it for boundary condition generation.
+#. Perform no scaling on this displacement or derived displacement. This assumes 
    that the strain is primarily localized to the notched 
    region of the specimen. 
 #. If the data does not contain a "time" field and there is *not* a :class:`~matcal.core.state.State`
@@ -179,6 +189,19 @@ output fields:
 #. time
 #. displacement - measured across extensometer length in the loading direction
 #. load - measured at the applied boundary condition node set in the loading direction.
+#. engineering_strain - computed as
+
+   .. math::
+
+      \varepsilon_{\text{eng}} = \frac{\text{displacement}}{\text{extensometer\_length}}
+
+#. engineering_stress - computed as
+
+   .. math::
+
+      \sigma_{\text{eng}} = \frac{\text{load}}{A_0},
+      \qquad
+      A_0 = \pi\,(\text{notch\_gauge\_radius})^2
 
 If coupling is activated, the following global
 temperature output is provided: 
