@@ -246,7 +246,8 @@ class Dispatcher:
         logger.debug(job_result.stdout)
         logger.info(job_result.stderr)
         self._job_results.append([job_key, job_result])
-        self._batch_restart.record(job_key, job_result.source_filename)
+        if job_result.source_filename is not None:
+            self._batch_restart.record(job_key, job_result.source_filename)
         logger.info("  Finished job: "+ _string_key(job_key))
 
     def _has_running_jobs(self):

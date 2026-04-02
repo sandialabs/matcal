@@ -137,13 +137,12 @@ class TestJobDispatch:
                 goal[key] = sim.stub_get_results()
 
             max_cores = 20
-            with open("test_file.restart", "w+") as fh:
-                br = BatchRestartCSV(fh, True)
-                dispatcher = _create_job_dispatcher(max_cores, self._use_threads, br)
-                job_results = dispatcher.dispatch_jobs(jobs)
-                for key, val in goal.items():
-                    result = job_results[key]
-                    self.assertEqual(result.stdout, val.stdout)
+            br = BatchRestartCSV("test_file.restart", True)
+            dispatcher = _create_job_dispatcher(max_cores, self._use_threads, br)
+            job_results = dispatcher.dispatch_jobs(jobs)
+            for key, val in goal.items():
+                result = job_results[key]
+                self.assertEqual(result.stdout, val.stdout)
 
         def test_serial_run(self):
             jobs = []
@@ -154,21 +153,19 @@ class TestJobDispatch:
                 goal[key] = sim.stub_get_results()
 
             max_cores = 20
-            with open("test_file.restart", "w+") as fh:
-                br = BatchRestartCSV(fh, True)            
-                job_results = run_jobs_serial(jobs, br)
-                for key, val in goal.items():
-                    result = job_results[key]
-                    self.assertEqual(result.stdout, val.stdout)
+            br = BatchRestartCSV("test_file.restart", True)            
+            job_results = run_jobs_serial(jobs, br)
+            for key, val in goal.items():
+                result = job_results[key]
+                self.assertEqual(result.stdout, val.stdout)
 
 
         def test_multi_core_process_too_many_cores(self):
             jobs = self._make_all_jobs()
             with self.assertRaises(TooManyJobCoresError):
-                with open("test_file.restart", "w+") as fh:
-                    br = BatchRestartCSV(fh, True)
-                    dispatcher = _create_job_dispatcher(10, self._use_threads, br)
-                    results = dispatcher.dispatch_jobs(jobs)
+                br = BatchRestartCSV("test_file.restart", True)
+                dispatcher = _create_job_dispatcher(10, self._use_threads, br)
+                results = dispatcher.dispatch_jobs(jobs)
 
         def _make_all_jobs(self):
             jobs = []
@@ -179,10 +176,9 @@ class TestJobDispatch:
 
         def test_correct_dispatcher(self):
             max_cores = 10
-            with open("test_file.restart", "w+") as fh:
-                br = BatchRestartCSV(fh, True)
-                dispathcer = _create_job_dispatcher(max_cores, self._use_threads, br)
-                self.assertEqual(dispathcer.pool_type == ThreadPoolExecutor, self._use_threads)
+            br = BatchRestartCSV("test_file.restart", True)
+            dispathcer = _create_job_dispatcher(max_cores, self._use_threads, br)
+            self.assertEqual(dispathcer.pool_type == ThreadPoolExecutor, self._use_threads)
 
 
         class DispatcherSpy(Dispatcher):
@@ -230,39 +226,36 @@ class TestJobDispatch:
             return jobs,dispatcher
 
         def test_correct_increment_when_dispatched(self):
-            with open("test_file.restart", "w+") as fh:
-                br = BatchRestartCSV(fh, True)
+            br = BatchRestartCSV("test_file.restart", True)
 
-                jobs, dispatcher = self._setup_dispatcher(br)
-                key, job = jobs[0]
-                dispatcher.dispatch_job_when_available(key, job)
-                self.assertTrue(dispatcher.confirm_core_use(2))
-                key, job = jobs[2]
-                dispatcher.dispatch_job_when_available(key, job)
-                self.assertTrue(dispatcher.confirm_core_use(22))
-                dispatcher.end_job(0)
-                self.assertTrue(dispatcher.confirm_core_use(20))
-                dispatcher.end_job(0)
-                self.assertTrue(dispatcher.confirm_core_use(0))
+            jobs, dispatcher = self._setup_dispatcher(br)
+            key, job = jobs[0]
+            dispatcher.dispatch_job_when_available(key, job)
+            self.assertTrue(dispatcher.confirm_core_use(2))
+            key, job = jobs[2]
+            dispatcher.dispatch_job_when_available(key, job)
+            self.assertTrue(dispatcher.confirm_core_use(22))
+            dispatcher.end_job(0)
+            self.assertTrue(dispatcher.confirm_core_use(20))
+            dispatcher.end_job(0)
+            self.assertTrue(dispatcher.confirm_core_use(0))
 
         def test_can_detect_existing_jobs(self):
-            with open("test_file.restart", "w+") as fh:
-                br = BatchRestartCSV(fh, True)
+            br = BatchRestartCSV("test_file.restart", True)
 
-                jobs, disp = self._setup_dispatcher(br)
-                self.assertFalse(disp._has_running_jobs())
-                disp.dispatch_job_when_available(jobs[0][0], jobs[0][1])
-                self.assertTrue(disp._has_running_jobs())
-                disp.end_job(0)
-                self.assertFalse(disp._has_running_jobs())
+            jobs, disp = self._setup_dispatcher(br)
+            self.assertFalse(disp._has_running_jobs())
+            disp.dispatch_job_when_available(jobs[0][0], jobs[0][1])
+            self.assertTrue(disp._has_running_jobs())
+            disp.end_job(0)
+            self.assertFalse(disp._has_running_jobs())
 
         def test_raise_error_when_reusing_dispatcher(self):
-            with open("test_file.restart", "w+") as fh:
-                br = BatchRestartCSV(fh, True)
-                jobs, dispatcher = self._setup_dispatcher(br)
-                results = dispatcher.get_results_when_finished()
-                with self.assertRaises(Dispatcher.ClosedDispatchError):
-                    dispatcher.dispatch_job_when_available(jobs[1][0], jobs[1][1])
+            br = BatchRestartCSV("test_file.restart", True)
+            jobs, dispatcher = self._setup_dispatcher(br)
+            results = dispatcher.get_results_when_finished()
+            with self.assertRaises(Dispatcher.ClosedDispatchError):
+                dispatcher.dispatch_job_when_available(jobs[1][0], jobs[1][1])
 
 
 class TestJobDispatchThreads(TestJobDispatch.CommonTests):

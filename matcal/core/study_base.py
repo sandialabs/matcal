@@ -434,18 +434,14 @@ class StudyBase(ABC):
         
         self._purge_unused_data()
         restart_filename = self._get_restart_filename()
-        write_or_append = self._get_write_or_append(restart_filename)
-        open_meth = SelectedBatchRestartClass.get_open_command()
-        with open_meth(restart_filename, write_or_append) as restart_file_handle:
-            self._restart_obj = SelectedBatchRestartClass(restart_file_handle, 
-                                                          self._restart)
-            logger.info("Launching study...\n")
-            try: 
-                self._results = self._run_study()
-                logger.info("Study complete!\n")
-            except Exception as e:
-                logger.error(f"MatCal study.launch() failed with error {repr(e)}. Exiting.")
-                raise e
+        self._restart_obj = SelectedBatchRestartClass(restart_filename, self._restart)
+        logger.info("Launching study...\n")
+        try: 
+            self._results = self._run_study()
+            logger.info("Study complete!\n")
+        except Exception as e:
+            logger.error(f"MatCal study.launch() failed with error {repr(e)}. Exiting.")
+            raise e
                 
         self._study_specific_postprocessing()
         logger.enable_traceback()
@@ -460,12 +456,6 @@ class StudyBase(ABC):
     def _get_restart_filename(self):
         restart_filename = BATCH_RESTART_FILENAME+SelectedBatchRestartClass.file_extension
         return restart_filename
-
-    def _get_write_or_append(self, restart_filename):
-        if self._restart and os.path.exists(restart_filename):
-            return "r+"
-        else:
-            return "w"
 
     def _export_final_results(self):
         self._set_final_results_name()
