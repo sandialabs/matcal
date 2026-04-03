@@ -1012,6 +1012,202 @@ from matcal.sierra.tests.sierra_sm_models_for_tests import RoundNotchedTensionMo
 class RoundNotchedTensionModelUnitTests(EigthSymmetryModelTests.CommonTests, 
     RoundNotchedTensionModelForTests):
     """"""
+    def test_boundary_condition_accepts_engineering_strain(self):
+        model = self.init_model()
+        data = convert_dictionary_to_data({ENG_STRAIN_KEY: [0.0, 0.1]})
+        model.add_boundary_condition_data(data)
+        model._setup_state(SolitaryState(), build_mesh=False)
+
+    def test_engineering_stress_strain_output_blocks_added(self):
+        model = self.init_model()
+
+        # Minimal BC data needed to allow setup_state to complete (displacement-based BC)
+        data = convert_dictionary_to_data({"displacement": [0.0, 1.0]})
+        model.add_boundary_condition_data(data)
+
+        # Build the input deck (no mesh required for this test)
+        model._setup_state(SolitaryState(), build_mesh=False)
+
+        sm_region = model._input_file.solid_mechanics_region
+
+        # Verify the named user output blocks exist in the input deck
+        self.assertIn("engineering_strain", sm_region.subblocks)
+        self.assertIn("engineering_stress", sm_region.subblocks)
+
+        # Verify the global variable lines are present in those blocks
+        strain_block_lines = sm_region.subblocks["engineering_strain"].lines
+        self.assertIn(f"global {ENG_STRAIN_KEY}", strain_block_lines)
+
+        stress_block_lines = sm_region.subblocks["engineering_stress"].lines
+        self.assertIn(f"global {ENG_STRESS_KEY}", stress_block_lines)
+
+    def test_bc_function_from_engineering_strain_with_time_uses_extensometer_length_and_symmetry(self):
+        model = self.init_model()
+
+        eng_strain = np.array([0.0, 0.10, 0.20])
+        time = np.array([0.0, 0.5, 1.0])
+
+        data = convert_dictionary_to_data({TIME_KEY: time, ENG_STRAIN_KEY: eng_strain})
+        model.add_boundary_condition_data(data)
+
+        ext_len = 0.01
+        model.add_constants(extensometer_length=ext_len)
+
+        state = data.state
+        model._setup_state(state, build_mesh=False)
+
+        disp_func = model._get_loading_boundary_condition_displacement_function(state, {})
+
+        expected_disp = 0.5 * eng_strain * float(ext_len)
+
+        self.assertIn(TIME_KEY, disp_func.field_names)
+        self.assertIn(DISPLACEMENT_KEY, disp_func.field_names)
+        self.assertTrue(np.allclose(disp_func[TIME_KEY], time))
+        self.assertTrue(np.allclose(disp_func[DISPLACEMENT_KEY], expected_disp))
+
+    def test_bc_function_from_engineering_strain_no_time_uses_max_strain_and_symmetry(self):
+        model = self.init_model()
+
+        eng_strain = np.array([0.0, 0.10, 0.20])
+        data = convert_dictionary_to_data({ENG_STRAIN_KEY: eng_strain})
+        model.add_boundary_condition_data(data)
+
+        ext_len = 0.01
+        model.add_constants(extensometer_length=ext_len)
+
+        state = data.state
+        model._setup_state(state, build_mesh=False)
+
+        disp_func = model._get_loading_boundary_condition_displacement_function(state, {})
+
+        # Without TIME_KEY (and without STRAIN_RATE_KEY), the BC calculator creates a
+        # 2-point linear ramp to the maximum strain value.
+        self.assertIn(TIME_KEY, disp_func.field_names)
+        self.assertIn(DISPLACEMENT_KEY, disp_func.field_names)
+        self.assertEqual(len(disp_func[TIME_KEY]), 2)
+        self.assertEqual(len(disp_func[DISPLACEMENT_KEY]), 2)
+
+        expected_end_disp = 0.5 * float(ext_len) * float(np.max(np.abs(eng_strain)))
+        self.assertAlmostEqual(disp_func[DISPLACEMENT_KEY][-1], expected_end_disp, places=14)
+
+    def test_bc_function_from_engineering_strain_no_time_with_strain_rate_sets_end_time_correctly(self):
+        model = self.init_model()
+
+        eng_strain = np.array([0.0, 0.10, 0.20])
+        data = convert_dictionary_to_data({ENG_STRAIN_KEY: eng_strain})
+
+        # Put engineering_strain_rate on the state so the BC calculator uses it
+        state = State("strain_rate_state", **{STRAIN_RATE_KEY: 2.0})  # 1/s
+        data.set_state(state)
+
+        model.add_boundary_condition_data(data)
+
+        ext_len = 0.01
+        model.add_constants(extensometer_length=ext_len)
+
+        model._setup_state(state, build_mesh=False)
+
+        disp_func = model._get_loading_boundary_condition_displacement_function(state, {})
+
+        # Still a 2-point function
+        self.assertIn(TIME_KEY, disp_func.field_names)
+        self.assertIn(DISPLACEMENT_KEY, disp_func.field_names)
+        self.assertEqual(len(disp_func[TIME_KEY]), 2)
+        self.assertEqual(len(disp_func[DISPLACEMENT_KEY]), 2)
+
+        eps_max = float(np.max(np.abs(eng_strain)))
+        strain_rate = float(state.params[STRAIN_RATE_KEY])
+        expected_end_time = eps_max / strain_rate
+
+        # Engineering strain -> displacement via ext_len, then model applies 0.5 symmetry
+        expected_end_disp = 0.5 * eps_max * float(ext_len)
+
+        self.assertAlmostEqual(disp_func[TIME_KEY][-1], expected_end_time, places=14)
+        self.assertAlmostEqual(disp_func[DISPLACEMENT_KEY][-1], expected_end_disp, places=14)
+
+    def test_bc_function_from_displacement_no_time_with_displacement_rate_sets_end_time_correctly(self):
+        model = self.init_model()
+
+        # Provide displacement BC input with no time
+        disp = np.array([0.0, 0.5, 1.0])
+        data = convert_dictionary_to_data({DISPLACEMENT_KEY: disp})
+
+        # Provide displacement_rate on the state so the BC calculator uses it
+        state = State("disp_rate_state", **{DISPLACEMENT_RATE_KEY: 4.0})  # length units / s
+        data.set_state(state)
+
+        model.add_boundary_condition_data(data)
+
+        model._setup_state(state, build_mesh=False)
+
+        disp_func = model._get_loading_boundary_condition_displacement_function(state, {})
+
+        # 2-point function: end time = max_disp / displacement_rate
+        self.assertIn(TIME_KEY, disp_func.field_names)
+        self.assertIn(DISPLACEMENT_KEY, disp_func.field_names)
+        self.assertEqual(len(disp_func[TIME_KEY]), 2)
+        self.assertEqual(len(disp_func[DISPLACEMENT_KEY]), 2)
+
+        max_disp = float(np.max(np.abs(disp)))
+        disp_rate = float(state.params[DISPLACEMENT_RATE_KEY])
+        expected_end_time = max_disp / disp_rate
+
+        # RoundNotchedTensionModel applies 0.5 symmetry scaling to the displacement function
+        expected_end_disp = 0.5 * max_disp
+
+        self.assertAlmostEqual(disp_func[TIME_KEY][-1], expected_end_time, places=14)
+        self.assertAlmostEqual(disp_func[DISPLACEMENT_KEY][-1], expected_end_disp, places=14)
+
+    def test_engineering_strain_denominator_uses_extensometer_length(self):
+        model = self.init_model()
+
+        data = convert_dictionary_to_data({"displacement": [0.0, 1.0]})
+        model.add_boundary_condition_data(data)
+
+        ext_len = 0.0123
+        model.add_constants(extensometer_length=ext_len)
+
+        model._setup_state(SolitaryState(), build_mesh=False)
+
+        sm_region = model._input_file.solid_mechanics_region
+        self.assertIn("engineering_strain", sm_region.subblocks)
+
+        strain_block = sm_region.subblocks["engineering_strain"]
+        line_obj = strain_block.lines[f"global {ENG_STRAIN_KEY}"]
+        line_str = line_obj.get_string()
+
+        denom = _parse_denominator_value_from_expression_string(line_str)
+
+        self.assertAlmostEqual(denom, float(ext_len), places=14)
+
+    def test_engineering_stress_denominator_uses_notch_gauge_radius_area(self):
+        model = self.init_model()
+
+        # Minimal BC data needed so setup_state completes
+        data = convert_dictionary_to_data({"displacement": [0.0, 1.0]})
+        model.add_boundary_condition_data(data)
+
+        notch_r = 0.0025
+        model.add_constants(
+        notch_gauge_radius=notch_r,
+        element_size=notch_r / 10.0)   # safely below notch_r/2
+        
+        model._setup_state(SolitaryState(), build_mesh=False)
+
+        expected_area = np.pi * float(notch_r) ** 2
+
+        sm_region = model._input_file.solid_mechanics_region
+        self.assertIn("engineering_stress", sm_region.subblocks)
+
+        stress_block = sm_region.subblocks["engineering_stress"]
+        line_obj = stress_block.lines[f"global {ENG_STRESS_KEY}"]
+        line_str = line_obj.get_string()
+
+        denom = _parse_denominator_value_from_expression_string(line_str)
+
+        # numeric comparison
+        self.assertAlmostEqual(denom, expected_area, places=14)
+
 
 from matcal.sierra.tests.sierra_sm_models_for_tests import SolidBarTorsionModelForTests
 class SolidBarTorsionModelUnitTests(MatcalThreeDimensionalStandardModelUnitTestNewBase.CommonTests, 
@@ -1419,3 +1615,35 @@ class UserDefinedSierraModelTests(ModelTestBase.CommonTests,
         model.read_full_field_data("test.e")
         self.assertTrue(model._results_information.results_reader_object == FieldSeriesData)
         self.assertEqual(model._results_information.results_filename, "test.e")
+
+
+def _parse_denominator_value_from_expression_string(expr_string):
+    """
+    Parse strings where the quoted expression is of the form:
+        "some_string/the_number_of_interest"
+    There may be spaces. The quotes are the only quotes in the string.
+
+    We extract the numeric token after the last '/' and before ';' (or before closing quote).
+    Returns: float
+    """
+    s = expr_string
+
+    q1 = s.find('"')
+    q2 = s.rfind('"')
+    if q1 == -1 or q2 == -1 or q2 <= q1:
+        raise AssertionError(f'Expected expression to contain quotes. Got: {s}')
+
+    expr = s[q1 + 1:q2].strip()  # inside quotes
+    if expr.endswith(";"):
+        expr = expr[:-1].strip()
+
+    slash = expr.rfind("/")
+    if slash == -1:
+        raise AssertionError(f'Expected "/" in quoted expression. Got: "{expr}"')
+
+    denom_str = expr[slash + 1:].strip()
+
+    try:
+        return float(denom_str)
+    except ValueError as e:
+        raise AssertionError(f'Failed parsing denominator "{denom_str}" from "{expr}"') from e

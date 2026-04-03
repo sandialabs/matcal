@@ -1318,10 +1318,77 @@ class RoundNotchedTensionModel(_TensionDerivedModelBase):
     model_type = "round_notched_tension_model"
     _geometry_creator_class = RoundNotchedTensionGeometry
 
+    def _create_derived_user_output_blocks(self, state):
+        # Keep the default outputs from _TensionDerivedModelBase:
+        #   - displacement (across extensometer)
+        #   - load (at loading BC)
+        super()._create_derived_user_output_blocks(state)
+        self._add_engineering_strain_outputs()
+        self._add_engineering_stress_outputs()
+
+    def _add_engineering_strain_outputs(self):
+        # engineering_strain = displacement / extensometer_length
+        strain_output = SolidMechanicsUserOutput(
+            "engineering_strain",
+            "extensometer_surf",
+            "node set"
+        )
+        self._input_file._solid_mechanics_region.add_subblock(strain_output)
+
+        extensometer_len = self._current_state_geo_params["extensometer_length"]
+        strain_output.add_compute_global_from_expression(
+            ENG_STRAIN_KEY,
+            f"{DISPLACEMENT_KEY}/{extensometer_len};"
+        )
+        self._input_file._add_heartbeat_global_variable(ENG_STRAIN_KEY)
+
+    def _add_engineering_stress_outputs(self):
+        # engineering_stress = load / A0, where A0 = pi*notch_gauge_radius^2
+        stress_output = SolidMechanicsUserOutput(
+            "engineering_stress",
+            self._loading_bc_node_sets[0],
+            "node set"
+        )
+        self._input_file._solid_mechanics_region.add_subblock(stress_output)
+
+        reference_area = self.reference_area
+        stress_output.add_compute_global_from_expression(
+            ENG_STRESS_KEY,
+            f"{LOAD_KEY}/{reference_area};"
+        )
+        self._input_file._add_heartbeat_global_variable(ENG_STRESS_KEY)
+
+    @property
+    def reference_area(self):
+        r = self._current_state_geo_params["notch_gauge_radius"]
+        return np.pi * np.double(r) ** 2
+
     def _get_loading_boundary_condition_displacement_function(self, state, params_by_precedent):
-        disp_function = super()._get_loading_boundary_condition_displacement_function(state, 
-                                    params_by_precedent)
-        # Account for symmetry accross gauge section
+        bc_data = self._boundary_condition_data
+        common_state_field_names = bc_data.state_common_field_names(state.name)
+
+        # Allow either displacement or engineering_strain as BC input
+        if DISPLACEMENT_KEY in common_state_field_names:
+            disp_func_calculator = get_displacement_function_from_load_displacement_data_collection
+            scale_factor = 1.0
+        elif ENG_STRAIN_KEY in common_state_field_names:
+            disp_func_calculator = get_displacement_function_from_strain_data_collection
+            scale_factor = self._current_state_geo_params.extensometer_length
+        else:
+            raise_required_fields_not_found_error(
+                state,
+                DISPLACEMENT_KEY + ", " + ENG_STRAIN_KEY,
+                bc_data.name
+            )
+
+        disp_function = disp_func_calculator(
+            bc_data,
+            state,
+            params_by_precedent,
+            scale_factor=scale_factor
+        )
+
+        # Account for symmetry across gauge section
         disp_function[DISPLACEMENT_KEY] *= 0.5
         return disp_function
 

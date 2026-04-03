@@ -370,7 +370,8 @@ from matcal.sierra.tests.sierra_sm_models_for_tests import RoundNotchedTensionMo
 class RoundNotchedTensionModelProductionTests(RoundNotchedTensionModelForTests, 
                                               MatcalGeneratedModelProductionTestsBase.CommonTests):
 
-    _default_output_field_names = ["time", "displacement", "load" ]
+    _default_output_field_names = ["time", "displacement", "load", 
+                                   "engineering_strain", "engineering_stress" ]
 
     _coupled_output_field_names = ["low_temperature", "med_temperature", "high_temperature" ]
 
