@@ -40,8 +40,9 @@ plt.rc('font', size=12)
 figsize = (4.5,3.5)
 
 tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
-                                    file_type="csv", fixed_states={"temperature":530, 
-                                                                   "displacement_rate":2e-4}).batch
+                                    file_type="csv")
+tension_data.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+tension_data = tension_data.batch
 tension_data = scale_data_collection(tension_data, "engineering_stress", 1000)
 
 yield_stress = Parameter("Y_0", 30, 40, 35.01)
