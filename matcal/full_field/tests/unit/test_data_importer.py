@@ -59,7 +59,7 @@ class TestSeriesImporter(MatcalUnitTest):
             data = FieldSeriesData(self._small_global_data, self._small_series_directory, 1)
 
 
-        with self.assertRaises(Data.TypeError):
+        with self.assertRaises(TypeError):
             data = FieldSeriesData(self._small_global_data, self._small_series_directory, ["X", "Y"], 1)
 
         with self.assertRaises(TypeError):

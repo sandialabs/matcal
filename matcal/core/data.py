@@ -28,6 +28,19 @@ class Data(np.ndarray):
     but adds name and state, so that the data can be
     uniquely identified.
 
+    **Construction / initialization**
+
+    `Data` may only be constructed from:
+
+    1. A NumPy structured/record array (i.e., an ``np.ndarray`` with
+       ``dtype.names is not None`` or an ``np.record``), or
+    2. A ``dict``/``OrderedDict`` mapping field names to array-like values.
+       If a dictionary is passed, it is converted using
+       :func:`~matcal.core.data.convert_dictionary_to_data`.
+
+    Passing anything else (including a plain/unstructured ``np.ndarray``)
+    raises a built-in ``TypeError``.
+
     Accessing fields through field names returns the data for that field in 
     either 1D or 2D arrays. If the data is 'global' such as time or load, 
     the data will be reported as a 1D [n_times] array. If the data is field
@@ -36,22 +49,13 @@ class Data(np.ndarray):
     """
     _id_numbers = count(0)
 
-    class TypeError(RuntimeError):
-        def __init__(self, *args):
-            super().__init__(*args)
-
-    class KeyError(RuntimeError):
-        def __init__(self, *args):
-            super().__init__(*args)
-
-    class ValueError(RuntimeError):
-        def __init__(self, *args):
-            super().__init__(*args)
-
     def __new__(cls, data, state=SolitaryState(), name=None):
         """
-        :param data: data to be added to the MatCal data object.
-        :type data: ArrayLike
+        :param data: data to be added to the MatCal data object. Must be either:
+            (1) a NumPy structured/record array, or
+            (2) a dict/OrderedDict of field_name -> array-like, which will be converted
+                using :func:`~matcal.core.data.convert_dictionary_to_data`.
+        :type data: numpy.ndarray | numpy.record | dict | OrderedDict
 
         :param state: the state associated with the data. If none is passed it 
             will be assigned the default state.
@@ -64,8 +68,23 @@ class Data(np.ndarray):
             filename from which the data was imported.
         :type name: str
         """
-        cls._check_type(cls, data, (np.ndarray, np.record), "data passed to MatCal Data")
-        obj = np.asarray(data).view(cls) #view will cast all intermal arrays as cls[Data] as well
+        # If a dictionary is passed, convert it to a Data object first
+        if isinstance(data, (dict, OrderedDict)):
+            data = convert_dictionary_to_data(data)
+
+        # Enforce ndarray/record type
+        check_item_is_correct_type(
+            data, (np.ndarray, np.record), "data"
+        )
+
+        # Enforce structured array only (plain ndarray is not allowed)
+        if isinstance(data, np.ndarray) and data.dtype.names is None:
+            raise TypeError(
+                "The data passed to MatCal Data must be a NumPy structured/record array "
+                "(dtype.names must not be None) or a dictionary."
+            )
+
+        obj = np.asarray(data).view(cls)  # view will cast all internal arrays as cls[Data] as well
 
         obj._state = None
         obj.set_state(state)
@@ -92,7 +111,7 @@ class Data(np.ndarray):
         :param state: The state for this particular data set.
         :type state: :class:`~matcal.core.state.State`
         """
-        self._check_type(state, State, "state for the data set")
+        check_item_is_correct_type(state, State, "state")
         self._state = state
 
     def set_name(self, name):
@@ -107,7 +126,7 @@ class Data(np.ndarray):
         :param name: The name for this particular data set.
         :type name: str
         """
-        self._check_type(name, str, "name for the data set")
+        check_item_is_correct_type(name, str, "name")
         self._name = name
 
     def add_field(self, field_name, data):
@@ -126,26 +145,21 @@ class Data(np.ndarray):
         :return: the data with newly added field
         :rtype: `~matcal.core.data.Data`
         """
-        self._check_type(field_name, str, "added field")
+        check_item_is_correct_type(field_name, str, "field_name")
         if len(data) != self.length:
             error_str = (f"Field to be added '{field_name}' has length " +
                          f"{len(data)}. It must be of length " +
                          f"{self.length}.")
-            raise self.ValueError(error_str)
+            raise ValueError(error_str)
         data_dict = convert_data_to_dictionary(self)
         data_dict.update({field_name:data})
         updated_data = convert_dictionary_to_data(data_dict)
         updated_data.set_state(self.state)
         return updated_data
-    
-    def _check_type(self, variable, desired_type, message_name):
-        if not isinstance(variable, desired_type):
-            raise self.TypeError("The {} must be of type {}. "
-                "Received a variable of type {}".format(message_name, desired_type, type(variable)))
 
     def _check_field_in_data(self, field):
         if field not in self.field_names:
-                raise self.KeyError(f"The field \"{field}\" does not exist. "+
+                raise KeyError(f"The field \"{field}\" does not exist. "+
                 f"The following fields exist in the data:\n{self.field_names}")
 
     @property
@@ -202,12 +216,14 @@ class Data(np.ndarray):
         
         :rtype: :class:`~matcal.core.data.Data`
         """
-        self._check_type(field, str, "Data field to be removed")
+        check_item_is_correct_type(field, str, "field")
         self._check_field_in_data(field)
         updated_field_names = self.field_names
         updated_field_names.remove(field)
         if len(updated_field_names) == 0:
-            return Data(np.array([]), self.state, self.name)
+            # Must return a valid empty structured array (plain ndarray is not allowed)
+            empty = np.zeros(0, dtype=[])
+            return Data(empty, self.state, self.name)
         else:
             return self[updated_field_names].copy()
 
@@ -223,8 +239,8 @@ class Data(np.ndarray):
         :param new_name: the replacement field name for the field name that is being changed.
         :type new_name: str
         """
-        self._check_type(old_name, str, "old field name")
-        self._check_type(new_name, str, "new field name")
+        check_item_is_correct_type(old_name, str, "old_name")
+        check_item_is_correct_type(new_name, str, "new_name")
         self._check_field_in_data(old_name)
         field_names = self.field_names
         name_to_change_index = field_names.index(old_name)
@@ -1372,10 +1388,9 @@ def convert_data_to_dictionary(data):
     :return: dictionary conversion of the data object
     :rtype: OrderedDict
     """
-
     if not isinstance(data, Data):
         raise TypeError(f"The object passed to be converted to a dictionary" 
-                         f" must be a MatCal Data type. Received an object of type {type(data)}.")
+                        f" must be a MatCal Data type. Received an object of type {type(data)}.")
 
     d = OrderedDict()
     for key in list(data.field_names):
@@ -1409,7 +1424,7 @@ def convert_dictionary_to_data(dict_data):
 def _check_dictionary_data(dict_data):
     for value in dict_data.values():
         if value is None:
-            raise Data.TypeError("Attempting to put a None in a Data object")
+            raise TypeError("Attempting to put a None in a Data object")
 
 
 def _create_array_from_dict(dict_data):

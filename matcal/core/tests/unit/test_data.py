@@ -42,12 +42,33 @@ class CommonDataUnitTests(object):
             self._state = State("my state", rate=1e-4)
 
     class CommonTests(CommonSetUp):
+        def test_init_accepts_structured_array(self):
+            d = self._data_class(self._array)
+            self.assertIsInstance(d, Data)
+            self.assertIn("x", d.field_names)
+            self.assertIn("y", d.field_names)
+
+        def test_init_accepts_dictionary(self):
+            d = self._data_class({"x": [1, 2, 3], "y": [4, 5, 6]})
+            self.assertIsInstance(d, Data)
+            self.assertListEqual(d.field_names, ["x", "y"])
+            self.assert_close_arrays(d["x"], np.array([1, 2, 3], dtype=float))
+            self.assert_close_arrays(d["y"], np.array([4, 5, 6], dtype=float))
+
+        def test_init_rejects_plain_ndarray(self):
+            with self.assertRaises(TypeError):
+                self._data_class(np.array([1.0, 2.0, 3.0]))
+
+        def test_init_rejects_list(self):
+            with self.assertRaises(TypeError):
+                self._data_class([1, 2, 3])
+
         def test_invalid_init(self):
-            with self.assertRaises(Data.TypeError):
+            with self.assertRaises(TypeError):
                 invalid_name = self._data_class("uh oh bad init")
 
         def test_bad_state_update(self):
-            with self.assertRaises(Data.TypeError):
+            with self.assertRaises(TypeError):
                 self._data.set_state('not a state')
 
         def test_state_update(self):
@@ -93,10 +114,10 @@ class CommonDataUnitTests(object):
 
         def test_data_remove_field(self):
 
-            with self.assertRaises(self._data.KeyError):
+            with self.assertRaises(KeyError):
                 self._data.remove_field("bad_field")
 
-            with self.assertRaises(self._data.TypeError):
+            with self.assertRaises(TypeError):
                 self._data.remove_field(1)
 
             new_data = self._data.remove_field("y")
@@ -111,13 +132,13 @@ class CommonDataUnitTests(object):
             self.assertTrue([] == self._data.field_names)
             
         def test_data_rename_field(self):
-            with self.assertRaises(self._data.TypeError):
+            with self.assertRaises(TypeError):
                 self._data.rename_field(1, "X")
 
-            with self.assertRaises(self._data.TypeError):
+            with self.assertRaises(TypeError):
                 new_data = self._data.rename_field("x", 1)
 
-            with self.assertRaises(self._data.KeyError):
+            with self.assertRaises(KeyError):
                 self._data.rename_field("asd", "X")
 
             with self.assertRaises(ValueError):
@@ -174,22 +195,17 @@ class CommonDataUnitTests(object):
         def test_add_field_bad_length(self):
             dict_data = {"x":np.linspace(0, 2, 102)}
             dict_data["y"] = dict_data["x"]**2*2+1
-
-            my_data = convert_dictionary_to_data(dict_data)
             my_state = State("the state", a=1, b=2, c=3)
-            my_data.set_state(my_state)
-
-            with self.assertRaises(Data.ValueError):
+            my_data = Data(dict_data, my_state)
+            with self.assertRaises(ValueError):
                 new_data  = my_data.add_field("d", np.linspace(0,0.1,100))
             
         def test_add_field_bad_name(self):
             dict_data = {"x":np.linspace(0, 2, 100)}
             dict_data["y"] = dict_data["x"]**2*2+1
-
-            my_data = convert_dictionary_to_data(dict_data)
             my_state = State("the state", a=1, b=2, c=3)
-            my_data.set_state(my_state)
-            with self.assertRaises(Data.TypeError):
+            my_data = Data(dict_data, my_state)
+            with self.assertRaises(TypeError):
                 new_data  = my_data.add_field(1, np.linspace(0,0.1,100))
 
 
@@ -738,11 +754,6 @@ class TestDictionaryToData(MatcalUnitTest):
 
         self.assertTrue(data['only'] == dict_data['only'])
 
-    def test_fail_on_none_entry(self):
-        dict_data = {"a": [1, 2], 'b': None}
-        with self.assertRaises(Data.TypeError):
-            convert_dictionary_to_data(dict_data)
-
     def test_produce_multiple_entries_same_length(self):
         dict_data = {"A": [1, 2, 3], "Beta": np.ones(3)}
         data = convert_dictionary_to_data(dict_data)
@@ -809,6 +820,11 @@ class TestDictionaryToData(MatcalUnitTest):
         self.assertFalse(_confirm_first_dimension_length(5, (1,2)))
         self.assertFalse(_confirm_first_dimension_length(5, (1,5)))
 
+    def test_fail_on_none_entry(self):
+        dict_data = {"a": [1, 2], 'b': None}
+        with self.assertRaises(TypeError):
+            convert_dictionary_to_data(dict_data)
+
 
 class TestDataToDictionary(MatcalUnitTest):
 
@@ -842,7 +858,7 @@ class TestDataToDictionary(MatcalUnitTest):
     def test_bad_call_to_convert_data_to_dict(self):
         with self.assertRaises(TypeError):
             return_dict = convert_data_to_dictionary("invalid")
-        
+
 
 def get_conditioner_test_data():
     simple_data_dict = {"time":np.linspace(0, 1, 11), "value":np.linspace(-4,6,11)}
