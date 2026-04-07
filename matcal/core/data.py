@@ -74,7 +74,7 @@ class Data(np.ndarray):
 
         # Enforce ndarray/record type
         check_item_is_correct_type(
-            data, (np.ndarray, np.record), "data", call_depth=1
+            data, (np.ndarray, np.record), "data"
         )
 
         # Enforce structured array only (plain ndarray is not allowed)
@@ -145,7 +145,7 @@ class Data(np.ndarray):
         :return: the data with newly added field
         :rtype: `~matcal.core.data.Data`
         """
-        check_item_is_correct_type(field_name, str, "field_name", call_depth=1)
+        check_item_is_correct_type(field_name, str, "field_name")
         if len(data) != self.length:
             error_str = (f"Field to be added '{field_name}' has length " +
                          f"{len(data)}. It must be of length " +
