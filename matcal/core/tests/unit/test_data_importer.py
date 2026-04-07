@@ -54,18 +54,17 @@ class CSVDataImporterTest(MatcalUnitTest):
         cls.headerless_csv_file = os.path.join(TEST_REFERENCE_DIR, "headerless.csv")
         cls.state_header_csv_file = os.path.join(TEST_REFERENCE_DIR, "state_header.csv")
         cls.example_state = State("example")
-        cls.csv_batch_pattern = os.path.join(TEST_REFERENCE_DIR, "exp_data_[0-3].csv")
-        
-        cls.csv_batch = glob.glob(cls.csv_batch_pattern)
         cls.dashed_header_file = os.path.join(TEST_REFERENCE_DIR, "data_with_dashes.csv")
+
+    # --- CSVDataImporter-only tests remain here ---
 
     def test_non_existent_file_will_throw_file_not_found_error(self):
         with self.assertRaises(FileNotFoundError):
-            d_0 = CSVDataImporter("invalid_file.csv")
+            CSVDataImporter("invalid_file.csv")
 
     def test_invalid_filename_type(self):
         with self.assertRaises(TypeError):
-            d0 = CSVDataImporter(1)
+            CSVDataImporter(1)
 
     def test_import_header_with_dashes(self):
         d_imp = CSVDataImporter(self.dashed_header_file)
@@ -78,8 +77,8 @@ class CSVDataImporterTest(MatcalUnitTest):
 
     def test_non_interpretable_file_will_throw_data_format_error(self):
         with self.assertRaises(TypeError):
-            d_nan = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "nan_test.csv"), 
-                                import_strings=True)
+            d_nan = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "nan_test.csv"),
+                                    import_strings=True)
             d_nan.load()
 
         with self.assertRaises(TypeError):
@@ -89,7 +88,6 @@ class CSVDataImporterTest(MatcalUnitTest):
         with self.assertRaises(TypeError):
             d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "str_test.csv"))
             d_str.load()
-
 
         with self.assertRaises(TypeError):
             d_char = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "char_test.csv"))
@@ -102,27 +100,25 @@ class CSVDataImporterTest(MatcalUnitTest):
     def test_drop_NaNs(self):
         with self.assertRaises(TypeError):
             d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"))
-            data = d_str.load()
+            d_str.load()
 
         d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"),
-                                 drop_NaNs=True)
+                                drop_NaNs=True)
         data = d_str.load()
 
-        data_gold = np.genfromtxt(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv")
-                                  , skip_header=1, delimiter=",")
+        data_gold = np.genfromtxt(os.path.join(TEST_REFERENCE_DIR, "data_with_nans_infs.csv"),
+                                  skip_header=1, delimiter=",")
         data_gold = data_gold[np.isfinite(data_gold).all(axis=1), :]
- 
-        self.assert_close_arrays(data_gold[:,0], data["load"])
-        self.assert_close_arrays(data_gold[:,1], data["displacement"])
-        
+
+        self.assert_close_arrays(data_gold[:, 0], data["load"])
+        self.assert_close_arrays(data_gold[:, 1], data["displacement"])
+
     def test_read_strings(self):
-        d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "str_test.csv"), 
+        d_str = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "str_test.csv"),
                                 import_strings=True)
         data = d_str.load()
         self.assertTrue("e" in data["load"])
 
-        #The below should work with ints in the char column, but does not. Waiting for 
-        # NumPy to chime in on the ticket.
         d_char = CSVDataImporter(os.path.join(TEST_REFERENCE_DIR, "char_test.csv"),
                                  import_strings=True)
         data = d_char.load()
@@ -139,7 +135,7 @@ class CSVDataImporterTest(MatcalUnitTest):
             f.write("X, Y\n")
         d0 = CSVDataImporter("empty.csv")
         with self.assertRaises(ValueError):
-            data = d0.load()
+            d0.load()
 
     def test_empty_column(self):
         with open("empty.csv", "w") as f:
@@ -149,7 +145,7 @@ class CSVDataImporterTest(MatcalUnitTest):
 
         d0 = CSVDataImporter("empty.csv")
         with self.assertRaises(TypeError):
-            data = d0.load()
+            d0.load()
 
     def test_field_names(self):
         d_0 = CSVDataImporter(self.default_csv_file)
@@ -157,95 +153,32 @@ class CSVDataImporterTest(MatcalUnitTest):
         self.assertListEqual(list(data.field_names), ["U", "F"])
 
     def test_get_length_of_data(self):
-        D = CSVDataImporter(self.default_csv_file)
-        data = D.load()
+        d = CSVDataImporter(self.default_csv_file)
+        data = d.load()
         self.assertEqual(data.length, 4)
 
     def test_load_data(self):
-        d_0 = CSVDataImporter(self.default_csv_file)
-        data = d_0.load()
+        d = CSVDataImporter(self.default_csv_file)
+        data = d.load()
         import sys
         self.assertTrue(sys.getsizeof(data) > 50)
 
     def test_state_header_values(self):
-        D = CSVDataImporter(self.state_header_csv_file)
-        data = D.load()
-        refstate = {'rate': 4.0, 'temperature': 300, 'extra': 1, "str":"my_str"}
+        d = CSVDataImporter(self.state_header_csv_file)
+        data = d.load()
+        refstate = {'rate': 4.0, 'temperature': 300, 'extra': 1, "str": "my_str"}
         self.assertEqual(data.length, 4)
         self.assertEqual(data.state.params, refstate)
 
     def test_state_header_state_name(self):
-        D = CSVDataImporter(self.state_header_csv_file)
-        data = D.load()
+        d = CSVDataImporter(self.state_header_csv_file)
+        data = d.load()
         refstate_name = "extra_1.000000e+00_rate_4.000000e+00_str_my_str_temperature_3.000000e+02"
         self.assertEqual(data.state.name, refstate_name)
-
-    def test_batch_loader_with_list_init(self):
-        dc = BatchDataImporter(self.csv_batch).batch
-        s = dc.states
-        self.assertEqual(len(dc), 3)
-        self.assertEqual(len(s[list(s.keys())[0]].params), 2)
-
-    def test_batch_load_with_set_precision(self):
-        b = BatchDataImporter(self.csv_batch_pattern)
-        b.set_options(state_precision=0)
-        dc = b.batch
-        s = dc.states
-        self.assertEqual(len(dc.state_names), 2)
-        self.assertEqual(len(s[list(s.keys())[0]].params), 2)
-
-    def test_batch_loader_with_reg_expression_init(self):
-        dc = BatchDataImporter(self.csv_batch_pattern).batch
-        s = dc.states
-        self.assertEqual(len(dc), 3)
-        self.assertEqual(len(dc.state_names), 3)
-        self.assertEqual(len(s[list(s.keys())[0]].params), 2)
-        for state in s.values():
-            self.assertTrue("str" in state.params)
-            self.assertTrue("rate" in state.params)
-
-    def test_batch_load_with_additional_states(self):
-        b = BatchDataImporter(self.csv_batch, fixed_states={"P1": 5.0, "P2": 4.0})
-        dc = b.batch
-        self.assertEqual(len(dc), 3)
-        s = dc.states
-        self.assertEqual(len(s[list(s.keys())[0]].params), 4)
-        for state in s.values():
-            self.assertTrue("str" in state.params)
-            self.assertTrue("rate" in state.params)
-            self.assertTrue("P1" in state.params)
-            self.assertTrue("P2" in state.params)
-
-    def test_batch_load_with_file_type(self):
-        b = BatchDataImporter(self.csv_batch, file_type="csv")
-        dc = b.batch
-        self.assertEqual(len(dc), 3)
-        s = dc.states
-        self.assertEqual(len(s[list(s.keys())[0]].params), 2)
-        for state in s.values():
-            self.assertTrue("str" in state.params)
-            self.assertTrue("rate" in state.params)
-
-    def test_batch_load_with_file_type_and_fixed_states(self):
-        b = BatchDataImporter(self.csv_batch, file_type="csv", fixed_states={"P1": 5.0, "P2": 4.0})
-        dc = b.batch
-        self.assertEqual(len(dc), 3)
-        s = dc.states
-        self.assertEqual(len(s[list(s.keys())[0]].params), 4)
-        for state in s.values():
-            self.assertTrue("str" in state.params)
-            self.assertTrue("rate" in state.params)
-            self.assertTrue("P1" in state.params)
-            self.assertTrue("P2" in state.params)
-
-    def test_batch_loader_error(self):
-        pattern = os.path.join(TEST_REFERENCE_DIR, "exp_data_*.csv")
-        B = BatchDataImporter(pattern).batch
 
     def test_equal(self):
         d_0 = CSVDataImporter(self.default_csv_file)
         d_1 = CSVDataImporter(self.default_csv_file)
-
         d_2 = copy(d_0)
 
         self.assertTrue(d_0 == d_1)
@@ -262,13 +195,205 @@ class CSVDataImporterTest(MatcalUnitTest):
         dos_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_dos.csv")
         data_importer = CSVDataImporter(dos_file)
         with self.assertRaises(DOSFileError):
-            data = data_importer.load()
-        
+            data_importer.load()
+
     def test_csv_has_unsupported_character_raise_InvalidCharacterError(self):
         converted_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_converted.csv")
         data_importer = CSVDataImporter(converted_file)
         with self.assertRaises(InvalidCharacterError):
-            data = data_importer.load()
+            data_importer.load()
+
+
+class BatchDataImporterTest(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.csv_batch_pattern = os.path.join(TEST_REFERENCE_DIR, "exp_data_[0-3].csv")
+        cls.csv_batch = glob.glob(cls.csv_batch_pattern)
+
+    def test_batch_loader_with_list_init(self):
+        dc = BatchDataImporter(self.csv_batch).batch
+        s = dc.states
+        self.assertEqual(len(dc), 3)
+        self.assertEqual(len(s[list(s.keys())[0]].params), 2)
+
+    def test_batch_load_with_set_precision(self):
+        b = BatchDataImporter(self.csv_batch_pattern)
+        b.set_state_precision(0)
+        dc = b.batch
+        s = dc.states
+        self.assertEqual(len(dc.state_names), 2)
+        self.assertEqual(len(s[list(s.keys())[0]].params), 2)
+
+    def test_batch_loader_with_reg_expression_init(self):
+        dc = BatchDataImporter(self.csv_batch_pattern).batch
+        s = dc.states
+        self.assertEqual(len(dc), 3)
+        self.assertEqual(len(dc.state_names), 3)
+        self.assertEqual(len(s[list(s.keys())[0]].params), 2)
+        for state in s.values():
+            self.assertTrue("str" in state.params)
+            self.assertTrue("rate" in state.params)
+
+    def test_batch_load_with_additional_states(self):
+        b = BatchDataImporter(self.csv_batch)
+        b.set_fixed_state_parameters("fixed_states", P1=5.0, P2=4.0)
+        dc = b.batch
+        self.assertEqual(len(dc), 3)
+        s = dc.states
+        self.assertEqual(len(s[list(s.keys())[0]].params), 4)
+        for state in s.values():
+            self.assertIn("str", state.params)
+            self.assertIn("rate", state.params)
+            self.assertIn("P1", state.params)
+            self.assertIn("P2", state.params)
+
+    def test_batch_load_with_file_type(self):
+        # file_type is forwarded to FileData(...) via kwargs
+        b = BatchDataImporter(self.csv_batch, file_type="csv")
+        dc = b.batch
+        self.assertEqual(len(dc), 3)
+
+    def test_batch_load_with_file_type_and_fixed_states(self):
+        b = BatchDataImporter(self.csv_batch, file_type="csv")
+        b.set_fixed_state_parameters(P1=5.0, P2=4.0)
+        dc = b.batch
+        self.assertEqual(len(dc), 3)
+        s = dc.states
+        for state in s.values():
+            self.assertIn("P1", state.params)
+            self.assertIn("P2", state.params)
+
+    def test_batch_loader_pattern_expands_and_loads_expected_files(self):
+        """
+        Improved replacement for the previous no-op test_batch_loader_error.
+        Verifies the glob expands, and that the batch loads the same files.
+        """
+        pattern = os.path.join(TEST_REFERENCE_DIR, "exp_data_*.csv")
+        expected_files = sorted(glob.glob(pattern))
+        self.assertGreater(len(expected_files), 0)
+
+        dc = BatchDataImporter(pattern).batch
+        # Compare expected absolute paths to the Data.name fields (which are set to abspath)
+        expected_abs = sorted(os.path.abspath(f) for f in expected_files)
+        loaded_abs = []
+        for state in dc:
+            for data in dc[state]:
+                loaded_abs.append(data.name)
+        loaded_abs = sorted(loaded_abs)
+
+        self.assertListEqual(loaded_abs, expected_abs)
+
+    def test_batch_loader_pattern_matches_no_files_raises(self):
+        pattern = os.path.join(TEST_REFERENCE_DIR, "this_matches_nothing_*.csv")
+        with self.assertRaises(FileNotFoundError):
+            BatchDataImporter(pattern)
+
+    def test_batch_loader_invalid_filenames_type_raises(self):
+        with self.assertRaises(TypeError):
+            BatchDataImporter(123)
+
+        with self.assertRaises(TypeError):
+            BatchDataImporter({"a": "b"})
+
+    def test_set_fixed_state_parameters_name_type_validation(self):
+        b = BatchDataImporter(self.csv_batch_pattern)
+        with self.assertRaises(TypeError):
+            b.set_fixed_state_parameters(name=123, P1=1.0)
+
+    def test_set_fixed_state_parameters_param_type_validation(self):
+        b = BatchDataImporter(self.csv_batch_pattern)
+        with self.assertRaises(TypeError):
+            b.set_fixed_state_parameters(P1=None)
+        with self.assertRaises(TypeError):
+            b.set_fixed_state_parameters(P1=SolitaryState())
+
+    def test_set_fixed_state_parameters_requires_string_or_real_values(self):
+        b = BatchDataImporter(self.csv_batch_pattern)
+        b.set_fixed_state_parameters(P1=5.0, P2="abc")  # ok
+
+        with self.assertRaises(TypeError):
+            b.set_fixed_state_parameters(P1=[1, 2, 3])  # not allowed
+
+    def test_fixed_state_name_used_only_when_no_file_states(self):
+        # Use comment files that have no state header => SolitaryState() in both
+        files = [
+            os.path.join(TEST_REFERENCE_DIR, "comment_header.csv"),
+            os.path.join(TEST_REFERENCE_DIR, "comment_header_and_tail.csv"),
+        ]
+        b = BatchDataImporter(files, comments="$")
+        b.set_fixed_state_parameters(name="my_fixed_state", P1=1.0)
+
+        dc = b.batch
+        self.assertEqual(len(dc.state_names), 1)
+        self.assertEqual(dc.state_names[0], "my_fixed_state")
+        s = dc.states["my_fixed_state"]
+        self.assertIn("P1", s.params)
+        self.assertEqual(s.params["P1"], 1.0)
+
+    def test_fixed_state_name_ignored_when_file_states_exist(self):
+        # Use batch files that include states in the headers
+        b = BatchDataImporter(self.csv_batch_pattern)
+        b.set_fixed_state_parameters(name="my_fixed_state", P1=1.0)
+
+        # We cannot easily assert on logs here without a capture helper,
+        # but we can assert the name is not adopted.
+        dc = b.batch
+        self.assertNotIn("my_fixed_state", dc.state_names)
+
+    def test_batch_loader_forwards_comments_kwarg(self):
+        """
+        Verify BatchDataImporter forwards kwargs into FileData/CSVDataImporter by using
+        files that require comments="$".
+        """
+        files = [
+            os.path.join(TEST_REFERENCE_DIR, "comment_header.csv"),
+            os.path.join(TEST_REFERENCE_DIR, "comment_header_and_tail.csv"),
+        ]
+
+        # Without forwarding comments="$", parsing should fail (comment lines not skipped)
+        with self.assertRaises(Exception):
+            BatchDataImporter(files).batch
+
+        dc = BatchDataImporter(files, comments="$").batch
+        self.assertEqual(len(dc[dc.state_names[0]]), 2)
+        for d in dc[dc.state_names[0]]:
+            self.assertIn("time", d.field_names)
+            self.assertIn("temp", d.field_names)
+            self.assert_close_arrays([0, 1, 2], d["time"])
+            self.assert_close_arrays([100, 200, 300], d["temp"])
+        
+    def test_batch_loader_mismatched_state_variables_raises(self):
+        """
+        Create two temporary CSVs with different state variable keys and verify the
+        reconciliation step throws BatchDataImporterStateError.
+        """
+        f1 = "batch_state_a.csv"
+        f2 = "batch_state_b.csv"
+
+        s1 = """{"temperature": 300}
+# comment
+X,Y
+0,0
+1,1
+"""
+        s2 = """{"rate": 1.0}
+# comment
+X,Y
+0,0
+1,1
+"""
+        with open(f1, "w") as fh:
+            fh.write(s1)
+        with open(f2, "w") as fh:
+            fh.write(s2)
+
+        b = BatchDataImporter([f1, f2], comments="#", file_type="csv")
+        with self.assertRaises(BatchDataImporter.BatchDataImporterStateError):
+            _ = b.batch
 
 
 class FileEncodingTest(MatcalUnitTest):
