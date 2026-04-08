@@ -69,7 +69,7 @@ To begin, we once again perform the data import, model preparation
 and objective specification for the tension model from the examples linked above.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 51-110
+.. GENERATED FROM PYTHON SOURCE LINES 51-111
 
 .. code-block:: Python
 
@@ -82,8 +82,9 @@ and objective specification for the tension model from the examples linked above
     figsize = (4,3)
 
 
-    data_collection = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", file_type="csv", 
-        fixed_states={"temperature":530, "displacement_rate":2e-4}).batch
+    data_collection = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", file_type="csv")
+    data_collection.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+    data_collection = data_collection.batch
     data_collection = scale_data_collection(data_collection, "engineering_stress", 1000)
     data_collection.remove_field("time")
 
@@ -139,14 +140,14 @@ and objective specification for the tension model from the examples linked above
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 111-115
+.. GENERATED FROM PYTHON SOURCE LINES 112-116
 
 Now to setup the different coupling models, we will use Python's copy
 module to copy the ``astme8_model_staggered_coupling model``, and the set 
 the correct coupling options 
 for the new models.
 
-.. GENERATED FROM PYTHON SOURCE LINES 115-132
+.. GENERATED FROM PYTHON SOURCE LINES 116-133
 
 .. code-block:: Python
 
@@ -174,7 +175,7 @@ for the new models.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 133-140
+.. GENERATED FROM PYTHON SOURCE LINES 134-141
 
 Similar to what was done in the convergence study, 
 we will perform a :class:`~matcal.core.parameter_studies.ParameterStudy`
@@ -184,7 +185,7 @@ We then add evaluation sets for each of the models with the different coupling
 methods.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 140-150
+.. GENERATED FROM PYTHON SOURCE LINES 141-151
 
 .. code-block:: Python
 
@@ -205,7 +206,7 @@ methods.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 151-170
+.. GENERATED FROM PYTHON SOURCE LINES 152-171
 
 We can now run the study, and  after it finishes, we can compare
 the results from the different models. For our purposes, we want to ensure that 
@@ -227,7 +228,7 @@ convergence plots for the objective once all the
 simulations are completed.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 170-226
+.. GENERATED FROM PYTHON SOURCE LINES 171-227
 
 .. code-block:: Python
 
@@ -311,7 +312,7 @@ simulations are completed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 227-232
+.. GENERATED FROM PYTHON SOURCE LINES 228-233
 
 We now update the time steps for each model, 
 and then we create a new study for the updated model.
@@ -319,7 +320,7 @@ The new study is launched and the results are once again
 plotted and stored for the objective time step 
 convergence plot.
 
-.. GENERATED FROM PYTHON SOURCE LINES 232-255
+.. GENERATED FROM PYTHON SOURCE LINES 233-256
 
 .. code-block:: Python
 
@@ -370,13 +371,13 @@ convergence plot.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 256-259
+.. GENERATED FROM PYTHON SOURCE LINES 257-260
 
 This process is completed one last time
 for models with a target of 1200 time steps
 for their simulations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 259-281
+.. GENERATED FROM PYTHON SOURCE LINES 260-282
 
 .. code-block:: Python
 
@@ -426,13 +427,13 @@ for their simulations.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 282-285
+.. GENERATED FROM PYTHON SOURCE LINES 283-286
 
 With all objective results complete, we can 
 plot the objectives for each model as a function of time step and coupling method. 
 The goal is to see whether the objectives are converging to a common value.
 
-.. GENERATED FROM PYTHON SOURCE LINES 285-310
+.. GENERATED FROM PYTHON SOURCE LINES 286-311
 
 .. code-block:: Python
 
@@ -474,13 +475,13 @@ The goal is to see whether the objectives are converging to a common value.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_coupling_verification.py:294: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_coupling_verification.py:295: RuntimeWarning: invalid value encountered in divide
       objectives/adiabatic_objective_fine, 'o-')
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 311-328
+.. GENERATED FROM PYTHON SOURCE LINES 312-329
 
 The results displayed in the plots are notable and 
 indicate that the coupling
@@ -503,7 +504,7 @@ correct any issues and will update the models if an issue is found and resolved.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (67 minutes 29.379 seconds)
+   **Total running time of the script:** (109 minutes 51.053 seconds)
 
 
 .. _sphx_glr_download_matcal_model_v_and_v_plot_coupling_verification.py:

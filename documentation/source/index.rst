@@ -27,14 +27,18 @@ emails about updates and new releases.
 
 Active developers
 -----------------
-| Kyle Karlson - knkarls@sandia.gov
-| Matt Kury - mwkury@sandia.gov
-| Reese Jones - rjones@sandia.gov
+| Kyle Karlson 
+| Matt Kury 
+| Reese Jones 
 
 Contributors
 ------------
 Denielle Ricciardi, Guy Bergel, Michael Antoun, Troy Hoffa
 
+
+Contact and Help
+----------------
+matcal-help@sandia.gov
 
 Sandia National Laboratories is a multimission laboratory managed and operated by 
 National Technology & Engineering Solutions of Sandia, LLC, a wholly owned 

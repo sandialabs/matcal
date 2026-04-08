@@ -12,11 +12,10 @@ figsize = (4,3)
 fig = plt.figure(figsize=figsize)
 
 
-tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat",
-                                    file_type="csv",
-                                    fixed_states={"displacement_rate":2e-4,
-                                                  "temperature":530}).batch
-
+tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
+                                    file_type="csv")
+tension_data.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+tension_data = tension_data.batch
 tension_data = scale_data_collection(tension_data, "engineering_stress", 1000)
 
 tension_data.plot("engineering_strain", "engineering_stress",

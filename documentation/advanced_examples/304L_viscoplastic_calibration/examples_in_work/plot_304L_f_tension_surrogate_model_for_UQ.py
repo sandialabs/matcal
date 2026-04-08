@@ -33,13 +33,14 @@ figsize = (4,3)
 
 #%%
 # Next, we import the data using a :class:`~matcal.core.data_importer.BatchDataImporter`.
-# Since we are using a rate dependent material model, we assign a displacement rate 
-# state variable to the data using the ``fixed_states`` keyword argument. We also
-# assign an initial temperature through ``fixed_states``.
+# Since we are using a rate dependent material model, we assign displacement 
+# rate and initial temperature 
+# state variables to the data using 
+# :meth:`~matcal.core.data_importer.BatchDataImporter.set_fixed_state_parameters`
 tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
-                                    file_type="csv", 
-                                    fixed_states={"displacement_rate":2e-4, 
-                                                  "temperature":530}).batch
+                                    file_type="csv")
+tension_data.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+tension_data = tension_data.batch
 #%%
 # We then manipulate the data to fit our needs and modeling choices. First, 
 # we scale the data from ksi to psi units. Then we remove the time field 

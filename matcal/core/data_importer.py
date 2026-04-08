@@ -522,46 +522,103 @@ class MatlabDataImporter(DataImporterBase):
 class BatchDataImporter:
     """
     Class to import multiple data files using a regular expression or a list of filenames.
+
+    Keyword arguments (``**filedata_kwargs``) are forwarded to
+    :func:`~matcal.core.data_importer.FileData` for each file.
+
+    States parsed from file headers are reconciled across the batch by rounding numeric
+    state parameters to a configurable significant-figure precision (default: 6). States
+    whose parameters match at the specified precision are combined into a common state.
     """
+
     class BatchDataImporterStateError(Exception):
         def __init__(self, *args):
             super().__init__(*args)
 
-    def __init__(self, filenames,  file_type=None, fixed_states=None):
+    def __init__(self, filenames, **filedata_kwargs):
         """
-        :param filenames: The names/paths of the file containing the data.
+        :param filenames: The names/paths of the files containing the data.
             This can be a list of strs or a single string that is a glob pattern.
-        :type filename: list(str) or str
+        :type filenames: list(str) or str
 
-        :param file_type: the file type to be read in. Default is to read the extension. 
-            MatCal recognizes "csv", "npy" and "mat" file types 
-            and only accepts these strings as input for 
-            this parameter.
-        :type file_type: str
-
-        :param fixed_states: additional state variables not defined in the data files
-        :type fixed: dict
+        :param filedata_kwargs: Keyword arguments forwarded to
+            :func:`~matcal.core.data_importer.FileData` for each file (e.g., ``comments``,
+            ``delimiter``, ``usecols``, ``import_strings``, ``drop_NaNs``, ``file_type``).
         """
         self._filenames = self._set_batch_filenames(filenames)
         self._datas = []
-        self._load_opts = {}
-        self._additional_states = {}
         self._state_vars = None
-        if fixed_states is not None:
-          if not isinstance(fixed_states,dict):
-            raise TypeError("The fixed states passed to the BatchDataImporter"
-                            " must be in dict format")
-          self._additional_states = fixed_states
 
-        self._file_type=None
-        if file_type is not None:
-          if not isinstance(file_type,str):
-            raise TypeError("File type passed to the BatchDataImporter "
-                            "must be specified as a string")
-          self._file_type = file_type
+        # forwarded into FileData(...) calls
+        self._filedata_kwargs = dict(filedata_kwargs)
 
-        self._load_opts = {}
-        self._set_default_loading_options()
+        # precision for reconciling states (significant figures)
+        self._state_precision = 6
+
+        # fixed states set by user via set_fixed_state_parameters(...)
+        self._fixed_state_params = {}
+        self._fixed_state_name = None
+
+    def set_state_precision(self, precision: int = 6):
+        """
+        Set the number of significant figures used when reconciling unique states across the batch.
+
+        Numeric state parameters are rounded to this many significant
+        figures when determining whether two states are the same;
+        states that match for all parameters
+        at this precision are combined.
+
+        :param precision: non-negative integer significant-figure precision
+        :type precision: int
+        """
+        if not isinstance(precision, numbers.Integral):
+            raise TypeError("state_precision must be an integer")
+        if precision < 0:
+            raise ValueError("state_precision must be non-negative")
+        self._state_precision = int(precision)
+
+    def _any_file_has_state(self) -> bool:
+        # true if ANY dataset has non-empty state params
+        for d in self._datas:
+            if not isinstance(d.state, SolitaryState) and len(d.state.params) > 0:
+                return True
+        return False
+
+    def set_fixed_state_parameters(self, name: str = None, **fixed_states):
+        """
+        Set fixed/additional state variables applied to every imported dataset during
+        reconciliation.
+
+        Values must be either strings or numeric real values.
+
+        Optional naming:
+        - If *no* state information is found in any imported file (i.e., all data sets have
+          :class:`~matcal.core.state.SolitaryState`), then providing ``name`` will cause the
+          fixed-state name to be used as the state name for the batch-created state.
+        - If state information *is* found in at least one file, then the provided ``name`` is
+          ignored and a warning is logged (the per-file state naming is preserved).
+
+        :param name: Optional name for the fixed-only state when no file states exist.
+        :type name: str or None
+
+        :param fixed_states: keyword/value pairs to add to the state (e.g., ``P1=5.0, P2="abc"``)
+        :type fixed_states: dict
+        """
+        if name is not None and not isinstance(name, str):
+            raise TypeError("Fixed state name must be a string or None")
+
+        # validate values
+        for k, v in fixed_states.items():
+            if not isinstance(k, str):
+                raise TypeError("Fixed state parameter names must be strings")
+            if not (isinstance(v, str) or isinstance(v, numbers.Real)):
+                raise TypeError(
+                    f"Fixed state parameter '{k}' must be a string or a real number. "
+                    f"Received type {type(v)}"
+                )
+
+        self._fixed_state_params = dict(fixed_states)
+        self._fixed_state_name = name
 
     def _set_batch_filenames(self, filenames):
         filename_list = []
@@ -570,13 +627,13 @@ class BatchDataImporter:
         elif isinstance(filenames, list):
             filename_list = filenames
         else:
-            raise TypeError("BatchDataImporter only takes a list of filenames or a regular expression for "
-                                 "finding file names. \"{}\" is not a valid option.".format(filenames))
+            raise TypeError("BatchDataImporter only takes a list of filenames "
+                            "or a regular expression for "
+                            f"finding file names. \"{filenames}\" is not a valid option.")
 
         for filename in filename_list:
             self._check_filename_type(filename)
         return filename_list
-
 
     def _get_filenames_from_pattern(self, filenames_list):
         pattern = filenames_list
@@ -586,53 +643,98 @@ class BatchDataImporter:
                                     "the BatchDataImporter matched no files")
         return filenames_list
 
-    def set_options(self, **opts):
-        """
-        This can be used to set options available for batch loading files.
-        Currently only "state_precision" is supported and it controls the precision of 
-        the state values in reconciling unique states. It has a default value of six.
-        As a result, states are kept independent if their precision differs up 
-        to the sixth significant
-        figure for each state parameter, and states where all parameters have the same values 
-        up to the sixth significant figure are combined into a common 
-        state as repeats. 
-
-        :param opts: comma delimited list of valid keyword/value pairs.
-        """
-        self._load_opts.update(opts)
-
     def _check_filename_type(self, filename):
         if not isinstance(filename, str):
             raise TypeError("The filename passed to the BatchDataImporter must be a string."
             f" Received variable of type '{type(filename)}'")
 
-    def _set_default_loading_options(self):
-      self._load_opts["state_precision"] = 6
-
     def _get_new_state_with_specified_precision(self, state):
-      precision = self._load_opts["state_precision"]
-      new_state_name = ""
-      if isinstance(state, SolitaryState) and self._additional_states:
-          new_state_name = "batch_fixed_state"
-      elif isinstance(state, SolitaryState):
-          return SolitaryState()
+        """
+        Return a new State derived from `state` with numeric parameters rounded to the
+        configured significant-figure precision.
 
-      params = {}
-      for name, value in state.params.items():
+        Special case: if `state` is SolitaryState and fixed state parameters were provided,
+        create a batch fixed-only State (name selection handled separately).
+        """
+        if isinstance(state, SolitaryState):
+            return self._create_state_when_no_file_state()
+
+        return self._create_precision_rounded_state(state)
+
+    def _create_state_when_no_file_state(self):
+        """
+        Handle the case where no per-file state exists (SolitaryState).
+        Returns either a SolitaryState (if no fixed state params) or a fixed-only State.
+        """
+        if not self._fixed_state_params:
+            return SolitaryState()
+
+        state_name = self._select_fixed_only_state_name()
+        # params are applied later in reconciliation via new_state.update(...)
+        return State(state_name, **{})
+
+    def _select_fixed_only_state_name(self) -> str:
+        """
+        Select the state name to use for a fixed-only batch state.
+
+        If a user fixed-state name was provided, it is only used when NO imported file
+        contains state information. If state information exists, log a warning and ignore it.
+        """
+        default_name = "batch_fixed_state"
+
+        if self._fixed_state_name is None:
+            return default_name
+
+        if self._any_file_has_state():
+            logger.warning(
+                "BatchDataImporter fixed state name '%s' was ignored because state "
+                "information was found in at least one imported file.",
+                self._fixed_state_name
+            )
+            return default_name
+
+        return self._fixed_state_name
+
+    def _create_precision_rounded_state(self, state):
+        """
+        Create a new State whose numeric parameters are rounded to the configured
+        significant-figure precision, and whose name is constructed consistently with
+        the rounded values.
+        """
+        precision = self._state_precision
+        new_state_name, params = self._round_state_params_and_build_name(state, precision)
+        return State(new_state_name, **params)
+
+    def _round_state_params_and_build_name(self, state, precision: int):
+        """
+        Round numeric state params to the configured precision and build the canonical
+        state name tag.
+        """
+        new_state_name = ""
+        params = {}
+
+        for name, value in state.params.items():
+            updated_value = self._round_state_param_value(value, precision)
+            new_state_name = self._update_new_state_name(precision, name, new_state_name, updated_value)
+            params[name] = updated_value
+
+        return new_state_name.rstrip("_"), params
+
+    @staticmethod
+    def _round_state_param_value(value, precision: int):
+        """
+        Round numeric values to the configured significant-figure precision.
+        Non-numeric values are returned unchanged.
+        """
         if isinstance(value, numbers.Real):
-            updated_value = set_significant_figures(value, precision+1)
-        else:
-            updated_value = value
-        new_state_name = self._update_new_state_name(precision, name, new_state_name, updated_value)
-        params[name] = updated_value
-      new_state_name = new_state_name.rstrip("_")
-      return State(new_state_name, **params)
+            # historical behavior: precision+1 passed to set_significant_figures
+            return set_significant_figures(value, precision + 1)
+        return value
 
     @staticmethod
     def _update_new_state_name(precision, state_parameter_name, state_name, updated_value):
-
         if precision == 0:
-            fmt = str(precision + 6) + "." + str(precision+1) + "e"
+            fmt = str(precision + 6) + "." + str(precision + 1) + "e"
         else:
             fmt = str(precision + 6) + "." + str(precision) + "e"
         if isinstance(updated_value, str):
@@ -641,12 +743,11 @@ class BatchDataImporter:
         return state_name
 
     def _reconcile_states(self):
-      states = self._get_original_states()
-      self._verify_all_data_sets_have_the_same_state_variables(states)
-      updated_states_data_collection = DataCollection("reconciled states data")
-      self._populate_updated_state_data_collection(updated_states_data_collection)
-
-      return updated_states_data_collection
+        states = self._get_original_states()
+        self._verify_all_data_sets_have_the_same_state_variables(states)
+        updated_states_data_collection = DataCollection("reconciled states data")
+        self._populate_updated_state_data_collection(updated_states_data_collection)
+        return updated_states_data_collection
 
     def _populate_updated_state_data_collection(self, updated_states_data_collection):
         for data in self._datas:
@@ -654,7 +755,9 @@ class BatchDataImporter:
             if new_state.name in updated_states_data_collection.state_names:
                 data.set_state(updated_states_data_collection.states[new_state.name])
             else:
-                new_state.update(self._additional_states)
+                # Apply fixed params (if any) to *new* states only
+                if self._fixed_state_params:
+                    new_state.update(self._fixed_state_params)
                 data.set_state(new_state)
             updated_states_data_collection.add(data)
 
@@ -665,10 +768,11 @@ class BatchDataImporter:
                 self._state_vars = current_state_vars
             else:
                 if self._state_vars != current_state_vars:
-                    raise self.BatchDataImporterStateError("The file \"{}\" has the state variables: {} \nExpected the "
-                                                           "following state varaibles:\n {}. Check input and "
-                                                           "files.".format(data_file, current_state_vars,
-                                                                           self._state_vars))
+                    raise self.BatchDataImporterStateError(
+                        "The file \"{}\" has the state variables: {} \nExpected the "
+                        "following state varaibles:\n {}. Check input and "
+                        "files.".format(data_file, current_state_vars, self._state_vars)
+                    )
 
     def _get_original_states(self):
         states = {}
@@ -678,34 +782,62 @@ class BatchDataImporter:
 
     @property
     def states(self):
-      return self._states
+        return self._states
 
     @property
     def filenames(self):
-      return self._filenames
+        return self._filenames
 
     def _collect(self):
-      for filename in self._filenames:
-        d = FileData(filename, file_type=self._file_type)
-        self._datas.append(d)
+        self._datas = []
+        for filename in self._filenames:
+            d = FileData(filename, **self._filedata_kwargs)
+            self._datas.append(d)
+
+        # decide once per batch
+        self._has_any_file_state = self._any_file_has_state()
+        self._fixed_only_state_name = self._compute_fixed_only_state_name(self._has_any_file_state)
+
+    def _compute_fixed_only_state_name(self, has_any_file_state: bool) -> str:
+        default_name = "batch_fixed_state"
+        if self._fixed_state_name is None:
+            return default_name
+
+        if has_any_file_state:
+            logger.warning(
+                "BatchDataImporter fixed state name '%s' was ignored because state "
+                "information was found in at least one imported file.",
+                self._fixed_state_name
+            )
+            return default_name
+
+        return self._fixed_state_name
+
+    def _create_state_when_no_file_state(self):
+        if not self._fixed_state_params:
+            return SolitaryState()
+        state_name = self._fixed_only_state_name
+        if state_name is None:
+            state_name = "batch_fixed_state"        
+        return State(state_name, **{})
 
     @property
     def batch(self):
-      """
-      Imports and collects the data into a :class:`~matcal.core.data.DataCollection`. 
-      If :class:`~matcal.core.state.State` data is included 
-      in the files, the appropriate states are assigned 
-      to each :class:`~matcal.core.data.Data` class along with any fixed 
-      state parameters specified in the 
-      :class:`~matcal.core.data_importer.BatchDataImporter` constructor.
-      Data with similar states are combined into single states according to
-      the "state_precision" optional parameter with a default value of six.
-      See :meth:`~matcal.core.data_importer.BatchDataImporter.set_options` for 
-      more details.
-      """
-      self._collect()
-      data_collection = self._reconcile_states()
-      return data_collection
+        """
+        Imports and collects the data into a :class:`~matcal.core.data.DataCollection`.
+
+        If :class:`~matcal.core.state.State` data is included in the files, the appropriate
+        states are assigned to each :class:`~matcal.core.data.Data` object along with any fixed
+        state parameters specified using
+        :meth:`~matcal.core.data_importer.BatchDataImporter.set_fixed_state_parameters`.
+
+        Data with similar states are combined into single states according to the configured
+        state precision 
+        (see :meth:`~matcal.core.data_importer.BatchDataImporter.set_state_precision`).
+        """
+        self._collect()
+        data_collection = self._reconcile_states()
+        return data_collection
 
 
 class JSONProbeDataImporter(DataImporterBase):

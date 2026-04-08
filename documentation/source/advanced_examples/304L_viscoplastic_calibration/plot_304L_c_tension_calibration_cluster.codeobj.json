@@ -4234,6 +4234,15 @@
    "name": "BatchDataImporter"
   }
  ],
+ "matcal.core.data_importer.BatchDataImporter.set_fixed_state_parameters": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "matcal.core.data_importer.BatchDataImporter",
+   "module_short": "matcal.core.data_importer.BatchDataImporter",
+   "name": "set_fixed_state_parameters"
+  }
+ ],
  "matcal.core.models.PythonModel": [
   {
    "is_class": false,
@@ -5150,6 +5159,29 @@
    "name": "DataCollection"
   }
  ],
+ "tension_data.batch": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
  "tension_data.plot": [
   {
    "is_class": false,
@@ -5292,6 +5324,29 @@
    "module": "abc",
    "module_short": "abc",
    "name": "ABC.remove_field"
+  }
+ ],
+ "tension_data.set_fixed_state_parameters": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
   }
  ],
  "voce_params": [

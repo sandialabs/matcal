@@ -59,21 +59,22 @@ We will be using MatPlotLib, NumPy and MatCal.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-37
+.. GENERATED FROM PYTHON SOURCE LINES 33-38
 
 Next, we import the data using a :class:`~matcal.core.data_importer.BatchDataImporter`.
-Since we are using a rate dependent material model, we assign a displacement rate 
-state variable to the data using the ``fixed_states`` keyword argument. We also
-assign an initial temperature through ``fixed_states``.
+Since we are using a rate dependent material model, we assign displacement 
+rate and initial temperature 
+state variables to the data using 
+:meth:`~matcal.core.data_importer.BatchDataImporter.set_fixed_state_parameters`
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-41
+.. GENERATED FROM PYTHON SOURCE LINES 38-43
 
 .. code-block:: Python
 
     tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
-                                        file_type="csv", 
-                                        fixed_states={"displacement_rate":2e-4, 
-                                                      "temperature":530}).batch
+                                        file_type="csv")
+    tension_data.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+    tension_data = tension_data.batch
 
 
 
@@ -81,14 +82,15 @@ assign an initial temperature through ``fixed_states``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-46
+
+.. GENERATED FROM PYTHON SOURCE LINES 44-48
 
 We then manipulate the data to fit our needs and modeling choices. First, 
 we scale the data from ksi to psi units. Then we remove the time field 
 as this has consequences for the finite element model boundary conditions. 
 See :ref:`Uniaxial tension solid mechanics boundary conditions`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-49
+.. GENERATED FROM PYTHON SOURCE LINES 48-51
 
 .. code-block:: Python
 
@@ -102,7 +104,7 @@ See :ref:`Uniaxial tension solid mechanics boundary conditions`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 50-72
+.. GENERATED FROM PYTHON SOURCE LINES 52-74
 
 .. note::
     Above we remove the "time" field from the data. We do this to avoid any 
@@ -127,11 +129,11 @@ See :ref:`Uniaxial tension solid mechanics boundary conditions`.
     due to our specification of "displacement_rate" in the data fixed 
     states when the data is imported.
 
-.. GENERATED FROM PYTHON SOURCE LINES 75-76
+.. GENERATED FROM PYTHON SOURCE LINES 77-78
 
 Next, we plot the data to verify we imported the data as expected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 76-82
+.. GENERATED FROM PYTHON SOURCE LINES 78-84
 
 .. code-block:: Python
 
@@ -154,19 +156,21 @@ Next, we plot the data to verify we imported the data as expected.
 
  .. code-block:: none
 
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/data.py:588: UserWarning: Ignoring specified arguments in this call because figure with num: 1 already exists
+      plt.figure(figure.number, constrained_layout=True)
 
     Text(20.77140016604401, 0.5, 'engineering stress (psi)')
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 83-87
+.. GENERATED FROM PYTHON SOURCE LINES 85-89
 
 We also import the rate data as we will need to recalibrate 
 the Johnson-Cook parameter :math:`C` since :math:`Y_0` will 
 likely be changing. We put it in a :class:`~matcal.core.data.DataCollection`
 to facilitate plotting.
 
-.. GENERATED FROM PYTHON SOURCE LINES 87-89
+.. GENERATED FROM PYTHON SOURCE LINES 89-91
 
 .. code-block:: Python
 
@@ -179,12 +183,12 @@ to facilitate plotting.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 90-92
+.. GENERATED FROM PYTHON SOURCE LINES 92-94
 
 Next, we plot the data on with a ``semilogx`` plot to verify it imported 
 as expected.
 
-.. GENERATED FROM PYTHON SOURCE LINES 92-117
+.. GENERATED FROM PYTHON SOURCE LINES 94-119
 
 .. code-block:: Python
 
@@ -225,7 +229,7 @@ as expected.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 118-162
+.. GENERATED FROM PYTHON SOURCE LINES 120-164
 
 Based on the previous examples, we choose a material model with the
 following flow rule:
@@ -272,7 +276,7 @@ and inspection of the data. The initial values come from
 First, we read in the results from those examples and then 
 create the parameters with the appropriate initial points.
 
-.. GENERATED FROM PYTHON SOURCE LINES 162-176
+.. GENERATED FROM PYTHON SOURCE LINES 164-178
 
 .. code-block:: Python
 
@@ -297,13 +301,13 @@ create the parameters with the appropriate initial points.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-180
+.. GENERATED FROM PYTHON SOURCE LINES 179-182
 
 Now we can define the models to be calibrated. 
 We will start with the Python function for the 
 rate-dependence Python model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-185
+.. GENERATED FROM PYTHON SOURCE LINES 182-187
 
 .. code-block:: Python
 
@@ -319,12 +323,12 @@ rate-dependence Python model.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-188
+.. GENERATED FROM PYTHON SOURCE LINES 188-190
 
 We then create the model and add the reference
 strain rate constant to the model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 188-192
+.. GENERATED FROM PYTHON SOURCE LINES 190-194
 
 .. code-block:: Python
 
@@ -339,7 +343,7 @@ strain rate constant to the model.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-215
+.. GENERATED FROM PYTHON SOURCE LINES 195-217
 
 In the ``JC_rate_dependence_model`` function, you can see that the correction factor :math:`X`
 is a simple multiplier on :math:`Y_0`. This allows the calibration algorithm to compensate
@@ -364,7 +368,7 @@ First, we create the :class:`~matcal.sierra.material.Material` object.
 We write the material file that will be used to create the 
 MatCal :class:`~matcal.sierra.material.Material`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-283
+.. GENERATED FROM PYTHON SOURCE LINES 217-285
 
 .. code-block:: Python
 
@@ -443,7 +447,7 @@ MatCal :class:`~matcal.sierra.material.Material`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 284-315
+.. GENERATED FROM PYTHON SOURCE LINES 286-317
 
 The study parameters and other parameters can be seen in the file 
 and are identified with the curly bracket identifiers for Aprepro :cite:p:`aprepro`
@@ -477,7 +481,7 @@ that we generate for the tension model. We then
 create the MatCal :class:`~matcal.sierra.material.Material`
 object.
 
-.. GENERATED FROM PYTHON SOURCE LINES 315-322
+.. GENERATED FROM PYTHON SOURCE LINES 317-324
 
 .. code-block:: Python
 
@@ -495,7 +499,7 @@ object.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 323-335
+.. GENERATED FROM PYTHON SOURCE LINES 325-337
 
 Next, we create the tension model using the
 :class:`~matcal.sierra.models.RoundUniaxialTensionModel`
@@ -510,7 +514,7 @@ the correct time to achieve the desired engineering strain rate.
 We study the effects of boundary condition choice in more detail in 
 :ref:`304L calibrated round tension model - effect of different model options`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 335-350
+.. GENERATED FROM PYTHON SOURCE LINES 337-352
 
 .. code-block:: Python
 
@@ -536,13 +540,13 @@ We study the effects of boundary condition choice in more detail in
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 351-354
+.. GENERATED FROM PYTHON SOURCE LINES 353-356
 
 We set the cores the model uses to be platform dependent.
 On a local machine it will run on 36 cores. If its on a cluster,
 it will run in the queue on 112.
 
-.. GENERATED FROM PYTHON SOURCE LINES 354-364
+.. GENERATED FROM PYTHON SOURCE LINES 356-366
 
 .. code-block:: Python
 
@@ -563,12 +567,12 @@ it will run in the queue on 112.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 365-367
+.. GENERATED FROM PYTHON SOURCE LINES 367-369
 
 We also add the reference strain rate constant to the
 SIERRA model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 367-369
+.. GENERATED FROM PYTHON SOURCE LINES 369-371
 
 .. code-block:: Python
 
@@ -581,7 +585,7 @@ SIERRA model.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 370-381
+.. GENERATED FROM PYTHON SOURCE LINES 372-383
 
 After preparing the models and data, we must define the objectives to be minimized. 
 For this calibration, we will need a separate objective for each model and 
@@ -595,7 +599,7 @@ at each rate. For the tension model, we will be calibrating to the
 measured engineering stress-strain curve. Therefore,
 we create the objectives shown below.
 
-.. GENERATED FROM PYTHON SOURCE LINES 381-384
+.. GENERATED FROM PYTHON SOURCE LINES 383-386
 
 .. code-block:: Python
 
@@ -609,7 +613,7 @@ we create the objectives shown below.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 385-392
+.. GENERATED FROM PYTHON SOURCE LINES 387-394
 
 We then create a function and set of objects that will 
 set certain values in the residual vector to zero 
@@ -619,7 +623,7 @@ residuals corresponding to portions of the curve
 that we should not calibrate to or do not wish to 
 calibrate to.
 
-.. GENERATED FROM PYTHON SOURCE LINES 392-403
+.. GENERATED FROM PYTHON SOURCE LINES 394-405
 
 .. code-block:: Python
 
@@ -641,7 +645,7 @@ calibrate to.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 404-421
+.. GENERATED FROM PYTHON SOURCE LINES 406-423
 
 .. note::
     Above we remove the elastic and steep unloading portions of the stress-strain
@@ -661,7 +665,7 @@ calibrate to.
     cost of the calibration and 
     most likely results in an improved calibration.
 
-.. GENERATED FROM PYTHON SOURCE LINES 423-467
+.. GENERATED FROM PYTHON SOURCE LINES 425-469
 
 To perform the calibration, we will use 
 the :class:`~matcal.dakota.local_calibration_studies.GradientCalibrationStudy`.
@@ -708,7 +712,7 @@ more than what is specified. If no core limit is set,
 MatCal will default to 1. For parallel jobs, you must specify the limit
 or MatCal will error out. These specifications are for running jobs on a local machine.
 
-.. GENERATED FROM PYTHON SOURCE LINES 467-474
+.. GENERATED FROM PYTHON SOURCE LINES 469-476
 
 .. code-block:: Python
 
@@ -726,7 +730,7 @@ or MatCal will error out. These specifications are for running jobs on a local m
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 475-482
+.. GENERATED FROM PYTHON SOURCE LINES 477-484
 
 However, if we are on a cluster where the models are run in a queue (not
 the local machine), 
@@ -736,7 +740,7 @@ For our case, that is only six python models run on the parent node
 and then six finite element models run on children nodes with job monitoring
 and post processing on the parent node.
 
-.. GENERATED FROM PYTHON SOURCE LINES 482-485
+.. GENERATED FROM PYTHON SOURCE LINES 484-487
 
 .. code-block:: Python
 
@@ -750,14 +754,14 @@ and post processing on the parent node.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 486-490
+.. GENERATED FROM PYTHON SOURCE LINES 488-492
 
 We can now run the calibration. After it finishes, we will plot 
 MatCal's standard plots which include plotting the simulation QoIs versus the experimental data
 QoIs, the objectives versus evaluation and the objectives versus the parameter values. 
 We also print and save the final parameter values. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 490-500
+.. GENERATED FROM PYTHON SOURCE LINES 492-502
 
 .. code-block:: Python
 
@@ -838,16 +842,16 @@ We also print and save the final parameter values.
 
  .. code-block:: none
 
-    Y_0: 33.825309816
-    A: 159.6781326
-    b: 1.9455735196
-    C: -1.4001190093
-    X: 0.95992077358
+    Y_0: 33.822903791
+    A: 159.67098523
+    b: 1.9458059132
+    C: -1.4001161716
+    X: 0.95998543176
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 501-528
+.. GENERATED FROM PYTHON SOURCE LINES 503-530
 
 The calibration finishes successfully with the Dakota output::
 
@@ -880,7 +884,7 @@ parameters if used.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (10 minutes 6.843 seconds)
+   **Total running time of the script:** (17 minutes 34.189 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_c_tension_calibration_cluster.py:

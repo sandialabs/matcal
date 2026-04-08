@@ -39,7 +39,7 @@ To begin, we reuse the data import, model preparation
 and objective specification for the tension model and rate 
 models from :ref:`304L stainless steel viscoplastic calibration uncertainty quantification`.    
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-111
+.. GENERATED FROM PYTHON SOURCE LINES 23-110
 
 .. code-block:: Python
 
@@ -53,10 +53,9 @@ models from :ref:`304L stainless steel viscoplastic calibration uncertainty quan
     figsize = (4,3)
 
     tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
-                                        file_type="csv", 
-                                        fixed_states={"displacement_rate":2e-4, 
-                                                      "temperature":530}).batch
-
+                                        file_type="csv")
+    tension_data.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+    tension_data = tension_data.batch
     tension_data = scale_data_collection(tension_data, "engineering_stress", 1000)
     tension_data.remove_field("time")
 
@@ -138,12 +137,12 @@ models from :ref:`304L stainless steel viscoplastic calibration uncertainty quan
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 112-114
+.. GENERATED FROM PYTHON SOURCE LINES 111-113
 
 With the models, data, and objectives created, 
 we import the :class:`~matcal.core.parameter_studies.LaplaceStudy` results from the previous step.
 
-.. GENERATED FROM PYTHON SOURCE LINES 114-116
+.. GENERATED FROM PYTHON SOURCE LINES 113-115
 
 .. code-block:: Python
 
@@ -156,14 +155,14 @@ we import the :class:`~matcal.core.parameter_studies.LaplaceStudy` results from 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 117-121
+.. GENERATED FROM PYTHON SOURCE LINES 116-120
 
 Next, we can sample
 the calculated parameter distribution using 
 :func:`~matcal.core.parameter_studies.sample_multivariate_normal` and evaluate 
 the parameter uncertainty as desired. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 121-130
+.. GENERATED FROM PYTHON SOURCE LINES 120-129
 
 .. code-block:: Python
 
@@ -184,17 +183,17 @@ the parameter uncertainty as desired.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/matcal/core/parameter_studies.py:919: RuntimeWarning: covariance is not symmetric positive-semidefinite.
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/parameter_studies.py:918: RuntimeWarning: covariance is not symmetric positive-semidefinite.
       samples = rng.multivariate_normal(mean, sigma, nsamples).T
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 131-132
+.. GENERATED FROM PYTHON SOURCE LINES 130-131
 
 We save the parameter samples to be used or plotted later.
 
-.. GENERATED FROM PYTHON SOURCE LINES 132-134
+.. GENERATED FROM PYTHON SOURCE LINES 131-133
 
 .. code-block:: Python
 
@@ -207,13 +206,13 @@ We save the parameter samples to be used or plotted later.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 135-138
+.. GENERATED FROM PYTHON SOURCE LINES 134-137
 
 Now we set up a study so we can 
 visualize the results by pushing the samples back through the models.
 We do so using a MatCal :class:`~matcal.core.parameter_studies.ParameterStudy`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-145
+.. GENERATED FROM PYTHON SOURCE LINES 137-144
 
 .. code-block:: Python
 
@@ -231,7 +230,7 @@ We do so using a MatCal :class:`~matcal.core.parameter_studies.ParameterStudy`.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 146-159
+.. GENERATED FROM PYTHON SOURCE LINES 145-158
 
 Next, we add parameter evaluations for each of the samples. 
 We do so by organizing the data using Python's
@@ -247,7 +246,7 @@ to add each parameter set sample to the study.
    and can be of use.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 159-172
+.. GENERATED FROM PYTHON SOURCE LINES 158-171
 
 .. code-block:: Python
 
@@ -272,57 +271,57 @@ to add each parameter set sample to the study.
 
  .. code-block:: none
 
-    Running evaluation with Y_0=40.67428072656411, A=182.04294770483514, b=1.4732928457156862, and C=-1.9659884303508401.
-    Running evaluation with Y_0=32.384473986969454, A=161.1825949453706, b=2.0063404900540838, and C=-1.3434091801475483.
-    Running evaluation with Y_0=28.450188550874678, A=154.6524793196593, b=2.0372897955326765, and C=-0.9433449166116928.
-    Running evaluation with Y_0=37.98767037082276, A=171.51595918311355, b=1.6914462195654156, and C=-1.7295428064705194.
-    Running evaluation with Y_0=28.791668738933414, A=147.50844606705817, b=2.2481453879362303, and C=-0.9683122235573907.
-    Running evaluation with Y_0=29.411085084804622, A=138.56074649409015, b=2.313338212696645, and C=-1.0490514575865757.
-    Running evaluation with Y_0=35.27419085001823, A=162.04120521934013, b=1.9349547960699631, and C=-1.5452397101172548.
-    Running evaluation with Y_0=34.790082757897906, A=130.94456103456292, b=2.4619414129927306, and C=-1.2540225111457934.
-    Running evaluation with Y_0=33.8396679314974, A=175.5582489345446, b=1.719401813119056, and C=-1.511650302962917.
-    Running evaluation with Y_0=30.225400140505194, A=147.86462779879884, b=2.2648025594596475, and C=-1.152134883208174.
-    Running evaluation with Y_0=32.649263151389434, A=154.70431269897574, b=1.9998455464545486, and C=-1.2658215236806651.
-    Running evaluation with Y_0=31.542366776555497, A=161.180023374771, b=1.9759104953305509, and C=-1.2214356485007327.
-    Running evaluation with Y_0=33.81178790928908, A=158.6681025667338, b=1.9549362520449314, and C=-1.3708505838472473.
-    Running evaluation with Y_0=33.521396324264344, A=150.94956755359414, b=2.0662719986774114, and C=-1.342723922253177.
-    Running evaluation with Y_0=29.396303723416647, A=155.4935376463011, b=2.032301265326686, and C=-1.1456933551571202.
-    Running evaluation with Y_0=35.08474704644182, A=160.6352719317596, b=1.9316117680569957, and C=-1.4907989833165283.
-    Running evaluation with Y_0=36.553508058011396, A=186.35938088486427, b=1.3564638137534855, and C=-1.7214053815590138.
-    Running evaluation with Y_0=28.881524368371057, A=149.78213625593546, b=2.1959670846371226, and C=-1.1165568695223405.
-    Running evaluation with Y_0=34.99581124256833, A=159.35230664705725, b=1.9748194350734782, and C=-1.5088130632570669.
-    Running evaluation with Y_0=28.525610225582874, A=133.758035233664, b=2.5356855172277557, and C=-0.9581361958758974.
-    Running evaluation with Y_0=32.89149082800119, A=163.54887552579254, b=1.977562390825341, and C=-1.3943299368867572.
-    Running evaluation with Y_0=35.44489842791416, A=168.8493731865494, b=1.8320726749343004, and C=-1.5361370746045813.
-    Running evaluation with Y_0=33.89864751200498, A=147.28028398726005, b=2.1930854336123917, and C=-1.3270098318019485.
-    Running evaluation with Y_0=33.58804785995762, A=144.97087258903136, b=2.2089266831686927, and C=-1.3004203394031626.
-    Running evaluation with Y_0=33.17132326954861, A=165.74811011315958, b=1.8879875495164415, and C=-1.4115888693618397.
-    Running evaluation with Y_0=30.0650615332249, A=164.39632874749634, b=1.9374852758328078, and C=-1.1684164026755752.
-    Running evaluation with Y_0=30.469229588756978, A=164.83139911010744, b=1.915769697920704, and C=-1.2033436313795651.
-    Running evaluation with Y_0=32.30516567275404, A=156.60400740424453, b=1.9994124596672211, and C=-1.1699782876453164.
-    Running evaluation with Y_0=35.92188518898163, A=160.93696733106532, b=1.9024647807083341, and C=-1.494025777451115.
-    Running evaluation with Y_0=31.541001737468335, A=136.01522505306912, b=2.393593276521238, and C=-1.1571935320385085.
-    Running evaluation with Y_0=36.06875822486453, A=172.72565840764855, b=1.6374356254812144, and C=-1.5566771690982706.
-    Running evaluation with Y_0=34.25068057197184, A=158.72460436295654, b=1.9716088198717148, and C=-1.4011827313315914.
-    Running evaluation with Y_0=32.591903174189476, A=178.4929544612727, b=1.595010166755416, and C=-1.477266676657481.
-    Running evaluation with Y_0=28.895924118685524, A=133.80291240737645, b=2.4562511786134475, and C=-1.0271046567709976.
-    Running evaluation with Y_0=31.638530015063115, A=155.3950164060499, b=2.030137991651555, and C=-1.1821869011115873.
-    Running evaluation with Y_0=36.932752747174725, A=171.97652456688215, b=1.7681188682828266, and C=-1.7610830753691007.
-    Running evaluation with Y_0=32.06173447678861, A=139.35242680067802, b=2.338420567106009, and C=-1.1823771136021666.
-    Running evaluation with Y_0=34.81231165667604, A=183.0132214382217, b=1.5368456479684776, and C=-1.516336289397542.
-    Running evaluation with Y_0=41.37596914627849, A=194.2913399804345, b=1.2107157222394407, and C=-1.9852438701215025.
-    Running evaluation with Y_0=35.102694765791945, A=173.84584593405486, b=1.6362719832569828, and C=-1.5845156133694909.
+    Running evaluation with Y_0=40.72441342703886, A=182.4379144883937, b=1.4698690626316924, and C=-1.9661180231567008.
+    Running evaluation with Y_0=32.393486456122886, A=161.19478113745876, b=2.006511861609928, and C=-1.3498419855317558.
+    Running evaluation with Y_0=28.452810086690572, A=154.53948380147227, b=2.0374150528005344, and C=-0.9408999658855374.
+    Running evaluation with Y_0=38.010725023703465, A=171.72381021836316, b=1.6895835276696582, and C=-1.7298186757585254.
+    Running evaluation with Y_0=28.766099706537293, A=147.27714013159462, b=2.249412459359706, and C=-0.9725980021826655.
+    Running evaluation with Y_0=29.350567334533224, A=138.18231240696633, b=2.3183375888108753, and C=-1.041766366545879.
+    Running evaluation with Y_0=35.27398131988298, A=162.0794566342244, b=1.9351683687561434, and C=-1.5485637758316813.
+    Running evaluation with Y_0=34.67763708386793, A=130.46006188864052, b=2.464860447431711, and C=-1.2551337273650789.
+    Running evaluation with Y_0=33.89531959164911, A=175.81704154012397, b=1.7174942325839184, and C=-1.5173311381157752.
+    Running evaluation with Y_0=30.194844392177533, A=147.6451229375477, b=2.267451064349489, and C=-1.1573626767841783.
+    Running evaluation with Y_0=32.63388591315658, A=154.60915613447523, b=2.000587273735786, and C=-1.2620956404737014.
+    Running evaluation with Y_0=31.55514090058545, A=161.18874089889496, b=1.975060235421476, and C=-1.2261280144861153.
+    Running evaluation with Y_0=33.80573861940592, A=158.6439707400068, b=1.9549016564098698, and C=-1.3706013757772066.
+    Running evaluation with Y_0=33.48844008845267, A=150.79508763959453, b=2.0682396461474486, and C=-1.3383337771223938.
+    Running evaluation with Y_0=29.39802042512996, A=155.39857540469103, b=2.034913879600619, and C=-1.141190710352086.
+    Running evaluation with Y_0=35.080306871627954, A=160.64921258131145, b=1.9315560569894779, and C=-1.4921334937991544.
+    Running evaluation with Y_0=36.637880765569946, A=186.8101218586871, b=1.3534286190619456, and C=-1.714389913372552.
+    Running evaluation with Y_0=28.86420228823914, A=149.58943259128296, b=2.1997042497147175, and C=-1.1162228528410867.
+    Running evaluation with Y_0=34.986977166358336, A=159.34441780985583, b=1.975436533340711, and C=-1.5110756691801719.
+    Running evaluation with Y_0=28.4505275045769, A=133.29544710198115, b=2.5402686618897072, and C=-0.9631604893152708.
+    Running evaluation with Y_0=32.90690664580745, A=163.60271329192219, b=1.9773242694403805, and C=-1.4024767994618468.
+    Running evaluation with Y_0=35.46877875187567, A=169.0022277303849, b=1.8299804768263006, and C=-1.5433985875507392.
+    Running evaluation with Y_0=33.85014930972343, A=147.06577777988235, b=2.194593519115062, and C=-1.3292175404196238.
+    Running evaluation with Y_0=33.53257795557018, A=144.7164837386597, b=2.2111322204432784, and C=-1.2996204964524651.
+    Running evaluation with Y_0=33.19386471967011, A=165.83994480464247, b=1.8875270060013802, and C=-1.4156286373270253.
+    Running evaluation with Y_0=30.096100054944113, A=164.45297769614643, b=1.9368154564613362, and C=-1.1731027411795758.
+    Running evaluation with Y_0=30.500180089918693, A=164.89698140606384, b=1.9152141140448151, and C=-1.2068830898894893.
+    Running evaluation with Y_0=32.29796086482621, A=156.53914128321043, b=1.9979403316304873, and C=-1.1716628948496.
+    Running evaluation with Y_0=35.91492059998702, A=160.95928948111384, b=1.9013168782329948, and C=-1.4953225008433946.
+    Running evaluation with Y_0=31.461520572465364, A=135.60266014588237, b=2.3979782443614477, and C=-1.155426544539657.
+    Running evaluation with Y_0=36.10480404265594, A=172.9460321355645, b=1.6348363141299118, and C=-1.5538043446418954.
+    Running evaluation with Y_0=34.24280847540498, A=158.70316244278564, b=1.9713866266222762, and C=-1.4029721979682204.
+    Running evaluation with Y_0=32.66430447288298, A=178.79600037455202, b=1.5941086037490335, and C=-1.474231700574034.
+    Running evaluation with Y_0=28.819901430442126, A=133.34271030751583, b=2.462315108734435, and C=-1.023622947668414.
+    Running evaluation with Y_0=31.629861183239814, A=155.30728898079195, b=2.0301635592986917, and C=-1.1823384892781248.
+    Running evaluation with Y_0=36.9618161227402, A=172.18786311148634, b=1.7677307599738525, and C=-1.7658475756813192.
+    Running evaluation with Y_0=31.99216740163429, A=138.99780057322496, b=2.3416666175073373, and C=-1.182426967568504.
+    Running evaluation with Y_0=34.891225833580656, A=183.4007024432691, b=1.532075399508311, and C=-1.521329077103156.
+    Running evaluation with Y_0=41.46816614902843, A=194.89417599665467, b=1.20389579843005, and C=-1.985068245620005.
+    Running evaluation with Y_0=35.1471425513697, A=174.08117376999581, b=1.6352887894457413, and C=-1.5802683407957228.
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 173-176
+.. GENERATED FROM PYTHON SOURCE LINES 172-175
 
 Next, we launch the study and plot the results.
 Once again, we use plotting functions from 
 the previous examples to simplify the plotting processes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 176-225
+.. GENERATED FROM PYTHON SOURCE LINES 175-224
 
 .. code-block:: Python
 
@@ -400,12 +399,14 @@ the previous examples to simplify the plotting processes.
 
  .. code-block:: none
 
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/data.py:588: UserWarning: Ignoring specified arguments in this call because figure with num: 1 already exists
+      plt.figure(figure.number, constrained_layout=True)
 
-    <matplotlib.legend.Legend object at 0x1553343799d0>
+    <matplotlib.legend.Legend object at 0x1554bd6212e0>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 226-232
+.. GENERATED FROM PYTHON SOURCE LINES 225-231
 
 These figure show the model results from the 40 samples. 
 For the tension model, the results appear to be good estimate of parameter 
@@ -417,7 +418,7 @@ data, the results seem to be an adequate measure of overall uncertainty.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 26.542 seconds)
+   **Total running time of the script:** (12 minutes 32.609 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_g_uq_validation.py:
