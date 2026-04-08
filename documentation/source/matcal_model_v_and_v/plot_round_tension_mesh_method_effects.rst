@@ -54,7 +54,7 @@ To begin, we once again perform the data import, model preparation
 and objective specification for the tension model from the example linked above.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-102
+.. GENERATED FROM PYTHON SOURCE LINES 39-104
 
 .. code-block:: Python
 
@@ -66,7 +66,9 @@ and objective specification for the tension model from the example linked above.
     plt.rc('font', size=12)
     figsize = (4,3)
 
-    data_collection = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", file_type="csv", fixed_states={"temperature":530, "displacement_rate":2e-4}).batch
+    data_collection = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", file_type="csv")
+    data_collection.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+    data_collection = data_collection.batch
     data_collection = scale_data_collection(data_collection, "engineering_stress", 1000)
     data_collection.remove_field("time")
 
@@ -128,7 +130,7 @@ and objective specification for the tension model from the example linked above.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 103-113
+.. GENERATED FROM PYTHON SOURCE LINES 105-115
 
 Now to setup the *mesh_method* study, we will use Python's copy
 module to copy the astme8_model_mesh_method_1 model and modify the *mesh_method* 
@@ -141,7 +143,7 @@ number of cores to be used for each model because the higher *mesh_method*
 schemes result in fewer elements being created for the meshed geometry.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-136
+.. GENERATED FROM PYTHON SOURCE LINES 115-138
 
 .. code-block:: Python
 
@@ -175,7 +177,7 @@ schemes result in fewer elements being created for the meshed geometry.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 137-143
+.. GENERATED FROM PYTHON SOURCE LINES 139-145
 
 Once again, we will perform a :class:`~matcal.core.parameter_studies.ParameterStudy` where the only parameters
 to be evaluated are the calibrated parameters from the initial study.
@@ -184,7 +186,7 @@ so each is added to the study
 as their own evaluation set. Lastly, the study core limit is set appropriately.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 143-159
+.. GENERATED FROM PYTHON SOURCE LINES 145-161
 
 .. code-block:: Python
 
@@ -211,7 +213,7 @@ as their own evaluation set. Lastly, the study core limit is set appropriately.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 160-167
+.. GENERATED FROM PYTHON SOURCE LINES 162-169
 
 We can now run the study. After it finishes, we can make our 
 results plots. We manipulate the results output from this study 
@@ -221,7 +223,7 @@ options numbers.
 We also plot the raw simulation stress-strain curves. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 167-209
+.. GENERATED FROM PYTHON SOURCE LINES 169-211
 
 .. code-block:: Python
 
@@ -292,24 +294,24 @@ We also plot the raw simulation stress-strain curves.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:200: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:202: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(mesh_method_1_curves["engineering_strain"], mesh_method_1_curves["engineering_stress"], label="$mesh\_method = 1$")
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:201: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:203: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(mesh_method_2_curves["engineering_strain"], mesh_method_2_curves["engineering_stress"], label="$mesh\_method = 2$")
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:202: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:204: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(mesh_method_3_curves["engineering_strain"], mesh_method_3_curves["engineering_stress"], label="$mesh\_method = 3$")
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:203: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:205: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(mesh_method_4_curves["engineering_strain"], mesh_method_4_curves["engineering_stress"], label="$mesh\_method = 4$")
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:204: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:206: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(mesh_method_5_curves["engineering_strain"], mesh_method_5_curves["engineering_stress"], label="$mesh\_method = 5$")
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:195: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:197: RuntimeWarning: invalid value encountered in divide
       plt.plot(methods, objectives/mesh_method_1_objective_results, 'o-')
 
-    <matplotlib.legend.Legend object at 0x15551706d610>
+    <matplotlib.legend.Legend object at 0x1554bfaca240>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 210-232
+.. GENERATED FROM PYTHON SOURCE LINES 212-234
 
 The plots show that for this element size 
 the results show strong agreement; however, measurable error exists especially 
@@ -334,7 +336,7 @@ from the other methods is the mesh size reduction at the edge of the necking reg
 the size of the necking region to see if the results improve.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 232-236
+.. GENERATED FROM PYTHON SOURCE LINES 234-238
 
 .. code-block:: Python
 
@@ -349,12 +351,12 @@ the size of the necking region to see if the results improve.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 237-239
+.. GENERATED FROM PYTHON SOURCE LINES 239-241
 
 We then run just this final model and compare the engineering stress-strain curve
 to the previous *mesh_method* = 5 model results and the *mesh_method* = 1 model results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 239-253
+.. GENERATED FROM PYTHON SOURCE LINES 241-255
 
 .. code-block:: Python
 
@@ -385,17 +387,17 @@ to the previous *mesh_method* = 5 model results and the *mesh_method* = 1 model 
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:244: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:246: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(mesh_method_1_curves["engineering_strain"], mesh_method_1_curves["engineering_stress"], label="$mesh\_method = 1$")
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:245: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:247: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(mesh_method_5_curves["engineering_strain"], mesh_method_5_curves["engineering_stress"], label="$mesh\_method = 5$")
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:246: SyntaxWarning: invalid escape sequence '\_'
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/matcal_model_v_and_v/plot_round_tension_mesh_method_effects.py:248: SyntaxWarning: invalid escape sequence '\_'
       plt.plot(updated_mesh_method_5_results["engineering_strain"], updated_mesh_method_5_results["engineering_stress"], label="updated $mesh\_method = 5$")
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-260
+.. GENERATED FROM PYTHON SOURCE LINES 256-262
 
 The engineering stress-strain shows that the location of the *necking_region* border
 can delay the necking for this mesh method. 
@@ -408,7 +410,7 @@ for this study is not negligible.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (58 minutes 58.964 seconds)
+   **Total running time of the script:** (72 minutes 34.728 seconds)
 
 
 .. _sphx_glr_download_matcal_model_v_and_v_plot_round_tension_mesh_method_effects.py:

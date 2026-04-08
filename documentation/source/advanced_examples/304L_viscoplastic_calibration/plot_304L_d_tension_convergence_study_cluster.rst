@@ -52,7 +52,7 @@ and objective specification for the tension model from the original calibration
 are repeated.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-100
+.. GENERATED FROM PYTHON SOURCE LINES 35-101
 
 .. code-block:: Python
 
@@ -65,9 +65,10 @@ are repeated.
     plt.rc('font', size=12)
     figsize = (5,4)
 
-    tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", file_type="csv", 
-                                        fixed_states={"temperature":530, 
-                                                      "displacement_rate":2e-4}).batch
+    tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
+                                        file_type="csv")
+    tension_data.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+    tension_data = tension_data.batch
     tension_data = scale_data_collection(tension_data, "engineering_stress", 1000)
     tension_data.remove_field("time")
 
@@ -128,14 +129,14 @@ are repeated.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 101-105
+.. GENERATED FROM PYTHON SOURCE LINES 102-106
 
 Now to setup the mesh convergence study, we will use Python's copy
 module to copy the astme8_model and modify the element sizes 
 for the new models. If needed, we can also change the 
 number of cores to be used for each model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 105-129
+.. GENERATED FROM PYTHON SOURCE LINES 106-130
 
 .. code-block:: Python
 
@@ -170,13 +171,13 @@ number of cores to be used for each model.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 130-133
+.. GENERATED FROM PYTHON SOURCE LINES 131-134
 
 We will then perform a :class:`~matcal.core.parameter_studies.ParameterStudy` 
 where the only parameters
 to be evaluated are the calibrated parameters from the initial study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 133-146
+.. GENERATED FROM PYTHON SOURCE LINES 134-147
 
 .. code-block:: Python
 
@@ -200,12 +201,12 @@ to be evaluated are the calibrated parameters from the initial study.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-149
+.. GENERATED FROM PYTHON SOURCE LINES 148-150
 
 The X parameter is not needed, so it is removed from the 
 calibration parameter dictionary.
 
-.. GENERATED FROM PYTHON SOURCE LINES 149-155
+.. GENERATED FROM PYTHON SOURCE LINES 150-156
 
 .. code-block:: Python
 
@@ -222,13 +223,13 @@ calibration parameter dictionary.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 156-159
+.. GENERATED FROM PYTHON SOURCE LINES 157-160
 
 This mesh discretization study will need to evaluate all models we created,
 so each is added to the study
 as their own evaluation set.  
 
-.. GENERATED FROM PYTHON SOURCE LINES 159-168
+.. GENERATED FROM PYTHON SOURCE LINES 160-169
 
 .. code-block:: Python
 
@@ -248,12 +249,12 @@ as their own evaluation set.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 169-171
+.. GENERATED FROM PYTHON SOURCE LINES 170-172
 
 Lastly, the study core limit is set appropriately. 
 The core limit is set to 112 cores which is what our hardware can support.
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-173
+.. GENERATED FROM PYTHON SOURCE LINES 172-174
 
 .. code-block:: Python
 
@@ -266,12 +267,12 @@ The core limit is set to 112 cores which is what our hardware can support.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 174-176
+.. GENERATED FROM PYTHON SOURCE LINES 175-177
 
 We can now run the study. After it finishes, we can make our 
 convergence plot. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 176-178
+.. GENERATED FROM PYTHON SOURCE LINES 177-179
 
 .. code-block:: Python
 
@@ -284,7 +285,7 @@ convergence plot.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 179-190
+.. GENERATED FROM PYTHON SOURCE LINES 180-191
 
 For our purposes, we want to ensure that 
 the objective value is converged or has an acceptable error. As 
@@ -298,7 +299,7 @@ the residuals for each model are calculated at the experimental data
 independent variables, their engineering strain values will be the same 
 for all data sets.
 
-.. GENERATED FROM PYTHON SOURCE LINES 190-195
+.. GENERATED FROM PYTHON SOURCE LINES 191-196
 
 .. code-block:: Python
 
@@ -314,14 +315,14 @@ for all data sets.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 196-200
+.. GENERATED FROM PYTHON SOURCE LINES 197-201
 
 For the residual values and simulation data we will have to extract the 
 data from the results object for each model. We write a function
 to perform this data extraction on a provided model and 
 retrun the results.
 
-.. GENERATED FROM PYTHON SOURCE LINES 200-215
+.. GENERATED FROM PYTHON SOURCE LINES 201-216
 
 .. code-block:: Python
 
@@ -347,11 +348,11 @@ retrun the results.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 216-217
+.. GENERATED FROM PYTHON SOURCE LINES 217-218
 
 Next, we apply the function to each model and organize the data for plotting.
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-253
+.. GENERATED FROM PYTHON SOURCE LINES 218-254
 
 .. code-block:: Python
 
@@ -398,13 +399,13 @@ Next, we apply the function to each model and organize the data for plotting.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-257
+.. GENERATED FROM PYTHON SOURCE LINES 255-258
 
 We then 
 use Matplotlib :cite:p:`matplotlib` to plot the objective values versus the element size.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 257-265
+.. GENERATED FROM PYTHON SOURCE LINES 258-266
 
 .. code-block:: Python
 
@@ -429,14 +430,14 @@ use Matplotlib :cite:p:`matplotlib` to plot the objective values versus the elem
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:261: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:262: RuntimeWarning: invalid value encountered in divide
       plt.semilogx(time_steps, objectives/finest_objective_results, 'o-')
 
     Text(18.92641051136365, 0.5, 'normalized objective value')
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 266-271
+.. GENERATED FROM PYTHON SOURCE LINES 267-272
 
 We also plot the raw simulation stress/strain curves. Note that this is different
 than the simulation QoIs used for the objective 
@@ -444,7 +445,7 @@ since the QoIs are the simulation curves interpolated
 to the experiment strain points. 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 271-284
+.. GENERATED FROM PYTHON SOURCE LINES 272-285
 
 .. code-block:: Python
 
@@ -475,11 +476,11 @@ to the experiment strain points.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x155259642a20>
+    <matplotlib.legend.Legend object at 0x155511d140e0>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 285-297
+.. GENERATED FROM PYTHON SOURCE LINES 286-298
 
 These plots show the objective is converging with reduced element 
 size and the objective values change ~1\% or less with element 
@@ -494,7 +495,7 @@ We also plot the weighted and conditioned residuals
 to observe the effect of the weighting applied.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 297-318
+.. GENERATED FROM PYTHON SOURCE LINES 298-319
 
 .. code-block:: Python
 
@@ -533,11 +534,11 @@ to observe the effect of the weighting applied.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x155470374770>
+    <matplotlib.legend.Legend object at 0x155511bedd90>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 319-328
+.. GENERATED FROM PYTHON SOURCE LINES 320-329
 
 In this first plot, it is clear that the residuals 
 are highest near the regions that were removed 
@@ -549,7 +550,7 @@ while at the unloading portion of the curve the residuals
 are much more sensitive to data set and mesh size. In fact, 
 the raw residuals are clearly not converging in this region.
 
-.. GENERATED FROM PYTHON SOURCE LINES 328-350
+.. GENERATED FROM PYTHON SOURCE LINES 329-351
 
 .. code-block:: Python
 
@@ -589,11 +590,11 @@ the raw residuals are clearly not converging in this region.
  .. code-block:: none
 
 
-    <matplotlib.legend.Legend object at 0x1555169b9220>
+    <matplotlib.legend.Legend object at 0x1555119740e0>
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 351-366
+.. GENERATED FROM PYTHON SOURCE LINES 352-367
 
 In the second plot, the weighting has removed parts of 
 the problematic portions of the stress-strain curve as 
@@ -611,7 +612,7 @@ We start by first updating the model constants from each model
 to the mesh size selected above. We can then change 
 the number of time steps the models will target.
 
-.. GENERATED FROM PYTHON SOURCE LINES 366-392
+.. GENERATED FROM PYTHON SOURCE LINES 367-393
 
 .. code-block:: Python
 
@@ -648,11 +649,11 @@ the number of time steps the models will target.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 393-394
+.. GENERATED FROM PYTHON SOURCE LINES 394-395
 
 Next, we re-create a new study to be launched with the updated models.
 
-.. GENERATED FROM PYTHON SOURCE LINES 394-410
+.. GENERATED FROM PYTHON SOURCE LINES 395-411
 
 .. code-block:: Python
 
@@ -679,7 +680,7 @@ Next, we re-create a new study to be launched with the updated models.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 411-422
+.. GENERATED FROM PYTHON SOURCE LINES 412-423
 
 Once again, we can make our 
 convergence plot using Matplotlib after 
@@ -693,7 +694,7 @@ obtain two values from each completed model for the convergence plot: the number
 time steps that the simulation took and the objective for that result. Once again, we 
 also plot the simulation data curves for each case.
 
-.. GENERATED FROM PYTHON SOURCE LINES 422-469
+.. GENERATED FROM PYTHON SOURCE LINES 423-470
 
 .. code-block:: Python
 
@@ -769,13 +770,13 @@ also plot the simulation data curves for each case.
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:451: RuntimeWarning: invalid value encountered in divide
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/documentation/advanced_examples/304L_viscoplastic_calibration/plot_304L_d_tension_convergence_study_cluster.py:452: RuntimeWarning: invalid value encountered in divide
       plt.semilogx(time_steps, objectives/finest_objective_results, 'o-')
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 470-480
+.. GENERATED FROM PYTHON SOURCE LINES 471-481
 
 These plots show the objective is converging with 
 increased time steps and the objective value change becomes ~1\% or less with 300 
@@ -791,7 +792,7 @@ a recalibration using a model with element sizes of 0.005" and more than 300 tim
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (116 minutes 26.293 seconds)
+   **Total running time of the script:** (96 minutes 26.856 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_d_tension_convergence_study_cluster.py:

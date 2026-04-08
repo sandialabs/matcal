@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**267:12.317** total execution time for 7 files **from advanced_examples/304L_viscoplastic_calibration**:
+**272:45.864** total execution time for 7 files **from advanced_examples/304L_viscoplastic_calibration**:
 
 .. container::
 
@@ -32,24 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_d_tension_convergence_study_cluster.py` (``plot_304L_d_tension_convergence_study_cluster.py``)
-     - 116:26.293
-     - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_e_tension_model_option_effects_cluster.py` (``plot_304L_e_tension_model_option_effects_cluster.py``)
-     - 98:21.185
+     - 140:47.053
      - 0.0
-   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_a_data_analysis.py` (``plot_304L_a_data_analysis.py``)
-     - 35:22.710
+   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_d_tension_convergence_study_cluster.py` (``plot_304L_d_tension_convergence_study_cluster.py``)
+     - 96:26.856
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_c_tension_calibration_cluster.py` (``plot_304L_c_tension_calibration_cluster.py``)
-     - 10:06.843
-     - 0.0
-   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py` (``plot_304L_f_tension_laplace_study_cluster.py``)
-     - 03:27.262
+     - 17:34.189
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_g_uq_validation.py` (``plot_304L_g_uq_validation.py``)
-     - 03:26.542
+     - 12:32.609
+     - 0.0
+   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py` (``plot_304L_f_tension_laplace_study_cluster.py``)
+     - 05:25.156
+     - 0.0
+   * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_a_data_analysis.py` (``plot_304L_a_data_analysis.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_advanced_examples_304L_viscoplastic_calibration_plot_304L_b_initial_point_estimation.py` (``plot_304L_b_initial_point_estimation.py``)
-     - 00:01.482
+     - 00:00.000
      - 0.0

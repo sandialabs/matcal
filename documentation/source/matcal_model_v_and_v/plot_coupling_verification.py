@@ -57,8 +57,9 @@ plt.rc('font', size=12)
 figsize = (4,3)
 
 
-data_collection = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", file_type="csv", 
-    fixed_states={"temperature":530, "displacement_rate":2e-4}).batch
+data_collection = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", file_type="csv")
+data_collection.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+data_collection = data_collection.batch
 data_collection = scale_data_collection(data_collection, "engineering_stress", 1000)
 data_collection.remove_field("time")
 

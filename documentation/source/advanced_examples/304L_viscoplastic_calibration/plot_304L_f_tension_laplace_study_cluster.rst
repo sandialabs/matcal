@@ -53,9 +53,9 @@ models from the original calibration.
     figsize = (4,3)
 
     tension_data = BatchDataImporter("ductile_failure_ASTME8_304L_data/*.dat", 
-                                        file_type="csv", 
-                                        fixed_states={"displacement_rate":2e-4, 
-                                                      "temperature":530}).batch
+                                        file_type="csv")
+    tension_data.set_fixed_state_parameters(displacement_rate=2e-4, temperature=530)
+    tension_data = tension_data.batch
 
 
 
@@ -111,6 +111,13 @@ Next, we plot the data to verify we imported the data as expected.
    :srcset: /advanced_examples/304L_viscoplastic_calibration/images/sphx_glr_plot_304L_f_tension_laplace_study_cluster_001.png
    :class: sphx-glr-single-img
 
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/data.py:588: UserWarning: Ignoring specified arguments in this call because figure with num: 1 already exists
+      plt.figure(figure.number, constrained_layout=True)
 
 
 
@@ -295,15 +302,15 @@ and launch the study.
  .. code-block:: none
 
     Initial covariance estimate:
-     [[ 1.32206295e+01  4.61503937e+01 -1.00040615e+00 -1.02410482e+00]
-     [ 4.61503937e+01  2.67218328e+02 -5.48895739e+00 -4.06271016e+00]
-     [-1.00040615e+00 -5.48895739e+00  1.14441479e-01  8.59005082e-02]
-     [-1.02410482e+00 -4.06271016e+00  8.59005082e-02  8.22479560e-02]]
+     [[ 1.32115570e+01  4.61400061e+01 -1.00034011e+00 -1.02329273e+00]
+     [ 4.61400061e+01  2.67119860e+02 -5.48852002e+00 -4.06085165e+00]
+     [-1.00034011e+00 -5.48852002e+00  1.14461084e-01  8.58810450e-02]
+     [-1.02329273e+00 -4.06085165e+00  8.58810450e-02  8.21702040e-02]]
     Calibrated covariance estimate:
-     [[ 1.29937471e+01  4.45713339e+01 -9.88097666e-01 -1.01570212e+00]
-     [ 4.45713339e+01  2.58039510e+02 -5.35164456e+00 -4.03844028e+00]
-     [-9.88097666e-01 -5.35164456e+00  1.12591672e-01  8.54194087e-02]
-     [-1.01570212e+00 -4.03844028e+00  8.54194087e-02  8.22158214e-02]]
+     [[ 1.32115606e+01  4.61399850e+01 -1.01189534e+00 -1.02329366e+00]
+     [ 4.61399850e+01  2.67119452e+02 -5.48851392e+00 -4.09821969e+00]
+     [-1.01189534e+00 -5.48851392e+00  1.14461008e-01  8.58810924e-02]
+     [-1.02329366e+00 -4.09821969e+00  8.58810924e-02  8.21703308e-02]]
 
 
 
@@ -349,7 +356,7 @@ KDE pair plot
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/matcal/core/parameter_studies.py:919: RuntimeWarning: covariance is not symmetric positive-semidefinite.
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/parameter_studies.py:918: RuntimeWarning: covariance is not symmetric positive-semidefinite.
       samples = rng.multivariate_normal(mean, sigma, nsamples).T
 
 
@@ -358,7 +365,7 @@ KDE pair plot
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 27.262 seconds)
+   **Total running time of the script:** (5 minutes 25.156 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py:

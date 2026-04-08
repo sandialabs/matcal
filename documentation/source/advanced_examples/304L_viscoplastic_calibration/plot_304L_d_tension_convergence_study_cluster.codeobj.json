@@ -8952,6 +8952,29 @@
    "name": "DataCollection"
   }
  ],
+ "tension_data.batch": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  }
+ ],
  "tension_data.remove_field": [
   {
    "is_class": false,
@@ -9022,6 +9045,29 @@
    "module": "abc",
    "module_short": "abc",
    "name": "ABC.remove_field"
+  }
+ ],
+ "tension_data.set_fixed_state_parameters": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core.data",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal.core",
+   "module_short": "matcal",
+   "name": "DataCollection"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matcal",
+   "module_short": "matcal",
+   "name": "DataCollection"
   }
  ],
  "tension_data.state_names": [
