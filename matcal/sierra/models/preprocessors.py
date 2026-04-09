@@ -21,7 +21,7 @@ from matcal.core.mesh_modifications import get_mesh_decomposer
 logger = initialize_matcal_logger(__name__)
 
 
-def add_aprepro_to_input(filename: str, message: str) -> None:
+def _prepend_string_to_file(filename: str, string: str) -> None:
     """
     Prepend a line to a SIERRA input deck file (used to inject aprepro includes).
 
@@ -31,7 +31,7 @@ def add_aprepro_to_input(filename: str, message: str) -> None:
     temp_file = filename + ".temp"
     with open(filename, "r") as f_read:
         with open(temp_file, "w") as f_write:
-            f_write.write(message)
+            f_write.write(string)
             for line in f_read:
                 f_write.write(line)
     shutil.copy(temp_file, filename)
@@ -54,8 +54,8 @@ class AddApreproParamFileLinesPreprocessor(ModelPreprocessorBase):
     def process(self, template_dir, input_filename):
         input_filename = os.path.basename(input_filename)
         input_file = f"{template_dir}/{input_filename}"
-        add_aprepro_to_input(input_file, self.param_aprepro_include)
-        add_aprepro_to_input(input_file, self.state_aprepro_include)
+        _prepend_string_to_file(input_file, self.param_aprepro_include)
+        _prepend_string_to_file(input_file, self.state_aprepro_include)
 
 
 class DecomposeAndCopyMeshPreprocessor(ModelPreprocessorBase):
