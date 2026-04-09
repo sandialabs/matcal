@@ -4,62 +4,53 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.full_field.data import convert_dictionary_to_field_data
 
-from matcal.sierra.input_file_writer import (SolidMechanicsProcedure,
-                                             SierraGlobalDefinitions,
-                                             SolidMechanicsRegion, 
-                                             AnalyticSierraFunction, 
-                                             PiecewiseLinearFunction,
-                                             ThermalMaterial,
-                                             ThermalTimeParameters,
-                                             FetiSolver, 
-                                             _Coupling,
-                                             GdswSolver, 
-                                             SolidSectionDefault,
-                                             TpetraSolver, 
-                                             ThermalRegion,
-                                             TotalLagrangeSection, 
-                                             ArpeggioTransfer, 
-                                             CoupledTransientParameters, 
-                                             CoupledTransient, 
-                                             CoupledSystem, 
-                                             CoupledInitialize,
-                                             NonlinearParameters, 
-                                             SolutionControl, 
-                                             Procedure, 
-                                             _Failure,
-                                             SolidMechanicsFiniteElementParameters, 
-                                             FiniteElementModel,
-                                             _SectionNames,
-                                             SolidMechanicsImplicitDynamics, 
-                                             SolidMechanicsDeath, 
-                                             SolidMechanicsFixedDisplacement,
-                                             SolidMechanicsPrescribedDisplacement,
-                                             SolidMechanicsUserOutput, 
-                                             SolidMechanicsPrescribedTemperature, 
-                                             SolidMechanicsInitialTemperature, 
-                                             SolidMechanicsUserVariable, 
-                                             SolidMechanicsNonlocalDamageAverage, 
-                                             SolidMechanicsResultsOutput, 
-                                             SolidMechanicsHeartbeatOutput, 
-                                             SolidMechanicsAdaptiveTimeStepping, 
-                                             SolidMechanicsInteractionDefaults, 
-                                             SolidMechanicsConstantFrictionModel, 
-                                             SolidMechanicsRemoveInitialOverlap, 
-                                             SolidMechanicsContactDefinitions, 
-                                             SolidMechanicsControlContact, 
-                                             SolidMechanicsLoadstepPredictor, 
-                                             SolidMechanicsFullTangentPreconditioner, 
-                                             SolidMechanicsConjugateGradient, 
-                                             SolidMechanicsSolutionTermination,
-                                             SierraFileBase, 
-                                             _FiniteElementModelNames, 
-                                             SierraFileWithCoupling, 
-                                             SierraFileThreeDimensional,
-                                             SierraFileThreeDimensionalContact,
-                                             ThermalDeath, 
-                                             _get_default_coupled_procedure_name, 
-                                             _get_default_thermal_region_name, 
-                                             )
+from matcal.sierra.input_file_writer import (
+    SierraGlobalDefinitions, AnalyticSierraFunction, PiecewiseLinearFunction,
+    _Coupling, SolidMechanicsUserOutput, SolidMechanicsUserVariable, 
+    SierraFileBase, SierraFileWithCoupling, SierraFileThreeDimensional,
+    SierraFileThreeDimensionalContact
+)
+from matcal.sierra.input_file_writer.blocks_base import (
+    _get_default_coupled_procedure_name, _get_default_thermal_region_name
+)
+from matcal.sierra.input_file_writer.boundary_conditions import (
+    SolidMechanicsFixedDisplacement, SolidMechanicsPrescribedDisplacement, 
+    SolidMechanicsPrescribedTemperature, SolidMechanicsInitialTemperature, 
+)
+from matcal.sierra.input_file_writer.contact import (
+    SolidMechanicsInteractionDefaults, SolidMechanicsConstantFrictionModel, 
+    SolidMechanicsRemoveInitialOverlap, SolidMechanicsContactDefinitions
+)
+from matcal.sierra.input_file_writer.coupling import (
+    _Failure, ArpeggioTransfer, CoupledTransientParameters, CoupledTransient, 
+    CoupledSystem, CoupledInitialize, NonlinearParameters, Procedure, SolutionControl
+)
+from matcal.sierra.input_file_writer.materials import (
+    ThermalMaterial, 
+)
+from matcal.sierra.input_file_writer.outputs import (
+    SolidMechanicsNonlocalDamageAverage, SolidMechanicsResultsOutput, 
+    SolidMechanicsHeartbeatOutput, SolidMechanicsAdaptiveTimeStepping,
+    SolidMechanicsSolutionTermination
+)
+from matcal.sierra.input_file_writer.regions_models import (
+    SolidMechanicsRegion, SolidMechanicsFiniteElementParameters, 
+    FiniteElementModel, SolidMechanicsImplicitDynamics, 
+    SolidMechanicsDeath, ThermalRegion, _FiniteElementModelNames, ThermalDeath
+)
+from matcal.sierra.input_file_writer.sections import(
+    _SectionNames, SolidSectionDefault, TotalLagrangeSection
+)
+from matcal.sierra.input_file_writer.solvers import(
+    FetiSolver, GdswSolver, TpetraSolver, SolidMechanicsControlContact,
+    SolidMechanicsLoadstepPredictor, SolidMechanicsFullTangentPreconditioner, 
+    SolidMechanicsConjugateGradient
+)
+
+from matcal.sierra.input_file_writer.time_control import (
+    SolidMechanicsProcedure, ThermalTimeParameters
+)
+
 from matcal.sierra.material import Material
 
 

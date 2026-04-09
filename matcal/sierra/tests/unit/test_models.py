@@ -1035,14 +1035,14 @@ class RoundNotchedTensionModelUnitTests(EigthSymmetryModelTests.CommonTests,
         sm_region = model._input_file.solid_mechanics_region
 
         # Verify the named user output blocks exist in the input deck
-        self.assertIn("engineering_strain", sm_region.subblocks)
-        self.assertIn("engineering_stress", sm_region.subblocks)
+        self.assertIn("global_strain", sm_region.subblocks)
+        self.assertIn("global_stress", sm_region.subblocks)
 
         # Verify the global variable lines are present in those blocks
-        strain_block_lines = sm_region.subblocks["engineering_strain"].lines
+        strain_block_lines = sm_region.subblocks["global_strain"].lines
         self.assertIn(f"global {ENG_STRAIN_KEY}", strain_block_lines)
 
-        stress_block_lines = sm_region.subblocks["engineering_stress"].lines
+        stress_block_lines = sm_region.subblocks["global_stress"].lines
         self.assertIn(f"global {ENG_STRESS_KEY}", stress_block_lines)
 
     def test_bc_function_from_engineering_strain_with_time_uses_extensometer_length_and_symmetry(self):
@@ -1174,9 +1174,9 @@ class RoundNotchedTensionModelUnitTests(EigthSymmetryModelTests.CommonTests,
         model._setup_state(SolitaryState(), build_mesh=False)
 
         sm_region = model._input_file.solid_mechanics_region
-        self.assertIn("engineering_strain", sm_region.subblocks)
+        self.assertIn("global_strain", sm_region.subblocks)
 
-        strain_block = sm_region.subblocks["engineering_strain"]
+        strain_block = sm_region.subblocks["global_strain"]
         line_obj = strain_block.lines[f"global {ENG_STRAIN_KEY}"]
         line_str = line_obj.get_string()
 
@@ -1201,9 +1201,9 @@ class RoundNotchedTensionModelUnitTests(EigthSymmetryModelTests.CommonTests,
         expected_area = np.pi * float(notch_r) ** 2
 
         sm_region = model._input_file.solid_mechanics_region
-        self.assertIn("engineering_stress", sm_region.subblocks)
+        self.assertIn("global_stress", sm_region.subblocks)
 
-        stress_block = sm_region.subblocks["engineering_stress"]
+        stress_block = sm_region.subblocks["global_stress"]
         line_obj = stress_block.lines[f"global {ENG_STRESS_KEY}"]
         line_str = line_obj.get_string()
 
