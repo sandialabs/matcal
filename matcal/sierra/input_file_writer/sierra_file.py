@@ -16,14 +16,12 @@ Note:
 """
 
 from collections import OrderedDict
-import numbers
 
 from matcal.core.boundary_condition_calculators import get_temperature_function_from_data_collection
 from matcal.core.constants import TEMPERATURE_KEY, TIME_KEY, DISPLACEMENT_KEY
 from matcal.core.input_file_writer import InputFileLine
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.utilities import (
-    check_item_is_correct_type,
     check_value_is_nonempty_str,
     get_string_from_text_file,
 )
@@ -36,7 +34,6 @@ from .blocks_base import (
     _get_default_solid_mechanics_region_name,
     _get_default_solid_mechanics_procedure_name,
     _get_default_thermal_region_name,
-    _get_default_coupled_procedure_name,
 )
 from .sections import TotalLagrangeSection, SolidSectionDefault, _SectionNames
 from .materials import ThermalMaterial
@@ -44,7 +41,6 @@ from .solvers import (
     FetiSolver,
     GdswSolver,
     TpetraSolver,
-    SolidMechanicsAdaptiveTimeStepping,  # actually in outputs.py in our split; keep import below
     SolidMechanicsFullTangentPreconditioner,
     SolidMechanicsConjugateGradient,
     SolidMechanicsNonlinearSolverContainer,
@@ -74,7 +70,6 @@ from .regions_models import (
     SolidMechanicsRegion,
     ThermalRegion,
     SolidMechanicsDeath,
-    ThermalDeath,
     SolidMechanicsImplicitDynamics,
     _FiniteElementModelNames,
 )

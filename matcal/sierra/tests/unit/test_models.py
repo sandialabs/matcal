@@ -20,11 +20,15 @@ from matcal.full_field.data import convert_dictionary_to_field_data
 from matcal.full_field.data_exporter import export_full_field_data_to_json
 from matcal.full_field.data_importer import FieldSeriesData
 
-from matcal.sierra.input_file_writer import (SolidMechanicsPrescribedTemperature,
-    SolidMechanicsInitialTemperature, SierraFileBase, _Coupling, _Failure, 
-    _SectionNames, SolidMechanicsPrescribedDisplacement, SolidMechanicsFixedDisplacement)
+from matcal.sierra.input_file_writer import (SierraFileBase, _Coupling)
+from matcal.sierra.input_file_writer.boundary_conditions import (
+    SolidMechanicsFixedDisplacement, SolidMechanicsInitialTemperature, 
+    SolidMechanicsPrescribedDisplacement, SolidMechanicsPrescribedTemperature
+)
+from matcal.sierra.input_file_writer.sections import _SectionNames
+from matcal.sierra.input_file_writer.sierra_file import _Failure
 from matcal.sierra.material import Material
-from matcal.sierra.models import _vfm_field_series_data
+from matcal.sierra.models.vfm import _vfm_field_series_data
 from matcal.sierra.tests.utilities import write_linear_elastic_material_file
 
 

@@ -23,7 +23,7 @@ from matcal.core.constants import (
     STRAIN_RATE_KEY,
 )
 from matcal.sierra.input_file_writer import SolidMechanicsUserOutput
-
+from matcal.sierra.models.base import _SymmetricUniaxiallyLoadedModelBase
 from matcal.cubit.geometry import (
     RoundUniaxialTensionGeometry,
     RectangularUniaxialTensionGeometry,
