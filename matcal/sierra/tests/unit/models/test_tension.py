@@ -15,7 +15,7 @@ from matcal.core.state import SolitaryState, State
 
 from matcal.cubit.geometry import GeometryParameters
 
-from model_tests_base import (
+from matcal.sierra.tests.unit.models.model_tests_base import (
     MatcalThreeDimensionalStandardModelUnitTestNewBase,
     _parse_denominator_value_from_expression_string,
 )

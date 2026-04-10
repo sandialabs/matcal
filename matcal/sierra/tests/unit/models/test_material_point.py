@@ -13,7 +13,9 @@ from matcal.core.constants import (
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.state import SolitaryState, State
 
-from model_tests_base import MatcalStandardModelUnitTestNewBase
+from matcal.sierra.tests.unit.models.model_tests_base import (
+    MatcalStandardModelUnitTestNewBase
+)
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
     UniaxialLoadingMaterialPointModelForTests,
 )

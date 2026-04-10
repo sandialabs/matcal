@@ -16,7 +16,7 @@ from matcal.sierra.input_file_writer.boundary_conditions import (
     SolidMechanicsPrescribedDisplacement,
 )
 
-from model_tests_base import MatcalStandardModelUnitTestNewBase
+from matcal.sierra.tests.unit.models.model_tests_base import MatcalStandardModelUnitTestNewBase
 
 
 class TestVFMUniaxialTensionModelCommon:

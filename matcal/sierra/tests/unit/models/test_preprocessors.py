@@ -1,7 +1,6 @@
 import os
 import shutil
 import tempfile
-import unittest
 from types import SimpleNamespace
 from unittest import mock
 

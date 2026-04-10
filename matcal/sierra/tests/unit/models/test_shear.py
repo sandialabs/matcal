@@ -3,7 +3,9 @@ from matcal.core.constants import TORQUE_KEY, ROTATION_KEY
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.state import SolitaryState
 
-from model_tests_base import MatcalThreeDimensionalStandardModelUnitTestNewBase
+from matcal.sierra.tests.unit.models.model_tests_base import (
+    MatcalThreeDimensionalStandardModelUnitTestNewBase
+)
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
     SolidBarTorsionModelForTests,
     TopHatShearModelForTests,

@@ -8,7 +8,7 @@ from matcal.sierra.tests.sierra_sm_models_for_tests import (
 )
 from matcal.sierra.tests.utilities import write_empty_file
 
-from model_tests_base import MatcalStandardModelUnitTestNewBase
+from matcal.sierra.tests.unit.models.model_tests_base import MatcalStandardModelUnitTestNewBase
 from matcal.core.tests.unit.test_models import ModelTestBase
 from matcal.full_field.data_importer import FieldSeriesData
 
