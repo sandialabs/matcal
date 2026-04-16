@@ -1,5 +1,6 @@
 from abc import abstractmethod
 import os
+import numpy as np
 
 from matcal import *
 

@@ -189,7 +189,7 @@ class TestDecomposeAndCopyMeshPreprocessor(MatcalUnitTest):
                 # Symlink should exist in template_dir with same basename
                 link_path = os.path.join(template_dir, "mesh.g")
                 self.assertTrue(os.path.islink(link_path))
-                self.assertEqual(os.path.realpath(link_path), os.path.abspath(copied_mesh))
+                self.assertEqual(os.path.realpath(link_path), os.path.realpath(copied_mesh))
 
     def test_parallel_decomposes_and_removes_undecomposed_and_symlinks(self):
         """
@@ -254,8 +254,8 @@ class TestDecomposeAndCopyMeshPreprocessor(MatcalUnitTest):
                 link2 = os.path.join(template_dir, os.path.basename(piece2))
                 self.assertTrue(os.path.islink(link1))
                 self.assertTrue(os.path.islink(link2))
-                self.assertEqual(os.path.realpath(link1), os.path.abspath(piece1))
-                self.assertEqual(os.path.realpath(link2), os.path.abspath(piece2))
+                self.assertEqual(os.path.realpath(link1), os.path.realpath(piece1))
+                self.assertEqual(os.path.realpath(link2), os.path.realpath(piece2))
 
     def test_delete_source_mesh_moves_into_mesh_folder(self):
         """
@@ -306,4 +306,6 @@ class TestDecomposeAndCopyMeshPreprocessor(MatcalUnitTest):
                 # symlink created in template_dir
                 link_path = os.path.join(template_dir, "mesh.g")
                 self.assertTrue(os.path.islink(link_path))
-                self.assertEqual(os.path.realpath(link_path), os.path.abspath(moved))
+                moved_real = os.path.realpath(moved)
+                link_real = os.path.realpath(link_path)
+                self.assertEqual(link_real, moved_real)

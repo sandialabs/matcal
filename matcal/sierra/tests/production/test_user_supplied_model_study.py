@@ -1,15 +1,14 @@
-from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
-
+import matcal as mc
+import os
 import shutil
 
+from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.sierra.models import *
 from matcal.sierra.tests.platform_options import matcal_test_platform_options_function_identifier
 from matcal.sierra.tests.sierra_sm_models_for_tests import ( 
     UniaxialLoadingMaterialPointModelForTests)
 from matcal.sierra.tests.utilities import (TEST_SUPPORT_FILES_FOLDER, 
     replace_string_in_file)
-
-import matcal as mc
 
 
 SET_PLATFORM_OPTIONS = matcal_test_platform_options_function_identifier.identify()
