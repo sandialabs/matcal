@@ -1,6 +1,10 @@
 ## want this to kind of look like an input a user would write
-import os
 from copy import deepcopy
+from matcal import *
+import numpy as np
+import os
+import time
+
 
 from matcal.core.constants import (MATCAL_TEMPLATE_DIRECTORY, IN_PROGRESS_RESULTS_FILENAME, 
                                    EVALUATION_EXTENSION)
@@ -15,9 +19,6 @@ from matcal.sierra.tests.sierra_sm_models_for_tests import (
     MatcalGeneratedModelForTestsBase)
 from matcal.sierra.tests.utilities import (create_goal_model_simulation_results, 
     GENERATED_TEST_DATA_FOLDER)
-
-from matcal import *
-import time
 
 
 def param_preprocessor_func(params):
