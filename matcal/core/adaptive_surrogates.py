@@ -41,19 +41,68 @@ def _get_parameter_bounds(parameters):
     return bounds
 
 
-def _get_variable_from_bounds(bounds):
-    from pyapprox.variables import IndependentMarginalsVariable
-
-    marginals = [
-        stats.uniform(bound[0], bound[1] - bound[0]) for bound in bounds
-    ]
-    return IndependentMarginalsVariable(marginals)
-
-
 def _get_pyapprox_variable_transformer(study, bounds):
-    from pyapprox.variables.transforms import AffineTransform
-    variable = _get_variable_from_bounds(bounds)
-    return AffineTransform(variable)
+    # bounds is (n_params, 2)
+    return _PyapproxBoundedAffineTransformerND(bounds)
+
+
+def _setup_pyapprox_adaptive_sparse_grid_fitter(
+    n_parameters: int,
+    n_qois: int,
+    basis_type: str = "lagrange",
+    piecewise_degree: int = 2,
+    max_level: int = 20,
+    pnorm: float = 1.0,
+):
+    """
+    Build a PyApprox adaptive sparse-grid fitter (new API).
+
+    Notes
+    -----
+    * Parameters are assumed to be in canonical space [-1,1]^d when passed to
+      the surrogate; we use AffineTransform in the study to map to/from.
+    * basis_type:
+        - 'lagrange': global Clenshaw-Curtis Lagrange
+        - 'piecewise': local piecewise polynomial basis
+    """
+    from pyapprox.util.backends.numpy import NumpyBkd
+    from pyapprox.probability.univariate.uniform import UniformMarginal
+
+    from pyapprox.surrogates.sparsegrids import (
+        SingleFidelityAdaptiveSparseGridFitter,
+        TensorProductSubspaceFactory,
+    )
+    from pyapprox.surrogates.sparsegrids.basis_factory import (
+        ClenshawCurtisLagrangeFactory,
+        PiecewiseFactory,
+    )
+    from pyapprox.surrogates.affine.indices import (
+        ClenshawCurtisGrowthRule,
+        CubicNestedGrowthRule,
+        MaxLevelCriteria,
+    )
+
+    bkd = NumpyBkd()
+    marginal = UniformMarginal(-1.0, 1.0, bkd)
+
+    basis_type = basis_type.lower().strip()
+    if basis_type not in ("lagrange", "piecewise"):
+        raise ValueError(f"basis_type must be 'lagrange' or 'piecewise'. Got '{basis_type}'.")
+
+    if basis_type == "lagrange":
+        factories = [ClenshawCurtisLagrangeFactory(marginal, bkd) for _ in range(n_parameters)]
+        growth = ClenshawCurtisGrowthRule()
+    else:
+        if piecewise_degree not in (1, 2, 3):
+            raise ValueError("piecewise_degree must be 1, 2, or 3")
+        poly_type = {1: "linear", 2: "quadratic", 3: "cubic"}[piecewise_degree]
+        factories = [PiecewiseFactory(marginal, bkd, poly_type=poly_type) for _ in range(n_parameters)]
+        growth = CubicNestedGrowthRule() if poly_type == "cubic" else ClenshawCurtisGrowthRule()
+
+    tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
+    admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
+    fitter = SingleFidelityAdaptiveSparseGridFitter(bkd, tp_factory, admissibility)
+    return fitter
 
 
 def _setup_sparse_grid_surrogate(n_parameters, n_qois):
@@ -288,24 +337,69 @@ class AdaptiveSurrogate:
 
 
 class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
-
-    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, 
+    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False,
                  transpose=True, **kwargs):
-        surrogate = self._surrogates[surrogate_index]
-        params_array = _process_surrogate_args_call(self._param_names, *args, 
-                                     batch_evaluate=batch_evaluate, transpose=transpose, **kwargs)
+        # Stored object is now a PyApprox fitter.result(), not AdaptiveCombinationSparseGrid
+        result = self._surrogates[surrogate_index]
+        surrogate_fun = result.surrogate
+
+        params_array = _process_surrogate_args_call(
+            self._param_names, *args,
+            batch_evaluate=batch_evaluate, transpose=transpose, **kwargs
+        )
+
+        # We want canonical mapping on arrays of shape (nvars, nsamples)
         if not batch_evaluate:
+            # single sample returned as (nvars,) -> make (nvars, 1)
             params_array = np.atleast_2d(params_array).T
+        else:
+            # batch from _process... may be (nsamples, nvars) depending on transpose;
+            # ensure (nvars, nsamples) for transformer and surrogate
+            if params_array.shape[0] != len(self._param_names):
+                params_array = params_array.T
+        # Range check in *physical* parameter space.
+        # Convert to dict expects (nsamples, nvars)
         params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
-        _check_params_in_range(params_dict, self._bounds.T, 
-                               self._enforce_training_data_parameter_range)
+        _check_params_in_range(
+            params_dict, self._bounds.T,
+            self._enforce_training_data_parameter_range
+        )
+
+        # Map physical -> canonical [-1,1]
         params_array = self._variable_transformer.map_to_canonical(params_array)
-        response = surrogate(params_array)
+
+        # Evaluate surrogate. PyApprox returns (n_qois, nsamples)
+        response = surrogate_fun(params_array)
+        response = np.asarray(response)
+
+        if response.ndim == 2:
+            # to (nsamples, n_qois)
+            response = response.T
+
         if not batch_evaluate:
             response = response.flatten()
-        results = {self._target_field_name:response}
+
+        results = {self._target_field_name: response}
         results[self._indep_variable_name] = self._indep_variable_values
         return results
+    
+    # def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, 
+    #              transpose=True, **kwargs):
+    #     surrogate = self._surrogates[surrogate_index]
+    #     params_array = _process_surrogate_args_call(self._param_names, *args, 
+    #                                  batch_evaluate=batch_evaluate, transpose=transpose, **kwargs)
+    #     if not batch_evaluate:
+    #         params_array = np.atleast_2d(params_array).T
+    #     params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
+    #     _check_params_in_range(params_dict, self._bounds.T, 
+    #                            self._enforce_training_data_parameter_range)
+    #     params_array = self._variable_transformer.map_to_canonical(params_array)
+    #     response = surrogate(params_array)
+    #     if not batch_evaluate:
+    #         response = response.flatten()
+    #     results = {self._target_field_name:response}
+    #     results[self._indep_variable_name] = self._indep_variable_values
+    #     return results
 
 
 class AdaptiveSurrogateStudyBase(HaltonStudy):
@@ -844,11 +938,86 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         return data
 
 
+class _PyapproxBoundedAffineTransformerND:
+    """
+    Minimal ND transformer compatible with MatCal's needs.
+
+    Uses PyApprox's updated univariate BoundedAffineTransform1D to map between
+    physical bounds [lb, ub] and canonical [-1, 1] for each dimension.
+    """
+
+    def __init__(self, bounds: np.ndarray):
+        # bounds shape: (n_params, 2) with columns [lb, ub]
+        from pyapprox.util.backends.numpy import NumpyBkd
+        from pyapprox.surrogates.affine.univariate.transforms import (
+            BoundedAffineTransform1D,
+        )
+
+        self._bkd = NumpyBkd()
+        self._bounds = np.asarray(bounds, dtype=float)
+        self._transforms = [
+            BoundedAffineTransform1D(self._bkd, lb=float(lb), ub=float(ub))
+            for lb, ub in self._bounds
+        ]
+
+    def map_to_canonical(self, samples: np.ndarray) -> np.ndarray:
+        """
+        Map physical -> canonical.
+
+        Accepts either:
+          * (n_params, n_samples)  [MatCal sparse-grid path]
+          * (n_samples, n_params)  [some internal uses]
+        Returns same orientation as input.
+        """
+        arr = np.asarray(samples, dtype=float)
+        if arr.ndim != 2:
+            raise ValueError("samples must be 2D")
+
+        transposed = False
+        if arr.shape[0] != self._bounds.shape[0] and arr.shape[1] == self._bounds.shape[0]:
+            arr = arr.T
+            transposed = True
+
+        out = arr.copy()
+        for ii, t1d in enumerate(self._transforms):
+            out[ii, :] = np.asarray(t1d.map_to_canonical(self._bkd.asarray(out[ii, :])))
+        return out.T if transposed else out
+
+    def map_from_canonical(self, canonical: np.ndarray) -> np.ndarray:
+        """
+        Map canonical -> physical. Same shape/orientation rules as map_to_canonical.
+        """
+        arr = np.asarray(canonical, dtype=float)
+        if arr.ndim != 2:
+            raise ValueError("canonical must be 2D")
+
+        transposed = False
+        if arr.shape[0] != self._bounds.shape[0] and arr.shape[1] == self._bounds.shape[0]:
+            arr = arr.T
+            transposed = True
+
+        out = arr.copy()
+        for ii, t1d in enumerate(self._transforms):
+            out[ii, :] = np.asarray(t1d.map_from_canonical(self._bkd.asarray(out[ii, :])))
+        return out.T if transposed else out
+    
+
 class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     """
-    The SparseGridAdaptiveSurrogateStudy builds a Sparse Grid adaptive surrogate
-    using the PyApprox library. They generally behave well for larger parameter spaces 
-    and problems with discontinuities in the response of interest. 
+    Build an adaptive sparse-grid surrogate using PyApprox's *fitter/result* API
+    (``SingleFidelityAdaptiveSparseGridFitter``).
+
+    This study supports two basis families:
+
+    * Global Lagrange basis on nested Clenshaw-Curtis rules (``basis_type="lagrange"``).
+      Best for smooth responses; may exhibit oscillations for kinks/discontinuities.
+
+    * Local piecewise polynomial basis (``basis_type="piecewise"``) with degree
+      1 (linear), 2 (quadratic), or 3 (cubic). More stable for non-smooth responses.
+
+    Use :meth:`set_sparse_grid_basis` to choose the basis.
+    
+    These generally behave well for larger parameter spaces.
     Some downsides for these surrogates
     is that one must be trained independently for each response of interest. 
     As a result, this surrogate requires only a single model and state be passed to it.
@@ -859,24 +1028,80 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     _variable_transformer_factory= _get_pyapprox_variable_transformer
     _adaptive_surrogate_class = SparseGridAdaptiveSurrogate
 
-    def _perform_adaptive_surrogate_batch_sampling(self): 
-        from pyapprox.interface.model import ModelFromVectorizedCallable
+    def __init__(self, *parameters):
+        super().__init__(*parameters)
+        self._sg_basis_type = "lagrange"   # "lagrange" or "piecewise"
+        self._sg_piecewise_degree = 2      # 1,2,3 (only used if piecewise)
+        self._sg_max_level = 20
+        self._sg_pnorm = 1.0
+
+    def _perform_adaptive_surrogate_batch_sampling(self):
         n_qois = len(self._independent_variable_values)
-        canonical_model = ModelFromVectorizedCallable(n_qois, self._number_parameters, 
-                                    self._matcal_evaluate_parameter_sets_batch_adaptive_training)
+
         if self._surrogate_save_filename is None:
-            self.set_surrogate_save_filename(f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib")
-        sg = _setup_sparse_grid_surrogate(self._number_parameters, n_qois)    
-        sg.step(canonical_model)
-        self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
-        training_batch_number = len(self._surrogate.sample_count_history)
-        matcal_save(self._surrogate_save_filename, self._surrogate)
-        while  not self._stopping_criterion_met(training_batch_number):
-            sg.step(canonical_model)
-            self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
-            training_batch_number = len(self._surrogate.sample_count_history)
+            self.set_surrogate_save_filename(
+                f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib"
+            )
+
+        fitter = _setup_pyapprox_adaptive_sparse_grid_fitter(
+            self._number_parameters,
+            n_qois,
+            basis_type=self._sg_basis_type,
+            piecewise_degree=self._sg_piecewise_degree,
+            max_level=self._sg_max_level,
+            pnorm=self._sg_pnorm,
+        )
+
+        # Run at least one refinement step, then check your existing criteria
+        while True:
+            new_samples = fitter.step_samples()
+            if new_samples is None:
+                logger.info("No more admissible sparse-grid indices. Stopping.")
+                break
+
+            # new_samples are canonical (nvars, nsamples_new)
+            # Evaluate MatCal; your callback expects canonical samples
+            new_vals = self._matcal_evaluate_parameter_sets_batch_adaptive_training(new_samples)
+            # new_vals comes back as (nsamples_new, n_qois); fitter wants (n_qois, nsamples_new)
+            if new_vals.ndim != 2 or new_vals.shape[1] != n_qois:
+                raise RuntimeError(
+                    "Batch evaluation must return array with shape (nsamples, n_qois). "
+                    f"Got {new_vals.shape}"
+                )
+
+            fitter.step_values(new_vals.T)
+
+            # Store this iteration's surrogate
+            result = fitter.result()
+            self._surrogate._add_iteration(result, self._results.number_of_evaluations)
+
+            # persist after each batch
             matcal_save(self._surrogate_save_filename, self._surrogate)
+
+            training_batch_number = len(self._surrogate.sample_count_history)
+            if self._stopping_criterion_met(training_batch_number):
+                break
+
         return self._results
+
+    # def _perform_adaptive_surrogate_batch_sampling(self): 
+    #     from pyapprox.interface.model import ModelFromVectorizedCallable
+    #     n_qois = len(self._independent_variable_values)
+    #     canonical_model = ModelFromVectorizedCallable(n_qois, self._number_parameters, 
+    #                                 self._matcal_evaluate_parameter_sets_batch_adaptive_training)
+    #     if self._surrogate_save_filename is None:
+    #         self.set_surrogate_save_filename(f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib")
+    #     sg = _setup_sparse_grid_surrogate(self._number_parameters, n_qois)    
+    #     sg.step(canonical_model)
+    #     self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
+    #     training_batch_number = len(self._surrogate.sample_count_history)
+    #     matcal_save(self._surrogate_save_filename, self._surrogate)
+    #     while  not self._stopping_criterion_met(training_batch_number):
+    #         sg.step(canonical_model)
+    #         self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
+    #         training_batch_number = len(self._surrogate.sample_count_history)
+    #         matcal_save(self._surrogate_save_filename, self._surrogate)
+    #     return self._results
 
     def _populate_parameter_evaluations_adaptive(self, samples):
         samples = self._variable_transformer.map_from_canonical(samples)
@@ -892,7 +1117,49 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             qoi = qoi[model_name][objective_name]
             formatted_results[idx, :] = qoi.simulation_qois[state_name][0][self._target_field_name]
         return formatted_results
-      
+
+    def set_sparse_grid_basis(self, basis_type="lagrange", piecewise_degree=2):
+        """
+        Select the 1-D basis used by the PyApprox adaptive sparse grid.
+
+        :param basis_type: Either ``"lagrange"`` (global Lagrange on nested Clenshaw-Curtis nodes)
+            or ``"piecewise"`` (local piecewise polynomials).
+        :type basis_type: str
+
+        :param piecewise_degree: Polynomial degree for the piecewise basis.
+            Only used when ``basis_type="piecewise"``.
+            Must be 1 (linear), 2 (quadratic), or 3 (cubic).
+        :type piecewise_degree: int
+        """
+        check_value_is_nonempty_str(basis_type, "basis_type")
+        basis_type = basis_type.lower().strip()
+        if basis_type not in ("lagrange", "piecewise"):
+            raise ValueError("basis_type must be 'lagrange' or 'piecewise'")
+        self._sg_basis_type = basis_type
+        if basis_type == "piecewise":
+            check_value_is_positive_integer(piecewise_degree, "piecewise_degree")
+            if piecewise_degree not in (1, 2, 3):
+                raise ValueError("piecewise_degree must be 1, 2, or 3")
+            self._sg_piecewise_degree = int(piecewise_degree)
+
+    def set_sparse_grid_adaptivity_limits(self, max_level=20, pnorm=1.0):
+        """
+        Set admissibility limits for the adaptive sparse-grid index set.
+
+        This controls which multi-indices are considered admissible by PyApprox's
+        greedy refinement algorithm.
+
+        :param max_level: Maximum total level (in the specified p-norm) allowed.
+        :type max_level: int
+
+        :param pnorm: The p-norm used by the admissibility criteria. Common is 1.0.
+        :type pnorm: float
+        """
+        check_value_is_positive_integer(max_level, "max_level")
+        check_value_is_positive_real(pnorm, "pnorm")
+        self._sg_max_level = int(max_level)
+        self._sg_pnorm = float(pnorm)
+
 
 def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations, 
                          test_eval_info, target_field, save_filename='voronoi_surrogate',  
