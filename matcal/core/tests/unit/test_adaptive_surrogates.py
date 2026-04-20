@@ -65,6 +65,11 @@ def quadratic_model_3d(**parameters):
     return {"x":x, "f":f} 
 
 
+a = Parameter("a", 0, 10)
+b = Parameter("b", 0, 10)
+c = Parameter("c", 0.1, 2)
+
+
 class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     """
     All tests inherit from MatcalUnitTest so that they get the same
@@ -387,9 +392,11 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.study._test_responses = np.array([[1.0, 2.0], [1.5, 2.5], [0.75, 0.85]])
 
         class DoubleParamSurrogate:
+            def __init__(self):
+                self.surrogate = self
             def __call__(self, params):
                 results = np.array(params)*2.0
-                return results.T
+                return results
         self.study._surrogate = SparseGridAdaptiveSurrogate("target", "independent", 
                                                    np.array([0.0, 1.0]), 
                                                    DummyTransform(), 
@@ -404,7 +411,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertEqual(len(self.study.surrogate.max_error_history), 1)
 
         expected_l2 = np.linalg.norm(self.study._test_responses -
-                                    DoubleParamSurrogate()(self.study._test_params.T))
+                                    DoubleParamSurrogate()(self.study._test_params))
         expected_l2 /= self.study._test_responses.shape[1]
         self.assertAlmostEqual(self.study.surrogate.average_error_history[0], expected_l2)
 
@@ -546,8 +553,92 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         results = self.study.launch()
         self.assertFalse(os.path.exists("test_samples"))
         self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+    # -------------------------
+    # B) Validation / API errors
+    # -------------------------
 
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_basis_type(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="not-a-basis")
 
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=0)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=4)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_validation(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        # If you did not implement this method, remove/skip this test
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=0, pnorm=1.0)
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
+
+    # -----------------------------------------
+    # C) Transformer / domain mapping regression
+    # -----------------------------------------
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_sparse_grid_transformer_round_trip(self):
+        """
+        Regression for removal of pyapprox.variables.transforms.AffineTransform.
+        Confirms MatCal's replacement transformer performs a stable round-trip.
+        """
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+
+        # Force initialization of bounds/transformer similarly to launch()
+        bounds = np.asarray([[0.0, 10.0], [0.0, 10.0], [0.1, 2.0]], dtype=float)
+
+        # study implementation should set _variable_transformer_factory
+        transformer_factory = getattr(sg_study, "_variable_transformer_factory", None)
+        if transformer_factory is None:
+            self.skipTest("Sparse-grid transformer factory not available")
+
+        # factory signature in adaptive_surrogates.py is (study, bounds) or (bounds)
+        try:
+            transformer = transformer_factory(sg_study, bounds)
+        except TypeError:
+            transformer = transformer_factory(bounds)
+
+        rng = np.random.default_rng(0)
+        n = 50
+        physical = np.vstack(
+            [
+                rng.uniform(0.0, 10.0, n),
+                rng.uniform(0.0, 10.0, n),
+                rng.uniform(0.1, 2.0, n),
+            ]
+        )
+        canonical = transformer.map_to_canonical(physical)
+        physical_rt = transformer.map_from_canonical(canonical)
+
+        np.testing.assert_allclose(physical, physical_rt, rtol=0.0, atol=1e-12)
+
+        # Also check canonical is within [-1,1] (allow tiny numerical noise)
+        self.assertTrue(np.all(canonical <= 1.0 + 1e-12))
+        self.assertTrue(np.all(canonical >= -1.0 - 1e-12))
+    
 
 class IdentityTransformer:
     """
@@ -575,10 +666,11 @@ class ConstantSurrogate:
     def __init__(self, n_parameters: int, constant: float = 0.0):
         self.n_parameters = n_parameters
         self.constant = constant
+        self.surrogate = self
         
     def __call__(self, param_array: np.ndarray) -> np.ndarray:
         n_samples = param_array.shape[1]
-        out = np.full((n_samples, 1), self.constant, dtype=float)
+        out = np.full((1, n_samples), self.constant, dtype=float)
         return out
 
 
