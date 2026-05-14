@@ -554,7 +554,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertFalse(os.path.exists("test_samples"))
         self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
     # -------------------------
-    # B) Validation / API errors
+    # Validation / API errors
     # -------------------------
 
     @unittest.skipIf(
@@ -593,7 +593,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
             sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
 
     # -----------------------------------------
-    # C) Transformer / domain mapping regression
+    # Transformer / domain mapping regression
     # -----------------------------------------
 
     @unittest.skipIf(
@@ -638,7 +638,64 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         # Also check canonical is within [-1,1] (allow tiny numerical noise)
         self.assertTrue(np.all(canonical <= 1.0 + 1e-12))
         self.assertTrue(np.all(canonical >= -1.0 - 1e-12))
-    
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_lagrange(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="lagrange")
+        self.assertEqual(sg_study._sg_basis_type, "lagrange")
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=2)
+        self.assertEqual(sg_study._sg_basis_type, "piecewise")
+        self.assertEqual(sg_study._sg_piecewise_degree, 2)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_sets_values(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        sg_study.set_sparse_grid_adaptivity_limits(max_level=7, pnorm=2.0)
+        self.assertEqual(sg_study._sg_max_level, 7)
+        self.assertEqual(sg_study._sg_pnorm, 2.0)
+
+    def test_results_synchronizer_property_before_and_after_add_evaluation_set(self):
+        self.assertIsNone(self.study.results_synchronizer)
+
+        self.study.set_independent_variable("x", [0.0, 1.0])
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+
+        self.assertIsInstance(self.study.results_synchronizer, SimulationResultsSynchronizer)
+
+    def test_set_test_data_invalid_type_raises(self):
+        with self.assertRaises(TypeError):
+            self.study.set_test_data(123)
+
+    def test_set_test_data_string_invalid_loaded_object_raises(self):
+        with open("not_a_study_results.joblib", "wb") as f:
+            import pickle
+            pickle.dump({"not": "study_results"}, f)
+
+        with self.assertRaises(RuntimeError):
+            self.study.set_test_data("not_a_study_results.joblib")
+
+    def test_default_save_filename_is_none_before_launch(self):
+        self.assertIsNone(self.study._surrogate_save_filename)
+        self.assertIsNone(self.study.surrogate_save_filename)
+
 
 class IdentityTransformer:
     """
@@ -920,6 +977,25 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertAlmostEqual(surrogate.max_error_history[0], np.max(np.abs(R_test - 0.0)))
         self.assertAlmostEqual(surrogate.max_error_history[1], np.max(np.abs(R_test - 1.0)))
         self.assertAlmostEqual(surrogate.max_error_history[2], np.max(np.abs(R_test - 2.0)))
+
+    def test_score_returns_nan_for_single_qoi(self):
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(n_parameters=2, constant=0.0), nsamples=5)
+        self.assertTrue(np.isnan(surrogate.score()))
+
+    def test_current_surrogate_tracks_latest_iteration(self):
+        surrogate = self._make_surrogate()
+
+        first = ConstantSurrogate(n_parameters=2, constant=1.0)
+        second = ConstantSurrogate(n_parameters=2, constant=2.0)
+
+        surrogate._add_iteration(first, nsamples=5)
+        first_current = surrogate.current_surrogate
+        self.assertAlmostEqual(first_current.constant, 1.0)
+
+        surrogate._add_iteration(second, nsamples=10)
+        second_current = surrogate.current_surrogate
+        self.assertAlmostEqual(second_current.constant, 2.0)
 
 
 class _FakeSurrogate:

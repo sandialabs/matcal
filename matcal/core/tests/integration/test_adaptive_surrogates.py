@@ -46,8 +46,9 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)           
 
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    @unittest.skipIf(
+            not HAS_PYAPPROX,
+            "pyapprox not installed – skipping pyapprox‑dependent tests")
     def test_restart_during_training(self):
         sg_study = mc.SparseGridAdaptiveSurrogateStudy(a,b,c)
         sg_study.set_independent_variable("x", np.linspace(0.0,3,100))
@@ -274,11 +275,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
           * patching PyApprox closures to globals, OR
           * storing a MatCal-owned replayable representation rather than PyApprox objects.
         """
-        # If this is still failing due to pickling closures, skip.
-        # You can delete the skip once your persistence is fixed.
-        self.skipTest("Enable after implementing picklable sparse-grid surrogate persistence")
-
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study = mc.SparseGridAdaptiveSurrogateStudy(a, b, c)
         sg_study.set_independent_variable("x", np.linspace(0.0, 3, 100))
         sg_study.set_error_stopping_criteria(1e-3)
         sg_study.set_number_of_test_samples(10)
@@ -330,7 +327,6 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertEqual(y_batch.shape[1], y_single.shape[0])
         np.testing.assert_allclose(x_single, x_batch, rtol=0, atol=1e-12)
         np.testing.assert_allclose(y_single, y_batch[0, :], rtol=0, atol=1e-12)
-
 
 
 class TestVoronoiAdaptiveSurrogate(MatcalUnitTest):
