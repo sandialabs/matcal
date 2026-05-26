@@ -44,7 +44,7 @@ from matcal.core.utilities import (
     check_value_is_positive_integer,
     check_value_is_positive_real,
     _convert_list_of_files_to_abs_path_list,
-    check_value_is_nonnegative_real,
+    check_value_is_nonnegative_real
 )
 
 from matcal.full_field.data_importer import FieldSeriesData
@@ -56,7 +56,6 @@ from matcal.sierra.input_file_writer import (
     SierraFileThreeDimensional,
     SierraFileThreeDimensionalContact,
     SolidMechanicsUserOutput,
-    SolidMechanicsUserVariable,
     _Coupling,
 )
 from matcal.sierra.simulators import SierraSimulator
@@ -305,6 +304,13 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
         self._temperature_field_from_boundary_data = field_name
 
     def reset_boundary_condition_data(self):
+        """
+        Remove all previously added boundary condition data and clear any request to
+        read temperature from that data.
+
+        This resets the model's boundary-condition data so new boundary
+        condition data can be added before the next run/setup.
+        """
         self._boundary_condition_data = DataCollection("boundary conditions")
         self._temperature_field_from_boundary_data = None
 
@@ -450,32 +456,81 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
 
     @property
     def coupling(self):
+        """
+        Returns the type of thermomechanical coupling that the model will use in a simulation. Returns None if uncoupled.
+        """
         return self._input_file.coupling
 
     @property
     def exodus_output(self):
+        """
+        Returns True if exodus output is activated and variables have been added. Otherwise, returns False.
+        """
         return self._input_file.exodus_output_active
 
     def set_number_of_time_steps(self, number_of_steps):
+        """
+        Set the number of load/time steps used in the SIERRA procedure. 
+        Due to other model options and adaptive time stepping, 
+        this number of time steps is not guaranteed.
+
+        :param number_of_steps: Total number of time steps in the analysis.
+        :type number_of_steps: int
+        """
         check_value_is_positive_integer(number_of_steps, "number_of_steps")
         self._input_file._set_number_of_time_steps(number_of_steps)
 
     def set_end_time(self, end_time):
+        """   
+        Set the analysis termination time. This will override the final time
+        determined from the supplied boundary condition and state data.
+        
+        This is most useful when boundary condition data is a complex load history 
+        and only a portion of it needs to be simulated. 
+        It may also be useful when trying to simulate stress relaxation after the end of loading.
+
+        :param end_time: Final simulation time.
+        :type end_time: float
+        """
         check_item_is_correct_type(end_time, numbers.Real, "end_time")
         self._input_file._set_end_time(end_time)
 
     def set_start_time(self, start_time):
+        """
+        Set the analysis start time. This will override the start time
+        determined from the supplied boundary condition and state data.
+
+        This is most useful when boundary condition data is a 
+        complex load history and only a portion of it needs to be simulated.
+
+        :param start_time: Initial simulation time.
+        :type start_time: float
+        """
         check_item_is_correct_type(start_time, numbers.Real, "start_time")
         self._input_file._set_start_time(start_time)
 
     def use_total_lagrange_element(self):
+        """
+        Sets the model to use SIERRA/SM’s total lagrange 
+        8 node hexahedral element with volume average J turned on.
+        """
         self._input_file._use_total_lagrange_element()
 
     def use_under_integrated_element(self):
+        """
+        Sets the model to use SIERRA/SM’s under integrated element 
+        8 node hexahedral element with hourglass control and the
+        SIERRA/SM default settings for the element.
+        """
         self._input_file._use_under_integrated_element()
         self._base_geo_params.update({"element_type": "hex8"})
 
     def activate_thermal_coupling(self):
+        """
+        Activates adiabatic heating for the model. 
+        An initial temperature is added to the model and 
+        additional temperature outputs are provided in the heartbeat and exodus output. 
+        """
         self._verify_temperature_not_read_from_boundary_data()
         self._input_file._activate_adiabatic_heating()
 
@@ -487,19 +542,49 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
             )
 
     def add_nodal_output_variable(self, *nodal_variable_names):
+        """
+        Add nodal output variables for the model. 
+        The method accepts a comma separated list of strings. 
+        These should be valid nodal variables for the model and material model being used.
+
+        :param nodal_variable_names: One or more nodal variable names to output.
+        :type nodal_variable_names: list(str)
+        """
         self._input_file._add_nodal_output_variable(*nodal_variable_names)
 
     def add_element_output_variable(self, *element_variable_names, volume_average=True):
+        """
+        Add element output variables for the model. 
+        The method accepts a comma separated list of strings. 
+        These should be valid element variables for the model and material model being used.
+
+        :param element_variable_names: One or more element variable names to output.
+        :type element_variable_names: list(str)
+
+        :param volume_average: If True, output a volume-averaged form of each element
+            variable when applicable.
+        :type volume_average: bool  
+        """
         self._input_file._add_element_output_variable(
             *element_variable_names, volume_average=volume_average
         )
 
     def activate_exodus_output(self, output_step_interval=20):
+        """
+        Enable exodus mesh/results output.
+
+        :param output_step_interval: Write exodus output every
+            ``output_step_interval`` steps.
+        :type output_step_interval: int
+        """
         check_value_is_positive_integer(output_step_interval, "output_step_interval")
         self._input_file._activate_exodus_output(output_step_interval)
 
     @property
     def element_type(self):
+        """
+        The element type being used by the model.
+        """
         return self._input_file.element_type
 
     def _assign_material_parameters(self):
@@ -508,6 +593,14 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
         )
 
     def set_minimum_timestep(self, minimum_timestep):
+        """
+        Sets a minimum timestep such that the simulation will 
+        exit cleanly if the timestep is cut to below the user specified minimum value. 
+        This is done using SIERRA/SM solution termination.
+
+        :param minimum_timestep: Minimum acceptable timestep.
+        :type minimum_timestep: float
+        """
         check_value_is_positive_real(minimum_timestep, "minimum_timestep")
         sol_term = self.input_file.solution_termination
         sol_term.add_global_termination_criteria("timestep", minimum_timestep, "<")
@@ -519,6 +612,32 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
         acceptable_relative_residual=None,
         acceptable_residual=None,
     ):
+        """
+        Set the convergence tolerance values for the SIERRA/SM conjugate gradient solver. 
+        By default the target residual is two orders of magnitude higher than the target 
+        relative residual, and the acceptable relative residual is one order of magnitude 
+        higher than the target relative residual. Updating the target relative residual 
+        will update the target residual and acceptable relative residual according 
+        to these defaults. No acceptable residual is specified by default.
+
+        :param target_relative_residual: the relative residual for convergence of the 
+            SIERRA/SM conjugate gradient solver. Must be between zero and one.
+        :type target_relative_residual: float
+
+        :param target_residual: the target residual for convergence of the 
+            SIERRA/SM conjugate gradient solver. Must be positive.
+        :type target_residual: float or None
+
+        :param acceptable_relative_residual: the acceptable relative residual for 
+            convergence of the SIERRA/SM conjugate gradient solver. 
+            Must be positive and greater than the target relative residual but less than one.
+        :type acceptable_relative_residual: float or None
+
+        :param acceptable_residual: the acceptable residual for convergence of 
+            the SIERRA/SM conjugate gradient solver. 
+            Must be positive and  should be greater than the target residual.
+        :type acceptable_residual: float or None
+        """
         self._input_file._set_cg_convergence_tolerance(
             target_relative_residual,
             target_residual,
@@ -530,9 +649,8 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
             1, "target_relative_residual"
         )
         if target_residual is not None:
-            check_value_is_real_between_values(
-                target_residual, target_relative_residual, 
-                1, "target_residual"
+            check_value_is_positive_real(
+                target_residual, "target_residual"
             )
         if acceptable_relative_residual is not None:
             check_value_is_real_between_values(
@@ -540,20 +658,32 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
                 1, "acceptable_relative_residual"
             )
         if acceptable_residual is not None:
-            check_value_is_real_between_values(
-                acceptable_residual, self._input_file._cg.get_target_residual(), 
-                1, "acceptable_residual"
+            check_value_is_positive_real(
+                acceptable_residual, "acceptable_residual"
             )
 
 
 class _StandardSierraModelWithDeathBase(_StandardSierraModelBase):
     def activate_element_death(self, death_variable="damage", critical_value=0.15):
+        """
+        Activate element death based on a damage/failure variable.
+
+        :param death_variable: Element variable used to determine failure.
+        :type death_variable: str
+
+        :param critical_value: Threshold value at which an element is deleted/deactivated.
+        :type critical_value: float or str
+        """
         check_value_is_nonempty_str(death_variable, "death_variable")
         check_item_is_correct_type(critical_value, (numbers.Real, str), "critical_value")
         self._input_file._activate_element_death(death_variable, critical_value)
 
     @property
     def failure(self):
+        """
+        Returns the type of failure that the model will use in a simulation.
+        Returns None if there is no failure.
+        """ 
         return self._input_file.failure
 
 
@@ -575,9 +705,24 @@ class _CoupledStandardSierraModelBase(_StandardSierraModelWithDeathBase):
         """"""
 
     def use_composite_tet_element(self):
+        """
+        Use the composite tetrahedral total-Lagrange element formulation.
+
+        This is a convenience wrapper around :meth:`use_total_lagrange_element`
+        with ``use_composite_tet=True``.
+        """
         self.use_total_lagrange_element(use_composite_tet=True)
 
     def use_total_lagrange_element(self, use_composite_tet=False):
+        """
+        Sets the model to use SIERRA/SM’s total lagrange 
+        8 node hexahedral element with volume average J turned on. Or, optionally, 
+        use composite tetrahedral elements for the model.
+
+        :param use_composite_tet: If True, use the composite tetrahedral version of
+            the formulation; otherwise use the hex formulation.
+        :type use_composite_tet: bool        
+        """
         self._input_file._use_total_lagrange_element(use_composite_tet)
         if use_composite_tet:
             self._base_geo_params.update({"element_type": "tet10"})
@@ -592,6 +737,38 @@ class _CoupledStandardSierraModelBase(_StandardSierraModelWithDeathBase):
         plastic_work_variable=None,
         executable="arpeggio",
     ):
+        """
+        Activates thermomechanical coupling for the MatCal generated model.
+        If no options are passed, the model assumes adiabatic heating is 
+        being added through the material model. For the adiabatic case, 
+        an initial temperature is added to the model and 
+        additional temperature outputs are provided in the heartbeat and exodus output. 
+        
+        If the additional input arguments for are provided, then staggered coupling through Arpeggio is used. 
+        Staggered coupling is setup to advance the solid mechanics solve, 
+        pass the displacements and plastic work to the thermal solver, 
+        advance the thermal solve, and pass the temperature to the 
+        solid mechanics solver before continuing to the next time step. 
+        
+        To activate iterative coupling, use the :meth:`use_iterative_coupling` method.
+
+        :param thermal_conductivity: Thermal conductivity for the thermal model.
+        :type thermal_conductivity: float or None
+
+        :param density: Density for the thermal model.
+        :type density: float or None
+
+        :param specific_heat: Specific heat for the thermal model.
+        :type specific_heat: float or None
+
+        :param plastic_work_variable: Element variable name representing plastic work rate 
+            passed to the thermal solver as the element volumetric heat source
+        :type plastic_work_variable: str or None
+
+        :param executable: Executable used for the coupled solve.
+            This can be an optional path to an custom compiled executable
+        :type executable: str
+        """
         self._verify_temperature_not_read_from_boundary_data()
         if (
             thermal_conductivity is not None
@@ -623,6 +800,10 @@ class _CoupledStandardSierraModelBase(_StandardSierraModelWithDeathBase):
             self._input_file._activate_adiabatic_heating()
 
     def use_iterative_coupling(self):
+        """
+        Activates iterative coupling for the model. Iterative coupling can only be used 
+        after thermal coupling with staggered coupling has been activated for the model.
+        """
         if self.coupling == _Coupling.staggered:
             self._input_file._activate_iterative_coupling()
         else:
@@ -688,6 +869,19 @@ class _ThreeDimensionalStandardSierraModelBase(_CoupledStandardSierraModelBase):
             self._input_file._add_nonlocal_user_output(self._death_variable, self._nonlocal_radius)
 
     def set_allowable_load_drop_factor(self, value):
+        """
+        The allowable drop in the models "load" field before the simulation is terminated.
+        Note that the actual load field name is model dependent. The simulation will terminate
+        when the following is true:
+
+        .. math:: load < max\\_load(1-value)
+
+        where max_load is the maximum load in the current load history. The load drop 
+        factor must be between 0 and 1.
+
+        :param value: the max allowable load drop fraction
+        :type value: float
+        """
         check_value_is_real_between_values(value, 0, 1, "allowable_load_drop_factor", closed=True)
         self._allowable_load_drop_factor = value
 
@@ -721,6 +915,37 @@ class _ThreeDimensionalStandardSierraModelBase(_CoupledStandardSierraModelBase):
         )
 
     def activate_full_field_data_output(self, full_field_window_width, full_field_window_height):
+        """
+        Activate full field data output for calibrations requiring full field data. The 
+        parameters for this method specify the rectangular window where data will be output. 
+        Currently, this is only implemented for the 
+        :class:`~matcal.sierra.models.RoundUniaxialTensionModel`, 
+        :class:`~matcal.sierra.models.RectangularUniaxialTensionModel` and 
+        the :class:`~matcal.sierra.models.RoundNotchedTensionModel`. 
+        The rectangular window starts 
+        at the axial and radial center of the model and goes outward according to the two 
+        arguments passed to this function. Since these models feature 1/8th symmetry, the window 
+        only covers one octant of the model. The full field window width and height 
+        specify the width and height 
+        of the 2D window in the octant where the model is built. 
+        Any nodes within that width and height
+        of the window will be included in the output. 
+        
+        .. warning:
+            No checks are made on these values. 
+            If mesh faces are not found within the specified window,
+            the model may error out or not produce mesh 
+            output for full field comparisons.
+
+        :param full_field_window_width: width of the 2D window for full field data output. 
+            The width is aligned with the X direction of the global coordinate system of the model.
+        :type full_field_window_width: float
+
+        :param full_field_window_height: height of the 2D window for full field data output. 
+            The height is aligned with the Y direction of the global coordinate system of the model 
+            and its axis of loading.
+        :type full_field_window_height: float
+        """
         check_value_is_positive_real(full_field_window_height, "full_field_window_height")
         check_value_is_positive_real(full_field_window_width, "full_field_window_width")
         self._base_geo_params["full_field_window_width"] = full_field_window_width
@@ -734,6 +959,31 @@ class _ThreeDimensionalStandardSierraModelBase(_CoupledStandardSierraModelBase):
             self, death_variable="damage", 
             critical_value=0.15, nonlocal_radius=None
         ):
+
+        """
+        Activates element death for the model. It will kill elements that have 
+        the element variable with
+        name "death_variable" reach the critical value. To use nonlocal damage also 
+        specify the "nonlocal_radius" and the "initial_value" for the "death_variable". Both
+        options are needed for nonlocal damage to work correctly.
+
+        :param death_variable: the name of the element variable that governs element death.
+        :type death_variable: str
+
+        :param critical_value: the element "death_variable" value at which 
+            the element will die. Elements 
+            with a "death_variable" value less than the "critical_value" are kept alive. This can 
+            also be a string if it is replaced by a MatCal design or state parameter on run time. 
+            For example, it could be set to "{critical_value}" and the critical value could be 
+            a MatCal study parameter.
+        :type critical_value: float, str
+
+        :param nonlocal_radius: the radius to be used for nonlocal average 
+            in the the geometry units. Specifying 
+            this parameter to anything but None activates nonlocal averaging 
+            for the "death_variable". This must be greater than zero.
+        :type nonlocal_radius: float
+        """        
         super().activate_element_death(death_variable, critical_value)
         if nonlocal_radius is not None:
             check_value_is_positive_real(nonlocal_radius, "nonlocal_radius")
@@ -743,6 +993,10 @@ class _ThreeDimensionalStandardSierraModelBase(_CoupledStandardSierraModelBase):
             self._input_file._add_nonlocal_user_output(death_variable, nonlocal_radius)
 
     def activate_implicit_dynamics(self):
+        """
+        Turns on implicit dynamics for SIERRA/SM. By default, all models
+        are run quasi-statically.
+        """        
         self._input_file._activate_implicit_dynamics()
 
 
@@ -787,6 +1041,12 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
     _input_file_class = SierraFileThreeDimensionalContact
 
     def activate_self_contact(self, friction_coefficient=0.3):
+        """
+        Activates self-contact for the model. 
+
+        :param friction_coefficient: the desired friction coefficient for self-contact
+        :type friction_coefficient: float
+        """
         check_value_is_nonnegative_real(friction_coefficient, "friction_coefficient")
         logger.warning(
             f'Use of self contact with the MatCal generated SIERRA/SM model "{self.name}" '
@@ -801,6 +1061,44 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
         acceptable_relative_residual=None,
         acceptable_residual=None,
     ):
+
+        """
+        Set the convergence tolerance values for the control contact block. 
+        By default the target residual and acceptable relative residual are 
+        set to one order of magnitude higher than the target relative residual. 
+        Updating the target 
+        relative residual will update the target residual and acceptable relative residual 
+        according to these defaults. 
+
+        The conjugate gradient solver settings will also 
+        be updated such that its target relative residual is one order of magnitude 
+        less than the contact target relative residual, its target residual is 
+        one order of magnitude higher than the contact target relative and 
+        its acceptable relative residual is set to 10. To specify custom CG solver 
+        convergence tolerances with contact, call 
+        :meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.set_convergence_tolerance`
+        after calling this method.
+
+        No acceptable residual is specified for either solver.
+
+        :param target_relative_residual: the relative residual for convergence 
+            of SIERRA/SM control contact. Must be between zero and one.
+        :type target_relative_residual: float
+
+        :param target_residual: the target residual for convergence 
+            of SIERRA/SM control contact. Must be positive.
+        :type target_residual: float
+
+        :param acceptable_relative_residual: the acceptable relative residual for convergence 
+            of SIERRA/SM control contact. Must be positive and greater than the target relative 
+            residual.
+        :type acceptable_relative_residual: float
+
+        :param acceptable_residual: the acceptable residual for convergence 
+            of SIERRA/SM control contact. Must be positive and should be greater than the 
+            target residual.
+        :type acceptable_residual: float
+        """
         self._input_file._set_contact_convergence_tolerance(
             target_relative_residual, target_residual, 
             acceptable_relative_residual, acceptable_residual
@@ -810,9 +1108,8 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
             1, "target_relative_residual"
         )
         if target_residual is not None:
-            check_value_is_real_between_values(
-                target_residual, target_relative_residual, 
-                1, "target_residual"
+            check_value_is_positive_real(
+                target_residual, "target_residual"
             )
         if acceptable_relative_residual is not None:
             check_value_is_real_between_values(
@@ -820,10 +1117,8 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
                 100, "acceptable_relative_residual"
             )
         if acceptable_residual is not None:
-            check_value_is_real_between_values(
+            check_value_is_positive_real(
                 acceptable_residual, 
-                self._input_file._contact_target_residual, 
-                100, 
                 "acceptable_relative_residual"
             )
 
