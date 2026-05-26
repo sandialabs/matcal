@@ -101,7 +101,19 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
 
     tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
     admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
-    fitter = SingleFidelityAdaptiveSparseGridFitter(bkd, tp_factory, admissibility)
+
+    from pyapprox.surrogates.sparsegrids.error_indicators import (
+        VarianceChangeIndicator,
+    )
+
+    error_indicator = VarianceChangeIndicator(bkd)
+
+    fitter = SingleFidelityAdaptiveSparseGridFitter(
+        bkd,
+        tp_factory,
+        admissibility,
+        error_indicator=error_indicator,
+    )
     return fitter
 
 
