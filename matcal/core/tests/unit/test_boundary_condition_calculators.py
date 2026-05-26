@@ -25,7 +25,9 @@ from matcal.core.state import State
 from matcal.core.tests.unit.comment_test_helpers import (
    assert_data_set_index_comment,
     assert_data_set_name_comment,
+    assert_default_ramp_comment,
     assert_metadata_common_fields,
+    assert_rate_ramp_comment,
     assert_selection_reason_comment,
     assert_source_collection_comment,
     assert_source_fields_comment,
@@ -390,11 +392,28 @@ class TestDisplacementBoundaryConditionCalculator(MatcalUnitTest):
         lines = format_bc_function_comment_lines(metadata)
         text = "\n".join(lines)
 
-        assert_source_fields_comment(self, text, ENG_STRAIN_KEY, uses_time=True)
-        assert_source_collection_comment(self, text, "boundary conditions")
-        assert_data_set_index_comment(self, text, 0)
-        assert_data_set_name_comment(self, text, "room_temp_repeat_1")
-        assert_selection_reason_comment(self, text, ENG_STRAIN_KEY, "room_temperature")
+        assert_source_fields_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            uses_time=True,
+            commented=False,
+        )
+        assert_source_collection_comment(
+            self,
+            text,
+            "boundary conditions",
+            commented=False,
+        )
+        assert_data_set_index_comment(self, text, 0, commented=False)
+        assert_data_set_name_comment(self, text, "room_temp_repeat_1", commented=False)
+        assert_selection_reason_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            "room_temperature",
+            commented=False,
+        )
 
     def test_format_bc_function_comment_lines_rate_based_history(self):
         metadata = {
@@ -417,17 +436,83 @@ class TestDisplacementBoundaryConditionCalculator(MatcalUnitTest):
         lines = format_bc_function_comment_lines(metadata)
         text = "\n".join(lines)
 
-        assert_source_fields_comment(self, text, ENG_STRAIN_KEY, uses_time=False)
-        self.assertIn(
-            f'Constructed a 2-point linear ramp from the maximum absolute "{ENG_STRAIN_KEY}" '
-            f'value using "{STRAIN_RATE_KEY}" = ',
+        assert_source_fields_comment(
+            self,
             text,
+            ENG_STRAIN_KEY,
+            uses_time=False,
+            commented=False,
+        )
+        assert_rate_ramp_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            STRAIN_RATE_KEY,
+            commented=False,
         )
         self.assertIn('Constructed points: (0, 0) and (250.0, 0.25).', text)
-        assert_source_collection_comment(self, text, "boundary conditions")
-        assert_data_set_index_comment(self, text, 0)
-        assert_data_set_name_comment(self, text, "target_strain_only")
-        assert_selection_reason_comment(self, text, ENG_STRAIN_KEY, "room_temperature")
+        assert_source_collection_comment(
+            self,
+            text,
+            "boundary conditions",
+            commented=False,
+        )
+        assert_data_set_index_comment(self, text, 0, commented=False)
+        assert_data_set_name_comment(self, text, "target_strain_only", commented=False)
+        assert_selection_reason_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            "room_temperature",
+            commented=False,
+        )
+
+    def test_format_bc_function_comment_lines_default_two_point_history(self):
+        metadata = {
+            "field_key": DISPLACEMENT_KEY,
+            "state_name": "state",
+            "used_time_history": False,
+            "used_rate": False,
+            "scale_factor": 1.5,
+            "source_method_comment": f'Using "{DISPLACEMENT_KEY}" field from source data set; no "{TIME_KEY}" field was provided.',
+            "data_collection_name": "boundary conditions",
+            "selected_data_set_index": 0,
+            "selected_data_set_name": "disp_only",
+            "max_value": 1.0,
+            "max_value_index": 3,
+        }
+
+        lines = format_bc_function_comment_lines(metadata)
+        text = "\n".join(lines)
+
+        assert_source_fields_comment(
+            self,
+            text,
+            DISPLACEMENT_KEY,
+            uses_time=False,
+            commented=False,
+        )
+        assert_default_ramp_comment(
+            self,
+            text,
+            DISPLACEMENT_KEY,
+            commented=False,
+        )
+        assert_source_collection_comment(
+            self,
+            text,
+            "boundary conditions",
+            commented=False,
+        )
+        assert_data_set_index_comment(self, text, 0, commented=False)
+        assert_data_set_name_comment(self, text, "disp_only", commented=False)
+        assert_selection_reason_comment(
+            self,
+            text,
+            DISPLACEMENT_KEY,
+            "state",
+            commented=False,
+        )
 
 class TestRotationBCFunctionCalculator(MatcalUnitTest):
     def setUp(self):
