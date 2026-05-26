@@ -81,14 +81,19 @@ class _UniaxialTensionModelBase(_TensionDerivedModelBase):
 
     def _get_loading_boundary_condition_displacement_function(self, state, params_by_precedent):
         bc_data = self._boundary_condition_data
+        extra_lines = []
 
         # Allow STRAIN_RATE or DISPLACEMENT_RATE to be used interchangeably by deriving the other.
         if STRAIN_RATE_KEY in params_by_precedent.keys():
-            disp_rate = params_by_precedent[STRAIN_RATE_KEY] * self._current_state_geo_params.extensometer_length
+            disp_rate = (
+                params_by_precedent[STRAIN_RATE_KEY] *
+                self._current_state_geo_params.extensometer_length
+            )
             params_by_precedent.update({DISPLACEMENT_RATE_KEY: disp_rate})
         elif DISPLACEMENT_RATE_KEY in params_by_precedent.keys():
             eng_strain_rate = (
-                params_by_precedent[DISPLACEMENT_RATE_KEY] / self._current_state_geo_params.extensometer_length
+                params_by_precedent[DISPLACEMENT_RATE_KEY] /
+                self._current_state_geo_params.extensometer_length
             )
             params_by_precedent.update({STRAIN_RATE_KEY: eng_strain_rate})
 
@@ -96,11 +101,35 @@ class _UniaxialTensionModelBase(_TensionDerivedModelBase):
 
         # Choose how to interpret boundary condition data
         if DISPLACEMENT_KEY in common_state_field_names:
-            disp_func_calculator = get_displacement_function_from_load_displacement_data_collection
-            scale_factor = self._current_state_geo_params.gauge_length / self._current_state_geo_params.extensometer_length
+            scale_factor = (
+                self._current_state_geo_params.gauge_length /
+                self._current_state_geo_params.extensometer_length
+            )
+            disp_function, metadata = (
+                get_displacement_function_from_load_displacement_data_collection(
+                    bc_data,
+                    state,
+                    params_by_precedent,
+                    scale_factor=scale_factor,
+                    return_metadata=True,
+                )
+            )
+            extra_lines.append(
+                f'Converted measured "{DISPLACEMENT_KEY}" to grip displacement using '
+                f'gauge_length / extensometer_length = {scale_factor}.'
+            )
         elif ENG_STRAIN_KEY in common_state_field_names:
-            disp_func_calculator = get_displacement_function_from_strain_data_collection
             scale_factor = self._current_state_geo_params.gauge_length
+            disp_function, metadata = get_displacement_function_from_strain_data_collection(
+                bc_data,
+                state,
+                params_by_precedent,
+                scale_factor=scale_factor,
+                return_metadata=True,
+            )
+            extra_lines.append(
+                f'Converted "{ENG_STRAIN_KEY}" to displacement using gauge_length = {scale_factor}.'
+            )
         else:
             raise_required_fields_not_found_error(
                 state,
@@ -108,15 +137,11 @@ class _UniaxialTensionModelBase(_TensionDerivedModelBase):
                 bc_data.name,
             )
 
-        disp_function = disp_func_calculator(
-            bc_data,
-            state,
-            params_by_precedent,
-            scale_factor=scale_factor,
-        )
-
         # Account for symmetry across the gauge length (model is built with symmetry)
         disp_function[DISPLACEMENT_KEY] *= 0.5
+        extra_lines.append("Applied symmetry factor of 0.5 to the prescribed displacement.")
+
+        self._set_last_loading_bc_comment(metadata, extra_lines)
         return disp_function
 
     def _create_derived_user_output_blocks(self, state):
@@ -227,14 +252,31 @@ class RoundNotchedTensionModel(_TensionDerivedModelBase):
     def _get_loading_boundary_condition_displacement_function(self, state, params_by_precedent):
         bc_data = self._boundary_condition_data
         common_state_field_names = bc_data.state_common_field_names(state.name)
+        extra_lines = []
 
         # Allow either displacement or engineering_strain as BC input
         if DISPLACEMENT_KEY in common_state_field_names:
-            disp_func_calculator = get_displacement_function_from_load_displacement_data_collection
-            scale_factor = 1.0
+            disp_function, metadata = (
+                get_displacement_function_from_load_displacement_data_collection(
+                    bc_data,
+                    state,
+                    params_by_precedent,
+                    scale_factor=1.0,
+                    return_metadata=True,
+                )
+            )
         elif ENG_STRAIN_KEY in common_state_field_names:
-            disp_func_calculator = get_displacement_function_from_strain_data_collection
             scale_factor = self._current_state_geo_params.extensometer_length
+            disp_function, metadata = get_displacement_function_from_strain_data_collection(
+                bc_data,
+                state,
+                params_by_precedent,
+                scale_factor=scale_factor,
+                return_metadata=True,
+            )
+            extra_lines.append(
+                f'Converted "{ENG_STRAIN_KEY}" to displacement using extensometer_length = {scale_factor}.'
+            )
         else:
             raise_required_fields_not_found_error(
                 state,
@@ -242,13 +284,9 @@ class RoundNotchedTensionModel(_TensionDerivedModelBase):
                 bc_data.name,
             )
 
-        disp_function = disp_func_calculator(
-            bc_data,
-            state,
-            params_by_precedent,
-            scale_factor=scale_factor,
-        )
-
         # Account for symmetry across gauge section
         disp_function[DISPLACEMENT_KEY] *= 0.5
+        extra_lines.append("Applied symmetry factor of 0.5 to the prescribed displacement.")
+
+        self._set_last_loading_bc_comment(metadata, extra_lines)
         return disp_function

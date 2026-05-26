@@ -9,9 +9,17 @@ from matcal.core.constants import (
     TRUE_STRAIN_KEY,
     TRUE_STRESS_KEY,
     TEMPERATURE_KEY,
+    TIME_KEY
 )
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.state import SolitaryState, State
+from matcal.core.tests.unit.comment_test_helpers import (
+    assert_data_set_index_comment,
+    assert_data_set_name_comment,
+    assert_selection_reason_comment,
+    assert_source_collection_comment,
+    assert_source_fields_comment,
+)
 
 from matcal.sierra.tests.unit.models.model_tests_base import (
     MatcalStandardModelUnitTestNewBase
@@ -95,3 +103,22 @@ class UniaxialLoadingMaterialPointModelTests(
 
         hb_output = model._input_file.heartbeat_output
         self.assertTrue(hb_output.has_global_output(TEMPERATURE_KEY))
+
+    def test_loading_function_comment_added_for_strain_history(self):
+        model = self.init_model()
+        data = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            ENG_STRAIN_KEY: [0.0, 0.1],
+        })
+        data.set_name("mp_curve_01")
+        model.add_boundary_condition_data(data)
+
+        state = data.state
+        model._setup_state(state, build_mesh=False)
+
+        func_str = self._get_loading_function_block_string(model)
+        assert_source_fields_comment(self, func_str, ENG_STRAIN_KEY, uses_time=True)
+        assert_source_collection_comment(self, func_str)
+        assert_data_set_index_comment(self, func_str, 0)
+        assert_data_set_name_comment(self, func_str, "mp_curve_01")
+        assert_selection_reason_comment(self, func_str, ENG_STRAIN_KEY, state.name)

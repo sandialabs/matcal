@@ -1,5 +1,13 @@
 from matcal.core.constants import DISPLACEMENT_KEY, TEMPERATURE_KEY, TIME_KEY
 from matcal.core.data import (DataCollection, convert_dictionary_to_data)
+from matcal.core.tests.unit.comment_test_helpers import (
+    assert_data_set_index_comment,
+    assert_data_set_name_comment,
+    assert_selection_reason_comment,
+    assert_source_collection_comment,
+    assert_source_fields_comment,
+)
+
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.full_field.data import convert_dictionary_to_field_data
@@ -27,6 +35,7 @@ from matcal.sierra.input_file_writer.sections import(
     _SectionNames
 )
 from matcal.sierra.material import Material
+
 
 class TestSierraInputFile(MatcalUnitTest):
     def setUp(self):
@@ -552,7 +561,129 @@ class TestSierraInputFile(MatcalUnitTest):
         self.assertAlmostEqual(ifile.solid_mechanics_procedure._termination_time, 8)
         self.assertAlmostEqual(ifile.solid_mechanics_procedure._time_step, 6/300)
         self.assertAlmostEqual(ifile.solid_mechanics_procedure._small_time_step, 6/300*1e-3)
-        
+
+    def _get_function_block_string(self, ifile, function_name):
+        return ifile.subblocks[function_name].get_string()
+    
+    def test_add_comment_to_function_block_single_line(self):
+        ifile = self._make_input_deck()
+        disp_func = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            DISPLACEMENT_KEY: [0.0, 1.0],
+        })
+        ifile._add_prescribed_loading_boundary_condition_with_displacement_function(
+            disp_func,
+            ["top_nodeset"],
+            ["x"],
+            ["component"],
+            1.0,
+        )
+
+        ifile._add_comment_to_function_block(
+            SierraFileBase._load_bc_function_name,
+            f'Using tabulated "{TIME_KEY}" and "{DISPLACEMENT_KEY}" fields from source data set.',
+        )
+
+        func_block = ifile.subblocks[SierraFileBase._load_bc_function_name]
+        line_names = list(func_block._lines.keys())
+        self.assertTrue(line_names[0].startswith("comment_prescribed_displacement_0"))
+
+        func_str = self._get_function_block_string(
+            ifile,
+            SierraFileBase._load_bc_function_name,
+        )
+        assert_source_fields_comment(self, func_str, DISPLACEMENT_KEY, uses_time=True)
+
+    def test_add_comment_to_function_block_multi_line(self):
+        ifile = self._make_input_deck()
+        disp_func = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            DISPLACEMENT_KEY: [0.0, 1.0],
+        })
+        ifile._add_prescribed_loading_boundary_condition_with_displacement_function(
+            disp_func,
+            ["top_nodeset"],
+            ["x"],
+            ["component"],
+            1.0,
+        )
+
+        comment = "\n".join([
+            f'Using tabulated "{TIME_KEY}" and "{DISPLACEMENT_KEY}" fields from source data set.',
+            'Source data collection: "boundary conditions".',
+            'Selected data set index: 0.',
+        ])
+        ifile._add_comment_to_function_block(
+            SierraFileBase._load_bc_function_name,
+            comment,
+        )
+
+        func_block = ifile.subblocks[SierraFileBase._load_bc_function_name]
+        line_names = list(func_block._lines.keys())
+        self.assertTrue(line_names[0].startswith("comment_prescribed_displacement_0"))
+        self.assertTrue(line_names[1].startswith("comment_prescribed_displacement_1"))
+        self.assertTrue(line_names[2].startswith("comment_prescribed_displacement_2"))
+
+        func_str = self._get_function_block_string(
+            ifile,
+            SierraFileBase._load_bc_function_name,
+        )
+        assert_source_fields_comment(self, func_str, DISPLACEMENT_KEY, uses_time=True)
+        assert_source_collection_comment(self, func_str, "boundary conditions")
+        assert_data_set_index_comment(self, func_str, 0)
+
+    def test_add_prescribed_loading_boundary_condition_with_displacement_function_adds_comment(self):
+        ifile = self._make_input_deck()
+        disp_func = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            DISPLACEMENT_KEY: [0.0, 1.0],
+        })
+        comment = "\n".join([
+            f'Using tabulated "{TIME_KEY}" and "{DISPLACEMENT_KEY}" fields from source data set.',
+            'Source data collection: "boundary conditions".',
+        ])
+
+        ifile._add_prescribed_loading_boundary_condition_with_displacement_function(
+            disp_func,
+            ["top_nodeset"],
+            ["x"],
+            ["component"],
+            1.0,
+            bc_comment=comment,
+        )
+
+        func_str = self._get_function_block_string(
+            ifile,
+            SierraFileBase._load_bc_function_name,
+        )
+        assert_source_fields_comment(self, func_str, DISPLACEMENT_KEY, uses_time=True)
+        assert_source_collection_comment(self, func_str, "boundary conditions")
+
+    def test_set_state_prescribed_temperature_from_boundary_data_adds_comment_to_temperature_function(self):
+        ifile = self._make_input_deck()
+        bc_data = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            TEMPERATURE_KEY: [298.0, 500.0],
+        })
+        bc_data.set_name("thermal_history")
+        dc = DataCollection("boundary conditions", bc_data)
+
+        ifile._set_state_prescribed_temperature_from_boundary_data(
+            dc,
+            bc_data.state,
+            TEMPERATURE_KEY,
+        )
+
+        func_str = self._get_function_block_string(
+            ifile,
+            SierraFileBase._temperature_bc_function_name,
+        )
+        assert_source_fields_comment(self, func_str, TEMPERATURE_KEY, uses_time=True)
+        assert_source_collection_comment(self, func_str, "boundary conditions")
+        assert_data_set_index_comment(self, func_str, 0)
+        assert_data_set_name_comment(self, func_str, "thermal_history")
+        assert_selection_reason_comment(self, func_str, TEMPERATURE_KEY, bc_data.state.name)    
+
 
 class TestSierraFileThreeDimensional(MatcalUnitTest):
     def setUp(self):

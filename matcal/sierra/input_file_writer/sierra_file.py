@@ -17,7 +17,10 @@ Note:
 
 from collections import OrderedDict
 
-from matcal.core.boundary_condition_calculators import get_temperature_function_from_data_collection
+from matcal.core.boundary_condition_calculators import (
+    format_bc_function_comment_lines,
+    get_temperature_function_from_data_collection
+)
 from matcal.core.constants import TEMPERATURE_KEY, TIME_KEY, DISPLACEMENT_KEY
 from matcal.core.input_file_writer import InputFileLine
 from matcal.core.logger import initialize_matcal_logger
@@ -295,15 +298,14 @@ class SierraFileBase(_BaseSierraInputFileBlock):
         self._solid_mechanics_region.add_subblock(self._vol_average_user_output)
 
     # -------------------------------------------------------------------------
-    # Comment injection helper (new feature)
+    # Comment injection helper 
     # -------------------------------------------------------------------------
 
     def _add_comment_to_function_block(self, function_name: str, comment: str):
         """
-        Prepend a comment line inside a SIERRA `function` block.
+        Prepend one or more comment lines inside a SIERRA `function` block.
 
-        The comment will be emitted just after `begin function ...` and before the
-        function's configuration lines.
+        Each emitted line begins with '# '.
         """
         check_value_is_nonempty_str(function_name, "function_name", call_depth=1)
         check_value_is_nonempty_str(comment, "comment", call_depth=1)
@@ -313,17 +315,18 @@ class SierraFileBase(_BaseSierraInputFileBlock):
 
         func_block = self.subblocks[function_name]
 
-        comment_line = InputFileLine(f"# {comment}", name=f"comment_{function_name}")
-        comment_line.suppress_symbol()
-
-        # Prepend to the function block lines (OrderedDict order matters)
-        if comment_line.name in func_block._lines:
-            func_block._lines.pop(comment_line.name)
-
         new_lines = OrderedDict()
-        new_lines[comment_line.name] = comment_line
+        for i, raw_line in enumerate(comment.splitlines()):
+            text = raw_line.rstrip()
+            if not text.startswith("#"):
+                text = f"# {text}" if text else "#"
+            comment_line = InputFileLine(text, name=f"comment_{function_name}_{i}")
+            comment_line.suppress_symbol()
+            new_lines[comment_line.name] = comment_line
+
         for k, v in func_block._lines.items():
             new_lines[k] = v
+
         func_block._lines = new_lines
 
     # -------------------------------------------------------------------------
@@ -489,18 +492,29 @@ class SierraFileBase(_BaseSierraInputFileBlock):
         self._solid_mechanics_region.add_subblock(prescribed_temp)
 
     def _set_temperature_from_temperature_time_history(self, boundary_data, state, temperature_key):
-        temperature_function = get_temperature_function_from_data_collection(
+        temperature_function, metadata = get_temperature_function_from_data_collection(
             boundary_data,
             state,
             temperature_key=temperature_key,
+            return_metadata=True,
         )
         func_name = self._temperature_bc_function_name
 
-        prescribed_temp = SolidMechanicsPrescribedTemperature("include all blocks", function_name=func_name)
+        prescribed_temp = SolidMechanicsPrescribedTemperature(
+            "include all blocks",
+            function_name=func_name,
+        )
         self._solid_mechanics_region.add_subblock(prescribed_temp)
 
-        temp_function = PiecewiseLinearFunction(func_name, temperature_function[TIME_KEY], temperature_function[temperature_key])
+        temp_function = PiecewiseLinearFunction(
+            func_name,
+            temperature_function[TIME_KEY],
+            temperature_function[temperature_key],
+        )
         self.add_subblock(temp_function)
+
+        comment = "\n".join(format_bc_function_comment_lines(metadata))
+        self._add_comment_to_function_block(func_name, comment)
 
         self._add_temperature_output(nodal=True)
 
