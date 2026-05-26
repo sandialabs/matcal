@@ -116,7 +116,7 @@ class TopHatShearModelUnitTests(
 
         model.set_contact_convergence_tolerance(1e-6)
         with self.assertRaises(ValueError):
-            model.set_contact_convergence_tolerance(1e-6, 1e-7)
+            model.set_contact_convergence_tolerance(1e-6, -1)
 
         model.set_contact_convergence_tolerance(1e-6, 1e-5)
         self.assertEqual(contact.get_target_relative_residual(), 1e-6)
@@ -132,7 +132,7 @@ class TopHatShearModelUnitTests(
 
         with self.assertRaises(ValueError):
             model.set_contact_convergence_tolerance(
-                1e-8, target_residual=1e-6, acceptable_residual=1e-7
+                1e-8, target_residual=1e-6, acceptable_residual=-1.0
             )
         model.set_contact_convergence_tolerance(1e-8, acceptable_residual=1e-5)
         self.assertAlmostEqual(contact.get_acceptable_residual(), 1e-5)
