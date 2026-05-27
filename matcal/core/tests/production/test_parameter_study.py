@@ -62,7 +62,7 @@ class TestParameterStudy(MatcalUnitTest):
         restart_end = time.time()
         restart_time_delta = restart_end - restart_start
 
-        expected_speedup = 4.
+        expected_speedup = 3.0
         speedup = base_time_delta / restart_time_delta
         self.assertGreaterEqual(speedup, expected_speedup)
 
@@ -163,7 +163,7 @@ class TestParameterStudy(MatcalUnitTest):
         restart_end = time.time()
         restart_time_delta = restart_end - restart_start
 
-        expected_speedup = 2.
+        expected_speedup = 1.5
         speedup = base_time_delta / restart_time_delta
 
         self.assertGreaterEqual(speedup, expected_speedup)

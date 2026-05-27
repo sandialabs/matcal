@@ -51,12 +51,15 @@ class UniaxialLoadingMaterialPointModel(_StandardSierraModelWithDeathBase):
         """"""
 
     def _get_loading_boundary_condition_displacement_function(self, state, params_by_precedent):
-        # For a material point, displacement BC is derived 
+        # For a material point, displacement BC is derived
         # from strain history (eng strain by default).
-        # Note: scale_factor is handled by the BC calculator as needed.
-        func = get_displacement_function_from_strain_data_collection(
-            self._boundary_condition_data, state, params_by_precedent
+        func, metadata = get_displacement_function_from_strain_data_collection(
+            self._boundary_condition_data,
+            state,
+            params_by_precedent,
+            return_metadata=True,
         )
+        self._set_last_loading_bc_comment(metadata)
         return func
 
     def _create_user_output_blocks(self, state):

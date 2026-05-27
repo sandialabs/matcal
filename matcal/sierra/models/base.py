@@ -16,7 +16,8 @@ from collections import OrderedDict
 import numbers
 import os
 
-from matcal.core.boundary_condition_calculators import (
+from matcal.core.boundary_condition_calculators import (    
+    format_bc_function_comment_lines,
     get_displacement_function_from_load_displacement_data_collection,
 )
 from matcal.core.constants import (
@@ -453,6 +454,13 @@ class _StandardSierraModelBase(_MatcalGeneratedSierraModelBase):
         else:
             params_by_precedent, _parameter_source = self._get_parameters_by_precedence(state)
             self._input_file._set_initial_temperature_from_parameters(params_by_precedent)
+
+    def _set_last_loading_bc_comment(self, metadata, extra_lines=None):
+        if extra_lines is None:
+            extra_lines = []
+        self._last_loading_bc_comment = "\n".join(
+            format_bc_function_comment_lines(metadata) + extra_lines
+        )
 
     @property
     def coupling(self):
@@ -1029,11 +1037,14 @@ class _SymmetricUniaxiallyLoadedModelBase(_ThreeDimensionalStandardSierraModelBa
         self._input_file._add_heartbeat_global_variable(LOAD_KEY)
 
     def _get_loading_boundary_condition_displacement_function(self, state, params_by_precedent):
-        disp_function = get_displacement_function_from_load_displacement_data_collection(
-            self._boundary_condition_data, state, params_by_precedent, scale_factor=1.0
+        disp_function, metadata = get_displacement_function_from_load_displacement_data_collection(
+            self._boundary_condition_data,
+            state,
+            params_by_precedent,
+            scale_factor=1.0,
+            return_metadata=True,
         )
-        # Optional: set comment for input deck if you implement comment builder upstream
-        self._last_loading_bc_comment = None
+        self._set_last_loading_bc_comment(metadata)
         return disp_function
 
 

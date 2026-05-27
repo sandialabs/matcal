@@ -584,7 +584,11 @@ class MatcalStandardModelUnitTestNewBase:
             with self.assertRaises(TypeError):
                 model.set_boundary_condition_scale_factor("invalid type")
 
+        def _get_loading_function_block_string(self, model):
+            func_block = model.input_file.subblocks[model.input_file._load_bc_function_name]
+            return func_block.get_string()
 
+        
 class MatcalThreeDimensionalStandardModelUnitTestNewBase:
     def __init__():
         pass

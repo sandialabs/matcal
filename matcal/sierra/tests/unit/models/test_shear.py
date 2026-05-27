@@ -1,7 +1,17 @@
 # test_shear.py
-from matcal.core.constants import TORQUE_KEY, ROTATION_KEY
+from matcal.core.constants import TORQUE_KEY, ROTATION_KEY, DISPLACEMENT_KEY, TIME_KEY
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.state import SolitaryState
+from matcal.core.tests.unit.comment_test_helpers import (
+    assert_data_set_index_comment,
+    assert_data_set_name_comment,
+    assert_rotation_rename_comment,
+    assert_rotation_to_radians_comment,
+    assert_selection_reason_comment,
+    assert_source_collection_comment,
+    assert_source_fields_comment,
+    assert_symmetry_rotation_comment,
+)
 
 from matcal.sierra.tests.unit.models.model_tests_base import (
     MatcalThreeDimensionalStandardModelUnitTestNewBase
@@ -44,6 +54,27 @@ class SolidBarTorsionModelUnitTests(
         zero_func_block_name = "ns_y_symmetry cylindrical_axis sierra_constant_function_zero"
         self.assertIn(zero_func_block_name, sm_region.subblocks)
 
+    def test_loading_function_comment_added_for_rotation_history(self):
+        model = self.init_model()
+        data = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            ROTATION_KEY: [0.0, 90.0],
+        })
+        data.set_name("torsion_cycle_1")
+        model.add_boundary_condition_data(data)
+
+        state = data.state
+        model._setup_state(state, build_mesh=False)
+
+        func_str = self._get_loading_function_block_string(model)
+        assert_source_fields_comment(self, func_str, ROTATION_KEY, uses_time=True)
+        assert_source_collection_comment(self, func_str)
+        assert_data_set_index_comment(self, func_str, 0)
+        assert_data_set_name_comment(self, func_str, "torsion_cycle_1")
+        assert_selection_reason_comment(self, func_str, ROTATION_KEY, state.name)
+        assert_symmetry_rotation_comment(self, func_str)
+        assert_rotation_to_radians_comment(self, func_str)
+        assert_rotation_rename_comment(self, func_str, ROTATION_KEY, DISPLACEMENT_KEY)
 
 class TopHatShearModelUnitTests(
     MatcalThreeDimensionalStandardModelUnitTestNewBase.CommonTests,
@@ -147,3 +178,23 @@ class TopHatShearModelUnitTests(
         self.assertEqual(cg.get_target_relative_residual(), 1e-6)
         self.assertAlmostEqual(cg.get_target_residual(), 1e-4)
         self.assertAlmostEqual(cg.get_acceptable_relative_residual(), 1e-5)
+
+    
+    def test_loading_function_comment_added_for_displacement_history(self):
+        model = self.init_model()
+        data = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            DISPLACEMENT_KEY: [0.0, 1.0],
+        })
+        data.set_name("top_hat_disp_history")
+        model.add_boundary_condition_data(data)
+
+        state = data.state
+        model._setup_state(state, build_mesh=False)
+
+        func_str = self._get_loading_function_block_string(model)
+        assert_source_fields_comment(self, func_str, DISPLACEMENT_KEY, uses_time=True)
+        assert_source_collection_comment(self, func_str)
+        assert_data_set_index_comment(self, func_str, 0)
+        assert_data_set_name_comment(self, func_str, "top_hat_disp_history")
+        assert_selection_reason_comment(self, func_str, DISPLACEMENT_KEY, state.name)

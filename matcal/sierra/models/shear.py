@@ -162,16 +162,24 @@ class SolidBarTorsionModel(_TensionDerivedModelBase):
         self._input_file._add_heartbeat_global_variable(ROTATION_KEY)
 
     def _get_loading_boundary_condition_displacement_function(self, state, params_by_precedent):
-        rot_function = get_rotation_function_from_data_collection(
+        rot_function, metadata = get_rotation_function_from_data_collection(
             self._boundary_condition_data,
             state,
             params_by_precedent,
             scale_factor=1.0,
+            return_metadata=True,
         )
 
         # Accounting for symmetry across the gauge length and conversion of degrees to radians
         rot_function[ROTATION_KEY] *= 0.5 * np.pi / 180.0
         rot_function.rename_field(ROTATION_KEY, DISPLACEMENT_KEY)
+
+        extra_lines = [
+            "Applied symmetry factor of 0.5 to the prescribed rotation.",
+            'Converted rotation from degrees to radians.',
+            f'Renamed "{ROTATION_KEY}" to "{DISPLACEMENT_KEY}" for the SIERRA prescribed displacement boundary condition.',
+        ]
+        self._set_last_loading_bc_comment(metadata, extra_lines)
         return rot_function
 
 

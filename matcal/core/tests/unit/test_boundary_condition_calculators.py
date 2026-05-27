@@ -2,17 +2,36 @@ from collections import OrderedDict
 import numpy as np
 import os
 
-from matcal.core.boundary_condition_calculators import (DISPLACEMENT_KEY, ENG_STRAIN_KEY, 
-    TEMPERATURE_KEY, TIME_KEY, BoundaryConditionDeterminationError, max_state_values, 
-    ROTATION_KEY, ROTATION_RATE_KEY, DISPLACEMENT_RATE_KEY, STRAIN_RATE_KEY, 
-    TRUE_STRAIN_KEY, 
-    get_displacement_function_from_load_displacement_data_collection, 
-    get_displacement_function_from_strain_data_collection, 
-    get_temperature_function_from_data_collection, 
-    get_rotation_function_from_data_collection)
+from matcal.core.boundary_condition_calculators import (
+    DISPLACEMENT_KEY,
+    ENG_STRAIN_KEY,
+    TEMPERATURE_KEY,
+    TIME_KEY,
+    BoundaryConditionDeterminationError,
+    max_state_values,
+    ROTATION_KEY,
+    ROTATION_RATE_KEY,
+    DISPLACEMENT_RATE_KEY,
+    STRAIN_RATE_KEY,
+    TRUE_STRAIN_KEY,
+    format_bc_function_comment_lines,
+    get_displacement_function_from_load_displacement_data_collection,
+    get_displacement_function_from_strain_data_collection,
+    get_temperature_function_from_data_collection,
+    get_rotation_function_from_data_collection,
+)
 from matcal.core.data import DataCollection, convert_dictionary_to_data
-from matcal.core.data_importer import FileData
 from matcal.core.state import State
+from matcal.core.tests.unit.comment_test_helpers import (
+   assert_data_set_index_comment,
+    assert_data_set_name_comment,
+    assert_default_ramp_comment,
+    assert_metadata_common_fields,
+    assert_rate_ramp_comment,
+    assert_selection_reason_comment,
+    assert_source_collection_comment,
+    assert_source_fields_comment,
+)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -309,7 +328,191 @@ class TestDisplacementBoundaryConditionCalculator(MatcalUnitTest):
         time_vec_state2 = state2_gold_data[TIME_KEY]        
         gold_function_state2 = np.array([time_vec_state2, disp_vec_state2]).T
         self.assert_close_arrays(disp_func_state2, gold_function_state2)
-        
+
+    def test_get_displacement_function_from_strain_data_collection_returns_metadata(self):
+        dc, state = make_single_state_time_strain_data_collection()
+        func, metadata = get_displacement_function_from_strain_data_collection(
+            dc,
+            state,
+            scale_factor=1.25,
+            return_metadata=True,
+        )
+
+        self.assertIn(DISPLACEMENT_KEY, func.field_names)
+        assert_metadata_common_fields(
+            self,
+            metadata,
+            ENG_STRAIN_KEY,
+            state.name,
+            "test",
+            selected_data_set_index=2,
+            selected_data_set_name="data 3",
+        )
+        self.assertTrue(metadata["used_time_history"])
+        self.assertFalse(metadata["used_rate"])
+        self.assertEqual(metadata["scale_factor"], 1.25)
+
+    def test_get_displacement_function_from_load_displacement_data_collection_returns_metadata(self):
+        dc, state = make_single_state_displacement_data_collection()
+        func, metadata = get_displacement_function_from_load_displacement_data_collection(
+            dc,
+            state,
+            scale_factor=2.0,
+            return_metadata=True,
+        )
+
+        self.assertIn(DISPLACEMENT_KEY, func.field_names)
+        assert_metadata_common_fields(
+            self,
+            metadata,
+            DISPLACEMENT_KEY,
+            state.name,
+            "test",
+            selected_data_set_index=2,
+            selected_data_set_name="data 3",
+        )
+        self.assertFalse(metadata["used_time_history"])
+        self.assertTrue(metadata["used_rate"])
+        self.assertEqual(metadata["scale_factor"], 2.0)
+
+    def test_format_bc_function_comment_lines_tabulated_time_history(self):
+        metadata = {
+            "field_key": ENG_STRAIN_KEY,
+            "state_name": "room_temperature",
+            "used_time_history": True,
+            "used_rate": False,
+            "source_method_comment": f'Using tabulated "{TIME_KEY}" and "{ENG_STRAIN_KEY}" fields from source data set.',
+            "data_collection_name": "boundary conditions",
+            "selected_data_set_index": 0,
+            "selected_data_set_name": "room_temp_repeat_1",
+            "max_value": 0.234,
+            "max_value_index": 187,
+        }
+
+        lines = format_bc_function_comment_lines(metadata)
+        text = "\n".join(lines)
+
+        assert_source_fields_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            uses_time=True,
+            commented=False,
+        )
+        assert_source_collection_comment(
+            self,
+            text,
+            "boundary conditions",
+            commented=False,
+        )
+        assert_data_set_index_comment(self, text, 0, commented=False)
+        assert_data_set_name_comment(self, text, "room_temp_repeat_1", commented=False)
+        assert_selection_reason_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            "room_temperature",
+            commented=False,
+        )
+
+    def test_format_bc_function_comment_lines_rate_based_history(self):
+        metadata = {
+            "field_key": ENG_STRAIN_KEY,
+            "state_name": "room_temperature",
+            "used_time_history": False,
+            "used_rate": True,
+            "compatible_rate_key": STRAIN_RATE_KEY,
+            "rate_value": 1e-3,
+            "constructed_end_time": 250.0,
+            "scale_factor": 1.0,
+            "source_method_comment": f'Using "{ENG_STRAIN_KEY}" field from source data set; no "{TIME_KEY}" field was provided.',
+            "data_collection_name": "boundary conditions",
+            "selected_data_set_index": 0,
+            "selected_data_set_name": "target_strain_only",
+            "max_value": 0.25,
+            "max_value_index": 0,
+        }
+
+        lines = format_bc_function_comment_lines(metadata)
+        text = "\n".join(lines)
+
+        assert_source_fields_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            uses_time=False,
+            commented=False,
+        )
+        assert_rate_ramp_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            STRAIN_RATE_KEY,
+            commented=False,
+        )
+        self.assertIn('Constructed points: (0, 0) and (250.0, 0.25).', text)
+        assert_source_collection_comment(
+            self,
+            text,
+            "boundary conditions",
+            commented=False,
+        )
+        assert_data_set_index_comment(self, text, 0, commented=False)
+        assert_data_set_name_comment(self, text, "target_strain_only", commented=False)
+        assert_selection_reason_comment(
+            self,
+            text,
+            ENG_STRAIN_KEY,
+            "room_temperature",
+            commented=False,
+        )
+
+    def test_format_bc_function_comment_lines_default_two_point_history(self):
+        metadata = {
+            "field_key": DISPLACEMENT_KEY,
+            "state_name": "state",
+            "used_time_history": False,
+            "used_rate": False,
+            "scale_factor": 1.5,
+            "source_method_comment": f'Using "{DISPLACEMENT_KEY}" field from source data set; no "{TIME_KEY}" field was provided.',
+            "data_collection_name": "boundary conditions",
+            "selected_data_set_index": 0,
+            "selected_data_set_name": "disp_only",
+            "max_value": 1.0,
+            "max_value_index": 3,
+        }
+
+        lines = format_bc_function_comment_lines(metadata)
+        text = "\n".join(lines)
+
+        assert_source_fields_comment(
+            self,
+            text,
+            DISPLACEMENT_KEY,
+            uses_time=False,
+            commented=False,
+        )
+        assert_default_ramp_comment(
+            self,
+            text,
+            DISPLACEMENT_KEY,
+            commented=False,
+        )
+        assert_source_collection_comment(
+            self,
+            text,
+            "boundary conditions",
+            commented=False,
+        )
+        assert_data_set_index_comment(self, text, 0, commented=False)
+        assert_data_set_name_comment(self, text, "disp_only", commented=False)
+        assert_selection_reason_comment(
+            self,
+            text,
+            DISPLACEMENT_KEY,
+            "state",
+            commented=False,
+        )
 
 class TestRotationBCFunctionCalculator(MatcalUnitTest):
     def setUp(self):
@@ -358,6 +561,31 @@ class TestRotationBCFunctionCalculator(MatcalUnitTest):
         func = get_rotation_function_from_data_collection(dc, self._rot_data.state)
         goal_func = np.array([[0,0], [self._rot_data[ROTATION_KEY][-1]/rate_state[ROTATION_RATE_KEY], self._rot_data[ROTATION_KEY][-1]]])
         self.assert_close_arrays(func, goal_func)
+
+    def test_get_rotation_function_from_data_collection_returns_metadata(self):
+        rate_state = State("state with rate")
+        rate_state.update_state_variable(ROTATION_RATE_KEY, 1e-3)
+        self._rot_data.set_state(rate_state)
+        self._rot_data.set_name("rotation_data")
+        dc = DataCollection("test", self._rot_data)
+
+        func, metadata = get_rotation_function_from_data_collection(
+            dc,
+            rate_state,
+            return_metadata=True,
+        )
+
+        self.assertIn(ROTATION_KEY, func.field_names)
+        assert_metadata_common_fields(self,
+            metadata,
+            ROTATION_KEY,
+            rate_state.name,
+            "test",
+            0,
+            "rotation_data",
+        )
+        self.assertFalse(metadata["used_time_history"])
+        self.assertTrue(metadata["used_rate"])
 
 
 class TestTemperatureBCFunctionCalculator(MatcalUnitTest):
@@ -443,3 +671,27 @@ class TestTemperatureBCFunctionCalculator(MatcalUnitTest):
         temp_values = dc[self._temp_data.state][max_index][TEMPERATURE_KEY]
         goal_temp_func = np.array([time_values, temp_values]).T
         self.assert_close_arrays(temp_func,goal_temp_func)
+
+    def test_get_temperature_function_from_data_collection_returns_metadata(self):
+        self._temp_time_data2.set_name("temp data 2")
+        dc = DataCollection(
+            "test",
+            self._temp_time_data,
+            self._temp_time_data2,
+            self._temp_time_data3,
+        )
+
+        func, metadata = get_temperature_function_from_data_collection(
+            dc,
+            self._temp_time_data.state,
+            return_metadata=True,
+        )
+
+        self.assertIn(TEMPERATURE_KEY, func.field_names)
+        assert_metadata_common_fields(self,
+            metadata,
+            TEMPERATURE_KEY,
+            self._temp_time_data.state.name,
+            "test",
+        )
+        self.assertTrue(metadata["used_time_history"])
