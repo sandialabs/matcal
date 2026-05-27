@@ -594,17 +594,23 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
         if not os.path.exists(template_dir):
             make_clean_dir(template_dir)
 
-    def get_target_dir_name(self, state, template_dir=None):
+    def get_target_dir_name(self, state, parent_dir=None):
         """
-        Returns the name of the directory where the model will run if launched
-        using :math:`~matcal.core.models.ModelBase.run`.
+        :param state: the state for the target directory
+        :type state: :class:`~matcal.core.state.State`
 
-        rtype: str
+        :param parent_dir: optional parent directory where the model files will be 
+            built.
+        :type parent_dir: str
+
+        :return: Returns the name of the directory where the model will run if launched
+            using :meth:`run`.
+        :rtype: str
         """
-        if template_dir is None:
-            template_dir = "."
+        if parent_dir is None:
+            parent_dir = "."
 
-        return os.path.join(template_dir, matcal_name_format(self.name), 
+        return os.path.join(parent_dir, matcal_name_format(self.name), 
                             matcal_name_format(state.name))
 
     def confirm_permissions(self):
