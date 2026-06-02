@@ -31,7 +31,7 @@ the following keyword arguments be provided to its constructor.
 #. extensometer_length
 #. fillet_radius  
 #. grip_contact_length - distance that the grips contact the specimen in the grip section.
-#. necking_region - the fraction of the extensometer length where necking is expected 
+#. necking_region (optional) - the fraction of the extensometer length where necking is expected 
    to occur. This is used for output and mesh refinement for some of the *mesh_methods*.
 #. element_size - target element edge length 
 #. mesh_method - user specified meshing method options
@@ -39,6 +39,24 @@ the following keyword arguments be provided to its constructor.
 #. grip_radius
 #. notch_radius
 #. notch_gauge_radius
+
+The *necking_region* geometry input is optional for this model. It specifies the
+fraction of the extensometer length where necking is expected to occur and is used
+for output and mesh refinement for some of the *mesh_methods*. If the user does not
+provide *necking_region* or provides a value of zero, MatCal automatically selects
+a default value based on the notch geometry and the model symmetry.
+
+For the round notched tension model, the automatic default is determined as follows:
+
+#. If *notch_radius* is less than *gauge_radius*, the necking-region length in the
+   half-symmetry model is set to :math:`1.2\,\text{notch\_radius}`.
+#. Otherwise, the *necking_region* value is set such that it corresponds to 37.5% of
+   the total notch height.
+#. The corresponding *necking_region* parameter value is then computed from that
+   necking-region length using the model relation
+   :math:`\text{necking\_region\_length} = \text{necking\_region}\,\text{extensometer\_length}/2`.
+
+If the user provides a valid, nonzero *necking_region*, that value is used directly.
 
 These parameters provide information related to geometry, discretization sizing
 and output and boundary condition mesh entities such as blocks and node sets.
@@ -149,7 +167,7 @@ algorithm:
    parameter.
 #. If the data does contain a "time" field, use the displacement function directly as provided.
 
-.. note:
+.. note::
    This algorithm assumes that negligible deformation occurs in the regions
    outside of the notched region of the geometry. If this is known or suspected to be 
    an invalid assumption, an additional scale factor can be applied to increase 

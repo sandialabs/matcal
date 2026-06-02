@@ -78,6 +78,24 @@ class UniaxialStressTensionGeometryUnitTest(TestUniaxialTensionLoadingGeometry):
             with self.assertRaises(GeometryParameters.ValueError):
                 self.params["element_size"]  = self.params["gauge_width"]/3.9
 
+        def test_uniaxial_stress_default_necking_region_used_when_not_specified(self):
+            params = dict(self._params)
+            params.pop("necking_region", None)
+
+            geo_params = self._geometry_class.Parameters(**params)
+            lims = geo_params._get_necking_region_parameter_limits()
+            if (lims[0] < 0.375 and 0.375 < lims[1]):
+                self.assertEqual(geo_params["necking_region"], 0.375)
+            else:
+                self.assertEqual(geo_params["necking_region"], (lims[0]+lims[1])/2)
+
+        def test_uniaxial_stress_user_necking_region_used_when_specified(self):
+            params = dict(self._params)
+            params["necking_region"] = 0.45
+
+            geo_params = self._geometry_class.Parameters(**params)
+
+            self.assertEqual(geo_params["necking_region"], 0.45)
 
 class RoundUniaxialStressTensionGeometryUnitTest(UniaxialStressTensionGeometryUnitTest.CommonTests):
 
@@ -111,7 +129,6 @@ class RoundUniaxialStressTensionGeometryUnitTest(UniaxialStressTensionGeometryUn
 class SolidBarTorsionGeometryUnitTest(RoundUniaxialStressTensionGeometryUnitTest):
     _geometry_class = SolidBarTorsionGeometry  
     _params = SolidBarTorsionModelForTests.geo_params
-
 
     def test_access_params(self):
         for key, value in self._params.items():
@@ -187,6 +204,34 @@ class RoundNotchedTensionGeometryUnitTest(TestUniaxialTensionLoadingGeometry.Com
         with self.assertRaises(GeometryParameters.ValueError):
             self.params["element_size"] = self._params["gauge_radius"]/23.5
             self.params["mesh_method"]  = 5
+            
+    def test_round_notched_default_necking_region_used_when_not_specified_and_notch_radius_less_than_gauge_radius(self):
+        params = dict(self._params)
+        params.pop("necking_region", None)
+
+        geo_params = self._geometry_class.Parameters(**params)
+
+        expected = 2.0 * (1.2 * params["notch_radius"]) / params["extensometer_length"]
+        self.assertAlmostEqual(geo_params["necking_region"], expected)
+
+    def test_round_notched_default_necking_region_used_when_not_specified_and_notch_radius_greater_than_or_equal_to_gauge_radius(self):
+        params = dict(self._params)
+        params.pop("necking_region", None)
+        params["notch_radius"] = params["gauge_radius"]
+
+        geo_params = self._geometry_class.Parameters(**params)
+
+        notch_height = geo_params["notch_height"]
+        expected = (0.375 * notch_height) / params["extensometer_length"]
+        self.assertAlmostEqual(geo_params["necking_region"], expected)
+
+    def test_round_notched_user_necking_region_used_when_specified(self):
+        params = dict(self._params)
+        params["necking_region"] = 0.2
+
+        geo_params = self._geometry_class.Parameters(**params)
+
+        self.assertEqual(geo_params["necking_region"], 0.2)
 
 
 class TopHatGeometryUnitTest(MatcalUnitTest):
