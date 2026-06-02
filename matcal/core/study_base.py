@@ -1369,6 +1369,8 @@ class StudyResults:
         self._exit_status = exit_status
         if success:
             self._exit_message = "Successful:\n"
+        elif success is None:
+            self._exit_message = ""
         else:
             self._exit_message = "Failed   :\n"
         self._exit_message += exit_message

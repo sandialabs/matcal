@@ -595,7 +595,7 @@ class MatcalStandardModelUnitTestNewBase:
 
         def test_set_time_limit_raises_over_96_hours_message(self):
             model = self.init_model()
-            with self.assertRaises(model.InvalidSierraTimeLimitSpecified) as cm:
+            with self.assertRaises(ValueError) as cm:
                 model.set_time_limit(97)
 
             self.assertIn("cannot exceed 96 hours", str(cm.exception))
