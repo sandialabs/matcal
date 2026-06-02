@@ -222,7 +222,7 @@ class RoundNotchedTensionGeometryUnitTest(TestUniaxialTensionLoadingGeometry.Com
         geo_params = self._geometry_class.Parameters(**params)
 
         notch_height = geo_params["notch_height"]
-        expected = 2.0 * (0.375 * notch_height) / params["extensometer_length"]
+        expected = (0.375 * notch_height) / params["extensometer_length"]
         self.assertAlmostEqual(geo_params["necking_region"], expected)
 
     def test_round_notched_user_necking_region_used_when_specified(self):
