@@ -121,14 +121,24 @@ class SierraSimulator(ExecutableSimulator):
     def _add_sierra_queue_commands(self):
         queue_commands = []
         computer = self._compute_information.computer
-        queue_names = computer.get_usable_queue_names(self._compute_information.time_limit_seconds,
-                                                      self._compute_information.number_of_cores)
+        queue_names = computer.get_usable_queue_names(
+            self._compute_information.time_limit_seconds,
+            self._compute_information.number_of_cores
+        )
         queue_commands.append('--queue-name')
         queue_commands.append(','.join(queue_names))
         queue_commands.append('-T')
         queue_commands.append(str(int(self._compute_information.time_limit_seconds)))
         queue_commands.append('--account')
         queue_commands.append(str(self._compute_information.queue_id))
+
+        if (
+            self._compute_information.time_limit_seconds is not None
+            and self._compute_information.time_limit_seconds > 48 * 60 * 60
+        ):
+            queue_commands.append('--qos')
+            queue_commands.append('long')
+
         if isinstance(self._compute_information.computer, HPCComputingPlatform):
             processors_per_node = self._compute_information.computer.get_processors_per_node()
             if processors_per_node is not None:
