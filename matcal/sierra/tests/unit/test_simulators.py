@@ -190,6 +190,32 @@ class TestSierraSimulator(MatcalUnitTest):
         for goal, test in zip(goal_commands, commands):
             self.assertEqual(goal, test)
 
+    def test_adds_long_qos_over_48_hours(self):
+        model = UserDefinedSierraModel('adagio', self.empty_input_file, self.empty_mesh_file)
+        SET_PLATFORM_OPTIONS(model)
+        model.set_time_limit(49)
+        sim = model.build_simulator(self.state)
+
+        platform_identifier = matcal_computing_platform_function_identifier.identify()
+        platform = platform_identifier()
+
+        if isinstance(platform, HPCComputingPlatform):
+            self.assertIn('--qos', sim._commands)
+            qos_index = sim._commands.index('--qos')
+            self.assertEqual(sim._commands[qos_index + 1], 'long')
+
+    def test_does_not_add_long_qos_at_48_hours(self):
+        model = UserDefinedSierraModel('adagio', self.empty_input_file, self.empty_mesh_file)
+        SET_PLATFORM_OPTIONS(model)
+        model.set_time_limit(48)
+        sim = model.build_simulator(self.state)
+
+        platform_identifier = matcal_computing_platform_function_identifier.identify()
+        platform = platform_identifier()
+
+        if isinstance(platform, HPCComputingPlatform):
+            self.assertNotIn('--qos', sim._commands)
+
 
 from copy import deepcopy
 from matcal.core.linux_modules import (matcal_executable_environment_setup_function_identifier, 
