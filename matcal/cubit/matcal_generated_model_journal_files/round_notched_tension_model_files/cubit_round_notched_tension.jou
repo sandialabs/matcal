@@ -53,9 +53,6 @@ reset
     #{gauge_surf_element_size = 3*element_size}
 #{endif}
 
-{if(necking_region_length == 0)}
-    #{necking_region_length=notch_radius*1.2}
-{endif}
 create vertex 0 0 0
 #{vertex_1 = Id('vertex')}
 
