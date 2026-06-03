@@ -633,14 +633,14 @@ class StudyResultsBaseUnitTests(object):
         def test_success_false(self):
             rc = self._random_init(success=False)
             self.assertEqual(rc.exit_status, 0)
-            self.assertTrue(rc.success)
+            self.assertFalse(rc.success)
             self.assertEqual(rc.exit_message, 
                              "Failed   :\nYay\nAlgorithm returned exit status:\n0")
 
         def test_success_none(self):
             rc = self._random_init(success=None)
             self.assertEqual(rc.exit_status, 0)
-            self.assertTrue(rc.success)
+            self.assertIsNone(rc.success)
             self.assertEqual(rc.exit_message, 
                              "Yay\nAlgorithm returned exit status:\n0")
 
