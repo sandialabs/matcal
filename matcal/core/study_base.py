@@ -631,9 +631,19 @@ class StudyBase(ABC):
         Add a parameter preprocessor to the study that will operate on the parameters 
         before they are sent to the models. 
         See :class:`~matcal.core.parameters.UserDefinedParameterPreprocessor`.
+        The function used for parameter preprocessing should take a single argument.
+        This single argument passed to it is a dictionary with keys equal to the study parameter
+        names and values equal to the parameter values for the current evaluation. The function
+        must return a dictionary with the preprocessed parameters. 
+        It can add new or remove parameters 
+        as needed but should provide all parameters needed to run the models for the study.
 
-        :param parameter_preprocessor: the parameter preprocessor that will modify and update 
-            the given model parameters 
+        Multiple parameter preprocessors can be added, and they will be applied in the 
+        order that they are added 
+        to the study.
+        
+        :param parameter_preprocessor: the parameter preprocessor function that 
+            will modify and update the given model parameters 
         :type parameter_preprocessor:
             :class:`~matcal.core.parameters.UserDefinedParameterPreprocessor`
         """
