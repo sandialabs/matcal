@@ -929,29 +929,72 @@ def _calculate_performance_metrics(regressor, param, data):
         metrics.append(regressor.score(param, data))
     else:
         metrics.append(None)
-    metrics.append(nlpd(regressor, param, data))
-    metrics.append(rmse(regressor, param, data))
+    metrics.append(_regressor_nlpd(regressor, param, data))
+    metrics.append(_regressor_rmse(regressor, param, data))
     return metrics
 
+def _safe_regressor_metric_return(reg, y_true, handle_errors, 
+    metric_func, input_values, error_value
+):
+    if handle_errors:
+        try:
+            return metric_func(reg, input_values, y_true)
+        except Exception:
+            return error_value
 
-def nlpd(regressor, input_values, evals):
-    """ Negative Log Predictive Density
-        Only applicable for GPR
+    return metric_func(reg, input_values, y_true)
+
+
+def _apply_regressor_metric(
+    regressor,
+    input_values,
+    evals,
+    metric_func,
+    *,
+    handle_errors=False,
+    error_value=np.nan,
+):
+    """
+    Apply a metric to either a single regressor or a modal regressor.
     """
     if isinstance(regressor, _modal_regressor):
-        nlpd = np.zeros(evals.shape[1])
+        results = np.full(evals.shape[1], error_value, dtype=float)
+
         for idx, reg in enumerate(regressor._mode_regressors):
-            try:
-                nlpd[idx] = _calculate_nlpd(reg, input_values, evals[:, idx])
-            except:
-                nlpd[idx] = None
-        return nlpd 
-    elif not isinstance(regressor, _modal_regressor):
-        try:
-            nlpd = _calculate_nlpd(regressor, input_values, evals)
-        except:
-            return None
-        return nlpd
+            results[idx] = _safe_regressor_metric_return(reg, evals[:, idx], handle_errors, 
+                metric_func, input_values, error_value
+            )
+        return results
+
+    return _safe_regressor_metric_return(regressor, evals, handle_errors, 
+        metric_func, input_values, error_value
+    )
+
+
+def _regressor_nlpd(regressor, input_values, evals):
+    """
+    Negative Log Predictive Density.
+
+    Only applicable for GPR-like regressors that support
+    predict(..., return_std=True).
+    """
+    return _apply_regressor_metric(
+        regressor,
+        input_values,
+        evals,
+        _calculate_nlpd,
+        handle_errors=True,
+        error_value=np.nan,
+    )
+
+
+def _regressor_rmse(regressor, input_values, evals):
+    return _apply_regressor_metric(
+        regressor,
+        input_values,
+        evals,
+        _calculate_rmse,
+    )
 
 
 def _calculate_nlpd(gpr, input_values, y_true):
@@ -962,32 +1005,16 @@ def _calculate_nlpd(gpr, input_values, y_true):
 
     var = std ** 2
     residuals = y_true - mu
-    nlpd = 0.5 * np.mean( np.log(2 * np.pi * var) + (residuals ** 2) / var)
-    
-    return nlpd
+
+    return 0.5 * np.mean(
+        np.log(2 * np.pi * var) + (residuals ** 2) / var
+    )
 
 
-def _mse(regressor, input_values, evals):
-    if isinstance(regressor, _modal_regressor):
-        mse = np.zeros(evals.shape[1])
-        for idx, reg in enumerate(regressor._mode_regressors):
-            mse[idx] = _calculate_mse(reg, input_values, evals[:, idx])
-    else:
-        mse = _calculate_mse(regressor, input_values, evals)
-    return mse
-
-
-def _calculate_mse(regressor, input_values, y_true):
+def _calculate_rmse(regressor, input_values, y_true):
     y_pred = regressor.predict(input_values)
-    residuals = y_true - y_pred
-    mse = np.mean( residuals ** 2)
-    return mse
-    
-    
-def rmse(regressors, input_values, evals):
-    rmse = _mse(regressors, input_values, evals) ** 0.5
-    return rmse
-    
+    return _root_mean_squared_error(y_true, y_pred)
+   
     
 def _convert_instances_to_stats(scores):
     score_stats = OrderedDict()
