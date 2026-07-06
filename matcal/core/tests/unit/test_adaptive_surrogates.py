@@ -407,13 +407,18 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
                                                    )        
         self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)        
         
-        self.assertEqual(len(self.study.surrogate.average_error_history), 1)
+        self.assertEqual(len(self.study.surrogate.RMSE_history), 1)
         self.assertEqual(len(self.study.surrogate.max_error_history), 1)
 
-        expected_l2 = np.linalg.norm(self.study._test_responses -
-                                    DoubleParamSurrogate()(self.study._test_params))
-        expected_l2 /= self.study._test_responses.shape[1]
-        self.assertAlmostEqual(self.study.surrogate.average_error_history[0], expected_l2)
+        expected_rmse = np.sqrt(
+            np.mean(
+                (
+                    self.study._test_responses
+                    - DoubleParamSurrogate()(self.study._test_params)
+                ) ** 2
+            )
+        )
+        self.assertAlmostEqual(self.study.surrogate.RMSE_history[0], expected_rmse)
 
     @unittest.skipIf(not HAS_PYAPPROX,
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
@@ -428,8 +433,8 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertIsNotNone(self.study.results)
         sur_file = self.study.surrogate_save_filename
         sur_results = matcal_load(sur_file)
-        self.assertEqual(self.study.surrogate.average_error_history, 
-                         sur_results.average_error_history)
+        self.assertEqual(self.study.surrogate.RMSE_history, 
+                         sur_results.RMSE_history)
         self.assertEqual(self.study.surrogate.sample_count_history, 
                          sur_results.sample_count_history)
         self.assertEqual(self.study.surrogate.max_error_history, 
@@ -446,7 +451,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
 
     def test_default_goals(self):
         self.assertAlmostEqual(
-            self.study._average_l2_error_goal,
+            self.study._rmse_goal,
             1e-2,
         )
         self.assertAlmostEqual(
@@ -455,15 +460,15 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         )
 
     def test_setting_both_goals(self):
-        new_avg = 5e-3
+        new_rmse = 5e-3
         new_max = 2e-3
         self.study.set_error_stopping_criteria(
-            average_l2_error_goal=new_avg,
+            rmse_goal=new_rmse,
             max_abs_error_goal=new_max,
         )
         self.assertAlmostEqual(
-            self.study._average_l2_error_goal,
-            new_avg,
+            self.study._rmse_goal,
+            new_rmse,
         )
         self.assertAlmostEqual(
             self.study._max_abs_error_goal,
@@ -471,13 +476,13 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         )
 
     def test_setting_one_goal_keeps_other_untouched(self):
-        new_avg = 1e-4
+        new_rmse = 1e-4
         self.study.set_error_stopping_criteria(
-            average_l2_error_goal=new_avg
+            rmse_goal=new_rmse
         )
         self.assertAlmostEqual(
-            self.study._average_l2_error_goal,
-            new_avg,
+            self.study._rmse_goal,
+            new_rmse,
         )
         self.assertAlmostEqual(
             self.study._max_abs_error_goal,
@@ -485,14 +490,14 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         )
     def test_invalid_non_numeric_raises_type_error(self):
         with self.assertRaises(TypeError):
-            self.study.set_error_stopping_criteria(average_l2_error_goal="bad")
+            self.study.set_error_stopping_criteria(rmse_goal="bad")
 
         with self.assertRaises(TypeError):
             self.study.set_error_stopping_criteria(max_abs_error_goal=[1, 2])
 
     def test_invalid_non_positive_raises_value_error(self):
         with self.assertRaises(ValueError):
-            self.study.set_error_stopping_criteria(average_l2_error_goal=0.0)
+            self.study.set_error_stopping_criteria(rmse_goal=0.0)
 
         with self.assertRaises(ValueError):
             self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
@@ -765,7 +770,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     def test_initialization(self):
         surrogate = self._make_surrogate()
         self.assertEqual(surrogate._surrogates, [])
-        self.assertEqual(surrogate._average_errors, [])
+        self.assertEqual(surrogate._root_mean_squared_errors, [])
         self.assertEqual(surrogate._max_errors, [])
         self.assertEqual(surrogate._sample_counts, [])
         self.assertIsNone(surrogate.current_surrogate)
@@ -774,7 +779,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         """
         Verify that _add_iteration:
         * stores a deep‑copied surrogate,
-        * computes average L2 and max ∞ errors correctly,
+        * computes RMSE and max ∞ errors correctly,
         * records the supplied sample count.
         """
         surrogate = self._make_surrogate()
@@ -795,10 +800,15 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         # 2. The stored surrogate is a *deep* copy (i.e. not the same object)
         self.assertIsNot(surrogate._surrogates[0], sur)
 
-        # 3. Average L2 error = ||R_test - 0||_2 / N
-        # R_test shape (2, 1) → norm = sqrt(1^2 + 2^2) = sqrt(5)
-        expected_l2 = np.linalg.norm(np.array([[1.0], [2.0]]) - np.array([[0], [0]])) / 1
-        self.assertAlmostEqual(surrogate._average_errors[0], expected_l2)
+        expected_rmse = np.sqrt(
+            np.mean(
+                (
+                    np.array([[1.0], [2.0]])
+                    - np.array([[0.0], [0.0]])
+                ) ** 2
+            )
+        )        
+        self.assertAlmostEqual(surrogate._root_mean_squared_errors[0], expected_rmse)
 
         # 4. Max ∞ error = max(|R_test - 0|) = 2.0
         self.assertAlmostEqual(surrogate._max_errors[0], 2.0)
@@ -807,7 +817,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertEqual(surrogate._sample_counts[0], nsamples)
 
     def test_property_getters(self):
-        """current_surrogate, average_error_history, max_error_history, sample_count_history."""
+        """current_surrogate, RMSE_history, max_error_history, sample_count_history."""
         surrogate = self._make_surrogate()
 
         sur = ConstantSurrogate(n_parameters=2, constant=0.0)
@@ -817,7 +827,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertIsInstance(surrogate.current_surrogate, ConstantSurrogate)
 
         # History properties should match the internal lists
-        self.assertEqual(surrogate.average_error_history, surrogate._average_errors)
+        self.assertEqual(surrogate.RMSE_history, surrogate._root_mean_squared_errors)
         self.assertEqual(surrogate.max_error_history, surrogate._max_errors)
         self.assertEqual(surrogate.sample_count_history, surrogate._sample_counts)
 
@@ -950,28 +960,28 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         surrogate._add_iteration(ConstantSurrogate(2, constant=2.0), nsamples=30)
 
         # Histories should have length 3
-        self.assertEqual(len(surrogate.average_error_history), 3)
+        self.assertEqual(len(surrogate.RMSE_history), 3)
         self.assertEqual(len(surrogate.max_error_history), 3)
         self.assertEqual(len(surrogate.sample_count_history), 3)
 
         # Verify sample‑count history matches the values we passed
         self.assertEqual(surrogate.sample_count_history, [10, 20, 30])
 
-        # Compute expected average L2 errors manually for sanity check
+        # Compute expected RMSE scores manually for sanity check
         R_test = surrogate._test_responses  # shape (2, 1)
         # Helper to compute error for a given constant
-        def expected_avg(const):
+        def expected_rmse(const):
             diff = R_test - const
-            return np.linalg.norm(diff) / 1
+            return np.sqrt(np.mean(diff ** 2))
 
         # Expected values
-        exp0 = expected_avg(0.0)
-        exp1 = expected_avg(1.0)
-        exp2 = expected_avg(2.0)
+        exp0 = expected_rmse(0.0)
+        exp1 = expected_rmse(1.0)
+        exp2 = expected_rmse(2.0)
 
-        self.assertAlmostEqual(surrogate.average_error_history[0], exp0)
-        self.assertAlmostEqual(surrogate.average_error_history[1], exp1)
-        self.assertAlmostEqual(surrogate.average_error_history[2], exp2)
+        self.assertAlmostEqual(surrogate.RMSE_history[0], exp0)
+        self.assertAlmostEqual(surrogate.RMSE_history[1], exp1)
+        self.assertAlmostEqual(surrogate.RMSE_history[2], exp2)
 
         # Max errors should be max absolute difference
         self.assertAlmostEqual(surrogate.max_error_history[0], np.max(np.abs(R_test - 0.0)))
@@ -1004,13 +1014,13 @@ class _FakeSurrogate:
     stopping‑criterion method.
     """
     def __init__(self):
-        self._average_errors = []   # filled by the test
+        self._root_mean_squared_errors = []   # filled by the test
         self._max_errors = []       # filled by the test
         self._r2_scores = []
 
     @property
-    def average_error_history(self):
-        return self._average_errors
+    def RMSE_history(self):
+        return self._root_mean_squared_errors
 
     @property
     def max_error_history(self):
@@ -1038,7 +1048,7 @@ class _TestStudyStoppingCriteria(SparseGridAdaptiveSurrogateStudy):
     def __init__(self):
         # Do **not** call the parent __init__ (it expects a full ParameterCollection)
         # Initialise only the fields that the stopping‑criterion method inspects.
-        self._average_l2_error_goal = 1e-2   # default in the parent class
+        self._rmse_goal = 1e-2   # default in the parent class
         self._max_abs_error_goal = 1e-1
         self._surrogate = _FakeSurrogate()
         self._results = _FakeResults()
@@ -1057,7 +1067,7 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
 
     def test_no_stop_on_first_batch(self):
         # populate error histories with values *below* the goals – they must be ignored
-        self.study._surrogate._average_errors = [0.0]   # below 1e‑2
+        self.study._surrogate._root_mean_squared_errors = [0.0]   # below 1e‑2
         self.study._surrogate._max_errors = [0.0]       # below 1e‑1
         self.study._surrogate._r2_scores = [0.0]
         self.study._results.number_of_evaluations = 0   # far below max_training_samples
@@ -1065,8 +1075,8 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         should_stop = self.study._stopping_criterion_met(training_batch_number=0)
         self.assertFalse(should_stop, "Stopping should NOT be triggered on the first batch")
 
-    def test_stop_on_average_l2_error(self):
-        self.study._surrogate._average_errors = [5e-3]   # < 1e‑2 goal
+    def test_stop_on_rmse(self):
+        self.study._surrogate._root_mean_squared_errors = [5e-3]   # < 1e‑2 goal
         self.study._surrogate._max_errors = [0.5]       # > goal (irrelevant)
         self.study._surrogate._r2_scores = [0.5]
 
@@ -1074,10 +1084,10 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
 
         should_stop = self.study._stopping_criterion_met(training_batch_number=2)
         self.assertTrue(should_stop,
-                        "Stopping should be triggered when avg L2 error ≤ goal after >1 batch")
+                        "Stopping should be triggered when RMSE ≤ goal after >1 batch")
 
     def test_stop_on_max_absolute_error(self):
-        self.study._surrogate._average_errors = [0.5]   # > goal (doesn't matter)
+        self.study._surrogate._root_mean_squared_errors = [0.5]   # > goal (doesn't matter)
         self.study._surrogate._max_errors = [5e-2]      # < 1e‑1 goal
         self.study._surrogate._r2_scores = [0.5]
 
@@ -1089,7 +1099,7 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
 
     def test_stop_on_max_training_samples(self):
         # Set error histories to values that would *not* normally trigger a stop
-        self.study._surrogate._average_errors = [1.0]   # > goal
+        self.study._surrogate._root_mean_squared_errors = [1.0]   # > goal
         self.study._surrogate._max_errors = [1.0]      # > goal
         self.study._surrogate._r2_scores = [0.5]
 
@@ -1106,7 +1116,7 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
 
 
     def test_no_stop_when_all_conditions_fail(self):
-        self.study._surrogate._average_errors = [0.2]   # > 1e‑2
+        self.study._surrogate._root_mean_squared_errors = [0.2]   # > 1e‑2
         self.study._surrogate._max_errors = [0.3]      # > 1e‑1
         self.study._surrogate._r2_scores = [0.5]
         self.study._max_training_samples = 1000

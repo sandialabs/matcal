@@ -23,7 +23,7 @@ from matcal.core.utilities import (check_value_is_positive_integer,
                                    check_value_is_nonnegative_integer, 
                                    check_item_is_correct_type)
 from matcal.core.serializer_wrapper import matcal_load, matcal_save
-from matcal.core.surrogates import (_average_l2_error_norm, 
+from matcal.core.surrogates import (_root_mean_squared_error, 
                                     _max_error_inf_norm, 
                                     _process_surrogate_args_call, 
                                     _check_params_in_range, 
@@ -185,7 +185,7 @@ class AdaptiveSurrogate:
         """
 
         self._surrogates: list = []         
-        self._average_errors: list[float] = [] 
+        self._root_mean_squared_errors: list[float] = [] 
         self._max_errors: list[float] = []
         self._r2_scores: list[float] = []    
         self._sample_counts: list[int] = []    
@@ -220,11 +220,11 @@ class AdaptiveSurrogate:
         ) -> None:
         self._surrogates.append(copy.deepcopy(surrogate))
         surrogate_values = self(self._test_params, batch_evaluate=True)[self._target_field_name]
-        average_l2_error = _average_l2_error_norm(self._test_responses, 
+        rmse = _root_mean_squared_error(self._test_responses, 
                                                   surrogate_values)
         max_abs_error = _max_error_inf_norm( self._test_responses, surrogate_values)
 
-        self._average_errors.append(average_l2_error)
+        self._root_mean_squared_errors.append(rmse)
         self._max_errors.append(max_abs_error)
         if self._test_responses.shape[1] > 1:
             score = r2_score(self._test_responses, surrogate_values)
@@ -239,19 +239,27 @@ class AdaptiveSurrogate:
         return self._surrogates[-1] if self._surrogates else None
 
     @property
-    def average_error_history(self):
-        """Returns the list of errors for the average error history. The average
-        error is calculated using
+    def RMSE_history(self):
+        """Returns the history of the root mean squared errors (RMSE) for 
+        the surrogate as training progressed. The RMSE is calculated using
        
         .. math::
-            E_{avg}
-            = \\frac{\\lVert \\mathbf{R}_{\\text{test}} - \\hat{\\mathbf{R}} \\rVert_{2}}
-               {N}
 
-        where :math:`N` is the number of QoIs in the response, :math:`{R}_{\\text{test}}` is the 
-        test responses and :math:`{\\hat{R}}` is the surrogate responses. 
+            \\mathrm{RMSE}
+            =
+            \\sqrt{
+            \\frac{1}{N_{\\text{samples}}N_{\\text{qoi}}}
+            \\sum_{i=1}^{N_{\\text{samples}}}
+            \\sum_{j=1}^{N_{\\text{qoi}}}
+            \\left(
+            R_{\\text{test},ij} - \\hat{R}_{ij}
+            \\right)^2
+            }
+
+        where :math:`R_{\\text{test}}` is the test response and
+        :math:`\\hat{R}` is the surrogate response.
         """
-        return self._average_errors
+        return self._root_mean_squared_errors
 
     @property
     def max_error_history(self):
@@ -438,7 +446,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._training_batch_number = 1
         self.set_max_training_samples()
 
-        self._average_l2_error_goal = None
+        self._rmse_goal = None
         self._max_abs_error_goal = None
         self.set_error_stopping_criteria()
 
@@ -446,27 +454,27 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._test_group_random_seed = None
 
     def set_error_stopping_criteria(self,
-                                    average_l2_error_goal: float=1e-2,
+                                    rmse_goal: float=1e-2,
                                     max_abs_error_goal: float=1e-1):
         """
         Set the error thresholds that determine when the adaptive surrogate
         training stops.
 
         When
-        the *average L2* error falls below ``average_l2_error_goal`` **or** the
+        the *rmse* falls below ``rmse_goal`` **or** the
         *maximum absolute* error falls below ``max_abs_error_goal`` the training
         loop terminates (provided at least two batches have been evaluated).
 
-        :param average_l2_error_goal: Desired upper bound for the average L2
+        :param rmse_goal: Desired upper bound for the root mean squared
             error. Must be a positive number. 
-        :type average_l2_error_goal: float, optional
+        :type rmse_goal: float, optional
 
         :param max_abs_error_goal: Desired upper bound for the maximum absolute
             error. Must be a positive number. 
         :type max_abs_error_goal: float, optional
         """
-        check_value_is_positive_real(average_l2_error_goal, "average_l2_error_goal")
-        self._average_l2_error_goal = float(average_l2_error_goal)
+        check_value_is_positive_real(rmse_goal, "rmse_goal")
+        self._rmse_goal = float(rmse_goal)
 
         check_value_is_positive_real(max_abs_error_goal, "max_abs_error_goal")
         self._max_abs_error_goal = float(max_abs_error_goal)
@@ -822,9 +830,9 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def _stopping_criterion_met(self, training_batch_number, stop=False):
         if training_batch_number > 0:
-            if np.abs(self._surrogate.average_error_history[-1]) <= self._average_l2_error_goal:
-                logger.info(f"Average L2 norm score converged! "+
-                            f"\nFinal L2 norm error: {self._surrogate.average_error_history[-1]}")
+            if np.abs(self._surrogate.RMSE_history[-1]) <= self._rmse_goal:
+                logger.info(f"Root mean squared error converged! "+
+                            f"\nFinal RMSE: {self._surrogate.RMSE_history[-1]}")
                 stop=True
             elif np.abs(self._surrogate.max_error_history[-1]) <=self._max_abs_error_goal:
                 logger.info(f"Max absolute error score converged! "+
@@ -838,7 +846,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             logger.info(f"Surrogate trained on {self._results.number_of_evaluations} samples.")
         else:
             logger.info("Surrogate not converged yet.")
-        logger.info(f"Average error score: {self._surrogate.average_error_history[-1]}")
+        logger.info(f"Root mean squared error: {self._surrogate.RMSE_history[-1]}")
         logger.info(f"Max error score: {self._surrogate.max_error_history[-1]}")
         logger.info(f"R2 score: {self._surrogate.score()}\n")
         return stop

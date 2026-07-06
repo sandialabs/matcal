@@ -23,7 +23,8 @@ from matcal.core.surrogates import (_ReconstructionDecomposition,
                                     _tune_data_decomposition, 
                                     _WorstEvaluations, _select_state_data, _select_model, 
                                     _apply_preprocessing_function, 
-                                    SurrogateGenerator)
+                                    SurrogateGenerator, 
+                                    _root_mean_squared_error)
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.utilities_for_tests import _generate_singe_model_single_state_mock_eval_hist
@@ -102,6 +103,17 @@ class TestSurrogateFunctions(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
+
+    def test_root_mean_squared_error(self):
+        test_values = np.array([[1.0, 2.0],
+                                [3.0, 4.0]])
+        surrogate_values = np.array([[0.0, 2.0],
+                                     [5.0, 1.0]])
+
+        expected = np.sqrt(np.mean((test_values - surrogate_values) ** 2))
+        actual = _root_mean_squared_error(test_values, surrogate_values)
+
+        self.assertAlmostEqual(actual, expected)
 
     def test_parse_study_results_returns_parameters_and_qois(self):
         p_names = ['a', 'b']
