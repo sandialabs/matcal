@@ -81,7 +81,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         sg_study.restart()
         sg_study.launch()
 
-        self.assertLess(sg_study.surrogate.RMSE_history[-1], 1e-2)
+        self.assertLess(sg_study.surrogate.rmse_history[-1], 1e-2)
         self.assertLess(sg_study.surrogate.max_error_history[-1], 1e-1)
 
     @unittest.skipIf(
@@ -99,7 +99,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         sg_study.add_evaluation_set(simple_py_model)
         sg_study.launch()
 
-        self.assertLess(sg_study.surrogate.RMSE_history[-1], 1e-2)
+        self.assertLess(sg_study.surrogate.rmse_history[-1], 1e-2)
         self.assertLess(sg_study.surrogate.max_error_history[-1], 1e-1)
 
     @unittest.skipIf(
@@ -120,7 +120,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         sg_study.launch()
 
         # linear piecewise may converge slower; keep thresholds reasonable
-        self.assertLess(sg_study.surrogate.RMSE_history[-1], 1e-2)
+        self.assertLess(sg_study.surrogate.rmse_history[-1], 1e-2)
         self.assertLess(sg_study.surrogate.max_error_history[-1], 1e-1)
 
     @unittest.skipIf(
@@ -140,7 +140,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         sg_study.add_evaluation_set(simple_py_model)
         sg_study.launch()
 
-        self.assertLess(sg_study.surrogate.RMSE_history[-1], 1e-2)
+        self.assertLess(sg_study.surrogate.rmse_history[-1], 1e-2)
         self.assertLess(sg_study.surrogate.max_error_history[-1], 1e-1)
 
     @unittest.skipIf(
@@ -263,7 +263,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         sg_study.add_evaluation_set(simple_py_model)
         sg_study.launch()
 
-        self.assertLess(sg_study.surrogate.RMSE_history[-1], 5e-2)
+        self.assertLess(sg_study.surrogate.rmse_history[-1], 5e-2)
 
     @unittest.skipIf(
         not HAS_PYAPPROX,
@@ -346,7 +346,7 @@ class TestVoronoiAdaptiveSurrogate(MatcalUnitTest):
         study.add_evaluation_set(simple_py_model)
         study.launch()
 
-        self.assertLess(study.surrogate.RMSE_history[-1], 1e-2)
+        self.assertLess(study.surrogate.rmse_history[-1], 1e-2)
         self.assertLess(study.surrogate.max_error_history[-1], 1e-1)
 
 

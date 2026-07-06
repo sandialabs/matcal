@@ -407,7 +407,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
                                                    )        
         self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)        
         
-        self.assertEqual(len(self.study.surrogate.RMSE_history), 1)
+        self.assertEqual(len(self.study.surrogate.rmse_history), 1)
         self.assertEqual(len(self.study.surrogate.max_error_history), 1)
 
         expected_rmse = np.sqrt(
@@ -418,7 +418,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
                 ) ** 2
             )
         )
-        self.assertAlmostEqual(self.study.surrogate.RMSE_history[0], expected_rmse)
+        self.assertAlmostEqual(self.study.surrogate.rmse_history[0], expected_rmse)
 
     @unittest.skipIf(not HAS_PYAPPROX,
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
@@ -433,8 +433,8 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertIsNotNone(self.study.results)
         sur_file = self.study.surrogate_save_filename
         sur_results = matcal_load(sur_file)
-        self.assertEqual(self.study.surrogate.RMSE_history, 
-                         sur_results.RMSE_history)
+        self.assertEqual(self.study.surrogate.rmse_history, 
+                         sur_results.rmse_history)
         self.assertEqual(self.study.surrogate.sample_count_history, 
                          sur_results.sample_count_history)
         self.assertEqual(self.study.surrogate.max_error_history, 
@@ -817,7 +817,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertEqual(surrogate._sample_counts[0], nsamples)
 
     def test_property_getters(self):
-        """current_surrogate, RMSE_history, max_error_history, sample_count_history."""
+        """current_surrogate, rmse_history, max_error_history, sample_count_history."""
         surrogate = self._make_surrogate()
 
         sur = ConstantSurrogate(n_parameters=2, constant=0.0)
@@ -827,7 +827,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertIsInstance(surrogate.current_surrogate, ConstantSurrogate)
 
         # History properties should match the internal lists
-        self.assertEqual(surrogate.RMSE_history, surrogate._root_mean_squared_errors)
+        self.assertEqual(surrogate.rmse_history, surrogate._root_mean_squared_errors)
         self.assertEqual(surrogate.max_error_history, surrogate._max_errors)
         self.assertEqual(surrogate.sample_count_history, surrogate._sample_counts)
 
@@ -960,7 +960,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         surrogate._add_iteration(ConstantSurrogate(2, constant=2.0), nsamples=30)
 
         # Histories should have length 3
-        self.assertEqual(len(surrogate.RMSE_history), 3)
+        self.assertEqual(len(surrogate.rmse_history), 3)
         self.assertEqual(len(surrogate.max_error_history), 3)
         self.assertEqual(len(surrogate.sample_count_history), 3)
 
@@ -979,9 +979,9 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         exp1 = expected_rmse(1.0)
         exp2 = expected_rmse(2.0)
 
-        self.assertAlmostEqual(surrogate.RMSE_history[0], exp0)
-        self.assertAlmostEqual(surrogate.RMSE_history[1], exp1)
-        self.assertAlmostEqual(surrogate.RMSE_history[2], exp2)
+        self.assertAlmostEqual(surrogate.rmse_history[0], exp0)
+        self.assertAlmostEqual(surrogate.rmse_history[1], exp1)
+        self.assertAlmostEqual(surrogate.rmse_history[2], exp2)
 
         # Max errors should be max absolute difference
         self.assertAlmostEqual(surrogate.max_error_history[0], np.max(np.abs(R_test - 0.0)))
@@ -1019,7 +1019,7 @@ class _FakeSurrogate:
         self._r2_scores = []
 
     @property
-    def RMSE_history(self):
+    def rmse_history(self):
         return self._root_mean_squared_errors
 
     @property

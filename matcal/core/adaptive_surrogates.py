@@ -239,7 +239,7 @@ class AdaptiveSurrogate:
         return self._surrogates[-1] if self._surrogates else None
 
     @property
-    def RMSE_history(self):
+    def rmse_history(self):
         """Returns the history of the root mean squared errors (RMSE) for 
         the surrogate as training progressed. The RMSE is calculated using
        
@@ -830,9 +830,9 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def _stopping_criterion_met(self, training_batch_number, stop=False):
         if training_batch_number > 0:
-            if np.abs(self._surrogate.RMSE_history[-1]) <= self._rmse_goal:
+            if np.abs(self._surrogate.rmse_history[-1]) <= self._rmse_goal:
                 logger.info(f"Root mean squared error converged! "+
-                            f"\nFinal RMSE: {self._surrogate.RMSE_history[-1]}")
+                            f"\nFinal RMSE: {self._surrogate.rmse_history[-1]}")
                 stop=True
             elif np.abs(self._surrogate.max_error_history[-1]) <=self._max_abs_error_goal:
                 logger.info(f"Max absolute error score converged! "+
@@ -846,7 +846,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             logger.info(f"Surrogate trained on {self._results.number_of_evaluations} samples.")
         else:
             logger.info("Surrogate not converged yet.")
-        logger.info(f"Root mean squared error: {self._surrogate.RMSE_history[-1]}")
+        logger.info(f"Root mean squared error: {self._surrogate.rmse_history[-1]}")
         logger.info(f"Max error score: {self._surrogate.max_error_history[-1]}")
         logger.info(f"R2 score: {self._surrogate.score()}\n")
         return stop
