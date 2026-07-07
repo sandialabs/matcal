@@ -553,7 +553,7 @@ class MatcalStandardModelUnitTestNewBase:
             self.assertAlmostEqual(cg.get_acceptable_relative_residual(), 1e-5)
 
             with self.assertRaises(ValueError):
-                model.set_convergence_tolerance(1e-6, 1e-7)
+                model.set_convergence_tolerance(1e-6, -1.0)
 
             model.set_convergence_tolerance(1e-6, 1e-5)
             self.assertEqual(cg.get_target_relative_residual(), 1e-6)
@@ -567,7 +567,7 @@ class MatcalStandardModelUnitTestNewBase:
             self.assertAlmostEqual(cg.get_acceptable_relative_residual(), 1e-4)
 
             with self.assertRaises(ValueError):
-                model.set_convergence_tolerance(1e-8, acceptable_residual=1e-6)
+                model.set_convergence_tolerance(1e-8, acceptable_residual=-1.0)
 
             model.set_convergence_tolerance(1e-8, acceptable_residual=1e-5)
             self.assertAlmostEqual(cg.get_acceptable_residual(), 1e-5)
@@ -584,7 +584,11 @@ class MatcalStandardModelUnitTestNewBase:
             with self.assertRaises(TypeError):
                 model.set_boundary_condition_scale_factor("invalid type")
 
+        def _get_loading_function_block_string(self, model):
+            func_block = model.input_file.subblocks[model.input_file._load_bc_function_name]
+            return func_block.get_string()
 
+        
 class MatcalThreeDimensionalStandardModelUnitTestNewBase:
     def __init__():
         pass

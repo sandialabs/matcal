@@ -32,10 +32,19 @@ the following keyword arguments be provided to their constructor.
    of the specimen gauge section to the ends of the gauge length where the gauge width/diameter 
    increase by this value.
 #. grip_contact_length - distance that the grips contact the specimen in the grip section.
-#. necking_region - the fraction of the extensometer length where necking is expected 
+#. necking_region (optional) - the fraction of the extensometer length where necking is expected 
    to occur. This is used for output and mesh refinement for some of the *mesh_methods*.
 #. element_size - target element edge length 
 #. mesh_method - user specified meshing method options
+
+The *necking_region* geometry input is optional for these models. It specifies the
+fraction of the extensometer length where necking is expected to occur and is used
+for output and mesh refinement for some of the *mesh_methods*. If the user does not
+provide *necking_region* or provides a value of zero, MatCal automatically selects
+a default value. For the uniaxial tension models, the preferred default is 0.375.
+If 0.375 is outside the allowable range for the specified geometry and mesh size,
+MatCal instead selects the midpoint of the valid interval for *necking_region*.
+If the user provides a valid, nonzero *necking_region*, that value is used directly.
 
 Keyword arguments specific to the :class:`~matcal.sierra.models.RoundUniaxialTensionModel` 
 include those shown below.

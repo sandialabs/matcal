@@ -522,10 +522,16 @@ class UniaxialLoadingGeometry(GeometryBase):
     _block_names = ["grip_section", "gauge_section", "necking_section"]
 
     class Parameters(GeometryParameters):
-        _required_geometry_parameters = ["extensometer_length", "gauge_length", 
-                                        "total_length", "fillet_radius", "element_size",
-                                         "mesh_method", "necking_region", "grip_contact_length", 
-                                         "element_type"]
+        _required_geometry_parameters = [
+            "extensometer_length",
+            "gauge_length",
+            "total_length",
+            "fillet_radius",
+            "element_size",
+            "mesh_method",
+            "grip_contact_length",
+            "element_type",
+        ]
 
         @abstractproperty
         def _model_type_name(self):
@@ -557,9 +563,7 @@ class UniaxialLoadingGeometry(GeometryBase):
                 self._parameters["full_field_window_width"] = 0
                 
         def _check_necking_region_parameters(self):
-            necking_region_upper_limit = (self._parameters["extensometer_length"]-2*self._parameters["element_size"])/self._parameters["extensometer_length"]
-            necking_region_lower_limit = 2*self._parameters["element_size"]/self._parameters["extensometer_length"]
-
+            necking_region_lower_limit, necking_region_upper_limit = self._get_necking_region_parameter_limits()
             if necking_region_upper_limit > necking_region_lower_limit:
                 necking_region_err_message = f"The necking region must be between {necking_region_lower_limit} "\
                                              f"and {necking_region_upper_limit} for "\
@@ -571,10 +575,25 @@ class UniaxialLoadingGeometry(GeometryBase):
                     "Refine mesh or update the specimen dimensions."
                 raise self.ValueError(err_message)
 
+        def _get_necking_region_parameter_limits(self):
+            necking_region_upper_limit = (self._parameters["extensometer_length"]-2*self._parameters["element_size"])/self._parameters["extensometer_length"]
+            necking_region_lower_limit = 2*self._parameters["element_size"]/self._parameters["extensometer_length"]
+            return necking_region_lower_limit, necking_region_upper_limit
 
         def _set_derived_parameters(self):
+            if ("necking_region" not in self._parameters or
+                    self._parameters["necking_region"] is None or
+                    self._parameters["necking_region"] == 0):
+                necking_region_limits = self._get_necking_region_parameter_limits()
+                necking_region_lower_limit, necking_region_upper_limit = necking_region_limits
+                default_necking_region_limit = 0.375
+                if (necking_region_lower_limit < default_necking_region_limit and
+                    default_necking_region_limit < necking_region_upper_limit):
+                    self._parameters["necking_region"] = 0.375
+                else:
+                    self._parameters["necking_region"] = (necking_region_lower_limit+
+                                                          necking_region_upper_limit)/2
             self._parameters["blend_height"] = self._calculate_blend_height()
-
         @property
         def gauge_length(self):
             return np.double(self._parameters["gauge_length"])
@@ -761,86 +780,136 @@ class RoundNotchedTensionGeometry(UniaxialLoadingGeometry):
     _journal_filename = "cubit_round_notched_tension.jou"
 
     class Parameters(UniaxialLoadingGeometry.Parameters):
-        _required_geometry_parameters = (["gauge_radius", "grip_radius", "notch_gauge_radius",
-        "notch_radius"] + UniaxialLoadingGeometry.Parameters._required_geometry_parameters)
+        _required_geometry_parameters = [
+            "gauge_radius",
+            "grip_radius",
+            "notch_gauge_radius",
+            "notch_radius",
+        ] + UniaxialLoadingGeometry.Parameters._required_geometry_parameters
         _model_type_name = "round notched tension model"
 
         def _check_parameters(self):
             super()._check_parameters()
 
             element_max_size = self._parameters["notch_radius"]
-            element_size_err_message = ("The element size cannot be greater than "+
-                                    "the notch radius for the round notched tension models.")
-            self._verify_parameter_less_than_equal_to_value("element_size", element_max_size, 
-                                                            element_size_err_message)
+            element_size_err_message = (
+                "The element size cannot be greater than "
+                "the notch radius for the round notched tension models."
+            )
+            self._verify_parameter_less_than_equal_to_value(
+                "element_size", element_max_size, element_size_err_message
+            )
 
-            element_max_size = self._parameters["notch_gauge_radius"]/2
-            element_size_err_message = ("The element size cannot be greater than "+
-                        "half of the notch gauge radius for the round notched tension models.")
-            self._verify_parameter_less_than_equal_to_value("element_size", element_max_size,
-                                                             element_size_err_message)
+            element_max_size = self._parameters["notch_gauge_radius"] / 2
+            element_size_err_message = (
+                "The element size cannot be greater than "
+                "half of the notch gauge radius for the round notched tension models."
+            )
+            self._verify_parameter_less_than_equal_to_value(
+                "element_size", element_max_size, element_size_err_message
+            )
 
-            guage_radius_err_message = ("The gauge radius cannot be greater than the grip "+
-                                       "radius for the round notched tension model.")
-            self._verify_parameter_less_than_parameter("gauge_radius", "grip_radius",
-                                                        guage_radius_err_message)
+            guage_radius_err_message = (
+                "The gauge radius cannot be greater than the grip "
+                "radius for the round notched tension model."
+            )
+            self._verify_parameter_less_than_parameter(
+                "gauge_radius", "grip_radius", guage_radius_err_message
+            )
 
-            notch_gauge_radius_err_message = ("The notch gauge radius cannot be greater "+
-                "than the gauge radius for the round notched tension model." )           
-            self._verify_parameter_less_than_parameter("notch_gauge_radius", "gauge_radius",
-                                                        notch_gauge_radius_err_message)
+            notch_gauge_radius_err_message = (
+                "The notch gauge radius cannot be greater "
+                "than the gauge radius for the round notched tension model."
+            )
+            self._verify_parameter_less_than_parameter(
+                "notch_gauge_radius", "gauge_radius", notch_gauge_radius_err_message
+            )
 
-            notch_height_err_message = ("The notch height is too large for the specimen with "+
-                "the provided dimensions. The notch height must be less than the "+
-                "\"extensometer_length\". Check the specimen dimensions.")
-            self._verify_parameter_less_than_parameter("notch_height", "extensometer_length", 
-                                                       notch_height_err_message)
+            notch_height_err_message = (
+                "The notch height is too large for the specimen with "
+                "the provided dimensions. The notch height must be less than the "
+                "\"extensometer_length\". Check the specimen dimensions."
+            )
+            self._verify_parameter_less_than_parameter(
+                "notch_height", "extensometer_length", notch_height_err_message
+            )
 
             if self._parameters["element_type"] == "hex8":
                 self._check_hex_mesh_parameters()
-            
+
         def _check_hex_mesh_parameters(self):
             mesh_method = self._parameters["mesh_method"]
             if mesh_method == 5:
-                ele_size_max_limit = self._parameters["notch_gauge_radius"]/24
-                mesh_method_message = "If the element size is greater than 1/24 of "\
-                                      "the notch gauge radius,  you cannot use \"mesh_method\"=5."
-                self._verify_parameter_less_than_equal_to_value("element_size", ele_size_max_limit, 
-                                                                mesh_method_message)
-            elif mesh_method == 4 :
-                ele_size_max_limit = self._parameters["notch_gauge_radius"]/9
-                mesh_method_message = "If the element size is greater than 1/9 of "\
-                                      "the notch gauge radius,  you cannot use \"mesh_method\"=4."
-                self._verify_parameter_less_than_equal_to_value("element_size", ele_size_max_limit,
-                                                                 mesh_method_message)
+                ele_size_max_limit = self._parameters["notch_gauge_radius"] / 24
+                mesh_method_message = (
+                    "If the element size is greater than 1/24 of "
+                    "the notch gauge radius,  you cannot use \"mesh_method\"=5."
+                )
+                self._verify_parameter_less_than_equal_to_value(
+                    "element_size", ele_size_max_limit, mesh_method_message
+                )
+            elif mesh_method == 4:
+                ele_size_max_limit = self._parameters["notch_gauge_radius"] / 9
+                mesh_method_message = (
+                    "If the element size is greater than 1/9 of "
+                    "the notch gauge radius,  you cannot use \"mesh_method\"=4."
+                )
+                self._verify_parameter_less_than_equal_to_value(
+                    "element_size", ele_size_max_limit, mesh_method_message
+                )
             elif mesh_method > 1:
-                ele_size_max_limit = self._parameters["notch_gauge_radius"]/4
-                mesh_method_message = "If the element size is greater than 1/4 of "\
-                                      "the notch gauge radius,  you must use \"mesh_method\"=1."
-                self._verify_parameter_less_than_equal_to_value("element_size", ele_size_max_limit, 
-                                                                mesh_method_message)
+                ele_size_max_limit = self._parameters["notch_gauge_radius"] / 4
+                mesh_method_message = (
+                    "If the element size is greater than 1/4 of "
+                    "the notch gauge radius,  you must use \"mesh_method\"=1."
+                )
+                self._verify_parameter_less_than_equal_to_value(
+                    "element_size", ele_size_max_limit, mesh_method_message
+                )
 
         def _calculate_notch_height(self):
             notch_gauge_radius = self._parameters["notch_gauge_radius"]
             gauge_radius = self._parameters["gauge_radius"]
             notch_radius = self._parameters["notch_radius"]
-            notch_height = self._calculate_height_of_radius_transition(notch_gauge_radius,
-                                                                        gauge_radius, 
-                                                                        notch_radius)*2
+            notch_height = self._calculate_height_of_radius_transition(
+                notch_gauge_radius,
+                gauge_radius,
+                notch_radius,
+            ) * 2
             return notch_height
+
+        def _calculate_default_necking_region(self):
+            gauge_radius = self._parameters["gauge_radius"]
+            notch_radius = self._parameters["notch_radius"]
+            extensometer_length = self._parameters["extensometer_length"]
+            notch_height = self._parameters["notch_height"]
+
+            if notch_radius < gauge_radius:
+                necking_region_length = 1.2 * notch_radius
+            else:
+                necking_region_length = 0.375 * notch_height / 2.0
+
+            return 2.0 * necking_region_length / extensometer_length
 
         def _calculate_blend_height(self):
             fillet_radius = self._parameters["fillet_radius"]
             outer_length = self._parameters["grip_radius"]
             inner_length = self._parameters["gauge_radius"]
-            blend_height = self._calculate_height_of_radius_transition(inner_length, 
-                                                                       outer_length, 
-                                                                       fillet_radius)
+            blend_height = self._calculate_height_of_radius_transition(
+                inner_length,
+                outer_length,
+                fillet_radius,
+            )
             return blend_height
 
         def _set_derived_parameters(self):
-            super()._set_derived_parameters()
             self._parameters["notch_height"] = self._calculate_notch_height()
+
+            if ("necking_region" not in self._parameters or
+                    self._parameters["necking_region"] is None or
+                    self._parameters["necking_region"] == 0):
+                self._parameters["necking_region"] = self._calculate_default_necking_region()
+            super()._set_derived_parameters()
 
         @property
         def reference_area(self):
@@ -849,8 +918,12 @@ class RoundNotchedTensionGeometry(UniaxialLoadingGeometry):
 
     def __init__(self, mesh_filename, geometry_parameters, **kwargs):
         if not isinstance(geometry_parameters, self.Parameters):
-            raise TypeError("geometry_parameters is not an instance "+
-            "of RoundNotchedTensionLoadingGeometry.Parameters")
-        super().__init__(mesh_filename, geometry_parameters=geometry_parameters.parameters, 
-                         **kwargs)
-
+            raise TypeError(
+                "geometry_parameters is not an instance "
+                "of RoundNotchedTensionLoadingGeometry.Parameters"
+            )
+        super().__init__(
+            mesh_filename,
+            geometry_parameters=geometry_parameters.parameters,
+            **kwargs
+        )

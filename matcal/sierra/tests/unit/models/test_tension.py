@@ -12,14 +12,23 @@ from matcal.core.constants import (
 )
 from matcal.core.data import convert_dictionary_to_data, DataCollection
 from matcal.core.state import SolitaryState, State
+from matcal.core.tests.unit.comment_test_helpers import (
+    assert_data_set_index_comment,
+    assert_data_set_name_comment,
+    assert_selection_reason_comment,
+    assert_source_collection_comment,
+    assert_source_fields_comment,
+    assert_symmetry_displacement_comment,
+    assert_rate_ramp_comment
+)
 
 from matcal.cubit.geometry import GeometryParameters
+
 
 from matcal.sierra.tests.unit.models.model_tests_base import (
     MatcalThreeDimensionalStandardModelUnitTestNewBase,
     _parse_denominator_value_from_expression_string,
 )
-
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
     RoundUniaxialTensionModelForTests,
     RectangularUniaxialTensionModelForTests,
@@ -171,6 +180,47 @@ class UniaxialTensionStandardModelUnitTestBase:
             self.assertTrue(ff_output.has_global_output("x_contraction"))
             self.assertTrue(ff_output.has_global_output("z_contraction"))
 
+        def test_loading_function_comment_added_for_engineering_strain_time_history(self):
+            model = self.init_model()
+
+            data = convert_dictionary_to_data({
+                TIME_KEY: [0.0, 1.0],
+                ENG_STRAIN_KEY: [0.0, 0.2],
+            })
+            data.set_name("strain_history")
+            model.add_boundary_condition_data(data)
+
+            state = data.state
+            model._setup_state(state, build_mesh=False)
+
+            func_str = self._get_loading_function_block_string(model)
+            assert_source_fields_comment(self, func_str, ENG_STRAIN_KEY, uses_time=True)
+            assert_source_collection_comment(self, func_str)
+            assert_data_set_index_comment(self, func_str, 0)
+            assert_data_set_name_comment(self, func_str, "strain_history")
+            assert_selection_reason_comment(self, func_str, ENG_STRAIN_KEY, state.name)
+            assert_symmetry_displacement_comment(self, func_str)
+
+        def test_loading_function_comment_added_for_displacement_time_history(self):
+            model = self.init_model()
+
+            data = convert_dictionary_to_data({
+                TIME_KEY: [0.0, 1.0],
+                DISPLACEMENT_KEY: [0.0, 1.0],
+            })
+            data.set_name("disp_history")
+            model.add_boundary_condition_data(data)
+
+            state = data.state
+            model._setup_state(state, build_mesh=False)
+
+            func_str = self._get_loading_function_block_string(model)
+            assert_source_fields_comment(self, func_str, DISPLACEMENT_KEY, uses_time=True)
+            assert_source_collection_comment(self, func_str)
+            assert_data_set_index_comment(self, func_str, 0)
+            assert_data_set_name_comment(self, func_str, "disp_history")
+            assert_selection_reason_comment(self, func_str, DISPLACEMENT_KEY, state.name)
+            assert_symmetry_displacement_comment(self, func_str)
 
 class RoundUniaxialTensionModelUnitTests(
     UniaxialTensionStandardModelUnitTestBase.CommonTests,
@@ -204,7 +254,7 @@ class RoundUniaxialTensionModelUnitTests(
         params_by_precedence, param_source = model._get_parameters_by_precedence(SolitaryState())
         model._update_geometry_parameters(params_by_precedence, param_source)
 
-
+   
 class RectangularUniaxialTensionModelUnitTests(
     UniaxialTensionStandardModelUnitTestBase.CommonTests,
     RectangularUniaxialTensionModelForTests,
@@ -392,3 +442,46 @@ class RoundNotchedTensionModelUnitTests(
 
         denom = _parse_denominator_value_from_expression_string(line_str)
         self.assertAlmostEqual(denom, expected_area, places=14)
+
+    def test_loading_function_comment_added_for_engineering_strain_time_history(self):
+        model = self.init_model()
+
+        data = convert_dictionary_to_data({
+            TIME_KEY: [0.0, 1.0],
+            ENG_STRAIN_KEY: [0.0, 0.2],
+        })
+        data.set_name("notched_strain_history")
+        model.add_boundary_condition_data(data)
+
+        state = data.state
+        model._setup_state(state, build_mesh=False)
+
+        func_str = self._get_loading_function_block_string(model)
+        assert_source_fields_comment(self, func_str, ENG_STRAIN_KEY, uses_time=True)
+        assert_source_collection_comment(self, func_str)
+        assert_data_set_index_comment(self, func_str, 0)
+        assert_data_set_name_comment(self, func_str, "notched_strain_history")
+        assert_selection_reason_comment(self, func_str, ENG_STRAIN_KEY, state.name)
+        assert_symmetry_displacement_comment(self, func_str)
+
+    def test_loading_function_comment_added_for_displacement_rate_history(self):
+        model = self.init_model()
+
+        data = convert_dictionary_to_data({
+            DISPLACEMENT_KEY: [0.0, 1.0],
+        })
+        data.set_name("notched_disp_history")
+        state = State("disp_rate_state", **{DISPLACEMENT_RATE_KEY: 4.0})
+        data.set_state(state)
+
+        model.add_boundary_condition_data(data)
+        model._setup_state(state, build_mesh=False)
+
+        func_str = self._get_loading_function_block_string(model)
+        assert_source_fields_comment(self, func_str, DISPLACEMENT_KEY, uses_time=False)
+        assert_rate_ramp_comment(self, func_str, DISPLACEMENT_KEY, DISPLACEMENT_RATE_KEY)
+        assert_source_collection_comment(self, func_str)
+        assert_data_set_index_comment(self, func_str, 0)
+        assert_data_set_name_comment(self, func_str, "notched_disp_history")
+        assert_selection_reason_comment(self, func_str, DISPLACEMENT_KEY, state.name)
+        assert_symmetry_displacement_comment(self, func_str)
