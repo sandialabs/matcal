@@ -978,26 +978,65 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
     def test_call_with_explicit_surrogate_index(self):
         """
-        Verify that the `surrogate_index` argument correctly selects a
-        surrogate from the internal list.
+        Verify that the surrogate_index argument correctly selects retained
+        surrogates, and that the default call evaluates the best surrogate.
         """
-        # Create two distinct ConstantSurrogates with different constant outputs
         surrogate = self._make_surrogate()
-        first = ConstantSurrogate(n_parameters=2, constant=0)
+
+        first = ConstantSurrogate(n_parameters=2, constant=0.0)
         surrogate._add_iteration(first, 1)
 
-        # Append a second surrogate (constant = 9.9) manually
         second = ConstantSurrogate(n_parameters=2, constant=9.9)
         surrogate._add_iteration(second, 2)
 
-        # Index 0 should return the first surrogate (constant 0.0)
+        # Index 0 should return the first retained surrogate.
         out0 = surrogate(0.0, 0.0, surrogate_index=0)
         self.assertAlmostEqual(out0["target"][0], 0.0)
 
-        # Index -1 (default) should return the second surrogate (constant 9.9)
-        out_last = surrogate(0.0, 0.0)   # default = -1
+        # Explicit latest should return the most recent retained surrogate.
+        out_latest = surrogate(0.0, 0.0, surrogate_index="latest")
+        self.assertAlmostEqual(out_latest["target"][0], 9.9)
+
+        # Positional -1 should also return the last retained surrogate.
+        out_last = surrogate(0.0, 0.0, surrogate_index=-1)
         self.assertAlmostEqual(out_last["target"][0], 9.9)
 
+        # Default call should evaluate the best surrogate, not the latest.
+        # For test responses [[1], [2]], constant 0.0 is better than 9.9.
+        out_default = surrogate(0.0, 0.0)
+        self.assertAlmostEqual(out_default["target"][0], 0.0)
+
+        out_best = surrogate(0.0, 0.0, surrogate_index="best")
+        self.assertAlmostEqual(out_best["target"][0], 0.0)    
+
+    def test_call_defaults_to_best_surrogate_not_latest(self):
+        """
+        Verify that calling the adaptive surrogate without surrogate_index uses
+        the best retained surrogate, not the most recent retained surrogate.
+        """
+        surrogate = self._make_surrogate()
+
+        # Test responses are [[1.0], [2.0]].
+        #
+        # Iteration 0: constant 10.0 -> poor
+        # Iteration 1: constant 1.5  -> best
+        # Iteration 2: constant 8.0  -> latest, but not best
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=10)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=20)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=8.0), nsamples=30)
+
+        self.assertEqual(set(surrogate.stored_surrogates.keys()), {0, 1, 2})
+        self.assertEqual(surrogate.best_surrogate_iteration_index, 1)
+
+        default_result = surrogate(0.0, 0.0)
+        best_result = surrogate(0.0, 0.0, surrogate_index="best")
+        latest_result = surrogate(0.0, 0.0, surrogate_index="latest")
+        last_positional_result = surrogate(0.0, 0.0, surrogate_index=-1)
+
+        self.assertAlmostEqual(default_result["target"][0], 1.5)
+        self.assertAlmostEqual(best_result["target"][0], 1.5)
+        self.assertAlmostEqual(latest_result["target"][0], 8.0)
+        self.assertAlmostEqual(last_positional_result["target"][0], 8.0)
     # ------------------------------------------------------------------
     # 9. Full workflow: add several iterations and query histories -----
     # ------------------------------------------------------------------
@@ -1045,6 +1084,15 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertAlmostEqual(surrogate.max_error_history[0], np.max(np.abs(R_test - 0.0)))
         self.assertAlmostEqual(surrogate.max_error_history[1], np.max(np.abs(R_test - 1.0)))
         self.assertAlmostEqual(surrogate.max_error_history[2], np.max(np.abs(R_test - 2.0)))
+
+        self.assertEqual(len(surrogate.surrogate_records), 3)
+        self.assertEqual(len(surrogate.stored_surrogates), 3)
+        self.assertEqual(len(surrogate.stored_surrogate_scores), 3)
+
+        for idx, record in surrogate.stored_surrogate_scores.items():
+            self.assertEqual(record["iteration_index"], idx)
+            self.assertTrue(record["surrogate_stored"])
+            self.assertEqual(record["sample_count"], surrogate.sample_count_history[idx])
 
     def test_score_returns_nan_for_single_qoi(self):
         surrogate = self._make_surrogate()

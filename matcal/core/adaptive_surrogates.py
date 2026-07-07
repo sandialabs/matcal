@@ -740,11 +740,11 @@ class AdaptiveSurrogate:
 
         Supported ``surrogate_index`` values are:
 
-        * ``-1``: evaluate the last retained surrogate;
+        * ``-1``: evaluate the last retained surrogate.
         * ``"best"``: evaluate the best retained surrogate according to the
-          active storage metric;
-        * ``"latest"``: evaluate the most recent retained surrogate;
-        * a retained adaptive iteration index;
+          active storage metric. This is the default.
+        * ``"latest"``: evaluate the most recent retained surrogate.
+        * a retained adaptive iteration index.
         * a positional integer index into the retained surrogate collection.
 
         The accepted parameter calling patterns are the same as the underlying
@@ -841,7 +841,7 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
         results[self._indep_variable_name] = self._indep_variable_values
         return results
 
-    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False,
+    def __call__(self, *args, surrogate_index="best", batch_evaluate=False,
                  transpose=True, **kwargs):
         """
         Evaluate a retained PyApprox sparse-grid surrogate.
@@ -856,7 +856,7 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
 
         :param surrogate_index: Retained surrogate selector. Accepts ``-1``,
             ``"best"``, ``"latest"``, a retained iteration index, or a
-            positional retained-surrogate index.
+            positional retained-surrogate index. Defaults to ``"best"``.
         :type surrogate_index: int or str
 
         :param batch_evaluate: If ``True``, evaluate a batch of parameter
@@ -1290,12 +1290,10 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             test_params,
             test_responses,
             param_names,
-            self._bounds
-        )
-        self._surrogate.set_surrogate_storage_options(
-            best_n_surrogates=self._surrogate_storage_best_n_surrogates,
-            save_every_n_batches=self._surrogate_storage_every_n_batches,
-            score_metric=self._surrogate_storage_score_metric,
+            self._bounds, 
+            storage_best_n_surrogates=self._surrogate_storage_best_n_surrogates,
+            storage_every_n_batches=self._surrogate_storage_every_n_batches,
+            storage_score_metric=self._surrogate_storage_score_metric,
         )
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
         return super().launch()
