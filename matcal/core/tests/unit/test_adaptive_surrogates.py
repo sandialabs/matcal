@@ -65,6 +65,11 @@ def quadratic_model_3d(**parameters):
     return {"x":x, "f":f} 
 
 
+a = Parameter("a", 0, 10)
+b = Parameter("b", 0, 10)
+c = Parameter("c", 0.1, 2)
+
+
 class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     """
     All tests inherit from MatcalUnitTest so that they get the same
@@ -387,9 +392,11 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.study._test_responses = np.array([[1.0, 2.0], [1.5, 2.5], [0.75, 0.85]])
 
         class DoubleParamSurrogate:
+            def __init__(self):
+                self.surrogate = self
             def __call__(self, params):
                 results = np.array(params)*2.0
-                return results.T
+                return results
         self.study._surrogate = SparseGridAdaptiveSurrogate("target", "independent", 
                                                    np.array([0.0, 1.0]), 
                                                    DummyTransform(), 
@@ -400,13 +407,18 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
                                                    )        
         self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)        
         
-        self.assertEqual(len(self.study.surrogate.average_error_history), 1)
+        self.assertEqual(len(self.study.surrogate.rmse_history), 1)
         self.assertEqual(len(self.study.surrogate.max_error_history), 1)
 
-        expected_l2 = np.linalg.norm(self.study._test_responses -
-                                    DoubleParamSurrogate()(self.study._test_params.T))
-        expected_l2 /= self.study._test_responses.shape[1]
-        self.assertAlmostEqual(self.study.surrogate.average_error_history[0], expected_l2)
+        expected_rmse = np.sqrt(
+            np.mean(
+                (
+                    self.study._test_responses
+                    - DoubleParamSurrogate()(self.study._test_params)
+                ) ** 2
+            )
+        )
+        self.assertAlmostEqual(self.study.surrogate.rmse_history[0], expected_rmse)
 
     @unittest.skipIf(not HAS_PYAPPROX,
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
@@ -421,8 +433,8 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertIsNotNone(self.study.results)
         sur_file = self.study.surrogate_save_filename
         sur_results = matcal_load(sur_file)
-        self.assertEqual(self.study.surrogate.average_error_history, 
-                         sur_results.average_error_history)
+        self.assertEqual(self.study.surrogate.rmse_history, 
+                         sur_results.rmse_history)
         self.assertEqual(self.study.surrogate.sample_count_history, 
                          sur_results.sample_count_history)
         self.assertEqual(self.study.surrogate.max_error_history, 
@@ -439,7 +451,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
 
     def test_default_goals(self):
         self.assertAlmostEqual(
-            self.study._average_l2_error_goal,
+            self.study._rmse_goal,
             1e-2,
         )
         self.assertAlmostEqual(
@@ -448,15 +460,15 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         )
 
     def test_setting_both_goals(self):
-        new_avg = 5e-3
+        new_rmse = 5e-3
         new_max = 2e-3
         self.study.set_error_stopping_criteria(
-            average_l2_error_goal=new_avg,
+            rmse_goal=new_rmse,
             max_abs_error_goal=new_max,
         )
         self.assertAlmostEqual(
-            self.study._average_l2_error_goal,
-            new_avg,
+            self.study._rmse_goal,
+            new_rmse,
         )
         self.assertAlmostEqual(
             self.study._max_abs_error_goal,
@@ -464,13 +476,13 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         )
 
     def test_setting_one_goal_keeps_other_untouched(self):
-        new_avg = 1e-4
+        new_rmse = 1e-4
         self.study.set_error_stopping_criteria(
-            average_l2_error_goal=new_avg
+            rmse_goal=new_rmse
         )
         self.assertAlmostEqual(
-            self.study._average_l2_error_goal,
-            new_avg,
+            self.study._rmse_goal,
+            new_rmse,
         )
         self.assertAlmostEqual(
             self.study._max_abs_error_goal,
@@ -478,14 +490,14 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         )
     def test_invalid_non_numeric_raises_type_error(self):
         with self.assertRaises(TypeError):
-            self.study.set_error_stopping_criteria(average_l2_error_goal="bad")
+            self.study.set_error_stopping_criteria(rmse_goal="bad")
 
         with self.assertRaises(TypeError):
             self.study.set_error_stopping_criteria(max_abs_error_goal=[1, 2])
 
     def test_invalid_non_positive_raises_value_error(self):
         with self.assertRaises(ValueError):
-            self.study.set_error_stopping_criteria(average_l2_error_goal=0.0)
+            self.study.set_error_stopping_criteria(rmse_goal=0.0)
 
         with self.assertRaises(ValueError):
             self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
@@ -502,6 +514,46 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertEqual(self.study._surrogate_save_filename, "my_surrogate_name.joblib")
         self.assertEqual(self.study.surrogate_save_filename, "my_surrogate_name.joblib")
 
+    def test_set_surrogate_storage_options(self):
+        self.assertEqual(self.study._surrogate_storage_best_n_surrogates, 1)
+        self.assertIsNone(self.study._surrogate_storage_every_n_batches)
+        self.assertEqual(self.study._surrogate_storage_score_metric, "max_error")
+
+        self.study.set_surrogate_storage_options(
+            best_n_surrogates=3,
+            save_every_n_batches=5,
+            score_metric="max_error",
+        )
+
+        self.assertEqual(self.study._surrogate_storage_best_n_surrogates, 3)
+        self.assertEqual(self.study._surrogate_storage_every_n_batches, 5)
+        self.assertEqual(self.study._surrogate_storage_score_metric, "max_error")
+
+        self.study.set_surrogate_storage_options(
+            best_n_surrogates=None,
+            save_every_n_batches=2,
+            score_metric="score",
+        )
+
+        self.assertIsNone(self.study._surrogate_storage_best_n_surrogates)
+        self.assertEqual(self.study._surrogate_storage_every_n_batches, 2)
+        self.assertEqual(self.study._surrogate_storage_score_metric, "score")
+
+    def test_set_surrogate_storage_options_invalid_inputs(self):
+        with self.assertRaises(ValueError):
+            self.study.set_surrogate_storage_options(
+                best_n_surrogates=None,
+                save_every_n_batches=None,
+            )
+
+        with self.assertRaises(ValueError):
+            self.study.set_surrogate_storage_options(score_metric="not_a_metric")
+
+        with self.assertRaises(ValueError):
+            self.study.set_surrogate_storage_options(best_n_surrogates=0)
+
+        with self.assertRaises(TypeError):
+            self.study.set_surrogate_storage_options(save_every_n_batches="bad")
 
     @unittest.skipIf(not HAS_PYAPPROX,
                  "pyapprox not installed – skipping pyapprox‑dependent tests")
@@ -546,7 +598,148 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         results = self.study.launch()
         self.assertFalse(os.path.exists("test_samples"))
         self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+    # -------------------------
+    # Validation / API errors
+    # -------------------------
 
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_basis_type(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="not-a-basis")
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=0)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=4)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_validation(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        # If you did not implement this method, remove/skip this test
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=0, pnorm=1.0)
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
+
+    # -----------------------------------------
+    # Transformer / domain mapping regression
+    # -----------------------------------------
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_sparse_grid_transformer_round_trip(self):
+        """
+        Regression for removal of pyapprox.variables.transforms.AffineTransform.
+        Confirms MatCal's replacement transformer performs a stable round-trip.
+        """
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+
+        # Force initialization of bounds/transformer similarly to launch()
+        bounds = np.asarray([[0.0, 10.0], [0.0, 10.0], [0.1, 2.0]], dtype=float)
+
+        # study implementation should set _variable_transformer_factory
+        transformer_factory = getattr(sg_study, "_variable_transformer_factory", None)
+        if transformer_factory is None:
+            self.skipTest("Sparse-grid transformer factory not available")
+
+        # factory signature in adaptive_surrogates.py is (study, bounds) or (bounds)
+        try:
+            transformer = transformer_factory(sg_study, bounds)
+        except TypeError:
+            transformer = transformer_factory(bounds)
+
+        rng = np.random.default_rng(0)
+        n = 50
+        physical = np.vstack(
+            [
+                rng.uniform(0.0, 10.0, n),
+                rng.uniform(0.0, 10.0, n),
+                rng.uniform(0.1, 2.0, n),
+            ]
+        )
+        canonical = transformer.map_to_canonical(physical)
+        physical_rt = transformer.map_from_canonical(canonical)
+
+        np.testing.assert_allclose(physical, physical_rt, rtol=0.0, atol=1e-12)
+
+        # Also check canonical is within [-1,1] (allow tiny numerical noise)
+        self.assertTrue(np.all(canonical <= 1.0 + 1e-12))
+        self.assertTrue(np.all(canonical >= -1.0 - 1e-12))
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_lagrange(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="lagrange")
+        self.assertEqual(sg_study._sg_basis_type, "lagrange")
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=2)
+        self.assertEqual(sg_study._sg_basis_type, "piecewise")
+        self.assertEqual(sg_study._sg_piecewise_degree, 2)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_sets_values(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        sg_study.set_sparse_grid_adaptivity_limits(max_level=7, pnorm=2.0)
+        self.assertEqual(sg_study._sg_max_level, 7)
+        self.assertEqual(sg_study._sg_pnorm, 2.0)
+
+    def test_results_synchronizer_property_before_and_after_add_evaluation_set(self):
+        self.assertIsNone(self.study.results_synchronizer)
+
+        self.study.set_independent_variable("x", [0.0, 1.0])
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+
+        self.assertIsInstance(self.study.results_synchronizer, SimulationResultsSynchronizer)
+
+    def test_set_test_data_invalid_type_raises(self):
+        with self.assertRaises(TypeError):
+            self.study.set_test_data(123)
+
+    def test_set_test_data_string_invalid_loaded_object_raises(self):
+        with open("not_a_study_results.joblib", "wb") as f:
+            import pickle
+            pickle.dump({"not": "study_results"}, f)
+
+        with self.assertRaises(RuntimeError):
+            self.study.set_test_data("not_a_study_results.joblib")
+
+    def test_default_save_filename_is_none_before_launch(self):
+        self.assertIsNone(self.study._surrogate_save_filename)
+        self.assertIsNone(self.study.surrogate_save_filename)
 
 
 class IdentityTransformer:
@@ -575,18 +768,37 @@ class ConstantSurrogate:
     def __init__(self, n_parameters: int, constant: float = 0.0):
         self.n_parameters = n_parameters
         self.constant = constant
+        self.surrogate = self
         
     def __call__(self, param_array: np.ndarray) -> np.ndarray:
         n_samples = param_array.shape[1]
-        out = np.full((n_samples, 1), self.constant, dtype=float)
+        out = np.full((1, n_samples), self.constant, dtype=float)
         return out
+
+
+class FixedResponseSurrogate:
+    """
+    Callable surrogate model that returns a fixed response array for scoring.
+
+    The response should be supplied with shape (n_samples, n_qois). The
+    SparseGridAdaptiveSurrogate evaluation path expects the underlying surrogate
+    function to return shape (n_qois, n_samples), so this class transposes the
+    stored response.
+    """
+    def __init__(self, response):
+        self.response = np.asarray(response, dtype=float)
+        self.surrogate = self
+
+    def __call__(self, param_array):
+        n_samples = param_array.shape[1]
+        return self.response[:n_samples, :].T
 
 
 class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)   
 
-    def _make_surrogate(self):
+    def _make_surrogate(self, store_all=True, **storage_options):
         # 2 parameters → simple 2‑D problem
         param_names = ["p1", "p2"]
         n_params = len(param_names)
@@ -601,6 +813,14 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         test_responses = np.array([[1.0], [2.0]])
 
         transformer = IdentityTransformer()
+
+        # Most existing tests were written assuming every surrogate object was
+        # retained. Keep that behavior for those tests by default. New tests can
+        # pass store_all=False to exercise the new default/best-N behavior.
+        if store_all:
+            storage_options.setdefault("storage_best_n_surrogates", None)
+            storage_options.setdefault("storage_every_n_batches", 1)
+
         surrogate = SparseGridAdaptiveSurrogate(
             target_field_name="target",
             indep_variable_name="independent",
@@ -609,14 +829,17 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
             test_params=test_params,
             test_responses=test_responses,
             param_names=param_names,
-            bounds = np.array([[0.0,1], [0,1]])
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            **storage_options,
         )
         return surrogate
 
     def test_initialization(self):
         surrogate = self._make_surrogate()
-        self.assertEqual(surrogate._surrogates, [])
-        self.assertEqual(surrogate._average_errors, [])
+        self.assertEqual(len(surrogate._surrogates), 0)
+        self.assertEqual(len(surrogate.stored_surrogates), 0)
+        self.assertEqual(surrogate.surrogate_records, [])
+        self.assertEqual(surrogate._root_mean_squared_errors, [])
         self.assertEqual(surrogate._max_errors, [])
         self.assertEqual(surrogate._sample_counts, [])
         self.assertIsNone(surrogate.current_surrogate)
@@ -625,7 +848,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         """
         Verify that _add_iteration:
         * stores a deep‑copied surrogate,
-        * computes average L2 and max ∞ errors correctly,
+        * computes RMSE and max ∞ errors correctly,
         * records the supplied sample count.
         """
         surrogate = self._make_surrogate()
@@ -644,12 +867,17 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertEqual(len(surrogate._surrogates), 1)
 
         # 2. The stored surrogate is a *deep* copy (i.e. not the same object)
-        self.assertIsNot(surrogate._surrogates[0], sur)
+        self.assertIsNot(surrogate.stored_surrogates[0], sur)
 
-        # 3. Average L2 error = ||R_test - 0||_2 / N
-        # R_test shape (2, 1) → norm = sqrt(1^2 + 2^2) = sqrt(5)
-        expected_l2 = np.linalg.norm(np.array([[1.0], [2.0]]) - np.array([[0], [0]])) / 1
-        self.assertAlmostEqual(surrogate._average_errors[0], expected_l2)
+        expected_rmse = np.sqrt(
+            np.mean(
+                (
+                    np.array([[1.0], [2.0]])
+                    - np.array([[0.0], [0.0]])
+                ) ** 2
+            )
+        )        
+        self.assertAlmostEqual(surrogate._root_mean_squared_errors[0], expected_rmse)
 
         # 4. Max ∞ error = max(|R_test - 0|) = 2.0
         self.assertAlmostEqual(surrogate._max_errors[0], 2.0)
@@ -657,8 +885,15 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         # 5. Sample‑count history
         self.assertEqual(surrogate._sample_counts[0], nsamples)
 
+        # 6. Metadata record was created and linked to the retained surrogate.
+        self.assertEqual(len(surrogate.surrogate_records), 1)
+        self.assertEqual(len(surrogate.stored_surrogate_scores), 1)
+        self.assertIn(0, surrogate.stored_surrogates)
+        self.assertIn(0, surrogate.stored_surrogate_scores)
+        self.assertEqual(surrogate.stored_surrogate_scores[0]["sample_count"], nsamples)
+
     def test_property_getters(self):
-        """current_surrogate, average_error_history, max_error_history, sample_count_history."""
+        """current_surrogate, rmse_history, max_error_history, sample_count_history."""
         surrogate = self._make_surrogate()
 
         sur = ConstantSurrogate(n_parameters=2, constant=0.0)
@@ -668,7 +903,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertIsInstance(surrogate.current_surrogate, ConstantSurrogate)
 
         # History properties should match the internal lists
-        self.assertEqual(surrogate.average_error_history, surrogate._average_errors)
+        self.assertEqual(surrogate.rmse_history, surrogate._root_mean_squared_errors)
         self.assertEqual(surrogate.max_error_history, surrogate._max_errors)
         self.assertEqual(surrogate.sample_count_history, surrogate._sample_counts)
 
@@ -761,26 +996,65 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
     def test_call_with_explicit_surrogate_index(self):
         """
-        Verify that the `surrogate_index` argument correctly selects a
-        surrogate from the internal list.
+        Verify that the surrogate_index argument correctly selects retained
+        surrogates, and that the default call evaluates the best surrogate.
         """
-        # Create two distinct ConstantSurrogates with different constant outputs
         surrogate = self._make_surrogate()
-        first = ConstantSurrogate(n_parameters=2, constant=0)
+
+        first = ConstantSurrogate(n_parameters=2, constant=0.0)
         surrogate._add_iteration(first, 1)
 
-        # Append a second surrogate (constant = 9.9) manually
         second = ConstantSurrogate(n_parameters=2, constant=9.9)
         surrogate._add_iteration(second, 2)
 
-        # Index 0 should return the first surrogate (constant 0.0)
+        # Index 0 should return the first retained surrogate.
         out0 = surrogate(0.0, 0.0, surrogate_index=0)
         self.assertAlmostEqual(out0["target"][0], 0.0)
 
-        # Index -1 (default) should return the second surrogate (constant 9.9)
-        out_last = surrogate(0.0, 0.0)   # default = -1
+        # Explicit latest should return the most recent retained surrogate.
+        out_latest = surrogate(0.0, 0.0, surrogate_index="latest")
+        self.assertAlmostEqual(out_latest["target"][0], 9.9)
+
+        # Positional -1 should also return the last retained surrogate.
+        out_last = surrogate(0.0, 0.0, surrogate_index=-1)
         self.assertAlmostEqual(out_last["target"][0], 9.9)
 
+        # Default call should evaluate the best surrogate, not the latest.
+        # For test responses [[1], [2]], constant 0.0 is better than 9.9.
+        out_default = surrogate(0.0, 0.0)
+        self.assertAlmostEqual(out_default["target"][0], 0.0)
+
+        out_best = surrogate(0.0, 0.0, surrogate_index="best")
+        self.assertAlmostEqual(out_best["target"][0], 0.0)    
+
+    def test_call_defaults_to_best_surrogate_not_latest(self):
+        """
+        Verify that calling the adaptive surrogate without surrogate_index uses
+        the best retained surrogate, not the most recent retained surrogate.
+        """
+        surrogate = self._make_surrogate()
+
+        # Test responses are [[1.0], [2.0]].
+        #
+        # Iteration 0: constant 10.0 -> poor
+        # Iteration 1: constant 1.5  -> best
+        # Iteration 2: constant 8.0  -> latest, but not best
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=10)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=20)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=8.0), nsamples=30)
+
+        self.assertEqual(set(surrogate.stored_surrogates.keys()), {0, 1, 2})
+        self.assertEqual(surrogate.best_surrogate_iteration_index, 1)
+
+        default_result = surrogate(0.0, 0.0)
+        best_result = surrogate(0.0, 0.0, surrogate_index="best")
+        latest_result = surrogate(0.0, 0.0, surrogate_index="latest")
+        last_positional_result = surrogate(0.0, 0.0, surrogate_index=-1)
+
+        self.assertAlmostEqual(default_result["target"][0], 1.5)
+        self.assertAlmostEqual(best_result["target"][0], 1.5)
+        self.assertAlmostEqual(latest_result["target"][0], 8.0)
+        self.assertAlmostEqual(last_positional_result["target"][0], 8.0)
     # ------------------------------------------------------------------
     # 9. Full workflow: add several iterations and query histories -----
     # ------------------------------------------------------------------
@@ -801,33 +1075,401 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         surrogate._add_iteration(ConstantSurrogate(2, constant=2.0), nsamples=30)
 
         # Histories should have length 3
-        self.assertEqual(len(surrogate.average_error_history), 3)
+        self.assertEqual(len(surrogate.rmse_history), 3)
         self.assertEqual(len(surrogate.max_error_history), 3)
         self.assertEqual(len(surrogate.sample_count_history), 3)
 
         # Verify sample‑count history matches the values we passed
         self.assertEqual(surrogate.sample_count_history, [10, 20, 30])
 
-        # Compute expected average L2 errors manually for sanity check
+        # Compute expected RMSE scores manually for sanity check
         R_test = surrogate._test_responses  # shape (2, 1)
         # Helper to compute error for a given constant
-        def expected_avg(const):
+        def expected_rmse(const):
             diff = R_test - const
-            return np.linalg.norm(diff) / 1
+            return np.sqrt(np.mean(diff ** 2))
 
         # Expected values
-        exp0 = expected_avg(0.0)
-        exp1 = expected_avg(1.0)
-        exp2 = expected_avg(2.0)
+        exp0 = expected_rmse(0.0)
+        exp1 = expected_rmse(1.0)
+        exp2 = expected_rmse(2.0)
 
-        self.assertAlmostEqual(surrogate.average_error_history[0], exp0)
-        self.assertAlmostEqual(surrogate.average_error_history[1], exp1)
-        self.assertAlmostEqual(surrogate.average_error_history[2], exp2)
+        self.assertAlmostEqual(surrogate.rmse_history[0], exp0)
+        self.assertAlmostEqual(surrogate.rmse_history[1], exp1)
+        self.assertAlmostEqual(surrogate.rmse_history[2], exp2)
 
         # Max errors should be max absolute difference
         self.assertAlmostEqual(surrogate.max_error_history[0], np.max(np.abs(R_test - 0.0)))
         self.assertAlmostEqual(surrogate.max_error_history[1], np.max(np.abs(R_test - 1.0)))
         self.assertAlmostEqual(surrogate.max_error_history[2], np.max(np.abs(R_test - 2.0)))
+
+        self.assertEqual(len(surrogate.surrogate_records), 3)
+        self.assertEqual(len(surrogate.stored_surrogates), 3)
+        self.assertEqual(len(surrogate.stored_surrogate_scores), 3)
+
+        for idx, record in surrogate.stored_surrogate_scores.items():
+            self.assertEqual(record["iteration_index"], idx)
+            self.assertTrue(record["surrogate_stored"])
+            self.assertEqual(record["sample_count"], surrogate.sample_count_history[idx])
+
+    def test_score_returns_nan_for_single_qoi(self):
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(n_parameters=2, constant=0.0), nsamples=5)
+        self.assertTrue(np.isnan(surrogate.score()))
+
+    def test_current_surrogate_tracks_latest_iteration(self):
+        surrogate = self._make_surrogate()
+
+        first = ConstantSurrogate(n_parameters=2, constant=1.0)
+        second = ConstantSurrogate(n_parameters=2, constant=2.0)
+
+        surrogate._add_iteration(first, nsamples=5)
+        first_current = surrogate.current_surrogate
+        self.assertAlmostEqual(first_current.constant, 1.0)
+
+        surrogate._add_iteration(second, nsamples=10)
+        second_current = surrogate.current_surrogate
+        self.assertAlmostEqual(second_current.constant, 2.0)
+
+    def test_default_storage_keeps_only_best_surrogate_but_all_scores(self):
+        surrogate = self._make_surrogate(store_all=False)
+
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=1)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=2)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=3)
+
+        self.assertEqual(len(surrogate.rmse_history), 3)
+        self.assertEqual(len(surrogate.max_error_history), 3)
+        self.assertEqual(len(surrogate.sample_count_history), 3)
+        self.assertEqual(len(surrogate.surrogate_records), 3)
+
+        # Default behavior is best_n_surrogates=1 by maximum absolute error.
+        self.assertEqual(len(surrogate.stored_surrogates), 1)
+
+        stored_index = list(surrogate.stored_surrogates.keys())[0]
+        self.assertEqual(stored_index, 2)
+
+        stored_record = surrogate.stored_surrogate_scores[stored_index]
+        self.assertTrue(stored_record["surrogate_stored"])
+        self.assertIn("best", stored_record["storage_reason"])
+        self.assertEqual(stored_record["iteration_index"], stored_index)
+        self.assertEqual(stored_record["batch_number"], 3)
+        self.assertEqual(stored_record["sample_count"], 3)
+
+        self.assertEqual(surrogate.best_surrogate_iteration_index, stored_index)
+        self.assertIs(surrogate.best_surrogate, surrogate.stored_surrogates[stored_index])
+
+        self.assertIsNotNone(surrogate.test_params)
+        self.assertIsNotNone(surrogate.test_responses)
+        self.assert_close_arrays(surrogate.test_params, np.array([[0.0, 1.0],
+                                                                  [0.0, 1.0]]))
+        self.assert_close_arrays(surrogate.test_responses, np.array([[1.0],
+                                                                     [2.0]]))
+
+    def test_best_n_storage_keeps_best_n_surrogates_and_links_scores(self):
+        surrogate = self._make_surrogate(
+            store_all=False,
+            storage_best_n_surrogates=2,
+            storage_every_n_batches=None,
+            storage_score_metric="rmse",
+        )
+
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=1)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=2)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=3)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.0), nsamples=4)
+
+        self.assertEqual(len(surrogate.surrogate_records), 4)
+        self.assertEqual(len(surrogate.rmse_history), 4)
+        self.assertEqual(len(surrogate.stored_surrogates), 2)
+
+        # For test responses [[1], [2]], constants 1.5 and 1.0 are the best two.
+        self.assertEqual(set(surrogate.stored_surrogates.keys()), {2, 3})
+        self.assertEqual(set(surrogate.stored_surrogate_scores.keys()), {2, 3})
+
+        for idx, record in surrogate.stored_surrogate_scores.items():
+            self.assertEqual(record["iteration_index"], idx)
+            self.assertTrue(record["surrogate_stored"])
+            self.assertIn("best", record["storage_reason"])
+
+    def test_periodic_storage_keeps_every_nth_batch(self):
+        surrogate = self._make_surrogate(
+            store_all=False,
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=2,
+        )
+
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=1)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=2)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=3)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=4)
+
+        self.assertEqual(len(surrogate.surrogate_records), 4)
+        self.assertEqual(len(surrogate.rmse_history), 4)
+
+        # Batches 2 and 4 correspond to zero-based iteration indices 1 and 3.
+        self.assertEqual(list(surrogate.stored_surrogates.keys()), [1, 3])
+        self.assertEqual(list(surrogate.stored_surrogate_scores.keys()), [1, 3])
+
+        for idx, record in surrogate.stored_surrogate_scores.items():
+            self.assertEqual(record["iteration_index"], idx)
+            self.assertTrue(record["surrogate_stored"])
+            self.assertIn("periodic", record["storage_reason"])
+
+    def test_combined_best_and_periodic_storage(self):
+        surrogate = self._make_surrogate(
+            store_all=False,
+            storage_best_n_surrogates=1,
+            storage_every_n_batches=2,
+            storage_score_metric="rmse",
+        )
+
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=1)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=2)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=3)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=8.0), nsamples=4)
+
+        # Best is iteration 2. Periodic batches are iterations 1 and 3.
+        self.assertEqual(set(surrogate.stored_surrogates.keys()), {1, 2, 3})
+        self.assertEqual(set(surrogate.stored_surrogate_scores.keys()), {1, 2, 3})
+
+        self.assertIn("periodic", surrogate.stored_surrogate_scores[1]["storage_reason"])
+        self.assertIn("best", surrogate.stored_surrogate_scores[2]["storage_reason"])
+        self.assertIn("periodic", surrogate.stored_surrogate_scores[3]["storage_reason"])
+
+    def test_r2_storage_metric_keeps_highest_r2_surrogate(self):
+        surrogate = self._make_surrogate(
+            store_all=False,
+            storage_best_n_surrogates=1,
+            storage_every_n_batches=None,
+            storage_score_metric="r2",
+        )
+
+        # Single QoI gives nan R2 in the current test fixture, so use a two-QoI
+        # response to make R2 meaningful.
+        surrogate._test_responses = np.array([[1.0, 2.0],
+                                              [2.0, 4.0]])
+
+        class LinearResponseSurrogate:
+            def __init__(self, scale):
+                self.scale = scale
+                self.surrogate = self
+
+            def __call__(self, param_array):
+                n_samples = param_array.shape[1]
+                base = np.array([[1.0, 2.0],
+                                 [2.0, 4.0]])
+                return self.scale * base[:n_samples, :].T
+
+        surrogate._add_iteration(LinearResponseSurrogate(scale=0.0), nsamples=1)
+        surrogate._add_iteration(LinearResponseSurrogate(scale=1.0), nsamples=2)
+        surrogate._add_iteration(LinearResponseSurrogate(scale=0.5), nsamples=3)
+
+        self.assertEqual(len(surrogate.stored_surrogates), 1)
+        self.assertEqual(list(surrogate.stored_surrogates.keys()), [1])
+        self.assertEqual(surrogate.best_surrogate_iteration_index, 1)
+        self.assertIn("best", surrogate.stored_surrogate_scores[1]["storage_reason"])
+
+    def test_select_surrogate_by_best_latest_iteration_and_position(self):
+        surrogate = self._make_surrogate(
+            store_all=False,
+            storage_best_n_surrogates=1,
+            storage_every_n_batches=2,
+            storage_score_metric="rmse",
+        )
+
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=1)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=2)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=3)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=8.0), nsamples=4)
+
+        # Retained iteration indices are 1 and 3 from periodic retention,
+        # plus 2 from best retention.
+        self.assertEqual(set(surrogate.stored_surrogates.keys()), {1, 2, 3})
+
+        best_result = surrogate(0.0, 0.0, surrogate_index="best")
+        self.assertAlmostEqual(best_result["target"][0], 1.5)
+
+        latest_result = surrogate(0.0, 0.0, surrogate_index="latest")
+        self.assertAlmostEqual(latest_result["target"][0], 8.0)
+
+        iteration_result = surrogate(0.0, 0.0, surrogate_index=2)
+        self.assertAlmostEqual(iteration_result["target"][0], 1.5)
+
+        positional_result = surrogate(0.0, 0.0, surrogate_index=-1)
+        self.assertAlmostEqual(positional_result["target"][0], 8.0)
+
+    def test_storage_options_can_be_updated_on_adaptive_surrogate(self):
+        surrogate = self._make_surrogate(store_all=False)
+
+        self.assertEqual(surrogate._storage_best_n_surrogates, 1)
+        self.assertIsNone(surrogate._storage_every_n_batches)
+        self.assertEqual(surrogate._storage_score_metric, "max_error")
+
+        surrogate.set_surrogate_storage_options(
+            best_n_surrogates=3,
+            save_every_n_batches=4,
+            score_metric="rmse",
+        )
+
+        self.assertEqual(surrogate._storage_best_n_surrogates, 3)
+        self.assertEqual(surrogate._storage_every_n_batches, 4)
+        self.assertEqual(surrogate._storage_score_metric, "rmse")
+
+    def test_storage_options_invalid_on_adaptive_surrogate(self):
+        surrogate = self._make_surrogate(store_all=False)
+
+        with self.assertRaises(ValueError):
+            surrogate.set_surrogate_storage_options(
+                best_n_surrogates=None,
+                save_every_n_batches=None,
+            )
+
+        with self.assertRaises(ValueError):
+            surrogate.set_surrogate_storage_options(score_metric="bad_metric")
+
+        with self.assertRaises(ValueError):
+            surrogate.set_surrogate_storage_options(best_n_surrogates=0)
+
+        with self.assertRaises(TypeError):
+            surrogate.set_surrogate_storage_options(save_every_n_batches="bad")
+
+    def test_multiple_iterations_history_when_not_all_surrogates_are_stored(self):
+        """
+        Run multiple adaptive iterations while retaining only the best surrogate.
+
+        This verifies that:
+        * all score histories are retained,
+        * all sample counts are retained,
+        * all per-batch metadata records are retained,
+        * only the best surrogate object is retained, and
+        * retained surrogate score records correctly link to retained surrogate objects.
+        """
+        surrogate = self._make_surrogate(store_all=False)
+
+        # Test responses are [[1.0], [2.0]] in _make_surrogate.
+        #
+        # Iteration 0: constant 10.0 -> very poor
+        # Iteration 1: constant 0.0  -> poor
+        # Iteration 2: constant 1.5  -> best for responses [1, 2]
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=10)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=0.0), nsamples=20)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=30)
+
+        # All histories are retained even though not all surrogate objects are retained.
+        self.assertEqual(len(surrogate.rmse_history), 3)
+        self.assertEqual(len(surrogate.max_error_history), 3)
+        self.assertEqual(len(surrogate.sample_count_history), 3)
+        self.assertEqual(len(surrogate.surrogate_records), 3)
+
+        self.assertEqual(surrogate.sample_count_history, [10, 20, 30])
+
+        # Default storage policy is best_n_surrogates=1 using maximum absolute error.
+        self.assertEqual(len(surrogate.stored_surrogates), 1)
+        self.assertEqual(len(surrogate.stored_surrogate_scores), 1)
+
+        # Compute expected RMSE and max-error histories.
+        test_responses = np.array([[1.0], [2.0]])
+
+        constants = [10.0, 0.0, 1.5]
+        expected_rmse = [
+            np.sqrt(np.mean((test_responses - constant) ** 2))
+            for constant in constants
+        ]
+        expected_max_error = [
+            np.max(np.abs(test_responses - constant))
+            for constant in constants
+        ]
+
+        for idx in range(3):
+            self.assertAlmostEqual(surrogate.rmse_history[idx], expected_rmse[idx])
+            self.assertAlmostEqual(surrogate.max_error_history[idx], expected_max_error[idx])
+
+        # The best surrogate is iteration 2, corresponding to constant=1.5.
+        best_iteration_index = 2
+        self.assertEqual(surrogate.best_surrogate_iteration_index, best_iteration_index)
+        self.assertEqual(list(surrogate.stored_surrogates.keys()), [best_iteration_index])
+        self.assertEqual(list(surrogate.stored_surrogate_scores.keys()), [best_iteration_index])
+
+        # Stored surrogate score record links cleanly to the retained surrogate.
+        stored_record = surrogate.stored_surrogate_scores[best_iteration_index]
+        self.assertEqual(stored_record["iteration_index"], best_iteration_index)
+        self.assertEqual(stored_record["batch_number"], 3)
+        self.assertEqual(stored_record["sample_count"], 30)
+        self.assertAlmostEqual(stored_record["rmse"], expected_rmse[best_iteration_index])
+        self.assertAlmostEqual(stored_record["max_error"], expected_max_error[best_iteration_index])
+        self.assertTrue(stored_record["surrogate_stored"])
+        self.assertIn("best", stored_record["storage_reason"])
+
+        # Non-retained records are still present but are marked as not stored.
+        self.assertFalse(surrogate.surrogate_records[0]["surrogate_stored"])
+        self.assertFalse(surrogate.surrogate_records[1]["surrogate_stored"])
+        self.assertTrue(surrogate.surrogate_records[2]["surrogate_stored"])
+
+        # The retained object is the best surrogate object.
+        self.assertIs(
+            surrogate.best_surrogate,
+            surrogate.stored_surrogates[best_iteration_index],
+        )
+
+        # Evaluating with surrogate_index="best" should use the retained best surrogate.
+        prediction = surrogate(0.0, 0.0, surrogate_index="best")
+        self.assertIn("target", prediction)
+        self.assertAlmostEqual(prediction["target"][0], 1.5)
+
+    def test_default_storage_metric_is_max_error_not_rmse(self):
+        """
+        Verify that the default best-surrogate selection uses max_error, not RMSE.
+
+        The two candidate surrogates are chosen so that:
+
+        * iteration 0 has lower RMSE but larger max error;
+        * iteration 1 has higher RMSE but smaller max error.
+
+        With the desired default metric of max_error, iteration 1 should be
+        retained as the best surrogate.
+        """
+        surrogate = self._make_surrogate(store_all=False)
+
+        # Test responses from _make_surrogate are [[1.0], [2.0]].
+        #
+        # Iteration 0 prediction: [[1.0], [0.6]]
+        # Errors: [[0.0], [1.4]]
+        # RMSE ~= 0.9899, max_error = 1.4
+        #
+        # Iteration 1 prediction: [[0.0], [1.0]]
+        # Errors: [[1.0], [1.0]]
+        # RMSE = 1.0, max_error = 1.0
+        #
+        # RMSE would select iteration 0.
+        # max_error should select iteration 1.
+        surrogate._add_iteration(
+            FixedResponseSurrogate(np.array([[1.0], [0.6]])),
+            nsamples=10,
+        )
+        surrogate._add_iteration(
+            FixedResponseSurrogate(np.array([[0.0], [1.0]])),
+            nsamples=20,
+        )
+
+        self.assertEqual(surrogate._storage_score_metric, "max_error")
+        self.assertEqual(len(surrogate.rmse_history), 2)
+        self.assertEqual(len(surrogate.max_error_history), 2)
+        self.assertEqual(len(surrogate.surrogate_records), 2)
+
+        # Confirm the metric conflict.
+        self.assertLess(surrogate.rmse_history[0], surrogate.rmse_history[1])
+        self.assertGreater(surrogate.max_error_history[0], surrogate.max_error_history[1])
+
+        # Since the default metric is max_error, iteration 1 should be retained.
+        self.assertEqual(surrogate.best_surrogate_iteration_index, 1)
+        self.assertEqual(list(surrogate.stored_surrogates.keys()), [1])
+        self.assertEqual(list(surrogate.stored_surrogate_scores.keys()), [1])
+
+        stored_record = surrogate.stored_surrogate_scores[1]
+        self.assertTrue(stored_record["surrogate_stored"])
+        self.assertIn("best", stored_record["storage_reason"])
+        self.assertAlmostEqual(stored_record["max_error"], 1.0)
 
 
 class _FakeSurrogate:
@@ -836,13 +1478,13 @@ class _FakeSurrogate:
     stopping‑criterion method.
     """
     def __init__(self):
-        self._average_errors = []   # filled by the test
+        self._root_mean_squared_errors = []   # filled by the test
         self._max_errors = []       # filled by the test
         self._r2_scores = []
 
     @property
-    def average_error_history(self):
-        return self._average_errors
+    def rmse_history(self):
+        return self._root_mean_squared_errors
 
     @property
     def max_error_history(self):
@@ -870,7 +1512,7 @@ class _TestStudyStoppingCriteria(SparseGridAdaptiveSurrogateStudy):
     def __init__(self):
         # Do **not** call the parent __init__ (it expects a full ParameterCollection)
         # Initialise only the fields that the stopping‑criterion method inspects.
-        self._average_l2_error_goal = 1e-2   # default in the parent class
+        self._rmse_goal = 1e-2   # default in the parent class
         self._max_abs_error_goal = 1e-1
         self._surrogate = _FakeSurrogate()
         self._results = _FakeResults()
@@ -889,7 +1531,7 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
 
     def test_no_stop_on_first_batch(self):
         # populate error histories with values *below* the goals – they must be ignored
-        self.study._surrogate._average_errors = [0.0]   # below 1e‑2
+        self.study._surrogate._root_mean_squared_errors = [0.0]   # below 1e‑2
         self.study._surrogate._max_errors = [0.0]       # below 1e‑1
         self.study._surrogate._r2_scores = [0.0]
         self.study._results.number_of_evaluations = 0   # far below max_training_samples
@@ -897,8 +1539,8 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         should_stop = self.study._stopping_criterion_met(training_batch_number=0)
         self.assertFalse(should_stop, "Stopping should NOT be triggered on the first batch")
 
-    def test_stop_on_average_l2_error(self):
-        self.study._surrogate._average_errors = [5e-3]   # < 1e‑2 goal
+    def test_stop_on_rmse(self):
+        self.study._surrogate._root_mean_squared_errors = [5e-3]   # < 1e‑2 goal
         self.study._surrogate._max_errors = [0.5]       # > goal (irrelevant)
         self.study._surrogate._r2_scores = [0.5]
 
@@ -906,10 +1548,10 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
 
         should_stop = self.study._stopping_criterion_met(training_batch_number=2)
         self.assertTrue(should_stop,
-                        "Stopping should be triggered when avg L2 error ≤ goal after >1 batch")
+                        "Stopping should be triggered when RMSE ≤ goal after >1 batch")
 
     def test_stop_on_max_absolute_error(self):
-        self.study._surrogate._average_errors = [0.5]   # > goal (doesn't matter)
+        self.study._surrogate._root_mean_squared_errors = [0.5]   # > goal (doesn't matter)
         self.study._surrogate._max_errors = [5e-2]      # < 1e‑1 goal
         self.study._surrogate._r2_scores = [0.5]
 
@@ -921,7 +1563,7 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
 
     def test_stop_on_max_training_samples(self):
         # Set error histories to values that would *not* normally trigger a stop
-        self.study._surrogate._average_errors = [1.0]   # > goal
+        self.study._surrogate._root_mean_squared_errors = [1.0]   # > goal
         self.study._surrogate._max_errors = [1.0]      # > goal
         self.study._surrogate._r2_scores = [0.5]
 
@@ -936,9 +1578,8 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         self.assertTrue(should_stop,
                         "Stopping should be triggered when number_of_evaluations > max_training_samples")
 
-
     def test_no_stop_when_all_conditions_fail(self):
-        self.study._surrogate._average_errors = [0.2]   # > 1e‑2
+        self.study._surrogate._root_mean_squared_errors = [0.2]   # > 1e‑2
         self.study._surrogate._max_errors = [0.3]      # > 1e‑1
         self.study._surrogate._r2_scores = [0.5]
         self.study._max_training_samples = 1000

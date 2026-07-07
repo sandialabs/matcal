@@ -108,7 +108,7 @@ class UniformUncertainBlock(BaseDakotaVariablesBlock):
 
 
 class ResponseBlock(_BaseTypedInputFileBlock):
-    type = "response"
+    type = "responses"
     response_type_key = "objective_functions"
     required_keys = [response_type_key]
 

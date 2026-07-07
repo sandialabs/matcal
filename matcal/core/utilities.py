@@ -439,6 +439,12 @@ def check_value_is_positive_integer(value, value_name, call_depth=0):
     check_value_is_positive(value, value_name, call_depth=call_depth+1)
     return True
 
+ 
+def check_value_is_positive_integer_or_none(value, name, *args, **kwargs):
+    if value is None:
+        return
+    check_value_is_positive_integer(value, name, *args, **kwargs)
+
 
 def check_value_is_positive_real(value, value_name, call_depth=0):
     check_item_is_correct_type(value, Real, value_name, call_depth=call_depth+1)

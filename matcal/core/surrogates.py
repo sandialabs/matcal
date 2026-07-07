@@ -696,6 +696,28 @@ class MatCalSurrogateBase(ABC):
         """
         return self._max_scores
 
+    @property
+    def rmse_errors(self):
+        """
+        The test and train root mean squared errors for the surrogate in the
+        given field's native units.
+
+        The RMSE is calculated as
+
+        .. math::
+
+            \\mathrm{RMSE}
+            =
+            \\sqrt{
+            \\frac{1}{N}
+            \\sum_{i=1}^{N}
+            \\left(R_i - \\hat{R}_i\\right)^2
+            }
+
+        where :math:`N` is the total number of scalar response values.
+        """
+        return self._rmse_scores
+
     @abstractmethod
     def __call__(self, parameters)-> OrderedDict:
         """"""
@@ -708,7 +730,7 @@ class MatCalSurrogateBase(ABC):
         in MatCal.
         """
         self._latent_scores = OrderedDict()
-        self._average_scores = OrderedDict()
+        self._rmse_scores = OrderedDict()
         self._max_scores = OrderedDict()
         self._r2_scores = OrderedDict()
 
@@ -741,9 +763,9 @@ class MatCalSurrogateBase(ABC):
                             "enforce_training_data_parameter_range")
         self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
 
-    def _set_native_space_scores(self, average_scores, max_scores, r2_scores):
-        self._average_scores['train'] = average_scores[0]
-        self._average_scores['test'] = average_scores[1]
+    def _set_native_space_scores(self, rmse_scores, max_scores, r2_scores):
+        self._rmse_scores['train'] = rmse_scores[0]
+        self._rmse_scores['test'] = rmse_scores[1]
 
         self._max_scores['train'] = max_scores[0]
         self._max_scores['test'] = max_scores[1]
@@ -756,7 +778,7 @@ class MatCalSurrogateBase(ABC):
         Update the admissible parameter ranges that the user can call the surrogate to evaluate.
 
         The surrogate stores, for each input parameter, a lower and upper bound that
-        define the region of parameter space where the surrogate is considerd valid.  When
+        define the region of parameter space where the surrogate is considered valid.  When
         the surrogate is called, values that fall outside of these ranges trigger a
         ``RuntimeError`` unless :meth:`enforce_training_data_parameter_range` has been
         disabled.
@@ -907,29 +929,72 @@ def _calculate_performance_metrics(regressor, param, data):
         metrics.append(regressor.score(param, data))
     else:
         metrics.append(None)
-    metrics.append(nlpd(regressor, param, data))
-    metrics.append(rmse(regressor, param, data))
+    metrics.append(_regressor_nlpd(regressor, param, data))
+    metrics.append(_regressor_rmse(regressor, param, data))
     return metrics
 
+def _safe_regressor_metric_return(reg, y_true, handle_errors, 
+    metric_func, input_values, error_value
+):
+    if handle_errors:
+        try:
+            return metric_func(reg, input_values, y_true)
+        except Exception:
+            return error_value
 
-def nlpd(regressor, input_values, evals):
-    """ Negative Log Predictive Density
-        Only applicable for GPR
+    return metric_func(reg, input_values, y_true)
+
+
+def _apply_regressor_metric(
+    regressor,
+    input_values,
+    evals,
+    metric_func,
+    *,
+    handle_errors=False,
+    error_value=np.nan,
+):
+    """
+    Apply a metric to either a single regressor or a modal regressor.
     """
     if isinstance(regressor, _modal_regressor):
-        nlpd = np.zeros(evals.shape[1])
+        results = np.full(evals.shape[1], error_value, dtype=float)
+
         for idx, reg in enumerate(regressor._mode_regressors):
-            try:
-                nlpd[idx] = _calculate_nlpd(reg, input_values, evals[:, idx])
-            except:
-                nlpd[idx] = None
-        return nlpd 
-    elif not isinstance(regressor, _modal_regressor):
-        try:
-            nlpd = _calculate_nlpd(regressor, input_values, evals)
-        except:
-            return None
-        return nlpd
+            results[idx] = _safe_regressor_metric_return(reg, evals[:, idx], handle_errors, 
+                metric_func, input_values, error_value
+            )
+        return results
+
+    return _safe_regressor_metric_return(regressor, evals, handle_errors, 
+        metric_func, input_values, error_value
+    )
+
+
+def _regressor_nlpd(regressor, input_values, evals):
+    """
+    Negative Log Predictive Density.
+
+    Only applicable for GPR-like regressors that support
+    predict(..., return_std=True).
+    """
+    return _apply_regressor_metric(
+        regressor,
+        input_values,
+        evals,
+        _calculate_nlpd,
+        handle_errors=True,
+        error_value=np.nan,
+    )
+
+
+def _regressor_rmse(regressor, input_values, evals):
+    return _apply_regressor_metric(
+        regressor,
+        input_values,
+        evals,
+        _calculate_rmse,
+    )
 
 
 def _calculate_nlpd(gpr, input_values, y_true):
@@ -940,32 +1005,16 @@ def _calculate_nlpd(gpr, input_values, y_true):
 
     var = std ** 2
     residuals = y_true - mu
-    nlpd = 0.5 * np.mean( np.log(2 * np.pi * var) + (residuals ** 2) / var)
-    
-    return nlpd
+
+    return 0.5 * np.mean(
+        np.log(2 * np.pi * var) + (residuals ** 2) / var
+    )
 
 
-def _mse(regressor, input_values, evals):
-    if isinstance(regressor, _modal_regressor):
-        mse = np.zeros(evals.shape[1])
-        for idx, reg in enumerate(regressor._mode_regressors):
-            mse[idx] = _calculate_mse(reg, input_values, evals[:, idx])
-    else:
-        mse = _calculate_mse(regressor, input_values, evals)
-    return mse
-
-
-def _calculate_mse(regressor, input_values, y_true):
+def _calculate_rmse(regressor, input_values, y_true):
     y_pred = regressor.predict(input_values)
-    residuals = y_true - y_pred
-    mse = np.mean( residuals ** 2)
-    return mse
-    
-    
-def rmse(regressors, input_values, evals):
-    rmse = _mse(regressors, input_values, evals) ** 0.5
-    return rmse
-    
+    return _root_mean_squared_error(y_true, y_pred)
+   
     
 def _convert_instances_to_stats(scores):
     score_stats = OrderedDict()
@@ -1132,8 +1181,8 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
 
         native_space_scores = _get_scores_in_native_data_space(surrogate, test_params, test_data, 
                                                                train_params, train_data)
-        average_scores, max_scores, r2_scores = native_space_scores
-        surrogate._set_native_space_scores(average_scores, max_scores, r2_scores)
+        rmse_scores, max_scores, r2_scores = native_space_scores
+        surrogate._set_native_space_scores(rmse_scores, max_scores, r2_scores)
         if logger_on:
             _print_scores(*latent_scores, *r2_scores)
         return surrogate
@@ -1191,24 +1240,24 @@ def _check_params_in_range( params_dict, param_ranges, enforce_range=True):
    
 
 def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_params, train_data):
-    average_train_score = _get_field_scores(surrogate, train_params, train_data, 
-                                        _average_l2_error_norm)
+    rmse_train_score = _get_field_scores(surrogate, train_params, train_data, 
+                                        _root_mean_squared_error)
     max_train_score = _get_field_scores(surrogate, train_params, train_data, 
                                         _max_error_inf_norm)
     r2_train_score = _get_field_scores(surrogate, train_params, train_data, r2_score)
 
-    average_test_score = _get_field_scores(surrogate, test_params, test_data, 
-                                        _average_l2_error_norm)
+    rmse_test_score = _get_field_scores(surrogate, test_params, test_data, 
+                                        _root_mean_squared_error)
     max_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _max_error_inf_norm)
     r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score, 
                                           needs_length=True)
 
 
-    average_scores = (average_train_score, average_test_score)
+    rmse_scores = (rmse_train_score, rmse_test_score)
     max_scores = (max_train_score, max_test_score)
     r2_scores = (r2_train_score, r2_test_score)
-    return average_scores, max_scores, r2_scores
+    return rmse_scores, max_scores, r2_scores
 
 
 def _get_field_scores(surrogate, params, data, score_function, needs_length=False):
@@ -1478,10 +1527,42 @@ def _convert_param_dict_to_array(passed_params_dict, parameter_order):
     return array
 
 
-def _average_l2_error_norm(test_values, surrogate_values):
-    #expects arrays to be sized (n_samples, n_qois)
-    return (np.linalg.norm(test_values - surrogate_values)
-            / test_values.shape[1])
+def _root_mean_squared_error(test_values, surrogate_values):
+    """
+    Compute the root mean squared error (RMSE) between reference values and
+    surrogate predictions.
+
+    The arrays are expected to represent responses with shape
+    ``(n_samples, n_qois)`` or any shape that can be compared element-wise.
+
+    The RMSE is calculated as
+
+    .. math::
+
+        \\mathrm{RMSE}
+        =
+        \\sqrt{
+        \\frac{1}{N}
+        \\sum_{i=1}^{N}
+        \\left(R_i - \\hat{R}_i\\right)^2
+        }
+
+    where :math:`N` is the total number of scalar response values,
+    :math:`R_i` are the reference values, and :math:`\\hat{R}_i` are the
+    surrogate predictions.
+
+    :param test_values: Reference response values.
+    :type test_values: array-like
+
+    :param surrogate_values: Surrogate-predicted response values.
+    :type surrogate_values: array-like
+
+    :return: Root mean squared error.
+    :rtype: float
+    """
+    test_values = np.asarray(test_values, dtype=float)
+    surrogate_values = np.asarray(surrogate_values, dtype=float)
+    return np.sqrt(np.mean((test_values - surrogate_values) ** 2))
 
 
 def _max_error_inf_norm(test_values, surrogate_values):
