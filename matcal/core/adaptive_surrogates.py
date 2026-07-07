@@ -155,7 +155,7 @@ class AdaptiveSurrogate:
                  test_params, test_responses, param_names, bounds,
                  storage_best_n_surrogates=1,
                  storage_every_n_batches=None,
-                 storage_score_metric="rmse"):
+                 storage_score_metric="max_error"):
         """
         Create an :class:`AdaptiveSurrogate` instance.
 
@@ -250,7 +250,7 @@ class AdaptiveSurrogate:
 
     def set_surrogate_storage_options(self, best_n_surrogates=1,
                                       save_every_n_batches=None,
-                                      score_metric="rmse"):
+                                      score_metric="max_error"):
         """
         Configure which surrogate model objects are retained.
 
@@ -914,7 +914,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         self._surrogate_storage_best_n_surrogates = 1
         self._surrogate_storage_every_n_batches = None
-        self._surrogate_storage_score_metric = "rmse"
+        self._surrogate_storage_score_metric = "max_error"
 
     def set_error_stopping_criteria(self,
                                     rmse_goal: float=1e-2,
@@ -1429,7 +1429,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def set_surrogate_storage_options(self, best_n_surrogates=1,
                                       save_every_n_batches=None,
-                                      score_metric="rmse"):
+                                      score_metric="max_error"):
         """
         Configure how many trained surrogate objects are retained in the saved
         :class:`AdaptiveSurrogate`.

@@ -517,7 +517,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     def test_set_surrogate_storage_options(self):
         self.assertEqual(self.study._surrogate_storage_best_n_surrogates, 1)
         self.assertIsNone(self.study._surrogate_storage_every_n_batches)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "rmse")
+        self.assertEqual(self.study._surrogate_storage_score_metric, "max_error")
 
         self.study.set_surrogate_storage_options(
             best_n_surrogates=3,
@@ -774,6 +774,24 @@ class ConstantSurrogate:
         n_samples = param_array.shape[1]
         out = np.full((1, n_samples), self.constant, dtype=float)
         return out
+
+
+class FixedResponseSurrogate:
+    """
+    Callable surrogate model that returns a fixed response array for scoring.
+
+    The response should be supplied with shape (n_samples, n_qois). The
+    SparseGridAdaptiveSurrogate evaluation path expects the underlying surrogate
+    function to return shape (n_qois, n_samples), so this class transposes the
+    stored response.
+    """
+    def __init__(self, response):
+        self.response = np.asarray(response, dtype=float)
+        self.surrogate = self
+
+    def __call__(self, param_array):
+        n_samples = param_array.shape[1]
+        return self.response[:n_samples, :].T
 
 
 class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
@@ -1125,7 +1143,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertEqual(len(surrogate.sample_count_history), 3)
         self.assertEqual(len(surrogate.surrogate_records), 3)
 
-        # Default behavior is best_n_surrogates=1 by RMSE.
+        # Default behavior is best_n_surrogates=1 by maximum absolute error.
         self.assertEqual(len(surrogate.stored_surrogates), 1)
 
         stored_index = list(surrogate.stored_surrogates.keys())[0]
@@ -1286,17 +1304,17 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
         self.assertEqual(surrogate._storage_best_n_surrogates, 1)
         self.assertIsNone(surrogate._storage_every_n_batches)
-        self.assertEqual(surrogate._storage_score_metric, "rmse")
+        self.assertEqual(surrogate._storage_score_metric, "max_error")
 
         surrogate.set_surrogate_storage_options(
             best_n_surrogates=3,
             save_every_n_batches=4,
-            score_metric="max_error",
+            score_metric="rmse",
         )
 
         self.assertEqual(surrogate._storage_best_n_surrogates, 3)
         self.assertEqual(surrogate._storage_every_n_batches, 4)
-        self.assertEqual(surrogate._storage_score_metric, "max_error")
+        self.assertEqual(surrogate._storage_score_metric, "rmse")
 
     def test_storage_options_invalid_on_adaptive_surrogate(self):
         surrogate = self._make_surrogate(store_all=False)
@@ -1346,7 +1364,7 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
         self.assertEqual(surrogate.sample_count_history, [10, 20, 30])
 
-        # Default storage policy is best_n_surrogates=1 using RMSE.
+        # Default storage policy is best_n_surrogates=1 using maximum absolute error.
         self.assertEqual(len(surrogate.stored_surrogates), 1)
         self.assertEqual(len(surrogate.stored_surrogate_scores), 1)
 
@@ -1398,6 +1416,60 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         prediction = surrogate(0.0, 0.0, surrogate_index="best")
         self.assertIn("target", prediction)
         self.assertAlmostEqual(prediction["target"][0], 1.5)
+
+    def test_default_storage_metric_is_max_error_not_rmse(self):
+        """
+        Verify that the default best-surrogate selection uses max_error, not RMSE.
+
+        The two candidate surrogates are chosen so that:
+
+        * iteration 0 has lower RMSE but larger max error;
+        * iteration 1 has higher RMSE but smaller max error.
+
+        With the desired default metric of max_error, iteration 1 should be
+        retained as the best surrogate.
+        """
+        surrogate = self._make_surrogate(store_all=False)
+
+        # Test responses from _make_surrogate are [[1.0], [2.0]].
+        #
+        # Iteration 0 prediction: [[1.0], [0.6]]
+        # Errors: [[0.0], [1.4]]
+        # RMSE ~= 0.9899, max_error = 1.4
+        #
+        # Iteration 1 prediction: [[0.0], [1.0]]
+        # Errors: [[1.0], [1.0]]
+        # RMSE = 1.0, max_error = 1.0
+        #
+        # RMSE would select iteration 0.
+        # max_error should select iteration 1.
+        surrogate._add_iteration(
+            FixedResponseSurrogate(np.array([[1.0], [0.6]])),
+            nsamples=10,
+        )
+        surrogate._add_iteration(
+            FixedResponseSurrogate(np.array([[0.0], [1.0]])),
+            nsamples=20,
+        )
+
+        self.assertEqual(surrogate._storage_score_metric, "max_error")
+        self.assertEqual(len(surrogate.rmse_history), 2)
+        self.assertEqual(len(surrogate.max_error_history), 2)
+        self.assertEqual(len(surrogate.surrogate_records), 2)
+
+        # Confirm the metric conflict.
+        self.assertLess(surrogate.rmse_history[0], surrogate.rmse_history[1])
+        self.assertGreater(surrogate.max_error_history[0], surrogate.max_error_history[1])
+
+        # Since the default metric is max_error, iteration 1 should be retained.
+        self.assertEqual(surrogate.best_surrogate_iteration_index, 1)
+        self.assertEqual(list(surrogate.stored_surrogates.keys()), [1])
+        self.assertEqual(list(surrogate.stored_surrogate_scores.keys()), [1])
+
+        stored_record = surrogate.stored_surrogate_scores[1]
+        self.assertTrue(stored_record["surrogate_stored"])
+        self.assertIn("best", stored_record["storage_reason"])
+        self.assertAlmostEqual(stored_record["max_error"], 1.0)
 
 
 class _FakeSurrogate:
