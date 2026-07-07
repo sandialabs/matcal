@@ -41,26 +41,23 @@ def _get_parameter_bounds(parameters):
     return bounds
 
 
-def _get_pyapprox_variable_transformer(study, bounds):
-    # bounds is (n_params, 2)
-    return _PyapproxBoundedAffineTransformerND(bounds)
-
-
 def _setup_pyapprox_adaptive_sparse_grid_fitter(
     n_parameters: int,
     n_qois: int,
+    bounds,
     basis_type: str = "lagrange",
     piecewise_degree: int = 2,
     max_level: int = 20,
     pnorm: float = 1.0,
 ):
     """
-    Build a PyApprox adaptive sparse-grid fitter (new API).
+    Build a PyApprox adaptive sparse-grid fitter.
 
     Notes
     -----
-    * Parameters are assumed to be in canonical space [-1,1]^d when passed to
-      the surrogate; we use AffineTransform in the study to map to/from.
+    * Parameters are assumed to be in native/physical parameter space.
+    * The physical parameter bounds are supplied to PyApprox through the
+      one-dimensional marginal distributions.
     * basis_type:
         - 'lagrange': global Clenshaw-Curtis Lagrange
         - 'piecewise': local piecewise polynomial basis
@@ -81,31 +78,54 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
         CubicNestedGrowthRule,
         MaxLevelCriteria,
     )
-
-    bkd = NumpyBkd()
-    marginal = UniformMarginal(-1.0, 1.0, bkd)
-
-    basis_type = basis_type.lower().strip()
-    if basis_type not in ("lagrange", "piecewise"):
-        raise ValueError(f"basis_type must be 'lagrange' or 'piecewise'. Got '{basis_type}'.")
-
-    if basis_type == "lagrange":
-        factories = [ClenshawCurtisLagrangeFactory(marginal, bkd) for _ in range(n_parameters)]
-        growth = ClenshawCurtisGrowthRule()
-    else:
-        if piecewise_degree not in (1, 2, 3):
-            raise ValueError("piecewise_degree must be 1, 2, or 3")
-        poly_type = {1: "linear", 2: "quadratic", 3: "cubic"}[piecewise_degree]
-        factories = [PiecewiseFactory(marginal, bkd, poly_type=poly_type) for _ in range(n_parameters)]
-        growth = CubicNestedGrowthRule() if poly_type == "cubic" else ClenshawCurtisGrowthRule()
-
-    tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
-    admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
-
     from pyapprox.surrogates.sparsegrids.error_indicators import (
         VarianceChangeIndicator,
     )
 
+    bkd = NumpyBkd()
+
+    bounds = np.asarray(bounds, dtype=float)
+    expected_shape = (n_parameters, 2)
+    if bounds.shape != expected_shape:
+        raise ValueError(
+            f"bounds must have shape {expected_shape}. Received {bounds.shape}."
+        )
+
+    if np.any(bounds[:, 1] <= bounds[:, 0]):
+        raise ValueError(
+            "Each parameter upper bound must be greater than its lower bound."
+        )
+
+    marginals = [
+        UniformMarginal(float(bounds[ii, 0]), float(bounds[ii, 1]), bkd)
+        for ii in range(n_parameters)
+    ]
+
+    basis_type = basis_type.lower().strip()
+    if basis_type not in ("lagrange", "piecewise"):
+        raise ValueError(
+            f"basis_type must be 'lagrange' or 'piecewise'. Got '{basis_type}'."
+        )
+
+    if basis_type == "lagrange":
+        factories = [
+            ClenshawCurtisLagrangeFactory(marginals[ii], bkd)
+            for ii in range(n_parameters)
+        ]
+        growth = ClenshawCurtisGrowthRule()
+    else:
+        if piecewise_degree not in (1, 2, 3):
+            raise ValueError("piecewise_degree must be 1, 2, or 3")
+
+        poly_type = {1: "linear", 2: "quadratic", 3: "cubic"}[piecewise_degree]
+        factories = [
+            PiecewiseFactory(marginals[ii], bkd, poly_type=poly_type)
+            for ii in range(n_parameters)
+        ]
+        growth = CubicNestedGrowthRule() if poly_type == "cubic" else ClenshawCurtisGrowthRule()
+
+    tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
+    admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
     error_indicator = VarianceChangeIndicator(bkd)
 
     fitter = SingleFidelityAdaptiveSparseGridFitter(
@@ -150,12 +170,12 @@ class AdaptiveSurrogate:
 
     _VALID_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
 
-    def __init__(self, target_field_name, indep_variable_name, 
-                 indep_variable_values, variable_transformer, 
-                 test_params, test_responses, param_names, bounds,
-                 storage_best_n_surrogates=1,
-                 storage_every_n_batches=None,
-                 storage_score_metric="max_error"):
+    def __init__(self, target_field_name, indep_variable_name,
+                indep_variable_values, test_params, test_responses,
+                param_names, bounds,
+                storage_best_n_surrogates=1,
+                storage_every_n_batches=None,
+                storage_score_metric="max_error"):
         """
         Create an :class:`AdaptiveSurrogate` instance.
 
@@ -171,22 +191,14 @@ class AdaptiveSurrogate:
             which the surrogate response is reported.
         :type indep_variable_values: array-like of real numbers
 
-        :param variable_transformer: Object that maps model parameters between
-            physical parameter space and the canonical space required by the
-            underlying surrogate library. For sparse-grid surrogates, this
-            typically maps physical parameter bounds to ``[-1, 1]^d``.
-        :type variable_transformer: object with ``map_to_canonical`` and
-            ``map_from_canonical`` methods, or ``None`` for surrogate types that
-            do not require such a transform
-
         :param test_params: Parameter samples used to evaluate surrogate
             accuracy. These are always stored, regardless of the surrogate
             retention policy.
         :type test_params: :class:`numpy.ndarray`
 
         :param test_responses: Model responses corresponding to
-            ``test_params``. These are always stored, regardless of the
-            surrogate retention policy.
+            ``test_params``. These are always stored, regardless of the surrogate
+            retention policy.
         :type test_responses: :class:`numpy.ndarray` of shape
             ``(n_test_samples, n_qois)``
 
@@ -207,29 +219,24 @@ class AdaptiveSurrogate:
 
         :param storage_every_n_batches: If provided, retain every N-th adaptive
             batch surrogate in addition to any score-based retained surrogates.
-            For example, ``storage_every_n_batches=5`` retains batches
-            5, 10, 15, ...
         :type storage_every_n_batches: int or None
 
         :param storage_score_metric: Metric used to identify the best
             surrogates. Supported values are ``"rmse"``, ``"max_error"``,
             ``"r2"``, and ``"score"``. ``"score"`` is an alias for ``"r2"``.
-            Lower is better for ``"rmse"`` and ``"max_error"``. Higher is
-            better for ``"r2"``.
         :type storage_score_metric: str
         """
         self._surrogates = OrderedDict()
         self._surrogate_iteration_records = []
 
-        self._root_mean_squared_errors: list[float] = [] 
+        self._root_mean_squared_errors: list[float] = []
         self._max_errors: list[float] = []
-        self._r2_scores: list[float] = []    
-        self._sample_counts: list[int] = []    
+        self._r2_scores: list[float] = []
+        self._sample_counts: list[int] = []
 
         self._target_field_name: str = target_field_name
         self._indep_variable_name = indep_variable_name
         self._indep_variable_values = np.asarray(indep_variable_values)
-        self._variable_transformer = variable_transformer
 
         # Always persisted. These are needed to understand/diagnose all scores.
         self._test_params = test_params
@@ -792,8 +799,7 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
 
     * process MatCal-style positional, keyword, dictionary, or batch inputs;
     * check physical parameter bounds;
-    * map physical parameters to PyApprox's canonical ``[-1, 1]^d`` domain;
-    * evaluate the PyApprox sparse-grid surrogate; and
+    * evaluate the PyApprox sparse-grid surrogate in native parameter space; and
     * package the response with the independent-variable values.
 
     Surrogate-object retention, score histories, test data storage, and
@@ -801,7 +807,7 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
     :class:`AdaptiveSurrogate` class.
     """
     def _evaluate_surrogate_object(self, result, *args, batch_evaluate=False,
-                                   transpose=True, **kwargs):
+                                transpose=True, **kwargs):
         # Stored object is a PyApprox fitter.result().
         surrogate_fun = result.surrogate
 
@@ -817,15 +823,15 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
             if params_array.shape[0] != len(self._param_names):
                 params_array = params_array.T
 
-        # Range check in physical parameter space.
+        # Range check in physical/native parameter space.
         params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
         _check_params_in_range(
             params_dict, self._bounds.T,
             self._enforce_training_data_parameter_range
         )
 
-        # Map physical -> canonical [-1, 1].
-        params_array = self._variable_transformer.map_to_canonical(params_array)
+        # PyApprox sparse grids are constructed directly on the physical/native
+        # parameter domain. No parameter transform is performed.
 
         # PyApprox returns (n_qois, nsamples).
         response = surrogate_fun(params_array)
@@ -894,8 +900,6 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._results_synchronizer = None
 
         self._surrogate = None
-        self._variable_transformer = None
-
         self._user_test_data = None
 
         self._max_training_samples=None
@@ -1267,34 +1271,28 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def launch(self):
         """
-        Run the initial test‑sampling study in a dedicated sub‑directory,
-        then continue with the adaptive Sparse‑Grid workflow.
+        Run the initial test-sampling study in a dedicated sub-directory,
+        then continue with the adaptive surrogate workflow.
 
-        The test‑sampling phase is performed by a standard **HaltonStudy** 
-        to generate the required test points. If the user called
-        :meth:`StudyBase.set_working_directory` before launching the study,
-        the test‑sampling directory is created by appending the suffix
-        ``\"_test_samples\"`` to the user‑provided path. Otherwise, the test 
-        samples are run in a local directory named ``\"test_samples\"``.
-        After the test sample study finishes, the original working directory is restored
-        and the surrogate‑building routine is started.
+        The test-sampling phase is performed by a standard HaltonStudy to generate
+        the required test points unless user-provided test data has been supplied.
         """
         test_params, test_responses = self._get_test_data()
         param_names = self._parameter_collection.get_item_names()
-        self._variable_transformer = self._variable_transformer_factory(self._bounds)
+
         self._surrogate = self._adaptive_surrogate_class(
             self._target_field_name,
             self._independent_variable,
             self._independent_variable_values,
-            self._variable_transformer,
             test_params,
             test_responses,
             param_names,
-            self._bounds, 
+            self._bounds,
             storage_best_n_surrogates=self._surrogate_storage_best_n_surrogates,
             storage_every_n_batches=self._surrogate_storage_every_n_batches,
             storage_score_metric=self._surrogate_storage_score_metric,
         )
+
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
         return super().launch()
 
@@ -1476,70 +1474,6 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._surrogate_storage_score_metric = score_metric
 
 
-class _PyapproxBoundedAffineTransformerND:
-    """
-    Minimal ND transformer compatible with MatCal's needs.
-
-    Uses PyApprox's updated univariate BoundedAffineTransform1D to map between
-    physical bounds [lb, ub] and canonical [-1, 1] for each dimension.
-    """
-
-    def __init__(self, bounds: np.ndarray):
-        # bounds shape: (n_params, 2) with columns [lb, ub]
-        from pyapprox.util.backends.numpy import NumpyBkd
-        from pyapprox.surrogates.affine.univariate.transforms import (
-            BoundedAffineTransform1D,
-        )
-
-        self._bkd = NumpyBkd()
-        self._bounds = np.asarray(bounds, dtype=float)
-        self._transforms = [
-            BoundedAffineTransform1D(self._bkd, lb=float(lb), ub=float(ub))
-            for lb, ub in self._bounds
-        ]
-
-    def map_to_canonical(self, samples: np.ndarray) -> np.ndarray:
-        """
-        Map physical -> canonical.
-
-        Accepts either:
-          * (n_params, n_samples)  [MatCal sparse-grid path]
-          * (n_samples, n_params)  [some internal uses]
-        Returns same orientation as input.
-        """
-        arr = np.asarray(samples, dtype=float)
-        if arr.ndim != 2:
-            raise ValueError("samples must be 2D")
-
-        transposed = False
-        if arr.shape[0] != self._bounds.shape[0] and arr.shape[1] == self._bounds.shape[0]:
-            arr = arr.T
-            transposed = True
-
-        out = arr.copy()
-        for ii, t1d in enumerate(self._transforms):
-            out[ii, :] = np.asarray(t1d.map_to_canonical(self._bkd.asarray(out[ii, :])))
-        return out.T if transposed else out
-
-    def map_from_canonical(self, canonical: np.ndarray) -> np.ndarray:
-        """
-        Map canonical -> physical. Same shape/orientation rules as map_to_canonical.
-        """
-        arr = np.asarray(canonical, dtype=float)
-        if arr.ndim != 2:
-            raise ValueError("canonical must be 2D")
-
-        transposed = False
-        if arr.shape[0] != self._bounds.shape[0] and arr.shape[1] == self._bounds.shape[0]:
-            arr = arr.T
-            transposed = True
-
-        out = arr.copy()
-        for ii, t1d in enumerate(self._transforms):
-            out[ii, :] = np.asarray(t1d.map_from_canonical(self._bkd.asarray(out[ii, :])))
-        return out.T if transposed else out
-    
-
 class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     """
     Build an adaptive sparse-grid surrogate using PyApprox's *fitter/result* API
@@ -1563,7 +1497,6 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     signifies the response of interest for the surrogate.
     """
 
-    _variable_transformer_factory= _get_pyapprox_variable_transformer
     _adaptive_surrogate_class = SparseGridAdaptiveSurrogate
 
     def __init__(self, *parameters):
@@ -1584,23 +1517,26 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         fitter = _setup_pyapprox_adaptive_sparse_grid_fitter(
             self._number_parameters,
             n_qois,
+            bounds=self._bounds,
             basis_type=self._sg_basis_type,
             piecewise_degree=self._sg_piecewise_degree,
             max_level=self._sg_max_level,
             pnorm=self._sg_pnorm,
         )
 
-        # Run at least one refinement step, then check your existing criteria
+        # Run at least one refinement step, then check the existing criteria.
         while True:
             new_samples = fitter.step_samples()
             if new_samples is None:
                 logger.info("No more admissible sparse-grid indices. Stopping.")
                 break
 
-            # new_samples are canonical (nvars, nsamples_new)
-            # Evaluate MatCal; your callback expects canonical samples
+            # new_samples are physical/native parameter values with shape
+            # (nvars, nsamples_new).
             new_vals = self._matcal_evaluate_parameter_sets_batch_adaptive_training(new_samples)
-            # new_vals comes back as (nsamples_new, n_qois); fitter wants (n_qois, nsamples_new)
+
+            # new_vals comes back as (nsamples_new, n_qois); fitter wants
+            # (n_qois, nsamples_new).
             if new_vals.ndim != 2 or new_vals.shape[1] != n_qois:
                 raise RuntimeError(
                     "Batch evaluation must return array with shape (nsamples, n_qois). "
@@ -1609,11 +1545,11 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
             fitter.step_values(new_vals.T)
 
-            # Store this iteration's surrogate
+            # Store this iteration's surrogate.
             result = fitter.result()
             self._surrogate._add_iteration(result, self._results.number_of_evaluations)
 
-            # persist after each batch
+            # Persist after each batch.
             matcal_save(self._surrogate_save_filename, self._surrogate)
 
             training_batch_number = len(self._surrogate.sample_count_history)
@@ -1623,7 +1559,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         return self._results
 
     def _populate_parameter_evaluations_adaptive(self, samples):
-        samples = self._variable_transformer.map_from_canonical(samples)
+        samples = np.asarray(samples, dtype=float)
         super()._populate_parameter_evaluations(samples.T)
 
     def _format_batch_results(self, batch_results, parameter_sets_from_pyapprox):
@@ -1705,8 +1641,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _return_none(*args, **kwargs):
         return None
     
-    _variable_transformer_factory = _return_none
-
     def __init__(self, *parameters):
         """Initialize the VoronoiAdaptiveSurrogateStudy
         """

@@ -355,58 +355,57 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     def test_populate_parameter_evaluations_adaptive(self):
         """
         Verify that the method:
-          * transforms the sample matrix via ``map_from_canonical``,
-          * creates a list ``_parameter_sets_to_evaluate`` with one dict per
+        * treats the sample matrix as native/physical parameter values,
+        * creates a list ``_parameter_sets_to_evaluate`` with one dict per
             sample,
-          * each dict contains the correct parameter names and values, and
-          * ``_add_parameter_evaluation`` is called with the same dictionaries.
+        * each dict contains the correct parameter names and values, and
+        * ``_add_parameter_evaluation`` is called with the same dictionaries.
         """
-        class DummyTransformer:
-            def map_from_canonical(self, arr):
-                return arr  # identity – the samples we pass are already in the desired space
+        native_samples = np.array([
+            [0.1, 0.2, 0.3],    # p1 values
+            [0.1, 0.5, -0.1],   # p2 values
+        ])
 
-        self.study._variable_transformer = DummyTransformer()
-
-        canonical_samples = np.array([[0.1, 0.2, 0.3],   # p1 values
-                                      [0.1, 0.5, -0.1]])  # p2 values
-
-        self.study._populate_parameter_evaluations_adaptive(canonical_samples)
+        self.study._populate_parameter_evaluations_adaptive(native_samples)
         self.assertEqual(len(self.study._parameter_sets_to_evaluate), 3)
 
         expected_names = self.study._parameter_collection.get_item_names()
-        expected_names = list(expected_names)          # ensure list for indexing
+        expected_names = list(expected_names)
 
         for i, param_dict in enumerate(self.study._parameter_sets_to_evaluate):
             self.assertCountEqual(param_dict.keys(), expected_names)
             for name, col_idx in zip(expected_names, range(len(expected_names))):
-                expected_value = canonical_samples[col_idx, i]
+                expected_value = native_samples[col_idx, i]
                 self.assertAlmostEqual(param_dict[name], expected_value)
 
     def test_update_surrogate_score(self):
-        class DummyTransform:
-            def map_to_canonical(self, x):
-                return x
-        self.study._variable_transformer = DummyTransform()
-
-        self.study._test_params = np.array([[0.0, 1.0], [0.5, 0.5], [ 1.0, 0]])
-        self.study._test_responses = np.array([[1.0, 2.0], [1.5, 2.5], [0.75, 0.85]])
+        self.study._test_params = np.array([[0.0, 1.0],
+                                            [0.5, 0.5],
+                                            [1.0, 0.0]])
+        self.study._test_responses = np.array([[1.0, 2.0],
+                                            [1.5, 2.5],
+                                            [0.75, 0.85]])
 
         class DoubleParamSurrogate:
             def __init__(self):
                 self.surrogate = self
+
             def __call__(self, params):
-                results = np.array(params)*2.0
+                results = np.array(params) * 2.0
                 return results
-        self.study._surrogate = SparseGridAdaptiveSurrogate("target", "independent", 
-                                                   np.array([0.0, 1.0]), 
-                                                   DummyTransform(), 
-                                                   self.study._test_params, 
-                                                   self.study._test_responses, 
-                                                   ["p1", "p2"], 
-                                                   np.array([[-1.0, 1.0], [-1.0, 1.0]])   
-                                                   )        
-        self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)        
-        
+
+        self.study._surrogate = SparseGridAdaptiveSurrogate(
+            "target",
+            "independent",
+            np.array([0.0, 1.0]),
+            self.study._test_params,
+            self.study._test_responses,
+            ["p1", "p2"],
+            np.array([[-1.0, 1.0], [-1.0, 1.0]]),
+        )
+
+        self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)
+
         self.assertEqual(len(self.study.surrogate.rmse_history), 1)
         self.assertEqual(len(self.study.surrogate.max_error_history), 1)
 
@@ -414,7 +413,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
             np.mean(
                 (
                     self.study._test_responses
-                    - DoubleParamSurrogate()(self.study._test_params)
+                    - DoubleParamSurrogate()(self.study._test_params.T).T
                 ) ** 2
             )
         )
@@ -637,53 +636,6 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         with self.assertRaises((ValueError, TypeError)):
             sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
 
-    # -----------------------------------------
-    # Transformer / domain mapping regression
-    # -----------------------------------------
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_sparse_grid_transformer_round_trip(self):
-        """
-        Regression for removal of pyapprox.variables.transforms.AffineTransform.
-        Confirms MatCal's replacement transformer performs a stable round-trip.
-        """
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-
-        # Force initialization of bounds/transformer similarly to launch()
-        bounds = np.asarray([[0.0, 10.0], [0.0, 10.0], [0.1, 2.0]], dtype=float)
-
-        # study implementation should set _variable_transformer_factory
-        transformer_factory = getattr(sg_study, "_variable_transformer_factory", None)
-        if transformer_factory is None:
-            self.skipTest("Sparse-grid transformer factory not available")
-
-        # factory signature in adaptive_surrogates.py is (study, bounds) or (bounds)
-        try:
-            transformer = transformer_factory(sg_study, bounds)
-        except TypeError:
-            transformer = transformer_factory(bounds)
-
-        rng = np.random.default_rng(0)
-        n = 50
-        physical = np.vstack(
-            [
-                rng.uniform(0.0, 10.0, n),
-                rng.uniform(0.0, 10.0, n),
-                rng.uniform(0.1, 2.0, n),
-            ]
-        )
-        canonical = transformer.map_to_canonical(physical)
-        physical_rt = transformer.map_from_canonical(canonical)
-
-        np.testing.assert_allclose(physical, physical_rt, rtol=0.0, atol=1e-12)
-
-        # Also check canonical is within [-1,1] (allow tiny numerical noise)
-        self.assertTrue(np.all(canonical <= 1.0 + 1e-12))
-        self.assertTrue(np.all(canonical >= -1.0 - 1e-12))
-
     @unittest.skipIf(
         not HAS_PYAPPROX,
         "pyapprox not installed – skipping pyapprox‑dependent tests",
@@ -742,19 +694,6 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assertIsNone(self.study.surrogate_save_filename)
 
 
-class IdentityTransformer:
-    """
-    Minimal transformer that implements the two methods used by AdaptiveSurrogate.
-    Both methods simply return the argument unchanged.
-    """
-    def map_to_canonical(self, arr):
-        # In the real code this would map to [-1, 1] space – we keep it identity.
-        return arr
-
-    def map_from_canonical(self, arr):
-        return arr
-
-
 class ConstantSurrogate:
     """
     Callable surrogate model used in the tests.
@@ -799,20 +738,15 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         super().setUp(__file__)   
 
     def _make_surrogate(self, store_all=True, **storage_options):
-        # 2 parameters → simple 2‑D problem
+        # 2 parameters → simple 2-D problem
         param_names = ["p1", "p2"]
-        n_params = len(param_names)
 
-        # Test parameters – shape (n_params, n_test_samples)
-        test_params = np.array([[0.0, 1.0],   # p1 values
-                                [0.0, 1.0]])  # p2 values
+        # Test parameters – shape (n_test_samples, n_params)
+        test_params = np.array([[0.0, 0.0],
+                                [1.0, 1.0]])
 
         # Test responses – shape (n_test_samples, n_qois)
-        # We deliberately set them to something different from the surrogate
-        # constant so we can validate error calculation.
         test_responses = np.array([[1.0], [2.0]])
-
-        transformer = IdentityTransformer()
 
         # Most existing tests were written assuming every surrogate object was
         # retained. Keep that behavior for those tests by default. New tests can
@@ -825,7 +759,6 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
             target_field_name="target",
             indep_variable_name="independent",
             indep_variable_values=np.array([0.0]),
-            variable_transformer=transformer,
             test_params=test_params,
             test_responses=test_responses,
             param_names=param_names,
@@ -1161,8 +1094,8 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
         self.assertIsNotNone(surrogate.test_params)
         self.assertIsNotNone(surrogate.test_responses)
-        self.assert_close_arrays(surrogate.test_params, np.array([[0.0, 1.0],
-                                                                  [0.0, 1.0]]))
+        self.assert_close_arrays(surrogate.test_params, np.array([[0.0, 0.0],
+                                                                  [1.0, 1.0]]))
         self.assert_close_arrays(surrogate.test_responses, np.array([[1.0],
                                                                      [2.0]]))
 
