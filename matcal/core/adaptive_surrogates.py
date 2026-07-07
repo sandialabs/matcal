@@ -5,7 +5,6 @@ from collections import OrderedDict
 import copy
 import numpy as np
 import os
-from scipy import stats
 from sklearn.metrics import r2_score
 
 from matcal.core.logger import initialize_matcal_logger
@@ -15,6 +14,7 @@ from matcal.core.qoi_extractor import UserDefinedExtractor
 from matcal.core.state import State
 from matcal.core.study_base import StudyResults
 from matcal.core.utilities import (check_value_is_positive_integer, 
+                                   check_value_is_positive_integer_or_none,
                                    check_value_is_array_like_of_reals, 
                                    check_value_is_nonempty_str, 
                                    check_value_is_array_like_of_reals, 
@@ -117,132 +117,546 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
     return fitter
 
 
-def _setup_sparse_grid_surrogate(n_parameters, n_qois):
-    from pyapprox.surrogates.univariate.base import ClenshawCurtisQuadratureRule
-    from pyapprox.surrogates.affine.multiindex import DoublePlusOneIndexGrowthRule
-    from pyapprox.surrogates.univariate.lagrange import UnivariateLagrangeBasis
-    from pyapprox.surrogates.sparsegrids.combination import (
-        AdaptiveCombinationSparseGrid,
-        MaxNSamplesSparseGridSubspaceAdmissibilityCriteria,
-        VarianceRefinementCriteria
-        )
-    
-    quad_rule = ClenshawCurtisQuadratureRule(store=True, bounds=[-1., 1.])
-    bases_1d = [UnivariateLagrangeBasis(quad_rule, 3) for dim_id in range(n_parameters)]
-    growth_rule = DoublePlusOneIndexGrowthRule()
-    sg = AdaptiveCombinationSparseGrid(n_qois, n_parameters)
-    sg.setup(
-        MaxNSamplesSparseGridSubspaceAdmissibilityCriteria(np.inf),
-        VarianceRefinementCriteria(),
-        bases_1d,
-        growth_rule
-    )
-    return sg
-
-
 class AdaptiveSurrogate:
     """
-    Stores the surrogate and training and test information regarding the surrogate
-    and the progress of training for the surrogate.
+    Stores retained surrogate objects, training/test score histories, test data,
+    and metadata describing the progress of adaptive surrogate training.
 
-    Can also be used to call the surrogate objects for predictions 
-    using the surrogate models. Since all iterations of the surrogate are 
-    stored, any version of the surrogate can be called.
+    The adaptive surrogate study may generate many surrogate models during
+    training. To avoid unnecessarily large ``.joblib`` files, this class does
+    not have to retain every trained surrogate object. Instead, the retention
+    policy is configurable through
+    :meth:`AdaptiveSurrogateStudyBase.set_surrogate_storage_options`.
+
+    Regardless of the surrogate-object retention policy, this class always
+    stores:
+
+    * the test parameters used to score each surrogate,
+    * the test responses used to score each surrogate,
+    * the RMSE history,
+    * the maximum absolute error history,
+    * the :math:`R^2` score history,
+    * the sample-count history, and
+    * one metadata record for every adaptive-training batch.
+
+    Retained surrogate objects are stored in ``stored_surrogates`` and are
+    keyed by the adaptive-training iteration index. The corresponding scores
+    and metadata for retained surrogates are available through
+    ``stored_surrogate_scores`` using the same keys.
+
+    By default, only the best surrogate, as measured by RMSE on the test set,
+    is retained.
     """
+
+    _VALID_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
 
     def __init__(self, target_field_name, indep_variable_name, 
                  indep_variable_values, variable_transformer, 
-                 test_params, test_responses, param_names, 
-                 bounds):
+                 test_params, test_responses, param_names, bounds,
+                 storage_best_n_surrogates=1,
+                 storage_every_n_batches=None,
+                 storage_score_metric="rmse"):
         """
         Create an :class:`AdaptiveSurrogate` instance.
 
         :param str target_field_name: Name of the model field that the surrogate
-            will approximate (e.g., ``"temperature"``).
-        :param str indep_variable_name: Name of the auxiliary independent variable
-            (e.g., ``"time"`` or ``"x_position"``) that will be attached to the
-            surrogate output.
-        :param indep_variable_values: The values of the independent variable at
-            which the surrogate should be evaluated.
-        :type indep_variable_values: array‑like of real numbers
-        :param variable_transformer: Object that maps model parameters to the
-            canonical space required by the surrogate library.
+            approximates, e.g. ``"temperature"``, ``"load"``, or ``"f"``.
+
+        :param str indep_variable_name: Name of the auxiliary independent
+            variable attached to the surrogate output, e.g. ``"time"``,
+            ``"x"``, or ``"x_position"``. This is not a model input parameter;
+            it is the independent coordinate for the predicted response.
+
+        :param indep_variable_values: Values of the independent variable at
+            which the surrogate response is reported.
+        :type indep_variable_values: array-like of real numbers
+
+        :param variable_transformer: Object that maps model parameters between
+            physical parameter space and the canonical space required by the
+            underlying surrogate library. For sparse-grid surrogates, this
+            typically maps physical parameter bounds to ``[-1, 1]^d``.
         :type variable_transformer: object with ``map_to_canonical`` and
-            ``map_from_canonical`` methods
-        :param test_params: Parameter samples used for testing the surrogate.
-        :type test_params: :class:`numpy.ndarray` of shape ``(n_parameters, n_test)``  
-        :param test_responses: Corresponding model responses for the test
-            parameter samples.
+            ``map_from_canonical`` methods, or ``None`` for surrogate types that
+            do not require such a transform
+
+        :param test_params: Parameter samples used to evaluate surrogate
+            accuracy. These are always stored, regardless of the surrogate
+            retention policy.
+        :type test_params: :class:`numpy.ndarray`
+
+        :param test_responses: Model responses corresponding to
+            ``test_params``. These are always stored, regardless of the
+            surrogate retention policy.
         :type test_responses: :class:`numpy.ndarray` of shape
-            ``(n_test, n_qois)``  
-        :param param_names: Ordered list of parameter names that define the
-            mapping between positional arguments and model parameters.
+            ``(n_test_samples, n_qois)``
+
+        :param param_names: Ordered parameter names. This order defines the
+            mapping between positional arguments and model parameters when the
+            surrogate is called.
         :type param_names: list[str]
 
-        The constructor stores the supplied information and prepares internal
-        containers that will hold the surrogate objects, error histories and
-        sample counts as the adaptive training proceeds.
-        """
+        :param bounds: Physical parameter bounds. Expected shape is
+            ``(n_parameters, 2)``, where column 0 is the lower bound and column
+            1 is the upper bound.
+        :type bounds: :class:`numpy.ndarray`
 
-        self._surrogates: list = []         
+        :param storage_best_n_surrogates: Number of best surrogate objects to
+            retain according to ``storage_score_metric``. If ``None``,
+            score-based retention is disabled.
+        :type storage_best_n_surrogates: int or None
+
+        :param storage_every_n_batches: If provided, retain every N-th adaptive
+            batch surrogate in addition to any score-based retained surrogates.
+            For example, ``storage_every_n_batches=5`` retains batches
+            5, 10, 15, ...
+        :type storage_every_n_batches: int or None
+
+        :param storage_score_metric: Metric used to identify the best
+            surrogates. Supported values are ``"rmse"``, ``"max_error"``,
+            ``"r2"``, and ``"score"``. ``"score"`` is an alias for ``"r2"``.
+            Lower is better for ``"rmse"`` and ``"max_error"``. Higher is
+            better for ``"r2"``.
+        :type storage_score_metric: str
+        """
+        self._surrogates = OrderedDict()
+        self._surrogate_iteration_records = []
+
         self._root_mean_squared_errors: list[float] = [] 
         self._max_errors: list[float] = []
         self._r2_scores: list[float] = []    
         self._sample_counts: list[int] = []    
+
         self._target_field_name: str = target_field_name
         self._indep_variable_name = indep_variable_name
         self._indep_variable_values = np.asarray(indep_variable_values)
         self._variable_transformer = variable_transformer
+
+        # Always persisted. These are needed to understand/diagnose all scores.
         self._test_params = test_params
         self._test_responses = test_responses
+
         self._param_names = param_names
         self._bounds = bounds
         self._enforce_training_data_parameter_range = True
 
+        self._storage_best_n_surrogates = None
+        self._storage_every_n_batches = None
+        self._storage_score_metric = None
+        self.set_surrogate_storage_options(
+            best_n_surrogates=storage_best_n_surrogates,
+            save_every_n_batches=storage_every_n_batches,
+            score_metric=storage_score_metric,
+        )
+
+    def set_surrogate_storage_options(self, best_n_surrogates=1,
+                                      save_every_n_batches=None,
+                                      score_metric="rmse"):
+        """
+        Configure which surrogate model objects are retained.
+
+        This method controls only the storage of trained surrogate objects.
+        All score histories, test parameters, test responses, sample counts,
+        and per-batch metadata records are always retained.
+
+        The retention policy can combine two independent rules:
+
+        * retain the best ``N`` surrogate objects according to a score metric;
+        * retain every ``N``-th adaptive-training batch surrogate.
+
+        If both rules are active, the retained surrogate set is the union of
+        the best-score surrogates and the periodic-batch surrogates.
+
+        By default, only the best surrogate by RMSE is retained.
+
+        :param best_n_surrogates: Retain the best N surrogate objects according
+            to ``score_metric``. If ``None``, score-based retention is disabled.
+        :type best_n_surrogates: int or None
+
+        :param save_every_n_batches: Retain every N-th adaptive batch surrogate.
+            If ``None``, periodic retention is disabled.
+        :type save_every_n_batches: int or None
+
+        :param score_metric: Metric used to rank the best surrogates. Supported
+            values are ``"rmse"``, ``"max_error"``, ``"r2"``, and ``"score"``.
+            ``"score"`` is treated as an alias for ``"r2"``.
+        :type score_metric: str
+
+        :raises TypeError: If ``best_n_surrogates`` or
+            ``save_every_n_batches`` is not ``None`` and is not an integer, or
+            if ``score_metric`` is not a string.
+
+        :raises ValueError: If either storage count is non-positive, if
+            ``score_metric`` is not supported, or if both retention rules are
+            disabled.
+
+        **Examples**
+
+        Retain only the best surrogate by RMSE:
+
+        >>> study.set_surrogate_storage_options(best_n_surrogates=1)
+
+        Retain the best five surrogates by maximum absolute error:
+
+        >>> study.set_surrogate_storage_options(
+        ...     best_n_surrogates=5,
+        ...     score_metric="max_error",
+        ... )
+
+        Retain every tenth adaptive batch surrogate:
+
+        >>> study.set_surrogate_storage_options(
+        ...     best_n_surrogates=None,
+        ...     save_every_n_batches=10,
+        ... )
+
+        Retain the best two surrogates and every fifth batch surrogate:
+
+        >>> study.set_surrogate_storage_options(
+        ...     best_n_surrogates=2,
+        ...     save_every_n_batches=5,
+        ...     score_metric="rmse",
+        ... )
+        """
+        check_value_is_positive_integer_or_none(best_n_surrogates, "best_n_surrogates")
+        check_value_is_positive_integer_or_none(save_every_n_batches, "save_every_n_batches")
+        check_value_is_nonempty_str(score_metric, "score_metric")
+
+        score_metric = score_metric.lower().strip()
+        if score_metric not in self._VALID_STORAGE_METRICS:
+            raise ValueError(
+                "Invalid surrogate storage score metric. "
+                f"Supported metrics are {self._VALID_STORAGE_METRICS}. "
+                f"Received '{score_metric}'."
+            )
+
+        if best_n_surrogates is None and save_every_n_batches is None:
+            raise ValueError(
+                "At least one surrogate retention option must be active. "
+                "Set best_n_surrogates to a positive integer or "
+                "save_every_n_batches to a positive integer."
+            )
+
+        if score_metric == "score":
+            score_metric = "r2"
+
+        self._storage_best_n_surrogates = best_n_surrogates
+        self._storage_every_n_batches = save_every_n_batches
+        self._storage_score_metric = score_metric
+
     def enforce_training_data_parameter_range(self, enforce_training_data_parameter_range=True):
         """
-        By default the surrogate will error if called with a parameter set outside of the 
-        parameter ranges used in the training data set. To call the surrogate for parameters 
-        outside of the training data range, call this method with the argument set to False. 
-        Adherence to the training data range can be reactivated by calling this method 
-        with the argument set to True.
-        
-        :param ignore_training_range: bool flag to ignore training data range.
-        :type ignore_training_range:
+        Activate or deactivate parameter-range enforcement during surrogate calls.
+
+        By default, the surrogate raises an error if it is evaluated at
+        parameter values outside the parameter bounds used to generate the
+        training data. Calling this method with ``False`` permits extrapolative
+        surrogate calls outside the training-data parameter range. Calling it
+        again with ``True`` restores the default range-checking behavior.
+
+        :param enforce_training_data_parameter_range: If ``True``, reject
+            surrogate calls outside the training parameter bounds. If ``False``,
+            allow calls outside the training parameter bounds.
+        :type enforce_training_data_parameter_range: bool
+
+        :raises TypeError: If ``enforce_training_data_parameter_range`` is not
+            a boolean.
         """
         check_value_is_bool(enforce_training_data_parameter_range, 
                             "enforce_training_data_parameter_range")
         self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
-    def _add_iteration(
-        self,
-        surrogate, 
-        nsamples
-        ) -> None:
-        self._surrogates.append(copy.deepcopy(surrogate))
-        surrogate_values = self(self._test_params, batch_evaluate=True)[self._target_field_name]
-        rmse = _root_mean_squared_error(self._test_responses, 
-                                                  surrogate_values)
-        max_abs_error = _max_error_inf_norm( self._test_responses, surrogate_values)
+
+    def _add_iteration(self, surrogate, nsamples) -> None:
+        """
+        Add one adaptive-training iteration.
+
+        The candidate surrogate is scored immediately. It is retained only if it
+        satisfies the configured storage policy.
+        """
+        surrogate_values = self._evaluate_surrogate_object(
+            surrogate, self._test_params, batch_evaluate=True
+        )[self._target_field_name]
+
+        rmse = _root_mean_squared_error(self._test_responses, surrogate_values)
+        max_abs_error = _max_error_inf_norm(self._test_responses, surrogate_values)
+
+        if self._test_responses.shape[1] > 1:
+            score = r2_score(self._test_responses, surrogate_values)
+        else:
+            score = np.nan
 
         self._root_mean_squared_errors.append(rmse)
         self._max_errors.append(max_abs_error)
-        if self._test_responses.shape[1] > 1:
-            score = r2_score(self._test_responses, surrogate_values)
-            self._r2_scores.append(score)
-        else:
-            self._r2_scores.append(np.nan)
+        self._r2_scores.append(score)
         self._sample_counts.append(nsamples)
+
+        iteration_index = len(self._surrogate_iteration_records)
+        record = OrderedDict()
+        record["iteration_index"] = iteration_index
+        record["batch_number"] = iteration_index + 1
+        record["sample_count"] = nsamples
+        record["rmse"] = float(rmse)
+        record["max_error"] = float(max_abs_error)
+        record["r2"] = float(score) if not np.isnan(score) else np.nan
+        record["surrogate_stored"] = False
+        record["storage_reason"] = []
+
+        self._surrogate_iteration_records.append(record)
+        self._update_retained_surrogates(surrogate, record)
+
+    def _evaluate_surrogate_object(self, surrogate, *args, batch_evaluate=False,
+                                   transpose=False, **kwargs):
+        """
+        Evaluate a candidate or retained surrogate object.
+
+        Subclasses can override this for surrogate libraries with special call
+        signatures.
+        """
+        return surrogate(*args, batch_evaluate=batch_evaluate,
+                         transpose=transpose, **kwargs)
+
+    def _update_retained_surrogates(self, surrogate, record):
+        iteration_index = record["iteration_index"]
+
+        retain_now = False
+
+        if self._storage_best_n_surrogates is not None:
+            retain_now = True
+            record["storage_reason"].append("best_candidate")
+
+        if self._storage_every_n_batches is not None:
+            if record["batch_number"] % self._storage_every_n_batches == 0:
+                retain_now = True
+                record["storage_reason"].append("periodic")
+
+        if retain_now:
+            self._surrogates[iteration_index] = copy.deepcopy(surrogate)
+            record["surrogate_stored"] = True
+
+        self._prune_score_based_retained_surrogates()
+
+    def _metric_value_for_record(self, record):
+        metric = self._storage_score_metric
+        value = record[metric]
+        if value is None or np.isnan(value):
+            if metric == "r2":
+                return -np.inf
+            return np.inf
+        return value
+
+    def _sorted_record_indices_by_metric(self):
+        metric = self._storage_score_metric
+        reverse = metric == "r2"
+
+        return [
+            rec["iteration_index"]
+            for rec in sorted(
+                self._surrogate_iteration_records,
+                key=self._metric_value_for_record,
+                reverse=reverse,
+            )
+        ]
+
+    def _prune_score_based_retained_surrogates(self):
+        """
+        Retain:
+          * all periodic-retention surrogates, and
+          * the best N score-based surrogates.
+
+        If only score-based retention is active, this leaves only the best N.
+        """
+        if self._storage_best_n_surrogates is None:
+            return
+
+        best_indices = set(
+            self._sorted_record_indices_by_metric()[:self._storage_best_n_surrogates]
+        )
+
+        periodic_indices = set()
+        for rec in self._surrogate_iteration_records:
+            if "periodic" in rec["storage_reason"]:
+                periodic_indices.add(rec["iteration_index"])
+
+        keep_indices = best_indices | periodic_indices
+
+        for idx in list(self._surrogates.keys()):
+            if idx not in keep_indices:
+                del self._surrogates[idx]
+
+        for rec in self._surrogate_iteration_records:
+            idx = rec["iteration_index"]
+            rec["surrogate_stored"] = idx in self._surrogates
+            reasons = []
+            if idx in best_indices:
+                reasons.append("best")
+            if idx in periodic_indices:
+                reasons.append("periodic")
+            rec["storage_reason"] = reasons
+
+    def _select_surrogate(self, surrogate_index=-1):
+        if len(self._surrogates) == 0:
+            raise RuntimeError("No surrogate objects are currently stored.")
+
+        if surrogate_index == "best":
+            idx = self.best_surrogate_iteration_index
+            return self._surrogates[idx]
+
+        if surrogate_index == "latest":
+            idx = max(self._surrogates.keys())
+            return self._surrogates[idx]
+
+        if not isinstance(surrogate_index, int):
+            raise TypeError(
+                "surrogate_index must be an integer, 'best', or 'latest'."
+            )
+
+        # Prefer exact iteration-index lookup for nonnegative indices.
+        if surrogate_index >= 0 and surrogate_index in self._surrogates:
+            return self._surrogates[surrogate_index]
+
+        # Otherwise treat as positional index into retained surrogates.
+        keys = list(self._surrogates.keys())
+        try:
+            return self._surrogates[keys[surrogate_index]]
+        except IndexError:
+            raise IndexError(
+                f"Retained surrogate index {surrogate_index} is invalid. "
+                f"Retained iteration indices are {keys}."
+            )
 
     @property
     def current_surrogate(self):
-        """Return the most recent surrogate (or ``None`` if no iteration yet)."""
-        return self._surrogates[-1] if self._surrogates else None
+        """
+        Return the most recent retained surrogate object.
+
+        This is not necessarily the most recently trained surrogate. If the
+        storage policy retains only the best surrogate, then a newly trained
+        surrogate that does not improve the selected metric may be discarded.
+
+        :return: Most recent retained surrogate, or ``None`` if no surrogate has
+            been retained.
+        :rtype: object or None
+        """
+        if not self._surrogates:
+            return None
+        latest_idx = max(self._surrogates.keys())
+        return self._surrogates[latest_idx]
+
+    @property
+    def best_surrogate(self):
+        """
+        Return the best retained surrogate according to the storage metric.
+
+        :return: Best retained surrogate, or ``None`` if no surrogate has been
+            retained.
+        :rtype: object or None
+        """
+        if not self._surrogates:
+            return None
+        return self._surrogates[self.best_surrogate_iteration_index]
+
+    @property
+    def best_surrogate_iteration_index(self):
+        """
+        Return the adaptive-training iteration index of the best retained surrogate.
+
+        :return: Iteration index for the best retained surrogate, or ``None`` if
+            no surrogate has been retained.
+        :rtype: int or None
+        """
+        if not self._surrogate_iteration_records:
+            return None
+        best_order = self._sorted_record_indices_by_metric()
+        for idx in best_order:
+            if idx in self._surrogates:
+                return idx
+        return None
+
+    @property
+    def stored_surrogates(self):
+        """
+        Return the retained surrogate objects.
+
+        The returned object maps adaptive-training iteration index to surrogate
+        object. These keys can be used to retrieve the corresponding score
+        records from :attr:`stored_surrogate_scores`.
+
+        :return: Retained surrogate objects keyed by iteration index.
+        :rtype: OrderedDict[int, object]
+        """
+        return self._surrogates
+
+    @property
+    def surrogate_records(self):
+        """
+        Return metadata records for all adaptive-training batches.
+
+        This includes records for batches whose surrogate objects were retained
+        and batches whose surrogate objects were discarded. Each record contains:
+
+        * ``iteration_index``
+        * ``batch_number``
+        * ``sample_count``
+        * ``rmse``
+        * ``max_error``
+        * ``r2``
+        * ``surrogate_stored``
+        * ``storage_reason``
+
+        :return: Per-batch surrogate metadata records.
+        :rtype: list[OrderedDict]
+        """
+        return self._surrogate_iteration_records
+
+    @property
+    def stored_surrogate_scores(self):
+        """
+        Return score records for retained surrogate objects.
+
+        This provides a clean link between retained surrogate objects and their
+        scores. The keys match the keys in :attr:`stored_surrogates`.
+
+        :return: Score records for retained surrogates keyed by iteration index.
+        :rtype: OrderedDict[int, OrderedDict]
+        """
+        records = OrderedDict()
+        for idx in self._surrogates:
+            records[idx] = self._surrogate_iteration_records[idx]
+        return records
+
+    @property
+    def test_params(self):
+        """
+        Return the test parameters used to score every adaptive surrogate.
+
+        These values are always stored regardless of how many surrogate objects
+        are retained.
+
+        :return: Test parameter samples.
+        :rtype: numpy.ndarray
+        """
+        return self._test_params
+
+    @property
+    def test_responses(self):
+        """
+        Return the test responses used to score every adaptive surrogate.
+
+        These values are always stored regardless of how many surrogate objects
+        are retained.
+
+        :return: Test response values.
+        :rtype: numpy.ndarray
+        """
+        return self._test_responses
 
     @property
     def rmse_history(self):
-        """Returns the history of the root mean squared errors (RMSE) for 
-        the surrogate as training progressed. The RMSE is calculated using
-       
+        """
+        Return the full root-mean-squared-error history.
+
+        The RMSE is calculated for each adaptive-training batch using the stored
+        test responses and the candidate surrogate predictions:
+
         .. math::
 
             \\mathrm{RMSE}
@@ -258,109 +672,137 @@ class AdaptiveSurrogate:
 
         where :math:`R_{\\text{test}}` is the test response and
         :math:`\\hat{R}` is the surrogate response.
+
+        :return: RMSE value for every adaptive-training batch.
+        :rtype: list[float]
         """
         return self._root_mean_squared_errors
 
     @property
     def max_error_history(self):
-        """Returns the list of errors for the max error history. The max
-        error is calculated using
-       
-        .. math::
-            E_{max}
-            = \\lVert \\mathbf{R}_{\\text{test}} - \\hat{\\mathbf{R}} \\rVert_{\\infty}
-              
+        """
+        Return the full maximum absolute error history.
 
-        where :math:`{R}_{\\text{test}}` is the 
-        test responses and :math:`{\\hat{R}}` is the surrogate responses. 
+        The maximum absolute error is calculated as
+
+        .. math::
+
+            E_{\\max}
+            =
+            \\lVert
+            \\mathbf{R}_{\\text{test}} - \\hat{\\mathbf{R}}
+            \\rVert_{\\infty}
+
+        where :math:`\\mathbf{R}_{\\text{test}}` is the test response and
+        :math:`\\hat{\\mathbf{R}}` is the surrogate response.
+
+        :return: Maximum absolute error for every adaptive-training batch.
+        :rtype: list[float]
         """
         return self._max_errors
 
     def score(self, surrogate_index=-1):
-        """Returns the :math:`R^2` test score  for the surrogate.
-        
-        :param surrogate_index: optionally pick which surrogate to return the score for.
-        :type surrogate_index: int
         """
+        Return the :math:`R^2` test score for an adaptive-training batch.
 
+        The score history is retained for all batches, even if the corresponding
+        surrogate object was discarded by the storage policy.
+
+        :param surrogate_index: Index into the full score history. The default
+            ``-1`` returns the score from the most recent adaptive-training
+            batch.
+        :type surrogate_index: int
+
+        :return: :math:`R^2` score for the selected batch. Returns ``nan`` when
+            the score is not defined, such as for a single scalar QoI.
+        :rtype: float
+        """        
         return self._r2_scores[surrogate_index]
 
     @property
     def sample_count_history(self):
-        """Returns a list containing the number of samples used by each surrogate
-           training step."""
+        """
+        Return the number of training samples used at each adaptive batch.
+
+        :return: Training sample count for every adaptive-training batch.
+        :rtype: list[int]
+        """
         return self._sample_counts
     
-    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, transpose=False, 
-                 **kwargs):
+    def __call__(self, *args, surrogate_index="best", batch_evaluate=False,
+                 transpose=False, **kwargs):
         """
-        Evaluate a stored surrogate model. This is represented in mathematical notation by 
+        Evaluate a retained surrogate model.
 
-        .. math::
-            \\hat{\\mathbf{R}} = S_i\\bigl(\\mathbf{p}\\bigr),
+        The adaptive surrogate may retain only a subset of the surrogate objects
+        generated during training. This method evaluates one of the retained
+        surrogates selected by ``surrogate_index``.
 
-        where :math:`\\mathbf{R}` is the vector (or matrix) of output responses,
-        :math:`\\mathbf{p}` is the vector (or matrix) of input
-        parameters and :math:`S_i` denotes the selected surrogate model.
+        Supported ``surrogate_index`` values are:
 
-        The surrogate objects includes all the
-        models generated during the adaptive training process.  This method
-        provides an interface for retrieving predictions from any
-        version of the surrogate during training using the ``surrogate_index``
-        keyword argument.
+        * ``-1``: evaluate the last retained surrogate;
+        * ``"best"``: evaluate the best retained surrogate according to the
+          active storage metric;
+        * ``"latest"``: evaluate the most recent retained surrogate;
+        * a retained adaptive iteration index;
+        * a positional integer index into the retained surrogate collection.
 
-        :param *args: Positional arguments representing the model parameters.
-            The accepted calling patterns are:
+        The accepted parameter calling patterns are the same as the underlying
+        surrogate type. In general, users may call the surrogate with positional
+        arguments, keyword arguments, a parameter dictionary, or a batch array,
+        depending on the surrogate implementation.
 
-            * **Single‑sample evaluation** (``batch_evaluate=False``) – a
-            tuple whose length equals the number of model parameters.
-            The values are interpreted in the order defined by the 
-            :class:`matcal.core.parameters.ParameterCollection` or order of parameters
-            passed to the adaptive surrogate training study.
+        :param args: Positional parameter values or batch parameter array.
+        :type args: tuple
 
-            * **Batch evaluation** (``batch_evaluate=True``) – a single argument
-            that must be a two‑dimensional ``np.ndarray`` of shape
-            ``(n_samples, n_parameters)``.  The array is forwarded unchanged
-            to the surrogate.
+        :param surrogate_index: Retained surrogate selector.
+        :type surrogate_index: int or str
 
-        :type *args: tuple or np.ndarray
+        :param batch_evaluate: If ``True``, interpret the input as a batch of
+            parameter values.
+        :type batch_evaluate: bool
 
-        :param surrogate_index: Index of the surrogate to use. ``-1`` selects the
-            most recent surrogate. Any valid list index is accepted.
-        :type surrogate_index: int, optional
+        :param transpose: If ``True``, transpose array input before forwarding
+            it to the retained surrogate.
+        :type transpose: bool
 
-        :param batch_evaluate: When ``True`` the call is interpreted as a *batch*
-            evaluation; otherwise it is a *single‑sample* evaluation.
-        :type batch_evaluate: bool, optional
+        :param kwargs: Keyword parameter values.
+        :type kwargs: dict
 
-        :param **kwargs: Keyword arguments that map each parameter name to the desired
-            evaluation value. This calling style is mutually exclusive 
-            with the positional ``*args`` form.
-        :type **kwargs: dict
+        :return: Surrogate prediction dictionary.
+        :rtype: dict
 
-        :return: The surrogate prediction ``\\hat{\\mathbf{R}}``.  For a single
-            sample, this is a dictionary 
-            containing two one‑dimensional arrays of length ``n_qois`` 
-            with the independent variable and the corresponding target variable
-            response. For a batch evaluation,  it is a two‑dimensional array of shape
-            ``(n_samples, n_qois)``.
-        :rtype: np.ndarray or dict(str, np.ndarray)
-
-        :raises RuntimeError: If the supplied arguments do not match any of the
-            supported calling conventions (wrong number of positional arguments,
-            missing or extra keyword arguments, etc.).
+        :raises RuntimeError: If no surrogate objects have been retained.
+        :raises RuntimeError: If the supplied parameter values do not match the
+            surrogate calling convention.
         """
-        surrogate = self._surrogates[surrogate_index]
-        response = surrogate(*args, batch_evaluate=batch_evaluate, transpose=transpose, 
-                             **kwargs)
-        return response
+        surrogate = self._select_surrogate(surrogate_index)
+        return self._evaluate_surrogate_object(
+            surrogate, *args, batch_evaluate=batch_evaluate,
+            transpose=transpose, **kwargs
+        )
 
 
 class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
-    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False,
-                 transpose=True, **kwargs):
-        # Stored object is now a PyApprox fitter.result(), not AdaptiveCombinationSparseGrid
-        result = self._surrogates[surrogate_index]
+    """
+    Adaptive surrogate wrapper for PyApprox sparse-grid surrogate objects.
+
+    The retained surrogate objects are PyApprox fitter results. This subclass
+    handles the additional steps required to evaluate those objects:
+
+    * process MatCal-style positional, keyword, dictionary, or batch inputs;
+    * check physical parameter bounds;
+    * map physical parameters to PyApprox's canonical ``[-1, 1]^d`` domain;
+    * evaluate the PyApprox sparse-grid surrogate; and
+    * package the response with the independent-variable values.
+
+    Surrogate-object retention, score histories, test data storage, and
+    retained-surrogate metadata are managed by the base
+    :class:`AdaptiveSurrogate` class.
+    """
+    def _evaluate_surrogate_object(self, result, *args, batch_evaluate=False,
+                                   transpose=True, **kwargs):
+        # Stored object is a PyApprox fitter.result().
         surrogate_fun = result.surrogate
 
         params_array = _process_surrogate_args_call(
@@ -368,32 +810,28 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
             batch_evaluate=batch_evaluate, transpose=transpose, **kwargs
         )
 
-        # We want canonical mapping on arrays of shape (nvars, nsamples)
+        # PyApprox wants shape (nvars, nsamples).
         if not batch_evaluate:
-            # single sample returned as (nvars,) -> make (nvars, 1)
             params_array = np.atleast_2d(params_array).T
         else:
-            # batch from _process... may be (nsamples, nvars) depending on transpose;
-            # ensure (nvars, nsamples) for transformer and surrogate
             if params_array.shape[0] != len(self._param_names):
                 params_array = params_array.T
-        # Range check in *physical* parameter space.
-        # Convert to dict expects (nsamples, nvars)
+
+        # Range check in physical parameter space.
         params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
         _check_params_in_range(
             params_dict, self._bounds.T,
             self._enforce_training_data_parameter_range
         )
 
-        # Map physical -> canonical [-1,1]
+        # Map physical -> canonical [-1, 1].
         params_array = self._variable_transformer.map_to_canonical(params_array)
 
-        # Evaluate surrogate. PyApprox returns (n_qois, nsamples)
+        # PyApprox returns (n_qois, nsamples).
         response = surrogate_fun(params_array)
         response = np.asarray(response)
 
         if response.ndim == 2:
-            # to (nsamples, n_qois)
             response = response.T
 
         if not batch_evaluate:
@@ -402,24 +840,45 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
         results = {self._target_field_name: response}
         results[self._indep_variable_name] = self._indep_variable_values
         return results
-    
-    # def __call__(self, *args, surrogate_index=-1, batch_evaluate=False, 
-    #              transpose=True, **kwargs):
-    #     surrogate = self._surrogates[surrogate_index]
-    #     params_array = _process_surrogate_args_call(self._param_names, *args, 
-    #                                  batch_evaluate=batch_evaluate, transpose=transpose, **kwargs)
-    #     if not batch_evaluate:
-    #         params_array = np.atleast_2d(params_array).T
-    #     params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
-    #     _check_params_in_range(params_dict, self._bounds.T, 
-    #                            self._enforce_training_data_parameter_range)
-    #     params_array = self._variable_transformer.map_to_canonical(params_array)
-    #     response = surrogate(params_array)
-    #     if not batch_evaluate:
-    #         response = response.flatten()
-    #     results = {self._target_field_name:response}
-    #     results[self._indep_variable_name] = self._indep_variable_values
-    #     return results
+
+    def __call__(self, *args, surrogate_index=-1, batch_evaluate=False,
+                 transpose=True, **kwargs):
+        """
+        Evaluate a retained PyApprox sparse-grid surrogate.
+
+        See :meth:`AdaptiveSurrogate.__call__` for the retained-surrogate
+        selection rules. This subclass uses ``transpose=True`` by default
+        because PyApprox uses ``(n_parameters, n_samples)`` orientation.
+
+        :param args: Positional parameter values, parameter dictionary, or batch
+            parameter array.
+        :type args: tuple
+
+        :param surrogate_index: Retained surrogate selector. Accepts ``-1``,
+            ``"best"``, ``"latest"``, a retained iteration index, or a
+            positional retained-surrogate index.
+        :type surrogate_index: int or str
+
+        :param batch_evaluate: If ``True``, evaluate a batch of parameter
+            samples.
+        :type batch_evaluate: bool
+
+        :param transpose: If ``True``, transpose the input array before
+            orientation checks.
+        :type transpose: bool
+
+        :param kwargs: Keyword parameter values.
+        :type kwargs: dict
+
+        :return: Dictionary containing the target-field prediction and the
+            independent-variable values.
+        :rtype: dict
+        """
+        result = self._select_surrogate(surrogate_index)
+        return self._evaluate_surrogate_object(
+            result, *args, batch_evaluate=batch_evaluate,
+            transpose=transpose, **kwargs
+        )
 
 
 class AdaptiveSurrogateStudyBase(HaltonStudy):
@@ -452,6 +911,10 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         self._surrogate_save_filename = None
         self._test_group_random_seed = None
+
+        self._surrogate_storage_best_n_surrogates = 1
+        self._surrogate_storage_every_n_batches = None
+        self._surrogate_storage_score_metric = "rmse"
 
     def set_error_stopping_criteria(self,
                                     rmse_goal: float=1e-2,
@@ -819,12 +1282,21 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         test_params, test_responses = self._get_test_data()
         param_names = self._parameter_collection.get_item_names()
         self._variable_transformer = self._variable_transformer_factory(self._bounds)
-        self._surrogate = self._adaptive_surrogate_class(self._target_field_name, 
-                                                          self._independent_variable, 
-                                            self._independent_variable_values, 
-                                            self._variable_transformer, 
-                                            test_params, test_responses, param_names, 
-                                            self._bounds)
+        self._surrogate = self._adaptive_surrogate_class(
+            self._target_field_name,
+            self._independent_variable,
+            self._independent_variable_values,
+            self._variable_transformer,
+            test_params,
+            test_responses,
+            param_names,
+            self._bounds
+        )
+        self._surrogate.set_surrogate_storage_options(
+            best_n_surrogates=self._surrogate_storage_best_n_surrogates,
+            save_every_n_batches=self._surrogate_storage_every_n_batches,
+            score_metric=self._surrogate_storage_score_metric,
+        )
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
         return super().launch()
 
@@ -956,6 +1428,54 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         for idx, sim_qoi in enumerate(sim_qois):
             data[idx,:] = sim_qoi[state_name][0][self._target_field_name]
         return data
+
+    def set_surrogate_storage_options(self, best_n_surrogates=1,
+                                      save_every_n_batches=None,
+                                      score_metric="rmse"):
+        """
+        Configure how many trained surrogate objects are retained in the saved
+        :class:`AdaptiveSurrogate`.
+
+        All score histories, test parameters, and test responses are always
+        stored. This method only controls which surrogate model objects are
+        retained.
+
+        By default, only the best surrogate by RMSE is retained.
+
+        :param best_n_surrogates: Retain the best N surrogate objects according
+            to ``score_metric``. Set to ``None`` to disable score-based retention.
+        :type best_n_surrogates: int or None
+
+        :param save_every_n_batches: Retain every N-th batch surrogate in
+            addition to score-based retained surrogates. For example,
+            ``save_every_n_batches=5`` retains batches 5, 10, 15, ...
+        :type save_every_n_batches: int or None
+
+        :param score_metric: Metric used to define the best surrogates. Supported
+            values are ``"rmse"``, ``"max_error"``, ``"r2"``, and ``"score"``.
+            ``"score"`` is treated as an alias for ``"r2"``.
+        :type score_metric: str
+        """
+        check_value_is_positive_integer_or_none(best_n_surrogates, "best_n_surrogates")
+        check_value_is_positive_integer_or_none(save_every_n_batches, "save_every_n_batches")
+        check_value_is_nonempty_str(score_metric, "score_metric")
+
+        score_metric = score_metric.lower().strip()
+        valid_metrics = ("rmse", "max_error", "r2", "score")
+        if score_metric not in valid_metrics:
+            raise ValueError(
+                f"score_metric must be one of {valid_metrics}. "
+                f"Received '{score_metric}'."
+            )
+
+        if best_n_surrogates is None and save_every_n_batches is None:
+            raise ValueError(
+                "At least one surrogate retention option must be active."
+            )
+
+        self._surrogate_storage_best_n_surrogates = best_n_surrogates
+        self._surrogate_storage_every_n_batches = save_every_n_batches
+        self._surrogate_storage_score_metric = score_metric
 
 
 class _PyapproxBoundedAffineTransformerND:
@@ -1104,25 +1624,6 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         return self._results
 
-    # def _perform_adaptive_surrogate_batch_sampling(self): 
-    #     from pyapprox.interface.model import ModelFromVectorizedCallable
-    #     n_qois = len(self._independent_variable_values)
-    #     canonical_model = ModelFromVectorizedCallable(n_qois, self._number_parameters, 
-    #                                 self._matcal_evaluate_parameter_sets_batch_adaptive_training)
-    #     if self._surrogate_save_filename is None:
-    #         self.set_surrogate_save_filename(f"{self._get_model_names()[0]}_sparse_grid_surrogate.joblib")
-    #     sg = _setup_sparse_grid_surrogate(self._number_parameters, n_qois)    
-    #     sg.step(canonical_model)
-    #     self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
-    #     training_batch_number = len(self._surrogate.sample_count_history)
-    #     matcal_save(self._surrogate_save_filename, self._surrogate)
-    #     while  not self._stopping_criterion_met(training_batch_number):
-    #         sg.step(canonical_model)
-    #         self._surrogate._add_iteration(sg, self._results.number_of_evaluations)
-    #         training_batch_number = len(self._surrogate.sample_count_history)
-    #         matcal_save(self._surrogate_save_filename, self._surrogate)
-    #     return self._results
-
     def _populate_parameter_evaluations_adaptive(self, samples):
         samples = self._variable_transformer.map_from_canonical(samples)
         super()._populate_parameter_evaluations(samples.T)
@@ -1248,8 +1749,19 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._surrogate_options = {}
         self._seed = None
             
-    def _update_surrogate_score(self):
-        latent_score = self._surrogate.current_surrogate._latent_scores['test']
+    def _update_surrogate_score(self, surrogate=None):
+        """
+        Store the latent-space scores for the surrogate produced by the current
+        batch.
+
+        This must use the current candidate surrogate, not necessarily
+        ``current_surrogate``, because the storage policy may choose not to
+        retain the current candidate.
+        """
+        if surrogate is None:
+            surrogate = self._surrogate.current_surrogate
+
+        latent_score = surrogate._latent_scores['test']
         self._current_surrogate_score['score'].append(_get_surrogate_metric(latent_score, 'score'))
         self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(latent_score, 'nlpd'))
         self._current_surrogate_score['rmse'].append(_get_surrogate_metric(latent_score, 'rmse'))
@@ -1498,15 +2010,21 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _train_surrogate_with_current_results(self):
         training_params = self._format_params(self._results)
         training_data = self._format_output_for_surrogate_gen(self._results)
-        current_surrogate = _fit_surrogate_model(self, interpolation_field=self._independent_variable, 
-                                               interpolation_locations=self._independent_variable_values, 
-                                               test_eval_info=self._test_eval_info, 
-                                               target_field=self._target_field_name,
-                                               save_filename=self._surrogate_save_filename,
-                                               **self._surrogate_options)
+        current_surrogate = _fit_surrogate_model(
+            self,
+            interpolation_field=self._independent_variable, 
+            interpolation_locations=self._independent_variable_values, 
+            test_eval_info=self._test_eval_info, 
+            target_field=self._target_field_name,
+            save_filename=self._surrogate_save_filename,
+            **self._surrogate_options
+        )
         self._surrogate._add_iteration(current_surrogate, self._results.number_of_evaluations)
-        self._update_surrogate_score()
+        self._update_surrogate_score(current_surrogate)
         self._nbatch_samples.append(self.results.number_of_evaluations)
+        # Persist the AdaptiveSurrogate container, not only the latest PCA surrogate.
+        if self._surrogate_save_filename is not None:
+            matcal_save(self._surrogate_save_filename, self._surrogate)
         return training_params, training_data
 
     def _create_voronoi_tess_and_choose_new_samples(self, iteration, training_params, 
