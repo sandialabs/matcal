@@ -390,15 +390,31 @@ class FiniteDifference:
 _small = 1e-12
 
 
-def _estimate_parameter_covariance(residuals, sensitivities, noise_variance):
+def _estimate_parameter_covariance(residuals, sensitivities, noise_variance,
+                                   method="svd_inverse",
+                                   rcond=1e-10,
+                                   regularization=0.0,
+                                   project_to_psd=False,
+                                   min_eigenvalue=_small):
     has_replicas = len(residuals.shape) > 1
     if has_replicas:
         Sigma_y = _get_residual_covariance(residuals)
-        Sigma_guess = _solve_for_parameter_covariance(Sigma_y, sensitivities, 
-                                                        noise_variance)
-    elif not has_replicas:
-        raise RuntimeError("The LaplaceStudy has no repeats. Repeat data "
-                            "are needed for the study.")
+        Sigma_guess = _solve_for_parameter_covariance(
+            Sigma_y,
+            sensitivities,
+            noise_variance,
+            method=method,
+            rcond=rcond,
+            regularization=regularization,
+            project_to_psd=project_to_psd,
+            min_eigenvalue=min_eigenvalue
+        )
+    else:
+        raise RuntimeError(
+            "The LaplaceStudy has no repeats. Repeat data are needed "
+            "for the study."
+        )
+
     return Sigma_guess
 
 
@@ -407,25 +423,262 @@ def _get_residual_covariance(residuals):
     return np.atleast_2d(Sigma_y)
 
 
-def _solve_for_parameter_covariance( output_covariance, 
+def _solve_for_parameter_covariance(output_covariance, 
                                     residual_sensitivities, 
-                                    noise_variance=0.0):
+                                    noise_variance=0.0,
+                                    method="svd_inverse",
+                                    rcond=1e-10,
+                                    regularization=0.0,
+                                    project_to_psd=False,
+                                    min_eigenvalue=_small):
+    """
+    Estimate parameter covariance from an output covariance and residual
+    sensitivities.
+
+    The supported methods are:
+
+    ``"svd_inverse"``
+        Original embedded-Laplace initial estimator:
+
+        Sigma_theta = (U.T A)^-1 D (U.T A)^-T
+
+        using a direct inverse.
+
+    ``"svd_pinv"``
+        Same eigenspace estimator, but using a pseudo-inverse for U.T A.
+
+    ``"least_squares"``
+        Solve the linearized covariance equation
+
+        Sigma_y - sigma^2 I ~= A Sigma_theta A.T
+
+        directly in a least-squares sense, enforcing symmetry of Sigma_theta.
+
+    :param output_covariance: observed/sample residual covariance, Sigma_y.
+    :type output_covariance: np.ndarray
+
+    :param residual_sensitivities: residual sensitivity matrix, A, with shape
+        n_outputs x n_parameters.
+    :type residual_sensitivities: np.ndarray
+
+    :param noise_variance: measurement noise variance, sigma^2.
+    :type noise_variance: float
+
+    :param method: covariance estimator method. One of
+        "svd_inverse", "svd_pinv", or "least_squares".
+    :type method: str
+
+    :param rcond: cutoff for pseudo-inverse or least-squares solve.
+    :type rcond: float
+
+    :param regularization: optional Tikhonov regularization for the least-squares
+        method. This regularizes the upper-triangular entries of Sigma_theta.
+    :type regularization: float
+
+    :param project_to_psd: if True, symmetrize and project the estimated
+        parameter covariance to positive semidefinite.
+    :type project_to_psd: bool
+
+    :param min_eigenvalue: minimum eigenvalue used in PSD projection.
+    :type min_eigenvalue: float
+
+    :return: estimated parameter covariance matrix.
+    :rtype: np.ndarray
+    """
+    output_covariance = np.asarray(output_covariance, dtype=float)
+    residual_sensitivities = np.asarray(residual_sensitivities, dtype=float)
+
     mineval, maxeval = _check_covariance(output_covariance)
     if np.abs(mineval) < _small:
-        logger.warning("Residual "
-                    "covariance is not positive definite!")
+        logger.warning("Residual covariance is nearly singular or not positive definite.")
+
     n_y = output_covariance.shape[0]
+
+    # Important: do not mutate the caller's covariance matrix.
+    shifted_output_covariance = (
+        output_covariance - np.eye(n_y) * noise_variance
+    )
+    shifted_output_covariance = _symmetrize_matrix(shifted_output_covariance)
+
+    method = method.lower()
+    if method in ["svd_inverse", "svd_pinv"]:
+        sigma_theta = _solve_for_parameter_covariance_svd_subspace(
+            shifted_output_covariance,
+            residual_sensitivities,
+            method=method,
+            rcond=rcond
+        )
+    elif method in ["least_squares", "ls"]:
+        sigma_theta = _solve_for_parameter_covariance_least_squares(
+            shifted_output_covariance,
+            residual_sensitivities,
+            rcond=rcond,
+            regularization=regularization
+        )
+    else:
+        raise ValueError(
+            "Unknown parameter covariance estimation method "
+            f"'{method}'. Valid options are 'svd_inverse', "
+            "'svd_pinv', and 'least_squares'."
+        )
+
+    sigma_theta = _symmetrize_matrix(sigma_theta)
+
+    if project_to_psd:
+        sigma_theta = _project_symmetric_matrix_to_psd(
+            sigma_theta,
+            min_eigenvalue=min_eigenvalue
+        )
+
+    return sigma_theta
+
+
+def _solve_for_parameter_covariance_svd_subspace(shifted_output_covariance,
+                                                 residual_sensitivities,
+                                                 method="svd_inverse",
+                                                 rcond=1e-10):
+    """
+    Original embedded-Laplace eigenspace estimator, with either direct inverse
+    or pseudo-inverse for U.T A.
+    """
     n_p = residual_sensitivities.shape[1]
-    output_covariance -= np.eye(n_y)*noise_variance
-    [U,d,V] = np.linalg.svd(output_covariance)
-    UTA = U[:,:n_p].T@residual_sensitivities
-    invUTA = np.linalg.inv(UTA)
-    s = np.diag(d[:n_p])
-    if (d[:n_p-1] < _small).any(): 
-        raise ValueError("LaplaceStudy under determined. "
-                         "System may be under determined.")
-    S = invUTA@s@(invUTA.T)
-    return S
+
+    U, d, Vt = np.linalg.svd(shifted_output_covariance)
+
+    if len(d) < n_p:
+        raise ValueError(
+            "LaplaceStudy under determined. The output covariance has fewer "
+            "singular values than there are parameters."
+        )
+
+    # The first n_p singular vectors/eigenvectors are assumed to span the
+    # parameter-induced covariance subspace.
+    Ubar = U[:, :n_p]
+    Dbar = np.diag(d[:n_p])
+    B = Ubar.T @ residual_sensitivities
+
+    logger.debug(
+        "Initial covariance SVD-subspace diagnostics:\n"
+        f"  singular values used = {d[:n_p]}\n"
+        f"  cond(A) = {np.linalg.cond(residual_sensitivities)}\n"
+        f"  cond(U.T @ A) = {np.linalg.cond(B)}"
+    )
+
+    if method == "svd_inverse":
+        # Original behavior, but fix the off-by-one rank check.
+        if (d[:n_p] < _small).any():
+            raise ValueError(
+                "LaplaceStudy under determined. System may be under determined."
+            )
+        Binv = np.linalg.inv(B)
+    elif method == "svd_pinv":
+        Binv = np.linalg.pinv(B, rcond=rcond)
+    else:
+        raise ValueError(f"Unsupported SVD covariance method '{method}'.")
+
+    sigma_theta = Binv @ Dbar @ Binv.T
+    return sigma_theta
+
+
+def _solve_for_parameter_covariance_least_squares(shifted_output_covariance,
+                                                  residual_sensitivities,
+                                                  rcond=1e-10,
+                                                  regularization=0.0):
+    """
+    Solve
+
+        C ~= A Sigma_theta A.T
+
+    for symmetric Sigma_theta using least squares, where
+
+        C = Sigma_y - sigma^2 I.
+
+    The unknowns are the upper-triangular entries of Sigma_theta.
+
+    This avoids relying on the dominant eigenspace of C and can be more stable
+    when the sample covariance eigenspace is noisy.
+    """
+    C = np.asarray(shifted_output_covariance, dtype=float)
+    A = np.asarray(residual_sensitivities, dtype=float)
+
+    C = _symmetrize_matrix(C)
+
+    n_y, n_p = A.shape
+
+    param_tri_rows, param_tri_cols = np.triu_indices(n_p)
+    output_tri_rows, output_tri_cols = np.triu_indices(n_y)
+
+    n_unknowns = len(param_tri_rows)
+    n_equations = len(output_tri_rows)
+
+    design_matrix = np.empty((n_equations, n_unknowns), dtype=float)
+
+    for col_index, (p_i, p_j) in enumerate(zip(param_tri_rows, param_tri_cols)):
+        # Contribution of Sigma_theta[p_i, p_j].
+        #
+        # If p_i == p_j:
+        #   C_ab contribution = A[a, p_i] A[b, p_i]
+        #
+        # If p_i != p_j and Sigma_theta is symmetric:
+        #   C_ab contribution =
+        #       A[a, p_i] A[b, p_j] + A[a, p_j] A[b, p_i]
+        basis_pushforward = np.outer(A[:, p_i], A[:, p_j])
+        if p_i != p_j:
+            basis_pushforward += np.outer(A[:, p_j], A[:, p_i])
+
+        design_matrix[:, col_index] = basis_pushforward[
+            output_tri_rows, output_tri_cols
+        ]
+
+    rhs = C[output_tri_rows, output_tri_cols]
+
+    if regularization is not None and regularization > 0.0:
+        sqrt_reg = np.sqrt(regularization)
+        design_matrix = np.vstack(
+            [design_matrix, sqrt_reg * np.eye(n_unknowns)]
+        )
+        rhs = np.concatenate([rhs, np.zeros(n_unknowns)])
+
+    coeffs, residuals, rank, singular_values = np.linalg.lstsq(
+        design_matrix, rhs, rcond=rcond
+    )
+
+    logger.debug(
+        "Initial covariance least-squares diagnostics:\n"
+        f"  n_outputs = {n_y}\n"
+        f"  n_parameters = {n_p}\n"
+        f"  n_equations = {n_equations}\n"
+        f"  n_unknowns = {n_unknowns}\n"
+        f"  rank(design_matrix) = {rank}\n"
+        f"  singular values = {singular_values}\n"
+        f"  cond(design_matrix) = {np.linalg.cond(design_matrix)}"
+    )
+
+    sigma_theta = np.zeros((n_p, n_p), dtype=float)
+    sigma_theta[param_tri_rows, param_tri_cols] = coeffs
+    sigma_theta[param_tri_cols, param_tri_rows] = coeffs
+
+    return _symmetrize_matrix(sigma_theta)
+
+
+def _symmetrize_matrix(matrix):
+    matrix = np.asarray(matrix, dtype=float)
+    return 0.5 * (matrix + matrix.T)
+
+
+def _project_symmetric_matrix_to_psd(matrix, min_eigenvalue=0.0):
+    """
+    Project a symmetric matrix to the positive-semidefinite cone by clipping
+    eigenvalues.
+
+    This is useful for forming a numerically safe initial covariance estimate
+    for the subsequent fitted-posterior optimization.
+    """
+    matrix = _symmetrize_matrix(matrix)
+    eigvals, eigvecs = np.linalg.eigh(matrix)
+    eigvals = np.maximum(eigvals, min_eigenvalue)
+    projected = eigvecs @ np.diag(eigvals) @ eigvecs.T
+    return _symmetrize_matrix(projected)
 
 
 def _check_covariance(Sigma):
@@ -524,20 +777,18 @@ def _to_theta(variances, correlation_coefficients, clip=True):
     return theta
 
 
-def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise):
-    noise2 = noise*noise
-    if noise2 == 0.0:
-        noise2 = _small
+def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise_variance):
+    if noise_variance == 0.0:
+        noise_variance = _small
     variances, correlation_coefficients = _from_theta(theta, residual_sensitivities.shape[1])
     Sigma_y = _pushed_forward_variances(variances,correlation_coefficients,residual_sensitivities)
-    Sigma_y = Sigma_y + noise2*np.eye(Sigma_y.shape[0])
+    Sigma_y = Sigma_y + noise_variance*np.eye(Sigma_y.shape[0])
     
     sign, logdet =  np.linalg.slogdet(Sigma_y)
     logdetSigma_y = sign*logdet
     invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
     mse = np.einsum("ki,ij,kj",residuals,invSigma,residuals) 
-
-    n_repeats = residuals.shape[1]
+    n_repeats = residuals.shape[0]
     logp = -0.5*( logdetSigma_y + mse/n_repeats)
     return logp
     
@@ -580,6 +831,13 @@ class _LaplaceStudyBase(ParameterStudy):
         self._center = None
         self._finite_difference = None
         self._step_size = None
+
+        self._initial_covariance_method = "least_squares"
+        self._initial_covariance_rcond = 1e-10
+        self._initial_covariance_regularization = 0.0
+        self._initial_covariance_project_to_psd = False
+        self._initial_covariance_min_eigenvalue = _small
+
         self.set_step_size()
 
     def _check_parameter_sets_populated(self):
@@ -631,6 +889,72 @@ class _LaplaceStudyBase(ParameterStudy):
         self._step_size=step_size
         if self._finite_difference is not None:
             self._setup_finite_difference()
+
+    def set_initial_covariance_estimator(self,
+                                         method="svd_inverse",
+                                         rcond=1e-10,
+                                         regularization=0.0,
+                                         project_to_psd=False,
+                                         min_eigenvalue=_small):
+        """
+        Select the initial covariance estimator used by LaplaceStudy.
+
+        Valid methods are:
+
+        ``"svd_inverse"``
+            Original eigenspace method using a direct inverse.
+
+        ``"svd_pinv"``
+            Eigenspace method using a pseudo-inverse for improved robustness
+            when U.T @ A is ill-conditioned.
+
+        ``"least_squares"``
+            Direct least-squares solve of
+
+                Sigma_y - sigma^2 I ~= A Sigma_theta A.T
+
+            using the symmetric upper-triangular entries of Sigma_theta as
+            unknowns.
+
+        :param method: covariance estimator method.
+        :type method: str
+
+        :param rcond: cutoff used in pseudo-inverse or least-squares solve.
+        :type rcond: float
+
+        :param regularization: Tikhonov regularization used only by the
+            least-squares method.
+        :type regularization: float
+
+        :param project_to_psd: project the result to positive semidefinite.
+        :type project_to_psd: bool
+
+        :param min_eigenvalue: minimum eigenvalue for PSD projection.
+        :type min_eigenvalue: float
+        """
+        valid_methods = ["svd_inverse", "svd_pinv", "least_squares", "ls"]
+        method = method.lower()
+
+        if method not in valid_methods:
+            raise ValueError(
+                f"Unknown initial covariance estimator '{method}'. "
+                "Valid options are 'svd_inverse', 'svd_pinv', and "
+                "'least_squares'."
+            )
+
+        check_value_is_nonnegative_real(rcond, "rcond")
+        check_value_is_nonnegative_real(regularization, "regularization")
+        check_value_is_bool(project_to_psd, "project_to_psd")
+        check_value_is_nonnegative_real(min_eigenvalue, "min_eigenvalue")
+
+        if method == "ls":
+            method = "least_squares"
+
+        self._initial_covariance_method = method
+        self._initial_covariance_rcond = rcond
+        self._initial_covariance_regularization = regularization
+        self._initial_covariance_project_to_psd = project_to_psd
+        self._initial_covariance_min_eigenvalue = min_eigenvalue
 
     def _add_parameter_evaluation(self, **p):
       super().add_parameter_evaluation(**p)
@@ -798,9 +1122,16 @@ class LaplaceStudy(_LaplaceStudyBase):
         return residual_sensitivities
 
     def _calculate_covariance(self, center_resids, residual_sensitivities):
-        estimated_covariance = _estimate_parameter_covariance(center_resids, 
-                                                             residual_sensitivities, 
-                                                             self._noise_variance) 
+        estimated_covariance = _estimate_parameter_covariance(
+            center_resids,
+            residual_sensitivities,
+            self._noise_variance,
+            method=self._initial_covariance_method,
+            rcond=self._initial_covariance_rcond,
+            regularization=self._initial_covariance_regularization,
+            project_to_psd=self._initial_covariance_project_to_psd,
+            min_eigenvalue=self._initial_covariance_min_eigenvalue
+        )
         covariance_results = OrderedDict()
         covariance_results["estimated_parameter_covariance"] = estimated_covariance
         if self._calibrate_covariance:
