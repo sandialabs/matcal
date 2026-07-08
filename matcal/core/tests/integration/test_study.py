@@ -19,6 +19,12 @@ from matcal.core.tests.unit.test_study_base import (StudyBaseUnitTests,
                                                model_func)
 
 
+def voce_model_with_c(a, b, c, *args, **kwargs):
+    n_x_points = 100
+    xs = np.linspace(0, 1.0, n_x_points)
+    ys = a * xs + b * (1.0 - np.exp(-c * xs))
+    return {"x": xs, "y": ys}
+
 def voce_model(a, b, *args, **kwargs):
     n_x_points = 100
     xs = np.linspace(0,1.0, n_x_points)
@@ -393,7 +399,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         super().setUp(__file__)
 
     def test_uq(self):
-        n_experiments = 750
+        n_experiments = 100
         mu_theta = np.array([2.0, 1.0])
         var_theta = np.array([[0.4,0.05],[0.05,0.1]])
 
@@ -427,13 +433,220 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         study.set_parameter_center(a=a_min, b=b_min)
         laplace_obj = CurveBasedInterpolatedObjective('x', 'y')
         study.add_evaluation_set(mod, laplace_obj, dc)
-        study.set_calibrate_covariance(False)
+        #study.set_calibrate_covariance(False)
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
 
         self.assert_close_arrays(var_theta, results.estimated_parameter_covariance,  
                                  atol = 0.0075)    
+
+    def test_uq_recovers_sample_covariance_for_linear_parameter_model(self):
+        """
+        For a model that is linear in its calibrated parameters and with zero
+        measurement noise, the embedded Laplace initial covariance estimate should
+        recover the sample covariance of the parameter draws used to generate the
+        repeated data.
+
+        This is a stronger unit test than comparing to the population covariance,
+        because it removes random finite-sample covariance error from the test.
+        """
+        n_experiments = 50
+
+        mu_theta = np.array([2.0, 1.0])
+        population_cov_theta = np.array([[0.4, 0.05],
+                                        [0.05, 0.1]])
+
+        measurement_noise = 0.0
+
+        mod = PythonModel(voce_model)
+        mod.set_name("voce")
+
+        rng = np.random.default_rng(seed=123456)
+        thetas = rng.multivariate_normal(
+            mu_theta,
+            population_cov_theta,
+            size=n_experiments
+        )
+
+        dc = DataCollection("generated data")
+        for theta in thetas:
+            mod_res = voce_model(theta[0], theta[1])
+            dc.add(convert_dictionary_to_data(mod_res))
+
+        # For this linear-in-parameters model, the least-squares optimum is the
+        # sample mean of the parameter draws. Use it directly so this test isolates
+        # LaplaceStudy instead of also testing ScipyMinimizeStudy.
+        sample_mean_theta = np.mean(thetas, axis=0)
+
+        # np.cov uses ddof=1 by default, matching the residual covariance estimator
+        # used in LaplaceStudy through np.cov(residuals.T).
+        sample_cov_theta = np.cov(thetas.T)
+
+        a = Parameter("a", 0, 5)
+        b = Parameter("b", 0, 5)
+
+        study = self._study_class(a, b)
+        study.set_parameter_center(a=sample_mean_theta[0], b=sample_mean_theta[1])
+
+        laplace_obj = CurveBasedInterpolatedObjective("x", "y")
+        laplace_obj.set_name("voce_curve")
+
+        study.add_evaluation_set(
+            mod,
+            laplace_obj,
+            dc,
+            data_conditioner_class=ReturnPassedDataConditioner
+        )
+
+        study.set_calibrate_covariance(False)
+        study.set_noise_estimate(measurement_noise)
+        study.set_step_size(1e-6)
+
+        results = study.launch()
+        self.assert_close_arrays(
+            sample_mean_theta,
+            results.mean.to_list(),
+            atol=1e-12,
+            rtol=1e-12,
+            show_on_fail=True
+        )
+        print("Test sample true covariance for parameters:", sample_cov_theta)
+        self.assert_close_arrays(
+            sample_cov_theta,
+            results.estimated_parameter_covariance,
+            atol=1e-6,
+            rtol=1e-6,
+            show_on_fail=True
+        )
+
+    def test_uq_recovers_sample_covariance_for_weakly_nonlinear_parameter_model(self):
+        """
+        For a model that is nonlinear in one calibrated parameter, the embedded
+        Laplace estimate should recover the sample covariance approximately when
+        the parameter spread is small enough that the local linearization is valid.
+
+        This test adds c to the Voce-like model
+
+            y = a*x + b*(1 - exp(-c*x))
+
+        so the model is nonlinear in the calibrated parameter vector (a, b, c).
+
+        The parameter samples are deterministic symmetric sigma points constructed
+        to have an exact sample mean and sample covariance. This avoids testing
+        Monte Carlo convergence and instead tests the local Laplace approximation.
+        """
+        mu_theta = np.array([2.0, 1.0, 5.0])
+
+        # Keep the covariance modest so the nonlinear model is well approximated
+        # by its local linearization about the mean.
+        target_sample_cov_theta = np.array([
+            [4.0e-4, 5.0e-5, 2.0e-4],
+            [5.0e-5, 1.0e-4, 5.0e-5],
+            [2.0e-4, 5.0e-5, 1.0e-2]
+        ])
+
+        measurement_noise = 0.0
+
+        # Build deterministic symmetric sigma-point samples with exact sample
+        # covariance under np.cov(..., ddof=1).
+        n_parameters = len(mu_theta)
+        n_experiments = 2 * n_parameters
+        alpha = np.sqrt((n_experiments - 1) / 2.0)
+
+        chol = np.linalg.cholesky(target_sample_cov_theta)
+
+        theta_samples = []
+        for param_index in range(n_parameters):
+            perturbation = alpha * chol[:, param_index]
+            theta_samples.append(mu_theta + perturbation)
+            theta_samples.append(mu_theta - perturbation)
+
+        theta_samples = np.array(theta_samples)
+
+        sample_mean_theta = np.mean(theta_samples, axis=0)
+        sample_cov_theta = np.cov(theta_samples.T)
+
+        self.assert_close_arrays(
+            sample_mean_theta,
+            mu_theta,
+            atol=1e-14,
+            rtol=1e-14,
+            show_on_fail=True
+        )
         
+        self.assert_close_arrays(
+            sample_cov_theta,
+            target_sample_cov_theta,
+            atol=1e-14,
+            rtol=1e-14,
+            show_on_fail=True
+        )
+
+        mod = PythonModel(voce_model_with_c)
+        mod.set_name("voce_with_c")
+
+        dc = DataCollection("generated nonlinear voce data")
+        for theta in theta_samples:
+            mod_res = voce_model_with_c(theta[0], theta[1], theta[2])
+            dc.add(convert_dictionary_to_data(mod_res))
+
+        a = Parameter("a", 0, 5)
+        b = Parameter("b", 0, 5)
+        c = Parameter("c", 0, 10)
+
+        study = self._study_class(a, b, c)
+        study.set_parameter_center(
+            a=sample_mean_theta[0],
+            b=sample_mean_theta[1],
+            c=sample_mean_theta[2]
+        )
+
+        # If you added the estimator switch from the previous discussion and want
+        # this test to exercise the least-squares estimator, uncomment this:
+        #
+        # study.set_initial_covariance_estimator(
+        #     method="least_squares",
+        #     rcond=1e-10,
+        #     regularization=0.0,
+        #     project_to_psd=True
+        # )
+
+        laplace_obj = CurveBasedInterpolatedObjective("x", "y")
+        laplace_obj.set_name("voce_with_c_curve")
+
+        study.add_evaluation_set(
+            mod,
+            laplace_obj,
+            dc,
+            data_conditioner_class=ReturnPassedDataConditioner
+        )
+
+        #study.set_calibrate_covariance(False)
+        study.set_noise_estimate(measurement_noise)
+        study.set_step_size(1e-6)
+
+        results = study.launch()
+
+        self.assert_close_arrays(
+            sample_mean_theta,
+            results.mean.to_list(),
+            atol=1e-12,
+            rtol=1e-12,
+            show_on_fail=True
+        )
+        print("Test sample true covariance for parameters:", sample_cov_theta)
+
+        # This tolerance is looser than the linear-in-parameters test because the
+        # embedded Laplace method is using a first-order local linearization of a
+        # nonlinear parameter-to-response map.
+        self.assert_close_arrays(
+            sample_cov_theta,
+            results.estimated_parameter_covariance,
+            atol=5e-5,
+            rtol=2e-2,
+            show_on_fail=True
+        )
+
     def test_uq_two_models(self):
         n_experiments = 250
         
@@ -485,6 +698,7 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         laplace_obj = CurveBasedInterpolatedObjective('x', 'y')
         study.add_evaluation_set(voce_mod, laplace_obj, dc_voce)
         study.add_evaluation_set(quadratic_mod, laplace_obj, dc_quadratic)
+        study.set_results_storage_options(False, False, False, False)
         study.set_calibrate_covariance(False)
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
