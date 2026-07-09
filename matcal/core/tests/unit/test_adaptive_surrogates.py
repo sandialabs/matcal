@@ -1404,6 +1404,96 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertIn("best", stored_record["storage_reason"])
         self.assertAlmostEqual(stored_record["max_error"], 1.0)
 
+    def test_plot_surrogate_vs_test_data_formats_labels_and_units(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=10)
+
+        fig, ax = surrogate.plot_surrogate_vs_test_data(
+            xlabel="independent_variable",
+            ylabel="target_field",
+            independent_variable_units="s",
+            target_field_units="K",
+        )
+
+        self.assertEqual(ax.get_xlabel(), "independent variable (s)")
+        self.assertEqual(ax.get_ylabel(), "target field (K)")
+        self.assertEqual(len(ax.lines), 4)
+
+        plt.close(fig)
+
+    def test_plot_surrogate_error_vs_independent_variable_mean_absolute(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=10)
+
+        fig, ax = surrogate.plot_surrogate_error_vs_independent_variable(
+            error_type="absolute",
+            error_statistic="mean",
+            independent_variable_units="s",
+            target_field_units="K",
+        )
+
+        self.assertEqual(ax.get_xlabel(), "independent (s)")
+        self.assertEqual(ax.get_ylabel(), "target absolute error (K)")
+        self.assertEqual(len(ax.lines), 1)
+
+        plt.close(fig)
+
+    def test_plot_surrogate_error_vs_independent_variable_individual_curves(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=10)
+
+        fig, ax = surrogate.plot_surrogate_error_vs_independent_variable(
+            error_type="signed",
+            error_statistic=None,
+        )
+
+        self.assertEqual(len(ax.lines), surrogate.test_responses.shape[0])
+
+        plt.close(fig)
+
+    def test_plot_surrogate_error_vs_independent_variable_invalid_error_type(self):
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=10)
+
+        with self.assertRaises(ValueError):
+            surrogate.plot_surrogate_error_vs_independent_variable(
+                error_type="bad_error_type",
+            )
+
+    def test_plot_error_history_formats_labels_and_units(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(ConstantSurrogate(2, constant=10.0), nsamples=10)
+        surrogate._add_iteration(ConstantSurrogate(2, constant=1.5), nsamples=20)
+
+        fig, ax = surrogate.plot_error_history(
+            metrics=("rmse", "max_error"),
+            error_units="K",
+            yscale="log",
+        )
+
+        self.assertEqual(ax.get_xlabel(), "number of training samples")
+        self.assertEqual(ax.get_ylabel(), "error or score (K)")
+        self.assertEqual(ax.get_yscale(), "log")
+        self.assertEqual(len(ax.lines), 2)
+
+        plt.close(fig)
+
 
 class _FakeSurrogate:
     """
