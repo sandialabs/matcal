@@ -883,6 +883,143 @@ class AdaptiveSurrogate:
         """
         return self._test_responses
 
+    def test_predictions(self, surrogate_index="best"):
+        """
+        Return retained-surrogate predictions at the stored test-parameter
+        locations.
+
+        :param surrogate_index: Retained surrogate selector. Supported values
+            are ``"best"``, ``"latest"``, a retained adaptive iteration index,
+            or a positional retained-surrogate index. Defaults to ``"best"``.
+        :type surrogate_index: int or str
+
+        :return: Surrogate predictions with shape ``(n_test_samples, n_qois)``.
+        :rtype: numpy.ndarray
+        """
+        return self._get_test_prediction_array(surrogate_index)
+
+    def test_errors(self, surrogate_index="best", error_type="signed"):
+        """
+        Return surrogate errors at the stored test-parameter locations.
+
+        The raw signed error is
+
+        .. math::
+
+            e = \\hat{y} - y
+
+        where ``hat(y)`` is the surrogate prediction and ``y`` is the stored
+        test response.
+
+        Supported error definitions are:
+
+        * ``"signed"``: ``surrogate - test``
+        * ``"absolute"``: ``abs(surrogate - test)``
+        * ``"squared"``: ``(surrogate - test)**2``
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param error_type: Error definition. Must be ``"signed"``,
+            ``"absolute"``, or ``"squared"``.
+        :type error_type: str
+
+        :return: Error array with shape ``(n_test_samples, n_qois)``.
+        :rtype: numpy.ndarray
+        """
+        error_type = _validate_error_type(error_type)
+        return self._get_surrogate_error_array(surrogate_index, error_type)
+
+    def _validate_test_sample_error_metric(self, metric):
+        check_value_is_nonempty_str(metric, "metric")
+        metric = metric.lower().strip()
+
+        valid_metrics = (
+            "max_error",
+            "max_abs_error",
+            "linf",
+            "rmse",
+            "mae",
+            "mean_abs_error",
+        )
+        if metric not in valid_metrics:
+            raise ValueError(
+                "Unsupported test-sample error metric. Supported values are "
+                "'max_error', 'max_abs_error', 'linf', 'rmse', 'mae', and "
+                "'mean_abs_error'. "
+                f"Received '{metric}'."
+            )
+
+        return metric
+
+    def test_sample_errors(self, surrogate_index="best", metric="max_error"):
+        """
+        Return one scalar error per stored test sample.
+
+        Supported metrics are:
+
+        * ``"max_error"``, ``"max_abs_error"``, or ``"linf"``:
+          maximum absolute error over the surrogate independent variable;
+        * ``"rmse"``:
+          root-mean-squared error over the surrogate independent variable;
+        * ``"mae"`` or ``"mean_abs_error"``:
+          mean absolute error over the surrogate independent variable.
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param metric: Per-sample error metric.
+        :type metric: str
+
+        :return: One scalar error value per stored test sample.
+        :rtype: numpy.ndarray
+        """
+        metric = self._validate_test_sample_error_metric(metric)
+        raw_error = self._raw_surrogate_error(surrogate_index)
+
+        if metric in ("max_error", "max_abs_error", "linf"):
+            return np.nanmax(np.abs(raw_error), axis=1)
+
+        if metric == "rmse":
+            return np.sqrt(np.nanmean(raw_error**2, axis=1))
+
+        if metric in ("mae", "mean_abs_error"):
+            return np.nanmean(np.abs(raw_error), axis=1)
+
+    def worst_test_sample_indices(self, n=5, surrogate_index="best",
+                                  metric="max_error"):
+        """
+        Return the indices of the worst N stored test samples.
+
+        The samples are ranked using :meth:`test_sample_errors` and returned
+        from largest error to smallest error.
+
+        :param n: Number of worst test samples to return.
+        :type n: int
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param metric: Per-sample error metric used for ranking. Supported
+            values are ``"max_error"``, ``"max_abs_error"``, ``"linf"``,
+            ``"rmse"``, ``"mae"``, and ``"mean_abs_error"``.
+        :type metric: str
+
+        :return: Test-sample indices sorted from worst to best.
+        :rtype: numpy.ndarray
+        """
+        check_value_is_positive_integer(n, "n")
+
+        sample_errors = self.test_sample_errors(
+            surrogate_index=surrogate_index,
+            metric=metric,
+        )
+        n = min(n, sample_errors.size)
+        return np.argsort(sample_errors)[::-1][:n]
+
     @property
     def rmse_history(self):
         """
@@ -1845,6 +1982,425 @@ class AdaptiveSurrogate:
         _apply_legend(axes, show_legend)
 
         return figure, axes
+
+    def plot_worst_N(
+        self,
+        N=5,
+        n_figures=1,
+        surrogate_index="best",
+        metric="max_error",
+        error_type="signed",
+        test_style=None,
+        surrogate_style=None,
+        error_style=None,
+        independent_variable_units=None,
+        target_field_units=None,
+        error_units=None,
+        grid=True,
+        show_legend=True,
+    ):
+        """
+        Plot surrogate predictions and errors for the worst N stored test samples.
+
+        The worst samples are identified using :meth:`test_sample_errors`.
+
+        The selected samples are split across ``n_figures`` figures. Each figure
+        contains two axes:
+
+        * the left axis compares stored test data and retained-surrogate
+          predictions for that figure's subset of samples;
+        * the right axis plots the corresponding surrogate errors.
+
+        Axis limits are kept common across all generated figures so that the
+        response and error plots can be compared directly.
+
+        :param N: Number of worst test samples to plot.
+        :type N: int
+
+        :param n_figures: Number of figures to split the selected samples across.
+            If ``n_figures`` is larger than the number of plotted samples, only
+            one figure per sample is created.
+        :type n_figures: int
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param metric: Per-sample error metric used to rank the worst samples.
+            Supported values are ``"max_error"``, ``"max_abs_error"``,
+            ``"linf"``, ``"rmse"``, ``"mae"``, and ``"mean_abs_error"``.
+        :type metric: str
+
+        :param error_type: Error definition for the right-axis plots. Must be
+            ``"signed"``, ``"absolute"``, or ``"squared"``.
+        :type error_type: str
+
+        :param test_style: Optional style for test-data curves.
+        :type test_style: dict or None
+
+        :param surrogate_style: Optional style for surrogate-prediction curves.
+        :type surrogate_style: dict or None
+
+        :param error_style: Optional style for error curves.
+        :type error_style: dict or None
+
+        :param independent_variable_units: Optional x-axis units.
+        :type independent_variable_units: str or None
+
+        :param target_field_units: Optional target-field units.
+        :type target_field_units: str or None
+
+        :param error_units: Optional error units. If omitted, inferred from
+            ``target_field_units``.
+        :type error_units: str or None
+
+        :param grid: If not ``None``, passed to
+            :meth:`matplotlib.axes.Axes.grid`.
+        :type grid: bool or None
+
+        :param show_legend: If ``True``, show legends on each figure.
+        :type show_legend: bool
+
+        :return: ``(figures, axes_groups, worst_indices)``, where ``figures`` is
+            a list of Matplotlib figures, ``axes_groups`` is a list of
+            ``(1, 2)`` axes arrays, and ``worst_indices`` contains the plotted
+            test-sample indices sorted from worst to best.
+        :rtype: tuple
+        """
+        metric, error_type = self._validate_plot_worst_N_inputs(
+            N, n_figures, metric, error_type
+        )
+        arrays = self._get_plot_worst_N_arrays(surrogate_index, error_type)
+        worst_indices, index_groups, sample_errors = self._get_plot_worst_N_groups(
+            N, n_figures, surrogate_index, metric
+        )
+        labels = self._get_plot_worst_N_labels(
+            error_type, independent_variable_units, target_field_units, error_units
+        )
+        styles = self._get_plot_worst_N_styles(
+            test_style, surrogate_style, error_style
+        )
+        limits = self._get_plot_worst_N_limits(arrays, worst_indices, error_type)
+        figures, axes_groups = self._make_plot_worst_N_figures(
+            index_groups, arrays, labels, styles, limits, sample_errors,
+            metric, error_type, surrogate_index, grid, show_legend
+        )
+        return figures, axes_groups, worst_indices
+
+    def plot_worst_n(self, n=5, **kwargs):
+        """
+        Lowercase alias for :meth:`plot_worst_N`.
+        """
+        return self.plot_worst_N(N=n, **kwargs)
+
+    def _validate_plot_worst_N_inputs(self, N, n_figures, metric, error_type):
+        check_value_is_positive_integer(N, "N")
+        check_value_is_positive_integer(n_figures, "n_figures")
+        metric = self._validate_test_sample_error_metric(metric)
+        error_type = _validate_error_type(error_type)
+        return metric, error_type
+
+    def _get_plot_worst_N_arrays(self, surrogate_index, error_type):
+        arrays = {}
+        arrays["test"] = self._get_test_response_array()
+        arrays["prediction"] = self._get_test_prediction_array(surrogate_index)
+        arrays["error"] = self._get_surrogate_error_array(surrogate_index, error_type)
+        arrays["x"] = self._get_independent_variable_array()
+        self._validate_plot_worst_N_array_lengths(arrays)
+        return arrays
+
+    def _validate_plot_worst_N_array_lengths(self, arrays):
+        self._validate_independent_variable_length(arrays["test"])
+        self._validate_independent_variable_length(arrays["prediction"])
+        self._validate_independent_variable_length(arrays["error"])
+
+    def _get_plot_worst_N_groups(self, N, n_figures, surrogate_index, metric):
+        worst_indices = self.worst_test_sample_indices(
+            n=N, surrogate_index=surrogate_index, metric=metric
+        )
+        sample_errors = self.test_sample_errors(
+            surrogate_index=surrogate_index, metric=metric
+        )
+        n_figures_to_make = min(n_figures, len(worst_indices))
+        index_groups = np.array_split(worst_indices, n_figures_to_make)
+        return worst_indices, index_groups, sample_errors
+
+    def _get_plot_worst_N_labels(
+        self, error_type, independent_variable_units,
+        target_field_units, error_units
+    ):
+        labels = {}
+        labels["x"] = _format_axis_label(
+            self._indep_variable_name, independent_variable_units
+        )
+        labels["response_y"] = _format_axis_label(
+            self._target_field_name, target_field_units
+        )
+        error_units = _error_units_for_type(
+            error_type, target_field_units, error_units
+        )
+        labels["error_y"] = _format_axis_label(
+            self._make_error_ylabel(error_type), error_units
+        )
+        return labels
+
+    def _get_plot_worst_N_styles(self, test_style, surrogate_style, error_style):
+        styles = {}
+        styles["test"] = _merge_plot_style(
+            self._default_plot_worst_N_test_style(), test_style
+        )
+        styles["surrogate"] = _merge_plot_style(
+            self._default_plot_worst_N_surrogate_style(), surrogate_style
+        )
+        styles["error"] = _merge_plot_style(
+            self._default_plot_worst_N_error_style(), error_style
+        )
+        return styles
+
+    def _default_plot_worst_N_test_style(self):
+        return {
+            "linestyle": "-",
+            "marker": None,
+            "alpha": 0.75,
+            "linewidth": 1.5,
+        }
+
+    def _default_plot_worst_N_surrogate_style(self):
+        return {
+            "linestyle": "--",
+            "marker": None,
+            "alpha": 0.9,
+            "linewidth": 1.8,
+        }
+
+    def _default_plot_worst_N_error_style(self):
+        return {
+            "linestyle": "-",
+            "marker": None,
+            "alpha": 0.9,
+            "linewidth": 1.8,
+        }
+
+    def _get_plot_worst_N_limits(self, arrays, worst_indices, error_type):
+        limits = {}
+        limits["x"] = self._get_padded_plot_limits(arrays["x"])
+        limits["response_y"] = self._get_plot_worst_N_response_limits(
+            arrays, worst_indices
+        )
+        limits["error_y"] = self._get_padded_plot_limits(
+            arrays["error"][worst_indices, :].ravel(),
+            include_zero=error_type == "signed",
+        )
+        return limits
+
+    def _get_plot_worst_N_response_limits(self, arrays, worst_indices):
+        values = np.concatenate((
+            arrays["test"][worst_indices, :].ravel(),
+            arrays["prediction"][worst_indices, :].ravel(),
+        ))
+        return self._get_padded_plot_limits(values)
+
+    def _get_padded_plot_limits(self, values, include_zero=False):
+        values = np.asarray(values, dtype=float).ravel()
+        values = values[np.isfinite(values)]
+        if include_zero:
+            values = np.concatenate((values, np.array([0.0])))
+        return self._padded_limits_from_finite_values(values)
+
+    def _padded_limits_from_finite_values(self, values):
+        if values.size == 0:
+            return None
+        lower = np.nanmin(values)
+        upper = np.nanmax(values)
+        pad = self._plot_limit_padding(lower, upper)
+        return lower - pad, upper + pad
+
+    def _plot_limit_padding(self, lower, upper):
+        if np.isclose(lower, upper):
+            return 0.05 * max(abs(lower), 1.0)
+        return 0.05 * (upper - lower)
+
+    def _make_plot_worst_N_figures(
+        self, index_groups, arrays, labels, styles, limits, sample_errors,
+        metric, error_type, surrogate_index, grid, show_legend
+    ):
+        figures = []
+        axes_groups = []
+        rank_start = 1
+        for group_indices in index_groups:
+            figure, axes = self._make_one_plot_worst_N_figure(
+                group_indices, rank_start, arrays, labels, styles, limits,
+                sample_errors, metric, error_type, surrogate_index, grid, show_legend
+            )
+            figures.append(figure)
+            axes_groups.append(axes)
+            rank_start += len(group_indices)
+        return figures, axes_groups
+
+    def _make_one_plot_worst_N_figure(
+        self, group_indices, rank_start, arrays, labels, styles, limits,
+        sample_errors, metric, error_type, surrogate_index, grid, show_legend
+    ):
+        figure, axes = self._create_plot_worst_N_figure_and_axes()
+        self._plot_worst_N_group_curves(
+            axes, group_indices, rank_start, arrays, styles,
+            sample_errors, metric, error_type
+        )
+        self._decorate_plot_worst_N_figure(
+            figure, axes, rank_start, group_indices, labels, limits,
+            error_type, surrogate_index, grid, show_legend
+        )
+        return figure, axes
+
+    def _create_plot_worst_N_figure_and_axes(self):
+        import matplotlib.pyplot as plt
+
+        return plt.subplots(
+            1, 2, squeeze=False, figsize=(13, 5), constrained_layout=True
+        )
+
+    def _plot_worst_N_group_curves(
+        self, axes, group_indices, rank_start, arrays, styles,
+        sample_errors, metric, error_type
+    ):
+        for local_index, sample_index in enumerate(group_indices):
+            self._plot_one_worst_N_sample(
+                axes, local_index, sample_index, rank_start, arrays,
+                styles, sample_errors, metric
+            )
+        if error_type == "signed":
+            self._add_plot_worst_N_zero_error_line(axes[0, 1])
+
+    def _plot_one_worst_N_sample(
+        self, axes, local_index, sample_index, rank_start, arrays,
+        styles, sample_errors, metric
+    ):
+        rank = rank_start + local_index
+        color = f"C{local_index % 10}"
+        self._plot_one_worst_N_response(
+            axes[0, 0], sample_index, rank, color,
+            arrays, styles, sample_errors, metric
+        )
+        self._plot_one_worst_N_error(
+            axes[0, 1], sample_index, color, arrays, styles
+        )
+
+    def _plot_one_worst_N_response(
+        self, axes, sample_index, rank, color,
+        arrays, styles, sample_errors, metric
+    ):
+        test_style, surrogate_style = self._make_worst_N_response_styles(
+            sample_index, rank, color, styles, sample_errors, metric
+        )
+        axes.plot(arrays["x"], arrays["test"][sample_index, :], **test_style)
+        axes.plot(
+            arrays["x"], arrays["prediction"][sample_index, :], **surrogate_style
+        )
+
+    def _plot_one_worst_N_error(
+        self, axes, sample_index, color, arrays, styles
+    ):
+        error_style = self._make_worst_N_error_style(
+            sample_index, color, styles
+        )
+        axes.plot(arrays["x"], arrays["error"][sample_index, :], **error_style)
+
+    def _make_worst_N_response_styles(
+        self, sample_index, rank, color, styles, sample_errors, metric
+    ):
+        test_style = self._make_worst_N_test_style(
+            sample_index, rank, color, styles, sample_errors, metric
+        )
+        surrogate_style = styles["surrogate"].copy()
+        surrogate_style.setdefault("color", color)
+        surrogate_style["label"] = f"surrogate sample {sample_index}"
+        return test_style, surrogate_style
+
+    def _make_worst_N_test_style(
+        self, sample_index, rank, color, styles, sample_errors, metric
+    ):
+        style = styles["test"].copy()
+        style.setdefault("color", color)
+        style["label"] = self._make_worst_N_test_label(
+            sample_index, rank, sample_errors[sample_index], metric
+        )
+        return style
+
+    def _make_worst_N_test_label(self, sample_index, rank, sample_error, metric):
+        return (
+            f"test sample {sample_index} "
+            f"(rank {rank}, {metric}={sample_error:.4g})"
+        )
+
+    def _make_worst_N_error_style(self, sample_index, color, styles):
+        style = styles["error"].copy()
+        style.setdefault("color", color)
+        style["label"] = f"sample {sample_index}"
+        return style
+
+    def _add_plot_worst_N_zero_error_line(self, axes):
+        axes.axhline(
+            0.0, color="black", linewidth=0.8,
+            alpha=0.7, label="_nolegend_"
+        )
+
+    def _decorate_plot_worst_N_figure(
+        self, figure, axes, rank_start, group_indices, labels, limits,
+        error_type, surrogate_index, grid, show_legend
+    ):
+        rank_end = rank_start + len(group_indices) - 1
+        self._decorate_plot_worst_N_response_axes(
+            axes[0, 0], rank_start, rank_end, labels, limits, grid
+        )
+        self._decorate_plot_worst_N_error_axes(
+            axes[0, 1], rank_start, rank_end, labels, limits, error_type, grid
+        )
+        self._decorate_plot_worst_N_figure_title(figure, surrogate_index)
+        self._maybe_add_plot_worst_N_legends(axes, show_legend)
+
+    def _decorate_plot_worst_N_response_axes(
+        self, axes, rank_start, rank_end, labels, limits, grid
+    ):
+        axes.set_xlabel(labels["x"])
+        axes.set_ylabel(labels["response_y"])
+        axes.set_title(
+            f"Worst samples {rank_start}-{rank_end}: surrogate vs. test data"
+        )
+        self._apply_plot_worst_N_axis_limits(axes, limits["x"], limits["response_y"])
+        self._maybe_add_plot_worst_N_grid(axes, grid)
+
+    def _decorate_plot_worst_N_error_axes(
+        self, axes, rank_start, rank_end, labels, limits, error_type, grid
+    ):
+        axes.set_xlabel(labels["x"])
+        axes.set_ylabel(labels["error_y"])
+        axes.set_title(f"Worst samples {rank_start}-{rank_end}: {error_type} error")
+        self._apply_plot_worst_N_axis_limits(axes, limits["x"], limits["error_y"])
+        self._maybe_add_plot_worst_N_grid(axes, grid)
+
+    def _apply_plot_worst_N_axis_limits(self, axes, xlim, ylim):
+        if xlim is not None:
+            axes.set_xlim(xlim)
+        if ylim is not None:
+            axes.set_ylim(ylim)
+
+    def _maybe_add_plot_worst_N_grid(self, axes, grid):
+        if grid is not None:
+            axes.grid(grid)
+
+    def _decorate_plot_worst_N_figure_title(self, figure, surrogate_index):
+        figure.suptitle(
+            f"Worst stored test samples for retained surrogate "
+            f"'{surrogate_index}'"
+        )
+
+    def _maybe_add_plot_worst_N_legends(self, axes, show_legend):
+        if show_legend:
+            axes[0, 0].legend()
+            axes[0, 1].legend()
+
+
+
 
 class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
     """

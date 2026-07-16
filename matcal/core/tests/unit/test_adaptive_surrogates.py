@@ -1493,7 +1493,333 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
         self.assertEqual(len(ax.lines), 2)
 
         plt.close(fig)
+        
+    def _make_known_error_surrogate(self):
+        """
+        Build a multi-QoI sparse-grid adaptive surrogate with known test errors.
 
+        Test responses are all zero, so the fixed surrogate prediction is also
+        the signed error.
+
+        Per-sample max absolute errors are:
+            sample 0: 3.0
+            sample 1: 5.0
+            sample 2: 0.5
+            sample 3: 2.0
+            sample 4: 7.0
+            sample 5: 4.0
+            sample 6: 6.0
+
+        Therefore worst-to-best by max_error is:
+            [4, 6, 1, 5, 0, 3, 2]
+        """
+        param_names = ["p1", "p2"]
+
+        test_params = np.column_stack((
+            np.linspace(0.0, 1.0, 7),
+            np.linspace(1.0, 0.0, 7),
+        ))
+
+        test_responses = np.zeros((7, 3))
+
+        surrogate = SparseGridAdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="independent",
+            indep_variable_values=np.array([0.0, 0.5, 1.0]),
+            test_params=test_params,
+            test_responses=test_responses,
+            param_names=param_names,
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+
+        fixed_prediction = np.array([
+            [1.0, 2.0, 3.0],
+            [-5.0, 0.0, 0.0],
+            [0.5, 0.5, 0.5],
+            [2.0, 2.0, 1.0],
+            [7.0, 0.0, 0.0],
+            [4.0, 1.0, 1.0],
+            [6.0, 0.0, 0.0],
+        ])
+
+        surrogate._add_iteration(
+            FixedResponseSurrogate(fixed_prediction),
+            nsamples=10,
+        )
+
+        return surrogate, fixed_prediction
+
+    def test_plot_worst_N_splits_samples_across_requested_number_of_figures(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate, _ = self._make_known_error_surrogate()
+
+        figures, axes_groups, worst_indices = surrogate.plot_worst_N(
+            N=7,
+            n_figures=3,
+            surrogate_index="best",
+            metric="max_error",
+            error_type="signed",
+            independent_variable_units="s",
+            target_field_units="K",
+        )
+
+        np.testing.assert_array_equal(
+            worst_indices,
+            np.array([4, 6, 1, 5, 0, 3, 2]),
+        )
+
+        self.assertEqual(len(figures), 3)
+        self.assertEqual(len(axes_groups), 3)
+
+        for axes in axes_groups:
+            self.assertEqual(axes.shape, (1, 2))
+
+        # np.array_split splits 7 samples over 3 figures as 3, 2, 2.
+        expected_group_sizes = [3, 2, 2]
+
+        for axes, group_size in zip(axes_groups, expected_group_sizes):
+            response_axes = axes[0, 0]
+            error_axes = axes[0, 1]
+
+            # Each sample contributes one test curve and one surrogate curve.
+            self.assertEqual(len(response_axes.lines), 2 * group_size)
+
+            # Each sample contributes one error curve. Signed error also adds a
+            # zero-reference line.
+            self.assertEqual(len(error_axes.lines), group_size + 1)
+
+        self.assertIn("Worst samples 1-3", axes_groups[0][0, 0].get_title())
+        self.assertIn("Worst samples 4-5", axes_groups[1][0, 0].get_title())
+        self.assertIn("Worst samples 6-7", axes_groups[2][0, 0].get_title())
+
+        for fig in figures:
+            plt.close(fig)
+
+    def test_plot_worst_N_uses_common_axis_limits_across_figures(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate, _ = self._make_known_error_surrogate()
+
+        figures, axes_groups, _ = surrogate.plot_worst_N(
+            N=7,
+            n_figures=3,
+            surrogate_index="best",
+            metric="max_error",
+            error_type="signed",
+            independent_variable_units="s",
+            target_field_units="K",
+        )
+
+        response_xlims = [axes[0, 0].get_xlim() for axes in axes_groups]
+        response_ylims = [axes[0, 0].get_ylim() for axes in axes_groups]
+        error_xlims = [axes[0, 1].get_xlim() for axes in axes_groups]
+        error_ylims = [axes[0, 1].get_ylim() for axes in axes_groups]
+
+        for xlim in response_xlims[1:]:
+            self.assertEqual(xlim, response_xlims[0])
+        for ylim in response_ylims[1:]:
+            self.assertEqual(ylim, response_ylims[0])
+        for xlim in error_xlims[1:]:
+            self.assertEqual(xlim, error_xlims[0])
+        for ylim in error_ylims[1:]:
+            self.assertEqual(ylim, error_ylims[0])
+
+        for fig in figures:
+            plt.close(fig)
+
+    def test_plot_worst_N_clips_number_of_figures_to_number_of_samples(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate, _ = self._make_known_error_surrogate()
+
+        figures, axes_groups, worst_indices = surrogate.plot_worst_N(
+            N=3,
+            n_figures=10,
+            surrogate_index="best",
+            metric="max_error",
+            error_type="signed",
+        )
+
+        np.testing.assert_array_equal(
+            worst_indices,
+            np.array([4, 6, 1]),
+        )
+
+        # Only three samples are plotted, so only three figures are created.
+        self.assertEqual(len(figures), 3)
+        self.assertEqual(len(axes_groups), 3)
+
+        for axes in axes_groups:
+            response_axes = axes[0, 0]
+            error_axes = axes[0, 1]
+
+            # One sample per figure.
+            self.assertEqual(len(response_axes.lines), 2)
+            self.assertEqual(len(error_axes.lines), 2)
+
+        for fig in figures:
+            plt.close(fig)
+
+    def test_plot_worst_N_clips_N_larger_than_number_of_test_samples(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate, _ = self._make_known_error_surrogate()
+
+        figures, axes_groups, worst_indices = surrogate.plot_worst_N(
+            N=100,
+            n_figures=2,
+            surrogate_index="best",
+            metric="max_error",
+            error_type="signed",
+        )
+
+        np.testing.assert_array_equal(
+            worst_indices,
+            np.array([4, 6, 1, 5, 0, 3, 2]),
+        )
+
+        # Seven available samples split over two figures as 4 and 3.
+        self.assertEqual(len(figures), 2)
+        self.assertEqual(len(axes_groups), 2)
+
+        first_response_axes = axes_groups[0][0, 0]
+        first_error_axes = axes_groups[0][0, 1]
+        second_response_axes = axes_groups[1][0, 0]
+        second_error_axes = axes_groups[1][0, 1]
+
+        self.assertEqual(len(first_response_axes.lines), 8)
+        self.assertEqual(len(first_error_axes.lines), 5)
+        self.assertEqual(len(second_response_axes.lines), 6)
+        self.assertEqual(len(second_error_axes.lines), 4)
+
+        for fig in figures:
+            plt.close(fig)
+
+    def test_plot_worst_N_absolute_error_does_not_add_zero_reference_line(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate, _ = self._make_known_error_surrogate()
+
+        figures, axes_groups, worst_indices = surrogate.plot_worst_N(
+            N=5,
+            n_figures=1,
+            surrogate_index="best",
+            metric="max_error",
+            error_type="absolute",
+            independent_variable_units="s",
+            target_field_units="K",
+        )
+
+        np.testing.assert_array_equal(
+            worst_indices,
+            np.array([4, 6, 1, 5, 0]),
+        )
+
+        response_axes = axes_groups[0][0, 0]
+        error_axes = axes_groups[0][0, 1]
+
+        self.assertEqual(len(response_axes.lines), 10)
+
+        # Absolute-error plot should have only one error curve per sample.
+        # There should be no zero-reference line.
+        self.assertEqual(len(error_axes.lines), 5)
+        self.assertEqual(error_axes.get_ylabel(), "target absolute error (K)")
+
+        plt.close(figures[0])
+
+    def test_plot_worst_N_rejects_invalid_number_of_figures(self):
+        surrogate, _ = self._make_known_error_surrogate()
+
+        with self.assertRaises(ValueError):
+            surrogate.plot_worst_N(N=5, n_figures=0)
+
+        with self.assertRaises(TypeError):
+            surrogate.plot_worst_N(N=5, n_figures="bad")
+
+    def test_plot_worst_N_rejects_invalid_inputs(self):
+        surrogate, _ = self._make_known_error_surrogate()
+
+        with self.assertRaises(ValueError):
+            surrogate.plot_worst_N(N=0)
+
+        with self.assertRaises(TypeError):
+            surrogate.plot_worst_N(N="bad")
+
+        with self.assertRaises(ValueError):
+            surrogate.plot_worst_N(metric="bad_metric")
+
+        with self.assertRaises(ValueError):
+            surrogate.plot_worst_N(error_type="bad_error_type")
+
+    def test_plot_worst_N_no_longer_accepts_figure_or_axes_arguments(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate, _ = self._make_known_error_surrogate()
+
+        fig, axes = plt.subplots(1, 2)
+
+        with self.assertRaises(TypeError):
+            surrogate.plot_worst_N(
+                N=2,
+                figure=fig,
+            )
+
+        with self.assertRaises(TypeError):
+            surrogate.plot_worst_N(
+                N=2,
+                axes=axes,
+            )
+
+        plt.close(fig)
+
+    def test_plot_worst_n_alias_passes_number_of_figures(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate, _ = self._make_known_error_surrogate()
+
+        figures, axes_groups, worst_indices = surrogate.plot_worst_n(
+            n=6,
+            n_figures=2,
+            surrogate_index="best",
+            metric="max_error",
+            error_type="signed",
+        )
+
+        np.testing.assert_array_equal(
+            worst_indices,
+            np.array([4, 6, 1, 5, 0, 3]),
+        )
+
+        # Six samples split over two figures as 3 and 3.
+        self.assertEqual(len(figures), 2)
+        self.assertEqual(len(axes_groups), 2)
+
+        for axes in axes_groups:
+            response_axes = axes[0, 0]
+            error_axes = axes[0, 1]
+            self.assertEqual(len(response_axes.lines), 6)
+            self.assertEqual(len(error_axes.lines), 4)
+
+        for fig in figures:
+            plt.close(fig)
+    
 
 class _FakeSurrogate:
     """

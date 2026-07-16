@@ -92,20 +92,30 @@ study.set_error_stopping_criteria(max_abs_error_goal=1.5)
 study.set_max_training_samples(500)
 
 #%%
-# Finally, we set the surrogate save filename 
-# and basic study options.
+# Next, we set the surrogate save options and filename.
+# The adaptive surrogate can retain only selected surrogate model objects to
+# keep the saved ``.joblib`` file small. Score histories and test data are
+# always stored. Here we retain the best surrogate according to the maximum
+# test-sample error, which is also the convergence metric used below.
+# Different options are available, see 
+# :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy.set_surrogate_storage_options`.
+study.set_surrogate_storage_options(
+    best_n_surrogates=1,
+    score_metric="max_error",
+)
 study.set_surrogate_save_filename("layered_metal_bc_SG_adaptive_surrogate.joblib")
+
+#%%
+# Finally, set the standard study options 
+# like seeds, core use and working directory.
 if is_sandia_cluster():
     study.set_core_limit(250)
 else:
     study.set_core_limit(112)
-#%%
-# If setting the seed, ensure the test group seed is different than 
-# the study seed. If not, the training data will include samples
-# from the test data.
 study.set_test_group_random_seed(12345)
 study.set_seed(54321)
 study.set_working_directory("sparse_grid_surrogate", remove_existing=True)
+
 #%%
 # With our study defined, we run it and wait for it to complete. 
 study_results = study.launch()
@@ -134,7 +144,12 @@ surrogate = study.surrogate
 # also be accessed through a method under the surrogate after 
 # it has been produced. We print the score below 
 # for this surrogate.
-print('Test scores:\n', surrogate.score())
+best_surrogate_index = surrogate.best_surrogate_iteration_index
+
+print("Best retained surrogate iteration:", best_surrogate_index)
+print("Stored surrogate score record:")
+print(surrogate.stored_surrogate_scores[best_surrogate_index])
+print("Best retained surrogate R2 score:\n", surrogate.score(best_surrogate_index))
 
 #%%
 # Both the test scores and the training scores indicate the surrogate is well
@@ -160,8 +175,11 @@ H2 = 20
 T_inf2 = 815
 T_air2 = 634
 
-prediction = surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]], batch_evaluate=True)
-
+prediction = surrogate(
+    [[H, T_inf, T_air], [H2, T_inf2, T_air2]],
+    surrogate_index="best",
+    batch_evaluate=True,
+)
 param_study = mc.ParameterStudy(conv_heat_transfer_coeff, far_field_temperature,
                                  air_temperature)
 my_objective = mc.SimulationResultsSynchronizer('time', indep_field_vals,
@@ -238,24 +256,57 @@ plt.show()
 # :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate.max_error_history`
 # and :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate.sample_count_history`
 # properties.
-print("Max error:", surrogate.max_error_history[-1])
-print("Training samples:", surrogate.sample_count_history[-1])
+print("Best retained surrogate max error:",
+      surrogate.max_error_history[best_surrogate_index])
+print("Training samples for best retained surrogate:",
+      surrogate.sample_count_history[best_surrogate_index])
+
+print("Final batch max error:", surrogate.max_error_history[-1])
+print("Final batch training samples:", surrogate.sample_count_history[-1])
 
 #%%
 # Since adaptive surrogates in MatCal also save the 
 # training error history, we can plot the error metrics for the surrogate
 # as a function of model training samples used. This can 
-# useful to evaluate convergence rate and 
+# be useful to evaluate convergence rate and 
 # to assess if better performance is likely 
 # with additional training samples.
-plt.figure(constrained_layout=True)
-plt.plot(surrogate.sample_count_history, surrogate.max_error_history,'o', 
-         color='tab:red')
-plt.xlabel("training samples")
-plt.ylabel("max test sample error (K)")
-plt.title("Surrogate error convergence")
+fig, ax = surrogate.plot_error_history(
+    metrics="max_error",
+    error_units="K",
+    metric_styles={
+        "max_error": {
+            "color": "tab:red",
+            "linestyle": "None",
+            "marker": "o",
+        },
+    },
+    ylabel="max_test_sample_error",
+    title="Surrogate error convergence",
+)
 plt.show()
 
 #%%
-# We can see in the convergence plot, that the error has stagnated.
-# More iterations will likely not improve the performance of the surrogate. 
+# The adaptive surrogate stores the test parameters and responses used to score
+# each candidate surrogate during training. We can use the retained best
+# surrogate to inspect which test samples were hardest to predict.
+# We can use use  
+# :meth:`~matcal.core.adaptive_surrogate.SparseGridAdaptiveSurrogate.plot_worse_N` 
+# to plot the worst five test samples. For each test sample, the left column
+# compares the surrogate prediction against the stored test data. The right
+# column shows the signed error, surrogate minus test data.
+fig, axes, worst_test_indices = surrogate.plot_worst_N(
+    N=5,
+    surrogate_index="best",
+    metric="max_error",
+    error_type="signed",
+    independent_variable_units="s",
+    target_field_units="K",
+)
+print("Worst test sample indices:", worst_test_indices)
+plt.show()
+
+#%%
+# We can see in the convergence plot whether the error has stagnated 
+# and the worst-test-sample plots show where the remaining 
+# surrogate error is concentrated.
