@@ -629,7 +629,21 @@ class StudyResultsBaseUnitTests(object):
             rc = StudyResults()
             with self.assertRaises(RuntimeError):
                 rc.outcome
-            
+
+        def test_success_false(self):
+            rc = self._random_init(success=False)
+            self.assertEqual(rc.exit_status, 0)
+            self.assertFalse(rc.success)
+            self.assertEqual(rc.exit_message, 
+                             "Failed   :\nYay\nAlgorithm returned exit status:\n0")
+
+        def test_success_none(self):
+            rc = self._random_init(success=None)
+            self.assertEqual(rc.exit_status, 0)
+            self.assertIsNone(rc.success)
+            self.assertEqual(rc.exit_message, 
+                             "Yay\nAlgorithm returned exit status:\n0")
+
         def test_can_return_termination_status(self):
             rc = self._random_init()
             self.assertEqual(rc.exit_status, 0)
@@ -841,7 +855,7 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
     
     def _random_init(self, n_samples=2, 
                      record_weighted_conditioned=False, 
-                     results_save_frequency=1)->StudyResults:
+                     results_save_frequency=1, success=True)->StudyResults:
         param_names = ['a', 'b']
         param_means = [0, 1]
         param_stds = [1, 2]
@@ -855,13 +869,13 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
                                                                simple_fun, 
                                                                record_weighted_conditioned, 
                                                                results_save_frequency=results_save_frequency)
-        sr._set_exit_information(True, 0, 'Yay')
+        sr._set_exit_information(success, 0, 'Yay')
         outcome = {'Best:a':0, "Best:b":1}
         sr._set_outcome(outcome)
         return sr
 
     def _specified_init(self, record_weighted_conditioned=False, 
-                        results_save_frequency=1)->StudyResults:
+                        results_save_frequency=1, success=True)->StudyResults:
         params = {}
         params['a'] = [-5,-4,-3,-2,-1.1, 0,1,2,3,4,5]
         params['b'] = [ 4, 3, 2,1,    0, 1,2,3,4,5,6]
@@ -877,7 +891,7 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
                                                                record_weighted_conditioned, 
                                                                best, 
                                                                results_save_frequency)
-        sr._set_exit_information(True, 0, 'Yay')
+        sr._set_exit_information(success, 0, 'Yay')
         outcome = {'Best:a':0, "Best:b":1}
         sr._set_outcome(outcome)
         return sr

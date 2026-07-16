@@ -588,7 +588,20 @@ class MatcalStandardModelUnitTestNewBase:
             func_block = model.input_file.subblocks[model.input_file._load_bc_function_name]
             return func_block.get_string()
 
-        
+        def test_set_time_limit_allows_96_hours(self):
+            model = self.init_model()
+            model.set_time_limit(96)
+            self.assertEqual(model.time_limit_seconds, 96 * 60 * 60)
+
+        def test_set_time_limit_raises_over_96_hours_message(self):
+            model = self.init_model()
+            with self.assertRaises(ValueError) as cm:
+                model.set_time_limit(97)
+
+            self.assertIn("cannot exceed 96 hours", str(cm.exception))
+            self.assertIn("97", str(cm.exception))
+
+
 class MatcalThreeDimensionalStandardModelUnitTestNewBase:
     def __init__():
         pass

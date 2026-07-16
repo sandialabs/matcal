@@ -79,6 +79,16 @@ class SierraModelBase(ModelBase):
         self._check_syntax = False
         self._check_input = False
 
+    def set_time_limit(self, time_limit_hours):
+
+        if time_limit_hours > 96:
+            message = (
+                "Sierra model time limit cannot exceed 96 hours.\n"
+                f"Requested time limit was {time_limit_hours} hours."
+            )
+            raise ValueError(message)
+        super().set_time_limit(time_limit_hours)
+
     def _get_simulator_class_inputs(self, state):
         args = [
             self.name,

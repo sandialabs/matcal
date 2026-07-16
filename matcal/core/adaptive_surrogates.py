@@ -32,6 +32,233 @@ from matcal.core.surrogates import (_root_mean_squared_error,
 logger = initialize_matcal_logger(__name__)
 
 
+def _get_or_create_matplotlib_axes(figure=None, axes=None):
+    if axes is not None:
+        return axes.figure, axes
+
+    import matplotlib.pyplot as plt
+
+    if figure is None:
+        return plt.subplots()
+
+    if len(figure.axes) > 0:
+        return figure, figure.axes[0]
+
+    return figure, figure.add_subplot(1, 1, 1)
+
+
+def _replace_underscores(text):
+    if text is None:
+        return None
+    return str(text).replace("_", " ")
+
+
+def _format_axis_label(label, units=None):
+    label = _replace_underscores(label)
+    if label is None:
+        return None
+
+    if units is None or str(units).strip() == "":
+        return label
+
+    return f"{label} ({units})"
+
+
+def _merge_plot_style(default_style, user_style):
+    style = default_style.copy()
+    if user_style is not None:
+        style.update(user_style)
+    return style
+
+
+def _apply_axis_limits(axes, xlim=None, ylim=None):
+    if xlim is not None:
+        axes.set_xlim(xlim)
+    if ylim is not None:
+        axes.set_ylim(ylim)
+
+
+def _apply_axis_scales(axes, xscale=None, yscale=None):
+    if xscale is not None:
+        axes.set_xscale(xscale)
+    if yscale is not None:
+        axes.set_yscale(yscale)
+
+
+def _apply_axis_labels(axes, xlabel=None, ylabel=None, title=None):
+    if xlabel is not None:
+        axes.set_xlabel(xlabel)
+    if ylabel is not None:
+        axes.set_ylabel(ylabel)
+    if title is not None:
+        axes.set_title(title)
+
+
+def _apply_grid(axes, grid):
+    if grid is not None:
+        axes.grid(grid)
+
+
+def _apply_legend(axes, show_legend):
+    if show_legend:
+        axes.legend()
+
+
+def _apply_axes_plot_options(
+    axes,
+    xlabel=None,
+    ylabel=None,
+    title=None,
+    xlim=None,
+    ylim=None,
+    xscale=None,
+    yscale=None,
+    grid=None,
+):
+    _apply_axis_labels(axes, xlabel, ylabel, title)
+    _apply_axis_limits(axes, xlim, ylim)
+    _apply_axis_scales(axes, xscale, yscale)
+    _apply_grid(axes, grid)
+
+
+def _as_2d_response_array(values):
+    values = np.asarray(values)
+    if values.ndim == 1:
+        return values.reshape(-1, 1)
+    return values
+
+
+def _validate_sample_indices(sample_indices, n_samples):
+    indices = np.atleast_1d(np.asarray(sample_indices, dtype=int))
+
+    if np.any(indices < 0) or np.any(indices >= n_samples):
+        raise ValueError(
+            "sample_indices contains an index outside the valid range "
+            f"[0, {n_samples - 1}]."
+        )
+
+    return indices
+
+
+def _default_sample_indices(n_samples):
+    return np.arange(n_samples, dtype=int)
+
+
+def _get_sample_indices(sample_indices, n_samples):
+    if sample_indices is None:
+        return _default_sample_indices(n_samples)
+    return _validate_sample_indices(sample_indices, n_samples)
+
+
+def _default_test_data_style():
+    return {
+        "color": "black",
+        "linestyle": "None",
+        "marker": "o",
+        "alpha": 0.55,
+        "markersize": 4,
+    }
+
+
+def _default_surrogate_style():
+    return {
+        "color": "tab:blue",
+        "linestyle": "-",
+        "marker": None,
+        "alpha": 0.85,
+        "linewidth": 1.5,
+    }
+
+
+def _default_surrogate_error_style():
+    return {
+        "color": "tab:red",
+        "linestyle": "-",
+        "marker": None,
+        "alpha": 0.9,
+        "linewidth": 1.8,
+    }
+
+
+def _default_error_history_styles():
+    return {
+        "rmse": {
+            "color": "tab:blue",
+            "linestyle": "-",
+            "marker": "o",
+            "label": "RMSE",
+        },
+        "max_error": {
+            "color": "tab:orange",
+            "linestyle": "-",
+            "marker": "s",
+            "label": "max absolute error",
+        },
+        "r2": {
+            "color": "tab:green",
+            "linestyle": "-",
+            "marker": "^",
+            "label": r"$R^2$",
+        },
+        "score": {
+            "color": "tab:green",
+            "linestyle": "-",
+            "marker": "^",
+            "label": r"$R^2$",
+        },
+    }
+
+
+def _add_label_to_first_curve(style, label, curve_index):
+    style = style.copy()
+    if curve_index == 0:
+        style.setdefault("label", label)
+    else:
+        style.setdefault("label", "_nolegend_")
+    return style
+
+
+def _validate_error_type(error_type):
+    check_value_is_nonempty_str(error_type, "error_type")
+    error_type = error_type.lower().strip()
+
+    valid_error_types = ("absolute", "signed", "squared")
+    if error_type not in valid_error_types:
+        raise ValueError(
+            f"error_type must be one of {valid_error_types}. "
+            f"Received '{error_type}'."
+        )
+
+    return error_type
+
+
+def _validate_error_statistic(error_statistic):
+    if error_statistic is None:
+        return None
+
+    check_value_is_nonempty_str(error_statistic, "error_statistic")
+    error_statistic = error_statistic.lower().strip()
+
+    valid_error_statistics = ("mean", "median", "max")
+    if error_statistic not in valid_error_statistics:
+        raise ValueError(
+            f"error_statistic must be one of {valid_error_statistics} or None. "
+            f"Received '{error_statistic}'."
+        )
+
+    return error_statistic
+
+
+def _error_units_for_type(error_type, target_field_units, error_units):
+    if error_units is not None:
+        return error_units
+
+    if error_type == "squared" and target_field_units is not None:
+        return f"{target_field_units}^2"
+
+    return target_field_units
+
+
 def _get_parameter_bounds(parameters):
     param_bounds = []
     for name, parameter in parameters.items():
@@ -41,26 +268,23 @@ def _get_parameter_bounds(parameters):
     return bounds
 
 
-def _get_pyapprox_variable_transformer(study, bounds):
-    # bounds is (n_params, 2)
-    return _PyapproxBoundedAffineTransformerND(bounds)
-
-
 def _setup_pyapprox_adaptive_sparse_grid_fitter(
     n_parameters: int,
     n_qois: int,
+    bounds,
     basis_type: str = "lagrange",
     piecewise_degree: int = 2,
     max_level: int = 20,
     pnorm: float = 1.0,
 ):
     """
-    Build a PyApprox adaptive sparse-grid fitter (new API).
+    Build a PyApprox adaptive sparse-grid fitter.
 
     Notes
     -----
-    * Parameters are assumed to be in canonical space [-1,1]^d when passed to
-      the surrogate; we use AffineTransform in the study to map to/from.
+    * Parameters are assumed to be in native/physical parameter space.
+    * The physical parameter bounds are supplied to PyApprox through the
+      one-dimensional marginal distributions.
     * basis_type:
         - 'lagrange': global Clenshaw-Curtis Lagrange
         - 'piecewise': local piecewise polynomial basis
@@ -81,31 +305,54 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
         CubicNestedGrowthRule,
         MaxLevelCriteria,
     )
-
-    bkd = NumpyBkd()
-    marginal = UniformMarginal(-1.0, 1.0, bkd)
-
-    basis_type = basis_type.lower().strip()
-    if basis_type not in ("lagrange", "piecewise"):
-        raise ValueError(f"basis_type must be 'lagrange' or 'piecewise'. Got '{basis_type}'.")
-
-    if basis_type == "lagrange":
-        factories = [ClenshawCurtisLagrangeFactory(marginal, bkd) for _ in range(n_parameters)]
-        growth = ClenshawCurtisGrowthRule()
-    else:
-        if piecewise_degree not in (1, 2, 3):
-            raise ValueError("piecewise_degree must be 1, 2, or 3")
-        poly_type = {1: "linear", 2: "quadratic", 3: "cubic"}[piecewise_degree]
-        factories = [PiecewiseFactory(marginal, bkd, poly_type=poly_type) for _ in range(n_parameters)]
-        growth = CubicNestedGrowthRule() if poly_type == "cubic" else ClenshawCurtisGrowthRule()
-
-    tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
-    admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
-
     from pyapprox.surrogates.sparsegrids.error_indicators import (
         VarianceChangeIndicator,
     )
 
+    bkd = NumpyBkd()
+
+    bounds = np.asarray(bounds, dtype=float)
+    expected_shape = (n_parameters, 2)
+    if bounds.shape != expected_shape:
+        raise ValueError(
+            f"bounds must have shape {expected_shape}. Received {bounds.shape}."
+        )
+
+    if np.any(bounds[:, 1] <= bounds[:, 0]):
+        raise ValueError(
+            "Each parameter upper bound must be greater than its lower bound."
+        )
+
+    marginals = [
+        UniformMarginal(float(bounds[ii, 0]), float(bounds[ii, 1]), bkd)
+        for ii in range(n_parameters)
+    ]
+
+    basis_type = basis_type.lower().strip()
+    if basis_type not in ("lagrange", "piecewise"):
+        raise ValueError(
+            f"basis_type must be 'lagrange' or 'piecewise'. Got '{basis_type}'."
+        )
+
+    if basis_type == "lagrange":
+        factories = [
+            ClenshawCurtisLagrangeFactory(marginals[ii], bkd)
+            for ii in range(n_parameters)
+        ]
+        growth = ClenshawCurtisGrowthRule()
+    else:
+        if piecewise_degree not in (1, 2, 3):
+            raise ValueError("piecewise_degree must be 1, 2, or 3")
+
+        poly_type = {1: "linear", 2: "quadratic", 3: "cubic"}[piecewise_degree]
+        factories = [
+            PiecewiseFactory(marginals[ii], bkd, poly_type=poly_type)
+            for ii in range(n_parameters)
+        ]
+        growth = CubicNestedGrowthRule() if poly_type == "cubic" else ClenshawCurtisGrowthRule()
+
+    tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
+    admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
     error_indicator = VarianceChangeIndicator(bkd)
 
     fitter = SingleFidelityAdaptiveSparseGridFitter(
@@ -150,12 +397,12 @@ class AdaptiveSurrogate:
 
     _VALID_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
 
-    def __init__(self, target_field_name, indep_variable_name, 
-                 indep_variable_values, variable_transformer, 
-                 test_params, test_responses, param_names, bounds,
-                 storage_best_n_surrogates=1,
-                 storage_every_n_batches=None,
-                 storage_score_metric="max_error"):
+    def __init__(self, target_field_name, indep_variable_name,
+                indep_variable_values, test_params, test_responses,
+                param_names, bounds,
+                storage_best_n_surrogates=1,
+                storage_every_n_batches=None,
+                storage_score_metric="max_error"):
         """
         Create an :class:`AdaptiveSurrogate` instance.
 
@@ -171,22 +418,14 @@ class AdaptiveSurrogate:
             which the surrogate response is reported.
         :type indep_variable_values: array-like of real numbers
 
-        :param variable_transformer: Object that maps model parameters between
-            physical parameter space and the canonical space required by the
-            underlying surrogate library. For sparse-grid surrogates, this
-            typically maps physical parameter bounds to ``[-1, 1]^d``.
-        :type variable_transformer: object with ``map_to_canonical`` and
-            ``map_from_canonical`` methods, or ``None`` for surrogate types that
-            do not require such a transform
-
         :param test_params: Parameter samples used to evaluate surrogate
             accuracy. These are always stored, regardless of the surrogate
             retention policy.
         :type test_params: :class:`numpy.ndarray`
 
         :param test_responses: Model responses corresponding to
-            ``test_params``. These are always stored, regardless of the
-            surrogate retention policy.
+            ``test_params``. These are always stored, regardless of the surrogate
+            retention policy.
         :type test_responses: :class:`numpy.ndarray` of shape
             ``(n_test_samples, n_qois)``
 
@@ -207,29 +446,24 @@ class AdaptiveSurrogate:
 
         :param storage_every_n_batches: If provided, retain every N-th adaptive
             batch surrogate in addition to any score-based retained surrogates.
-            For example, ``storage_every_n_batches=5`` retains batches
-            5, 10, 15, ...
         :type storage_every_n_batches: int or None
 
         :param storage_score_metric: Metric used to identify the best
             surrogates. Supported values are ``"rmse"``, ``"max_error"``,
             ``"r2"``, and ``"score"``. ``"score"`` is an alias for ``"r2"``.
-            Lower is better for ``"rmse"`` and ``"max_error"``. Higher is
-            better for ``"r2"``.
         :type storage_score_metric: str
         """
         self._surrogates = OrderedDict()
         self._surrogate_iteration_records = []
 
-        self._root_mean_squared_errors: list[float] = [] 
+        self._root_mean_squared_errors: list[float] = []
         self._max_errors: list[float] = []
-        self._r2_scores: list[float] = []    
-        self._sample_counts: list[int] = []    
+        self._r2_scores: list[float] = []
+        self._sample_counts: list[int] = []
 
         self._target_field_name: str = target_field_name
         self._indep_variable_name = indep_variable_name
         self._indep_variable_values = np.asarray(indep_variable_values)
-        self._variable_transformer = variable_transformer
 
         # Always persisted. These are needed to understand/diagnose all scores.
         self._test_params = test_params
@@ -649,6 +883,143 @@ class AdaptiveSurrogate:
         """
         return self._test_responses
 
+    def test_predictions(self, surrogate_index="best"):
+        """
+        Return retained-surrogate predictions at the stored test-parameter
+        locations.
+
+        :param surrogate_index: Retained surrogate selector. Supported values
+            are ``"best"``, ``"latest"``, a retained adaptive iteration index,
+            or a positional retained-surrogate index. Defaults to ``"best"``.
+        :type surrogate_index: int or str
+
+        :return: Surrogate predictions with shape ``(n_test_samples, n_qois)``.
+        :rtype: numpy.ndarray
+        """
+        return self._get_test_prediction_array(surrogate_index)
+
+    def test_errors(self, surrogate_index="best", error_type="signed"):
+        """
+        Return surrogate errors at the stored test-parameter locations.
+
+        The raw signed error is
+
+        .. math::
+
+            e = \\hat{y} - y
+
+        where ``hat(y)`` is the surrogate prediction and ``y`` is the stored
+        test response.
+
+        Supported error definitions are:
+
+        * ``"signed"``: ``surrogate - test``
+        * ``"absolute"``: ``abs(surrogate - test)``
+        * ``"squared"``: ``(surrogate - test)**2``
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param error_type: Error definition. Must be ``"signed"``,
+            ``"absolute"``, or ``"squared"``.
+        :type error_type: str
+
+        :return: Error array with shape ``(n_test_samples, n_qois)``.
+        :rtype: numpy.ndarray
+        """
+        error_type = _validate_error_type(error_type)
+        return self._get_surrogate_error_array(surrogate_index, error_type)
+
+    def _validate_test_sample_error_metric(self, metric):
+        check_value_is_nonempty_str(metric, "metric")
+        metric = metric.lower().strip()
+
+        valid_metrics = (
+            "max_error",
+            "max_abs_error",
+            "linf",
+            "rmse",
+            "mae",
+            "mean_abs_error",
+        )
+        if metric not in valid_metrics:
+            raise ValueError(
+                "Unsupported test-sample error metric. Supported values are "
+                "'max_error', 'max_abs_error', 'linf', 'rmse', 'mae', and "
+                "'mean_abs_error'. "
+                f"Received '{metric}'."
+            )
+
+        return metric
+
+    def test_sample_errors(self, surrogate_index="best", metric="max_error"):
+        """
+        Return one scalar error per stored test sample.
+
+        Supported metrics are:
+
+        * ``"max_error"``, ``"max_abs_error"``, or ``"linf"``:
+          maximum absolute error over the surrogate independent variable;
+        * ``"rmse"``:
+          root-mean-squared error over the surrogate independent variable;
+        * ``"mae"`` or ``"mean_abs_error"``:
+          mean absolute error over the surrogate independent variable.
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param metric: Per-sample error metric.
+        :type metric: str
+
+        :return: One scalar error value per stored test sample.
+        :rtype: numpy.ndarray
+        """
+        metric = self._validate_test_sample_error_metric(metric)
+        raw_error = self._raw_surrogate_error(surrogate_index)
+
+        if metric in ("max_error", "max_abs_error", "linf"):
+            return np.nanmax(np.abs(raw_error), axis=1)
+
+        if metric == "rmse":
+            return np.sqrt(np.nanmean(raw_error**2, axis=1))
+
+        if metric in ("mae", "mean_abs_error"):
+            return np.nanmean(np.abs(raw_error), axis=1)
+
+    def worst_test_sample_indices(self, n=5, surrogate_index="best",
+                                  metric="max_error"):
+        """
+        Return the indices of the worst N stored test samples.
+
+        The samples are ranked using :meth:`test_sample_errors` and returned
+        from largest error to smallest error.
+
+        :param n: Number of worst test samples to return.
+        :type n: int
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param metric: Per-sample error metric used for ranking. Supported
+            values are ``"max_error"``, ``"max_abs_error"``, ``"linf"``,
+            ``"rmse"``, ``"mae"``, and ``"mean_abs_error"``.
+        :type metric: str
+
+        :return: Test-sample indices sorted from worst to best.
+        :rtype: numpy.ndarray
+        """
+        check_value_is_positive_integer(n, "n")
+
+        sample_errors = self.test_sample_errors(
+            surrogate_index=surrogate_index,
+            metric=metric,
+        )
+        n = min(n, sample_errors.size)
+        return np.argsort(sample_errors)[::-1][:n]
+
     @property
     def rmse_history(self):
         """
@@ -782,6 +1153,1254 @@ class AdaptiveSurrogate:
             transpose=transpose, **kwargs
         )
 
+    def _evaluate_test_predictions(self, surrogate_index="best"):
+        surrogate = self._select_surrogate(surrogate_index)
+        return self._evaluate_surrogate_object(
+            surrogate,
+            self._test_params,
+            batch_evaluate=True,
+        )
+
+    def _get_target_prediction(self, prediction_data):
+        if self._target_field_name not in prediction_data:
+            raise RuntimeError(
+                f"Surrogate evaluation did not return target field "
+                f"'{self._target_field_name}'. Returned fields are "
+                f"{list(prediction_data.keys())}."
+            )
+
+        return prediction_data[self._target_field_name]
+
+    def _get_test_response_array(self):
+        return _as_2d_response_array(self._test_responses)
+
+    def _match_prediction_shape(self, predictions, test_responses):
+        predictions = _as_2d_response_array(predictions)
+
+        if predictions.shape == test_responses.shape:
+            return predictions
+
+        if predictions.T.shape == test_responses.shape:
+            return predictions.T
+
+        raise self._prediction_shape_error(predictions, test_responses)
+
+    def _prediction_shape_error(self, predictions, test_responses):
+        return RuntimeError(
+            "Surrogate predictions do not match stored test-response shape. "
+            f"Prediction shape: {predictions.shape}. "
+            f"Test-response shape: {test_responses.shape}."
+        )
+
+    def _get_test_prediction_array(self, surrogate_index="best"):
+        prediction_data = self._evaluate_test_predictions(surrogate_index)
+        predictions = self._get_target_prediction(prediction_data)
+        test_responses = self._get_test_response_array()
+        return self._match_prediction_shape(predictions, test_responses)
+
+    def _get_plot_sample_indices(self, sample_indices):
+        n_samples = self._get_test_response_array().shape[0]
+        return _get_sample_indices(sample_indices, n_samples)
+
+    def _get_independent_variable_array(self):
+        return np.asarray(self._indep_variable_values)
+
+    def _validate_independent_variable_length(self, responses):
+        indep_values = self._get_independent_variable_array()
+
+        if indep_values.size != responses.shape[1]:
+            raise RuntimeError(
+                "The number of independent-variable values does not match "
+                "the number of response values. "
+                f"Independent-variable length: {indep_values.size}. "
+                f"Response length: {responses.shape[1]}."
+            )
+
+    def _get_test_plot_arrays(self, surrogate_index, sample_indices):
+        test = self._get_test_response_array()
+        prediction = self._get_test_prediction_array(surrogate_index)
+        indices = self._get_plot_sample_indices(sample_indices)
+        self._validate_independent_variable_length(test)
+        return test, prediction, indices
+
+    def _make_response_plot_labels(
+        self,
+        xlabel,
+        ylabel,
+        independent_variable_units,
+        target_field_units,
+    ):
+        if xlabel is None:
+            xlabel = self._indep_variable_name
+        if ylabel is None:
+            ylabel = self._target_field_name
+
+        xlabel = _format_axis_label(xlabel, independent_variable_units)
+        ylabel = _format_axis_label(ylabel, target_field_units)
+        return xlabel, ylabel
+
+    def _make_response_plot_title(self, title):
+        if title is not None:
+            return title
+        target = _replace_underscores(self._target_field_name)
+        return f"Surrogate vs. test data: {target}"
+
+    def _plot_one_test_response(self, axes, x_values, y_values, style):
+        axes.plot(x_values, y_values, **style)
+
+    def _plot_one_surrogate_response(self, axes, x_values, y_values, style):
+        axes.plot(x_values, y_values, **style)
+
+    def _plot_response_sample(
+        self,
+        axes,
+        x_values,
+        test_values,
+        surrogate_values,
+        curve_index,
+        test_style,
+        surrogate_style,
+    ):
+        test_style = _add_label_to_first_curve(test_style, "test data", curve_index)
+        surrogate_style = _add_label_to_first_curve(surrogate_style, "surrogate", curve_index)
+        self._plot_one_test_response(axes, x_values, test_values, test_style)
+        self._plot_one_surrogate_response(axes, x_values, surrogate_values, surrogate_style)
+
+    def _plot_response_samples(
+        self,
+        axes,
+        test_responses,
+        surrogate_predictions,
+        sample_indices,
+        test_style,
+        surrogate_style,
+    ):
+        x_values = self._get_independent_variable_array()
+
+        for curve_index, sample_index in enumerate(sample_indices):
+            self._plot_response_sample(
+                axes,
+                x_values,
+                test_responses[sample_index, :],
+                surrogate_predictions[sample_index, :],
+                curve_index,
+                test_style.copy(),
+                surrogate_style.copy(),
+            )
+
+    def _raw_surrogate_error(self, surrogate_index):
+        test = self._get_test_response_array()
+        prediction = self._get_test_prediction_array(surrogate_index)
+        return prediction - test
+
+    def _transform_error(self, raw_error, error_type):
+        if error_type == "absolute":
+            return np.abs(raw_error)
+
+        if error_type == "squared":
+            return raw_error ** 2
+
+        return raw_error
+
+    def _get_surrogate_error_array(self, surrogate_index, error_type):
+        raw_error = self._raw_surrogate_error(surrogate_index)
+        return self._transform_error(raw_error, error_type)
+
+    def _reduce_error_array(self, errors, error_statistic):
+        if error_statistic == "mean":
+            return np.nanmean(errors, axis=0)
+
+        if error_statistic == "median":
+            return np.nanmedian(errors, axis=0)
+
+        if error_statistic == "max":
+            return np.nanmax(errors, axis=0)
+
+        return errors
+
+    def _make_error_label(self, error_type, error_statistic):
+        if error_statistic is None:
+            return "surrogate error"
+
+        if error_statistic == "max":
+            statistic = "maximum"
+        else:
+            statistic = error_statistic
+
+        return f"{statistic} {error_type} error"
+
+    def _make_error_ylabel(self, error_type):
+        target = self._target_field_name
+
+        if error_type == "absolute":
+            return f"{target}_absolute_error"
+
+        if error_type == "squared":
+            return f"{target}_squared_error"
+
+        return f"{target}_error"
+
+    def _make_error_plot_title(self, title):
+        if title is not None:
+            return title
+
+        indep_var = _replace_underscores(self._indep_variable_name)
+        return f"Surrogate error vs. {indep_var}"
+
+    def _plot_reduced_error(
+        self,
+        axes,
+        x_values,
+        selected_errors,
+        error_statistic,
+        error_type,
+        error_style,
+    ):
+        reduced_errors = self._reduce_error_array(selected_errors, error_statistic)
+        error_style.setdefault("label", self._make_error_label(error_type, error_statistic))
+        axes.plot(x_values, reduced_errors, **error_style)
+
+    def _plot_individual_error_curves(self, axes, x_values, errors, sample_indices, error_style):
+        for curve_index, sample_index in enumerate(sample_indices):
+            style = _add_label_to_first_curve(error_style, "surrogate error", curve_index)
+            axes.plot(x_values, errors[sample_index, :], **style)
+
+    def _plot_surrogate_errors(
+        self,
+        axes,
+        errors,
+        sample_indices,
+        error_type,
+        error_statistic,
+        error_style,
+    ):
+        x_values = self._get_independent_variable_array()
+
+        if error_statistic is None:
+            self._plot_individual_error_curves(axes, x_values, errors, sample_indices, error_style)
+            return
+
+        selected_errors = errors[sample_indices, :]
+        self._plot_reduced_error(
+            axes,
+            x_values,
+            selected_errors,
+            error_statistic,
+            error_type,
+            error_style,
+        )
+
+    def _history_by_metric(self):
+        return {
+            "rmse": self._root_mean_squared_errors,
+            "max_error": self._max_errors,
+            "r2": self._r2_scores,
+            "score": self._r2_scores,
+        }
+
+    def _normalize_history_metrics(self, metrics):
+        if isinstance(metrics, str):
+            return (metrics,)
+        return tuple(metrics)
+
+    def _validate_history_metric(self, metric):
+        check_value_is_nonempty_str(metric, "metric")
+        metric = metric.lower().strip()
+
+        if metric not in self._history_by_metric():
+            raise ValueError(
+                "Unsupported error-history metric. Supported metrics are "
+                "'rmse', 'max_error', 'r2', and 'score'. "
+                f"Received '{metric}'."
+            )
+
+        return metric
+
+    def _get_metric_history(self, metric):
+        metric = self._validate_history_metric(metric)
+        return metric, np.asarray(self._history_by_metric()[metric], dtype=float)
+
+    def _validate_history_length(self, metric, values):
+        n_samples = len(self._sample_counts)
+
+        if len(values) != n_samples:
+            raise RuntimeError(
+                f"History for metric '{metric}' has length {len(values)}, "
+                f"but sample-count history has length {n_samples}."
+            )
+
+    def _get_metric_plot_style(self, metric, metric_styles):
+        default_styles = _default_error_history_styles()
+        style = default_styles[metric].copy()
+        style.update(metric_styles.get(metric, {}))
+        return style
+
+    def _plot_one_metric_history(self, axes, metric, metric_styles):
+        metric, values = self._get_metric_history(metric)
+        self._validate_history_length(metric, values)
+        style = self._get_metric_plot_style(metric, metric_styles)
+        axes.plot(self._sample_counts, values, **style)
+
+    def _plot_metric_histories(self, axes, metrics, metric_styles):
+        for metric in self._normalize_history_metrics(metrics):
+            self._plot_one_metric_history(axes, metric, metric_styles)
+
+    def plot_error_history(
+        self,
+        metrics=("rmse", "max_error"),
+        figure=None,
+        axes=None,
+        metric_styles=None,
+        xlabel=None,
+        ylabel=None,
+        title=None,
+        xlim=None,
+        ylim=None,
+        xscale=None,
+        yscale=None,
+        sample_count_units=None,
+        error_units=None,
+        grid=True,
+        show_legend=True,
+    ):
+        """
+        Plot adaptive-surrogate error histories versus number of training
+        samples.
+
+        This method plots stored adaptive-surrogate score histories against the
+        number of training samples used at each adaptive-training batch. The
+        primary intended use is to visualize convergence of the adaptive
+        surrogate as additional training samples are added.
+
+        Supported metrics are:
+
+        * ``"rmse"``: root-mean-squared error history
+        * ``"max_error"``: maximum absolute error history
+        * ``"r2"``: :math:`R^2` score history
+        * ``"score"``: alias for ``"r2"``
+
+        Axis labels automatically replace underscores with spaces. For example,
+        ``"number_of_training_samples"`` is displayed as
+        ``"number of training samples"``. If units are supplied, they are
+        appended in parentheses.
+
+        :param metrics: Metric or metrics to plot. A single metric may be passed
+            as a string. Multiple metrics may be passed as a sequence of strings.
+            Defaults to ``("rmse", "max_error")``.
+        :type metrics: str or sequence[str]
+
+        :param figure: Optional Matplotlib figure. If provided and ``axes`` is
+            not provided, the first axes in the figure is used. If the figure has
+            no axes, a new axes is added.
+        :type figure: matplotlib.figure.Figure or None
+
+        :param axes: Optional Matplotlib axes to draw on. If provided, this takes
+            precedence over ``figure``.
+        :type axes: matplotlib.axes.Axes or None
+
+        :param metric_styles: Optional mapping from metric name to keyword
+            arguments passed to :meth:`matplotlib.axes.Axes.plot`. User-supplied
+            style values override the default style for each metric.
+
+            Example::
+
+                {
+                    "rmse": {
+                        "color": "tab:blue",
+                        "linestyle": "-",
+                        "marker": "o",
+                    },
+                    "max_error": {
+                        "color": "tab:red",
+                        "linestyle": "--",
+                    },
+                }
+
+        :type metric_styles: dict or None
+
+        :param xlabel: Optional x-axis label. If ``None``,
+            ``"number_of_training_samples"`` is used.
+        :type xlabel: str or None
+
+        :param ylabel: Optional y-axis label. If ``None``,
+            ``"error_or_score"`` is used.
+        :type ylabel: str or None
+
+        :param title: Optional plot title. If ``None``, a default title is used.
+        :type title: str or None
+
+        :param xlim: Optional x-axis limits, e.g. ``(0, 100)``.
+        :type xlim: tuple or list or None
+
+        :param ylim: Optional y-axis limits, e.g. ``(1e-4, 1)``.
+        :type ylim: tuple or list or None
+
+        :param xscale: Optional x-axis scale, e.g. ``"linear"`` or ``"log"``.
+        :type xscale: str or None
+
+        :param yscale: Optional y-axis scale, e.g. ``"linear"`` or ``"log"``.
+        :type yscale: str or None
+
+        :param sample_count_units: Optional units appended to the x-axis label.
+            This is usually ``None`` because sample counts are dimensionless.
+        :type sample_count_units: str or None
+
+        :param error_units: Optional units appended to the y-axis label.
+        :type error_units: str or None
+
+        :param grid: If not ``None``, passed to
+            :meth:`matplotlib.axes.Axes.grid`.
+        :type grid: bool or None
+
+        :param show_legend: If ``True``, show the axes legend.
+        :type show_legend: bool
+
+        :return: Matplotlib ``(figure, axes)`` pair.
+        :rtype: tuple
+
+        :raises ValueError: If an unsupported metric is requested.
+        :raises RuntimeError: If a metric history length does not match the
+            sample-count history length.
+
+        **Example**
+
+        .. code-block:: python
+
+            fig, ax = study.surrogate.plot_error_history(
+                metrics=("rmse", "max_error"),
+                error_units="K",
+                yscale="log",
+                metric_styles={
+                    "rmse": {"color": "tab:blue", "marker": "o"},
+                    "max_error": {"color": "tab:red", "linestyle": "--"},
+                },
+            )
+        """
+        figure, axes = _get_or_create_matplotlib_axes(figure, axes)
+
+        if metric_styles is None:
+            metric_styles = {}
+
+        self._plot_metric_histories(axes, metrics, metric_styles)
+
+        if xlabel is None:
+            xlabel = "number_of_training_samples"
+        if ylabel is None:
+            ylabel = "error_or_score"
+        if title is None:
+            title = "Adaptive surrogate error history"
+
+        xlabel = _format_axis_label(xlabel, sample_count_units)
+        ylabel = _format_axis_label(ylabel, error_units)
+
+        _apply_axes_plot_options(
+            axes,
+            xlabel,
+            ylabel,
+            title,
+            xlim,
+            ylim,
+            xscale,
+            yscale,
+            grid,
+        )
+        _apply_legend(axes, show_legend)
+
+        return figure, axes
+
+    def plot_surrogate_error_vs_independent_variable(
+        self,
+        surrogate_index="best",
+        sample_indices=None,
+        error_type="absolute",
+        error_statistic="mean",
+        figure=None,
+        axes=None,
+        error_style=None,
+        xlabel=None,
+        ylabel=None,
+        title=None,
+        xlim=None,
+        ylim=None,
+        xscale=None,
+        yscale=None,
+        independent_variable_units=None,
+        target_field_units=None,
+        error_units=None,
+        grid=True,
+        show_legend=True,
+    ):
+        """
+        Plot surrogate prediction error versus the surrogate independent
+        variable.
+
+        This method evaluates a retained surrogate at the stored test-parameter
+        locations, compares the surrogate predictions to the stored test
+        responses, and plots the error as a function of the independent
+        variable.
+
+        The raw error is defined as
+
+        .. math::
+
+            e = \\hat{y} - y
+
+        where (\\hat{y}) is the surrogate prediction and (y) is the stored
+        test response.
+
+        Supported error definitions are:
+
+        * ``"absolute"``: plots ``abs(surrogate - test)``
+        * ``"signed"``: plots ``surrogate - test``
+        * ``"squared"``: plots ``(surrogate - test)**2``
+
+        By default, the method plots the mean absolute error over the selected
+        test samples at each independent-variable location. Set
+        ``error_statistic=None`` to plot one error curve per selected test
+        sample.
+
+        Axis labels automatically replace underscores with spaces. For example,
+        ``"temperature_absolute_error"`` is displayed as
+        ``"temperature absolute error"``. If units are supplied, they are
+        appended in parentheses.
+
+        :param surrogate_index: Retained surrogate selector. Supported values
+            are ``"best"``, ``"latest"``, a retained adaptive iteration index,
+            or a positional retained-surrogate index. Defaults to ``"best"``.
+        :type surrogate_index: int or str
+
+        :param sample_indices: Optional subset of test-sample indices to use.
+            If ``None``, all stored test samples are used.
+        :type sample_indices: array-like of int or None
+
+        :param error_type: Error definition. Must be one of ``"absolute"``,
+            ``"signed"``, or ``"squared"``.
+        :type error_type: str
+
+        :param error_statistic: Statistic used to reduce the selected test
+            samples at each independent-variable location. Must be one of
+            ``"mean"``, ``"median"``, ``"max"``, or ``None``. If ``None``, one
+            error curve is plotted per selected test sample.
+        :type error_statistic: str or None
+
+        :param figure: Optional Matplotlib figure. If provided and ``axes`` is
+            not provided, the first axes in the figure is used. If the figure has
+            no axes, a new axes is added.
+        :type figure: matplotlib.figure.Figure or None
+
+        :param axes: Optional Matplotlib axes to draw on. If provided, this takes
+            precedence over ``figure``.
+        :type axes: matplotlib.axes.Axes or None
+
+        :param error_style: Optional keyword arguments passed to
+            :meth:`matplotlib.axes.Axes.plot` for the plotted error curve or
+            curves. These values override the default error style.
+        :type error_style: dict or None
+
+        :param xlabel: Optional x-axis label. If ``None``, the adaptive
+            surrogate's independent-variable name is used.
+        :type xlabel: str or None
+
+        :param ylabel: Optional y-axis label. If ``None``, a label is generated
+            from the target-field name and ``error_type``.
+        :type ylabel: str or None
+
+        :param title: Optional plot title. If ``None``, a default title is used.
+        :type title: str or None
+
+        :param xlim: Optional x-axis limits, e.g. ``(0, 1)``.
+        :type xlim: tuple or list or None
+
+        :param ylim: Optional y-axis limits, e.g. ``(-1, 1)``.
+        :type ylim: tuple or list or None
+
+        :param xscale: Optional x-axis scale, e.g. ``"linear"`` or ``"log"``.
+        :type xscale: str or None
+
+        :param yscale: Optional y-axis scale, e.g. ``"linear"`` or ``"log"``.
+        :type yscale: str or None
+
+        :param independent_variable_units: Optional units appended to the x-axis
+            label.
+        :type independent_variable_units: str or None
+
+        :param target_field_units: Optional units for the target field. If
+            ``error_units`` is not provided, these units are used for
+            ``"absolute"`` and ``"signed"`` errors. For ``"squared"`` errors,
+            ``"^2"`` is appended to these units.
+        :type target_field_units: str or None
+
+        :param error_units: Optional units appended to the y-axis label. If
+            provided, this overrides units inferred from ``target_field_units``.
+        :type error_units: str or None
+
+        :param grid: If not ``None``, passed to
+            :meth:`matplotlib.axes.Axes.grid`.
+        :type grid: bool or None
+
+        :param show_legend: If ``True``, show the axes legend.
+        :type show_legend: bool
+
+        :return: Matplotlib ``(figure, axes)`` pair.
+        :rtype: tuple
+
+        :raises RuntimeError: If no retained surrogate is available, if the
+            retained surrogate does not return the target field, or if the
+            prediction shape is incompatible with the stored test responses.
+        :raises ValueError: If ``error_type`` or ``error_statistic`` is invalid,
+            or if ``sample_indices`` contains an invalid test-sample index.
+
+        **Examples**
+
+        Plot mean absolute error:
+
+        .. code-block:: python
+
+            fig, ax = study.surrogate.plot_surrogate_error_vs_independent_variable(
+                error_type="absolute",
+                error_statistic="mean",
+                independent_variable_units="s",
+                target_field_units="K",
+            )
+
+        Plot individual signed error curves:
+
+        .. code-block:: python
+
+            fig, ax = study.surrogate.plot_surrogate_error_vs_independent_variable(
+                error_type="signed",
+                error_statistic=None,
+                sample_indices=[0, 1, 2],
+                target_field_units="MPa",
+            )
+        """
+        error_type = _validate_error_type(error_type)
+        error_statistic = _validate_error_statistic(error_statistic)
+        figure, axes = _get_or_create_matplotlib_axes(figure, axes)
+
+        errors = self._get_surrogate_error_array(surrogate_index, error_type)
+        self._validate_independent_variable_length(errors)
+        indices = self._get_plot_sample_indices(sample_indices)
+
+        error_style = _merge_plot_style(_default_surrogate_error_style(), error_style)
+        self._plot_surrogate_errors(
+            axes,
+            errors,
+            indices,
+            error_type,
+            error_statistic,
+            error_style,
+        )
+
+        if xlabel is None:
+            xlabel = self._indep_variable_name
+        if ylabel is None:
+            ylabel = self._make_error_ylabel(error_type)
+
+        error_units = _error_units_for_type(error_type, target_field_units, error_units)
+        xlabel = _format_axis_label(xlabel, independent_variable_units)
+        ylabel = _format_axis_label(ylabel, error_units)
+        title = self._make_error_plot_title(title)
+
+        _apply_axes_plot_options(
+            axes,
+            xlabel,
+            ylabel,
+            title,
+            xlim,
+            ylim,
+            xscale,
+            yscale,
+            grid,
+        )
+        _apply_legend(axes, show_legend)
+
+        return figure, axes
+
+    def plot_surrogate_vs_test_data(
+        self,
+        surrogate_index="best",
+        sample_indices=None,
+        figure=None,
+        axes=None,
+        test_style=None,
+        surrogate_style=None,
+        xlabel=None,
+        ylabel=None,
+        title=None,
+        xlim=None,
+        ylim=None,
+        xscale=None,
+        yscale=None,
+        independent_variable_units=None,
+        target_field_units=None,
+        grid=True,
+        show_legend=True,
+    ):
+        """
+        Plot retained surrogate predictions and stored test data versus the
+        surrogate independent variable.
+
+        This method evaluates a retained surrogate at the adaptive surrogate's
+        stored test-parameter locations and plots the resulting surrogate
+        response curves alongside the corresponding test-data response curves.
+        One test-data curve and one surrogate curve are plotted for each
+        selected test sample.
+
+        Matplotlib is imported lazily when this method is called, so importing
+        :mod:`matcal.core.adaptive_surrogates` does not require Matplotlib unless
+        plotting is requested.
+
+        Axis labels automatically replace underscores with spaces. For example,
+        ``"target_field"`` is displayed as ``"target field"``. If units are
+        supplied, they are appended in parentheses.
+
+        :param surrogate_index: Retained surrogate selector. Supported values
+            are ``"best"``, ``"latest"``, a retained adaptive iteration index,
+            or a positional retained-surrogate index. Defaults to ``"best"``.
+        :type surrogate_index: int or str
+
+        :param sample_indices: Optional subset of test-sample indices to plot.
+            If ``None``, all stored test samples are plotted.
+        :type sample_indices: array-like of int or None
+
+        :param figure: Optional Matplotlib figure. If provided and ``axes`` is
+            not provided, the first axes in the figure is used. If the figure has
+            no axes, a new axes is added.
+        :type figure: matplotlib.figure.Figure or None
+
+        :param axes: Optional Matplotlib axes to draw on. If provided, this takes
+            precedence over ``figure``.
+        :type axes: matplotlib.axes.Axes or None
+
+        :param test_style: Optional keyword arguments passed to
+            :meth:`matplotlib.axes.Axes.plot` for the test-data curves. These
+            values override the default test-data style.
+        :type test_style: dict or None
+
+        :param surrogate_style: Optional keyword arguments passed to
+            :meth:`matplotlib.axes.Axes.plot` for the surrogate-prediction
+            curves. These values override the default surrogate style.
+        :type surrogate_style: dict or None
+
+        :param xlabel: Optional x-axis label. If ``None``, the adaptive
+            surrogate's independent-variable name is used.
+        :type xlabel: str or None
+
+        :param ylabel: Optional y-axis label. If ``None``, the adaptive
+            surrogate's target-field name is used.
+        :type ylabel: str or None
+
+        :param title: Optional plot title. If ``None``, a default title is used.
+        :type title: str or None
+
+        :param xlim: Optional x-axis limits, e.g. ``(0, 1)``.
+        :type xlim: tuple or list or None
+
+        :param ylim: Optional y-axis limits, e.g. ``(-1, 1)``.
+        :type ylim: tuple or list or None
+
+        :param xscale: Optional x-axis scale, e.g. ``"linear"`` or ``"log"``.
+        :type xscale: str or None
+
+        :param yscale: Optional y-axis scale, e.g. ``"linear"`` or ``"log"``.
+        :type yscale: str or None
+
+        :param independent_variable_units: Optional units appended to the x-axis
+            label.
+        :type independent_variable_units: str or None
+
+        :param target_field_units: Optional units appended to the y-axis label.
+        :type target_field_units: str or None
+
+        :param grid: If not ``None``, passed to
+            :meth:`matplotlib.axes.Axes.grid`.
+        :type grid: bool or None
+
+        :param show_legend: If ``True``, show the axes legend.
+        :type show_legend: bool
+
+        :return: Matplotlib ``(figure, axes)`` pair.
+        :rtype: tuple
+
+        :raises RuntimeError: If no retained surrogate is available, if the
+            retained surrogate does not return the target field, or if the
+            prediction shape is incompatible with the stored test responses.
+        :raises ValueError: If ``sample_indices`` contains an invalid test-sample
+            index.
+
+        **Example**
+
+        .. code-block:: python
+
+            fig, ax = study.surrogate.plot_surrogate_vs_test_data(
+                sample_indices=[0, 1, 2],
+                independent_variable_units="s",
+                target_field_units="K",
+                test_style={"color": "black", "marker": "o"},
+                surrogate_style={"color": "tab:red", "linestyle": "--"},
+            )
+        """
+        figure, axes = _get_or_create_matplotlib_axes(figure, axes)
+
+        test, prediction, indices = self._get_test_plot_arrays(
+            surrogate_index,
+            sample_indices,
+        )
+
+        test_style = _merge_plot_style(_default_test_data_style(), test_style)
+        surrogate_style = _merge_plot_style(_default_surrogate_style(), surrogate_style)
+
+        self._plot_response_samples(
+            axes,
+            test,
+            prediction,
+            indices,
+            test_style,
+            surrogate_style,
+        )
+
+        xlabel, ylabel = self._make_response_plot_labels(
+            xlabel,
+            ylabel,
+            independent_variable_units,
+            target_field_units,
+        )
+        title = self._make_response_plot_title(title)
+
+        _apply_axes_plot_options(
+            axes,
+            xlabel,
+            ylabel,
+            title,
+            xlim,
+            ylim,
+            xscale,
+            yscale,
+            grid,
+        )
+        _apply_legend(axes, show_legend)
+
+        return figure, axes
+
+    def plot_worst_N(
+        self,
+        N=5,
+        n_figures=1,
+        surrogate_index="best",
+        metric="max_error",
+        error_type="signed",
+        test_style=None,
+        surrogate_style=None,
+        error_style=None,
+        independent_variable_units=None,
+        target_field_units=None,
+        error_units=None,
+        grid=True,
+        show_legend=True,
+    ):
+        """
+        Plot surrogate predictions and errors for the worst N stored test samples.
+
+        The worst samples are identified using :meth:`test_sample_errors`.
+
+        The selected samples are split across ``n_figures`` figures. Each figure
+        contains two axes:
+
+        * the left axis compares stored test data and retained-surrogate
+          predictions for that figure's subset of samples;
+        * the right axis plots the corresponding surrogate errors.
+
+        Axis limits are kept common across all generated figures so that the
+        response and error plots can be compared directly.
+
+        :param N: Number of worst test samples to plot.
+        :type N: int
+
+        :param n_figures: Number of figures to split the selected samples across.
+            If ``n_figures`` is larger than the number of plotted samples, only
+            one figure per sample is created.
+        :type n_figures: int
+
+        :param surrogate_index: Retained surrogate selector. Defaults to
+            ``"best"``.
+        :type surrogate_index: int or str
+
+        :param metric: Per-sample error metric used to rank the worst samples.
+            Supported values are ``"max_error"``, ``"max_abs_error"``,
+            ``"linf"``, ``"rmse"``, ``"mae"``, and ``"mean_abs_error"``.
+        :type metric: str
+
+        :param error_type: Error definition for the right-axis plots. Must be
+            ``"signed"``, ``"absolute"``, or ``"squared"``.
+        :type error_type: str
+
+        :param test_style: Optional style for test-data curves.
+        :type test_style: dict or None
+
+        :param surrogate_style: Optional style for surrogate-prediction curves.
+        :type surrogate_style: dict or None
+
+        :param error_style: Optional style for error curves.
+        :type error_style: dict or None
+
+        :param independent_variable_units: Optional x-axis units.
+        :type independent_variable_units: str or None
+
+        :param target_field_units: Optional target-field units.
+        :type target_field_units: str or None
+
+        :param error_units: Optional error units. If omitted, inferred from
+            ``target_field_units``.
+        :type error_units: str or None
+
+        :param grid: If not ``None``, passed to
+            :meth:`matplotlib.axes.Axes.grid`.
+        :type grid: bool or None
+
+        :param show_legend: If ``True``, show legends on each figure.
+        :type show_legend: bool
+
+        :return: ``(figures, axes_groups, worst_indices)``, where ``figures`` is
+            a list of Matplotlib figures, ``axes_groups`` is a list of
+            ``(1, 2)`` axes arrays, and ``worst_indices`` contains the plotted
+            test-sample indices sorted from worst to best.
+        :rtype: tuple
+        """
+        metric, error_type = self._validate_plot_worst_N_inputs(
+            N, n_figures, metric, error_type
+        )
+        arrays = self._get_plot_worst_N_arrays(surrogate_index, error_type)
+        worst_indices, index_groups, sample_errors = self._get_plot_worst_N_groups(
+            N, n_figures, surrogate_index, metric
+        )
+        labels = self._get_plot_worst_N_labels(
+            error_type, independent_variable_units, target_field_units, error_units
+        )
+        styles = self._get_plot_worst_N_styles(
+            test_style, surrogate_style, error_style
+        )
+        limits = self._get_plot_worst_N_limits(arrays, worst_indices, error_type)
+        figures, axes_groups = self._make_plot_worst_N_figures(
+            index_groups, arrays, labels, styles, limits, sample_errors,
+            metric, error_type, surrogate_index, grid, show_legend
+        )
+        return figures, axes_groups, worst_indices
+
+    def plot_worst_n(self, n=5, **kwargs):
+        """
+        Lowercase alias for :meth:`plot_worst_N`.
+        """
+        return self.plot_worst_N(N=n, **kwargs)
+
+    def _validate_plot_worst_N_inputs(self, N, n_figures, metric, error_type):
+        check_value_is_positive_integer(N, "N")
+        check_value_is_positive_integer(n_figures, "n_figures")
+        metric = self._validate_test_sample_error_metric(metric)
+        error_type = _validate_error_type(error_type)
+        return metric, error_type
+
+    def _get_plot_worst_N_arrays(self, surrogate_index, error_type):
+        arrays = {}
+        arrays["test"] = self._get_test_response_array()
+        arrays["prediction"] = self._get_test_prediction_array(surrogate_index)
+        arrays["error"] = self._get_surrogate_error_array(surrogate_index, error_type)
+        arrays["x"] = self._get_independent_variable_array()
+        self._validate_plot_worst_N_array_lengths(arrays)
+        return arrays
+
+    def _validate_plot_worst_N_array_lengths(self, arrays):
+        self._validate_independent_variable_length(arrays["test"])
+        self._validate_independent_variable_length(arrays["prediction"])
+        self._validate_independent_variable_length(arrays["error"])
+
+    def _get_plot_worst_N_groups(self, N, n_figures, surrogate_index, metric):
+        worst_indices = self.worst_test_sample_indices(
+            n=N, surrogate_index=surrogate_index, metric=metric
+        )
+        sample_errors = self.test_sample_errors(
+            surrogate_index=surrogate_index, metric=metric
+        )
+        n_figures_to_make = min(n_figures, len(worst_indices))
+        index_groups = np.array_split(worst_indices, n_figures_to_make)
+        return worst_indices, index_groups, sample_errors
+
+    def _get_plot_worst_N_labels(
+        self, error_type, independent_variable_units,
+        target_field_units, error_units
+    ):
+        labels = {}
+        labels["x"] = _format_axis_label(
+            self._indep_variable_name, independent_variable_units
+        )
+        labels["response_y"] = _format_axis_label(
+            self._target_field_name, target_field_units
+        )
+        error_units = _error_units_for_type(
+            error_type, target_field_units, error_units
+        )
+        labels["error_y"] = _format_axis_label(
+            self._make_error_ylabel(error_type), error_units
+        )
+        return labels
+
+    def _get_plot_worst_N_styles(self, test_style, surrogate_style, error_style):
+        styles = {}
+        styles["test"] = _merge_plot_style(
+            self._default_plot_worst_N_test_style(), test_style
+        )
+        styles["surrogate"] = _merge_plot_style(
+            self._default_plot_worst_N_surrogate_style(), surrogate_style
+        )
+        styles["error"] = _merge_plot_style(
+            self._default_plot_worst_N_error_style(), error_style
+        )
+        return styles
+
+    def _default_plot_worst_N_test_style(self):
+        return {
+            "linestyle": "-",
+            "marker": None,
+            "alpha": 0.75,
+            "linewidth": 1.5,
+        }
+
+    def _default_plot_worst_N_surrogate_style(self):
+        return {
+            "linestyle": "--",
+            "marker": None,
+            "alpha": 0.9,
+            "linewidth": 1.8,
+        }
+
+    def _default_plot_worst_N_error_style(self):
+        return {
+            "linestyle": "-",
+            "marker": None,
+            "alpha": 0.9,
+            "linewidth": 1.8,
+        }
+
+    def _get_plot_worst_N_limits(self, arrays, worst_indices, error_type):
+        limits = {}
+        limits["x"] = self._get_padded_plot_limits(arrays["x"])
+        limits["response_y"] = self._get_plot_worst_N_response_limits(
+            arrays, worst_indices
+        )
+        limits["error_y"] = self._get_padded_plot_limits(
+            arrays["error"][worst_indices, :].ravel(),
+            include_zero=error_type == "signed",
+        )
+        return limits
+
+    def _get_plot_worst_N_response_limits(self, arrays, worst_indices):
+        values = np.concatenate((
+            arrays["test"][worst_indices, :].ravel(),
+            arrays["prediction"][worst_indices, :].ravel(),
+        ))
+        return self._get_padded_plot_limits(values)
+
+    def _get_padded_plot_limits(self, values, include_zero=False):
+        values = np.asarray(values, dtype=float).ravel()
+        values = values[np.isfinite(values)]
+        if include_zero:
+            values = np.concatenate((values, np.array([0.0])))
+        return self._padded_limits_from_finite_values(values)
+
+    def _padded_limits_from_finite_values(self, values):
+        if values.size == 0:
+            return None
+        lower = np.nanmin(values)
+        upper = np.nanmax(values)
+        pad = self._plot_limit_padding(lower, upper)
+        return lower - pad, upper + pad
+
+    def _plot_limit_padding(self, lower, upper):
+        if np.isclose(lower, upper):
+            return 0.05 * max(abs(lower), 1.0)
+        return 0.05 * (upper - lower)
+
+    def _make_plot_worst_N_figures(
+        self, index_groups, arrays, labels, styles, limits, sample_errors,
+        metric, error_type, surrogate_index, grid, show_legend
+    ):
+        figures = []
+        axes_groups = []
+        rank_start = 1
+        for group_indices in index_groups:
+            figure, axes = self._make_one_plot_worst_N_figure(
+                group_indices, rank_start, arrays, labels, styles, limits,
+                sample_errors, metric, error_type, surrogate_index, grid, show_legend
+            )
+            figures.append(figure)
+            axes_groups.append(axes)
+            rank_start += len(group_indices)
+        return figures, axes_groups
+
+    def _make_one_plot_worst_N_figure(
+        self, group_indices, rank_start, arrays, labels, styles, limits,
+        sample_errors, metric, error_type, surrogate_index, grid, show_legend
+    ):
+        figure, axes = self._create_plot_worst_N_figure_and_axes()
+        self._plot_worst_N_group_curves(
+            axes, group_indices, rank_start, arrays, styles,
+            sample_errors, metric, error_type
+        )
+        self._decorate_plot_worst_N_figure(
+            figure, axes, rank_start, group_indices, labels, limits,
+            error_type, surrogate_index, grid, show_legend
+        )
+        return figure, axes
+
+    def _create_plot_worst_N_figure_and_axes(self):
+        import matplotlib.pyplot as plt
+
+        return plt.subplots(
+            1, 2, squeeze=False, figsize=(13, 5), constrained_layout=True
+        )
+
+    def _plot_worst_N_group_curves(
+        self, axes, group_indices, rank_start, arrays, styles,
+        sample_errors, metric, error_type
+    ):
+        for local_index, sample_index in enumerate(group_indices):
+            self._plot_one_worst_N_sample(
+                axes, local_index, sample_index, rank_start, arrays,
+                styles, sample_errors, metric
+            )
+        if error_type == "signed":
+            self._add_plot_worst_N_zero_error_line(axes[0, 1])
+
+    def _plot_one_worst_N_sample(
+        self, axes, local_index, sample_index, rank_start, arrays,
+        styles, sample_errors, metric
+    ):
+        rank = rank_start + local_index
+        color = f"C{local_index % 10}"
+        self._plot_one_worst_N_response(
+            axes[0, 0], sample_index, rank, color,
+            arrays, styles, sample_errors, metric
+        )
+        self._plot_one_worst_N_error(
+            axes[0, 1], sample_index, color, arrays, styles
+        )
+
+    def _plot_one_worst_N_response(
+        self, axes, sample_index, rank, color,
+        arrays, styles, sample_errors, metric
+    ):
+        test_style, surrogate_style = self._make_worst_N_response_styles(
+            sample_index, rank, color, styles, sample_errors, metric
+        )
+        axes.plot(arrays["x"], arrays["test"][sample_index, :], **test_style)
+        axes.plot(
+            arrays["x"], arrays["prediction"][sample_index, :], **surrogate_style
+        )
+
+    def _plot_one_worst_N_error(
+        self, axes, sample_index, color, arrays, styles
+    ):
+        error_style = self._make_worst_N_error_style(
+            sample_index, color, styles
+        )
+        axes.plot(arrays["x"], arrays["error"][sample_index, :], **error_style)
+
+    def _make_worst_N_response_styles(
+        self, sample_index, rank, color, styles, sample_errors, metric
+    ):
+        test_style = self._make_worst_N_test_style(
+            sample_index, rank, color, styles, sample_errors, metric
+        )
+        surrogate_style = styles["surrogate"].copy()
+        surrogate_style.setdefault("color", color)
+        surrogate_style["label"] = f"surrogate sample {sample_index}"
+        return test_style, surrogate_style
+
+    def _make_worst_N_test_style(
+        self, sample_index, rank, color, styles, sample_errors, metric
+    ):
+        style = styles["test"].copy()
+        style.setdefault("color", color)
+        style["label"] = self._make_worst_N_test_label(
+            sample_index, rank, sample_errors[sample_index], metric
+        )
+        return style
+
+    def _make_worst_N_test_label(self, sample_index, rank, sample_error, metric):
+        return (
+            f"test sample {sample_index} "
+            f"(rank {rank}, {metric}={sample_error:.4g})"
+        )
+
+    def _make_worst_N_error_style(self, sample_index, color, styles):
+        style = styles["error"].copy()
+        style.setdefault("color", color)
+        style["label"] = f"sample {sample_index}"
+        return style
+
+    def _add_plot_worst_N_zero_error_line(self, axes):
+        axes.axhline(
+            0.0, color="black", linewidth=0.8,
+            alpha=0.7, label="_nolegend_"
+        )
+
+    def _decorate_plot_worst_N_figure(
+        self, figure, axes, rank_start, group_indices, labels, limits,
+        error_type, surrogate_index, grid, show_legend
+    ):
+        rank_end = rank_start + len(group_indices) - 1
+        self._decorate_plot_worst_N_response_axes(
+            axes[0, 0], rank_start, rank_end, labels, limits, grid
+        )
+        self._decorate_plot_worst_N_error_axes(
+            axes[0, 1], rank_start, rank_end, labels, limits, error_type, grid
+        )
+        self._decorate_plot_worst_N_figure_title(figure, surrogate_index)
+        self._maybe_add_plot_worst_N_legends(axes, show_legend)
+
+    def _decorate_plot_worst_N_response_axes(
+        self, axes, rank_start, rank_end, labels, limits, grid
+    ):
+        axes.set_xlabel(labels["x"])
+        axes.set_ylabel(labels["response_y"])
+        axes.set_title(
+            f"Worst samples {rank_start}-{rank_end}: surrogate vs. test data"
+        )
+        self._apply_plot_worst_N_axis_limits(axes, limits["x"], limits["response_y"])
+        self._maybe_add_plot_worst_N_grid(axes, grid)
+
+    def _decorate_plot_worst_N_error_axes(
+        self, axes, rank_start, rank_end, labels, limits, error_type, grid
+    ):
+        axes.set_xlabel(labels["x"])
+        axes.set_ylabel(labels["error_y"])
+        axes.set_title(f"Worst samples {rank_start}-{rank_end}: {error_type} error")
+        self._apply_plot_worst_N_axis_limits(axes, limits["x"], limits["error_y"])
+        self._maybe_add_plot_worst_N_grid(axes, grid)
+
+    def _apply_plot_worst_N_axis_limits(self, axes, xlim, ylim):
+        if xlim is not None:
+            axes.set_xlim(xlim)
+        if ylim is not None:
+            axes.set_ylim(ylim)
+
+    def _maybe_add_plot_worst_N_grid(self, axes, grid):
+        if grid is not None:
+            axes.grid(grid)
+
+    def _decorate_plot_worst_N_figure_title(self, figure, surrogate_index):
+        figure.suptitle(
+            f"Worst stored test samples for retained surrogate "
+            f"'{surrogate_index}'"
+        )
+
+    def _maybe_add_plot_worst_N_legends(self, axes, show_legend):
+        if show_legend:
+            axes[0, 0].legend()
+            axes[0, 1].legend()
+
+
+
 
 class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
     """
@@ -792,8 +2411,7 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
 
     * process MatCal-style positional, keyword, dictionary, or batch inputs;
     * check physical parameter bounds;
-    * map physical parameters to PyApprox's canonical ``[-1, 1]^d`` domain;
-    * evaluate the PyApprox sparse-grid surrogate; and
+    * evaluate the PyApprox sparse-grid surrogate in native parameter space; and
     * package the response with the independent-variable values.
 
     Surrogate-object retention, score histories, test data storage, and
@@ -801,7 +2419,7 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
     :class:`AdaptiveSurrogate` class.
     """
     def _evaluate_surrogate_object(self, result, *args, batch_evaluate=False,
-                                   transpose=True, **kwargs):
+                                transpose=True, **kwargs):
         # Stored object is a PyApprox fitter.result().
         surrogate_fun = result.surrogate
 
@@ -817,15 +2435,15 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
             if params_array.shape[0] != len(self._param_names):
                 params_array = params_array.T
 
-        # Range check in physical parameter space.
+        # Range check in physical/native parameter space.
         params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
         _check_params_in_range(
             params_dict, self._bounds.T,
             self._enforce_training_data_parameter_range
         )
 
-        # Map physical -> canonical [-1, 1].
-        params_array = self._variable_transformer.map_to_canonical(params_array)
+        # PyApprox sparse grids are constructed directly on the physical/native
+        # parameter domain. No parameter transform is performed.
 
         # PyApprox returns (n_qois, nsamples).
         response = surrogate_fun(params_array)
@@ -894,8 +2512,6 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._results_synchronizer = None
 
         self._surrogate = None
-        self._variable_transformer = None
-
         self._user_test_data = None
 
         self._max_training_samples=None
@@ -1267,34 +2883,28 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def launch(self):
         """
-        Run the initial test‑sampling study in a dedicated sub‑directory,
-        then continue with the adaptive Sparse‑Grid workflow.
+        Run the initial test-sampling study in a dedicated sub-directory,
+        then continue with the adaptive surrogate workflow.
 
-        The test‑sampling phase is performed by a standard **HaltonStudy** 
-        to generate the required test points. If the user called
-        :meth:`StudyBase.set_working_directory` before launching the study,
-        the test‑sampling directory is created by appending the suffix
-        ``\"_test_samples\"`` to the user‑provided path. Otherwise, the test 
-        samples are run in a local directory named ``\"test_samples\"``.
-        After the test sample study finishes, the original working directory is restored
-        and the surrogate‑building routine is started.
+        The test-sampling phase is performed by a standard HaltonStudy to generate
+        the required test points unless user-provided test data has been supplied.
         """
         test_params, test_responses = self._get_test_data()
         param_names = self._parameter_collection.get_item_names()
-        self._variable_transformer = self._variable_transformer_factory(self._bounds)
+
         self._surrogate = self._adaptive_surrogate_class(
             self._target_field_name,
             self._independent_variable,
             self._independent_variable_values,
-            self._variable_transformer,
             test_params,
             test_responses,
             param_names,
-            self._bounds, 
+            self._bounds,
             storage_best_n_surrogates=self._surrogate_storage_best_n_surrogates,
             storage_every_n_batches=self._surrogate_storage_every_n_batches,
             storage_score_metric=self._surrogate_storage_score_metric,
         )
+
         self._run_study = self._perform_adaptive_surrogate_batch_sampling
         return super().launch()
 
@@ -1476,70 +3086,6 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         self._surrogate_storage_score_metric = score_metric
 
 
-class _PyapproxBoundedAffineTransformerND:
-    """
-    Minimal ND transformer compatible with MatCal's needs.
-
-    Uses PyApprox's updated univariate BoundedAffineTransform1D to map between
-    physical bounds [lb, ub] and canonical [-1, 1] for each dimension.
-    """
-
-    def __init__(self, bounds: np.ndarray):
-        # bounds shape: (n_params, 2) with columns [lb, ub]
-        from pyapprox.util.backends.numpy import NumpyBkd
-        from pyapprox.surrogates.affine.univariate.transforms import (
-            BoundedAffineTransform1D,
-        )
-
-        self._bkd = NumpyBkd()
-        self._bounds = np.asarray(bounds, dtype=float)
-        self._transforms = [
-            BoundedAffineTransform1D(self._bkd, lb=float(lb), ub=float(ub))
-            for lb, ub in self._bounds
-        ]
-
-    def map_to_canonical(self, samples: np.ndarray) -> np.ndarray:
-        """
-        Map physical -> canonical.
-
-        Accepts either:
-          * (n_params, n_samples)  [MatCal sparse-grid path]
-          * (n_samples, n_params)  [some internal uses]
-        Returns same orientation as input.
-        """
-        arr = np.asarray(samples, dtype=float)
-        if arr.ndim != 2:
-            raise ValueError("samples must be 2D")
-
-        transposed = False
-        if arr.shape[0] != self._bounds.shape[0] and arr.shape[1] == self._bounds.shape[0]:
-            arr = arr.T
-            transposed = True
-
-        out = arr.copy()
-        for ii, t1d in enumerate(self._transforms):
-            out[ii, :] = np.asarray(t1d.map_to_canonical(self._bkd.asarray(out[ii, :])))
-        return out.T if transposed else out
-
-    def map_from_canonical(self, canonical: np.ndarray) -> np.ndarray:
-        """
-        Map canonical -> physical. Same shape/orientation rules as map_to_canonical.
-        """
-        arr = np.asarray(canonical, dtype=float)
-        if arr.ndim != 2:
-            raise ValueError("canonical must be 2D")
-
-        transposed = False
-        if arr.shape[0] != self._bounds.shape[0] and arr.shape[1] == self._bounds.shape[0]:
-            arr = arr.T
-            transposed = True
-
-        out = arr.copy()
-        for ii, t1d in enumerate(self._transforms):
-            out[ii, :] = np.asarray(t1d.map_from_canonical(self._bkd.asarray(out[ii, :])))
-        return out.T if transposed else out
-    
-
 class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     """
     Build an adaptive sparse-grid surrogate using PyApprox's *fitter/result* API
@@ -1563,7 +3109,6 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     signifies the response of interest for the surrogate.
     """
 
-    _variable_transformer_factory= _get_pyapprox_variable_transformer
     _adaptive_surrogate_class = SparseGridAdaptiveSurrogate
 
     def __init__(self, *parameters):
@@ -1584,23 +3129,26 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         fitter = _setup_pyapprox_adaptive_sparse_grid_fitter(
             self._number_parameters,
             n_qois,
+            bounds=self._bounds,
             basis_type=self._sg_basis_type,
             piecewise_degree=self._sg_piecewise_degree,
             max_level=self._sg_max_level,
             pnorm=self._sg_pnorm,
         )
 
-        # Run at least one refinement step, then check your existing criteria
+        # Run at least one refinement step, then check the existing criteria.
         while True:
             new_samples = fitter.step_samples()
             if new_samples is None:
                 logger.info("No more admissible sparse-grid indices. Stopping.")
                 break
 
-            # new_samples are canonical (nvars, nsamples_new)
-            # Evaluate MatCal; your callback expects canonical samples
+            # new_samples are physical/native parameter values with shape
+            # (nvars, nsamples_new).
             new_vals = self._matcal_evaluate_parameter_sets_batch_adaptive_training(new_samples)
-            # new_vals comes back as (nsamples_new, n_qois); fitter wants (n_qois, nsamples_new)
+
+            # new_vals comes back as (nsamples_new, n_qois); fitter wants
+            # (n_qois, nsamples_new).
             if new_vals.ndim != 2 or new_vals.shape[1] != n_qois:
                 raise RuntimeError(
                     "Batch evaluation must return array with shape (nsamples, n_qois). "
@@ -1609,11 +3157,11 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
             fitter.step_values(new_vals.T)
 
-            # Store this iteration's surrogate
+            # Store this iteration's surrogate.
             result = fitter.result()
             self._surrogate._add_iteration(result, self._results.number_of_evaluations)
 
-            # persist after each batch
+            # Persist after each batch.
             matcal_save(self._surrogate_save_filename, self._surrogate)
 
             training_batch_number = len(self._surrogate.sample_count_history)
@@ -1623,7 +3171,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         return self._results
 
     def _populate_parameter_evaluations_adaptive(self, samples):
-        samples = self._variable_transformer.map_from_canonical(samples)
+        samples = np.asarray(samples, dtype=float)
         super()._populate_parameter_evaluations(samples.T)
 
     def _format_batch_results(self, batch_results, parameter_sets_from_pyapprox):
@@ -1705,8 +3253,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _return_none(*args, **kwargs):
         return None
     
-    _variable_transformer_factory = _return_none
-
     def __init__(self, *parameters):
         """Initialize the VoronoiAdaptiveSurrogateStudy
         """
