@@ -186,37 +186,46 @@ prediction with the same or fewer samples.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 95-97
+.. GENERATED FROM PYTHON SOURCE LINES 95-102
 
-Finally, we set the surrogate save filename 
-and basic study options.
+Next, we set the surrogate save options and filename.
+The adaptive surrogate can retain only selected surrogate model objects to
+keep the saved ``.joblib`` file small. Score histories and test data are
+always stored. Here we retain the best surrogate according to the maximum
+test-sample error, which is also the convergence metric used below.
+Different options are available, see 
+:meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy.set_surrogate_storage_options`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 97-102
+.. GENERATED FROM PYTHON SOURCE LINES 102-108
 
 .. code-block:: Python
 
+    study.set_surrogate_storage_options(
+        best_n_surrogates=1,
+        score_metric="max_error",
+    )
     study.set_surrogate_save_filename("layered_metal_bc_SG_adaptive_surrogate.joblib")
+
+
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 109-111
+
+Finally, set the standard study options 
+like seeds, core use and working directory.
+
+.. GENERATED FROM PYTHON SOURCE LINES 111-119
+
+.. code-block:: Python
+
     if is_sandia_cluster():
         study.set_core_limit(250)
     else:
         study.set_core_limit(112)
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 103-106
-
-If setting the seed, ensure the test group seed is different than 
-the study seed. If not, the training data will include samples
-from the test data.
-
-.. GENERATED FROM PYTHON SOURCE LINES 106-109
-
-.. code-block:: Python
-
     study.set_test_group_random_seed(12345)
     study.set_seed(54321)
     study.set_working_directory("sparse_grid_surrogate", remove_existing=True)
@@ -227,11 +236,12 @@ from the test data.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 110-111
+
+.. GENERATED FROM PYTHON SOURCE LINES 120-121
 
 With our study defined, we run it and wait for it to complete. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 111-113
+.. GENERATED FROM PYTHON SOURCE LINES 121-123
 
 .. code-block:: Python
 
@@ -244,7 +254,7 @@ With our study defined, we run it and wait for it to complete.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 114-119
+.. GENERATED FROM PYTHON SOURCE LINES 124-129
 
 We can now access our surrogate using the 
 :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy.surrogate`
@@ -252,7 +262,7 @@ property.
 The surrogate is a :class:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate`
 object.
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-121
+.. GENERATED FROM PYTHON SOURCE LINES 129-131
 
 .. code-block:: Python
 
@@ -265,7 +275,7 @@ object.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 122-137
+.. GENERATED FROM PYTHON SOURCE LINES 132-147
 
 The `study_results` variable is a :class:`~matcal.core.study_base.StudyResults`
 object with the training results store in it.
@@ -283,11 +293,16 @@ also be accessed through a method under the surrogate after
 it has been produced. We print the score below 
 for this surrogate.
 
-.. GENERATED FROM PYTHON SOURCE LINES 137-139
+.. GENERATED FROM PYTHON SOURCE LINES 147-154
 
 .. code-block:: Python
 
-    print('Test scores:\n', surrogate.score())
+    best_surrogate_index = surrogate.best_surrogate_iteration_index
+
+    print("Best retained surrogate iteration:", best_surrogate_index)
+    print("Stored surrogate score record:")
+    print(surrogate.stored_surrogate_scores[best_surrogate_index])
+    print("Best retained surrogate R2 score:\n", surrogate.score(best_surrogate_index))
 
 
 
@@ -297,13 +312,16 @@ for this surrogate.
 
  .. code-block:: none
 
-    Test scores:
-     0.9899359687882371
+    Best retained surrogate iteration: 26
+    Stored surrogate score record:
+    OrderedDict({'iteration_index': 26, 'batch_number': 27, 'sample_count': 321, 'rmse': 0.300015469552027, 'max_error': 1.4411816561109845, 'r2': 0.9897140371692931, 'surrogate_stored': True, 'storage_reason': ['best']})
+    Best retained surrogate R2 score:
+     0.9897140371692931
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 140-155
+.. GENERATED FROM PYTHON SOURCE LINES 155-170
 
 Both the test scores and the training scores indicate the surrogate is well
 trained and can be used to predict our response. 
@@ -321,7 +339,7 @@ We evaluate the surrogate and resulting error similar to
 as was done in the previous non-adaptive surrogate example
 so that we can see if the surrogate has a more accurate prediction.
 
-.. GENERATED FROM PYTHON SOURCE LINES 155-175
+.. GENERATED FROM PYTHON SOURCE LINES 170-193
 
 .. code-block:: Python
 
@@ -333,8 +351,11 @@ so that we can see if the surrogate has a more accurate prediction.
     T_inf2 = 815
     T_air2 = 634
 
-    prediction = surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]], batch_evaluate=True)
-
+    prediction = surrogate(
+        [[H, T_inf, T_air], [H2, T_inf2, T_air2]],
+        surrogate_index="best",
+        batch_evaluate=True,
+    )
     param_study = mc.ParameterStudy(conv_heat_transfer_coeff, far_field_temperature,
                                      air_temperature)
     my_objective = mc.SimulationResultsSynchronizer('time', indep_field_vals,
@@ -352,7 +373,7 @@ so that we can see if the surrogate has a more accurate prediction.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 176-182
+.. GENERATED FROM PYTHON SOURCE LINES 194-200
 
 With both the finite element model results 
 and the surrogate model results obtained, we can 
@@ -361,7 +382,7 @@ Note that we can only plot the bottom
 thermocouple because adaptive surrogates are specific for a
 given response.
 
-.. GENERATED FROM PYTHON SOURCE LINES 182-205
+.. GENERATED FROM PYTHON SOURCE LINES 200-223
 
 .. code-block:: Python
 
@@ -400,14 +421,14 @@ given response.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-210
+.. GENERATED FROM PYTHON SOURCE LINES 224-228
 
 Similarly, we can plot the surrogate model error. First, 
 we interpolate the surrogate results to the finite element model 
 times. Next, we calculate and plot the absolute error 
 for each prediction.
 
-.. GENERATED FROM PYTHON SOURCE LINES 210-229
+.. GENERATED FROM PYTHON SOURCE LINES 228-247
 
 .. code-block:: Python
 
@@ -442,7 +463,7 @@ for each prediction.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-241
+.. GENERATED FROM PYTHON SOURCE LINES 248-259
 
 The sparse grid surrogate shows much reduced error for the chosen 
 samples points when compared to the non-adaptive surrogate from 
@@ -450,18 +471,23 @@ samples points when compared to the non-adaptive surrogate from
 The error is less than 1 K for all time. However, the 
 adaptive surrogate did not reach this low value for all 50 samples
 in the test set. However, it did reach the convergence criteria of 
-a maximum error for all test samples of 1.5 K at 353 samples. 
+a maximum error for all test samples of 1.5 K at 321 samples. 
 You can access this information using the 
 :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate.max_error_history`
 and :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate.sample_count_history`
 properties.
 
-.. GENERATED FROM PYTHON SOURCE LINES 241-244
+.. GENERATED FROM PYTHON SOURCE LINES 259-267
 
 .. code-block:: Python
 
-    print("Max error:", surrogate.max_error_history[-1])
-    print("Training samples:", surrogate.sample_count_history[-1])
+    print("Best retained surrogate max error:",
+          surrogate.max_error_history[best_surrogate_index])
+    print("Training samples for best retained surrogate:",
+          surrogate.sample_count_history[best_surrogate_index])
+
+    print("Final batch max error:", surrogate.max_error_history[-1])
+    print("Final batch training samples:", surrogate.sample_count_history[-1])
 
 
 
@@ -471,31 +497,40 @@ properties.
 
  .. code-block:: none
 
-    Max error: 1.4860231166993572
-    Training samples: 353
+    Best retained surrogate max error: 1.4411816561109845
+    Training samples for best retained surrogate: 321
+    Final batch max error: 1.4411816561109845
+    Final batch training samples: 321
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 245-251
+.. GENERATED FROM PYTHON SOURCE LINES 268-274
 
 Since adaptive surrogates in MatCal also save the 
 training error history, we can plot the error metrics for the surrogate
 as a function of model training samples used. This can 
-useful to evaluate convergence rate and 
+be useful to evaluate convergence rate and 
 to assess if better performance is likely 
 with additional training samples.
 
-.. GENERATED FROM PYTHON SOURCE LINES 251-259
+.. GENERATED FROM PYTHON SOURCE LINES 274-289
 
 .. code-block:: Python
 
-    plt.figure(constrained_layout=True)
-    plt.plot(surrogate.sample_count_history, surrogate.max_error_history,'o', 
-             color='tab:red')
-    plt.xlabel("training samples")
-    plt.ylabel("max test sample error (K)")
-    plt.title("Surrogate error convergence")
+    fig, ax = surrogate.plot_error_history(
+        metrics="max_error",
+        error_units="K",
+        metric_styles={
+            "max_error": {
+                "color": "tab:red",
+                "linestyle": "None",
+                "marker": "o",
+            },
+        },
+        ylabel="max_test_sample_error",
+        title="Surrogate error convergence",
+    )
     plt.show()
 
 
@@ -510,15 +545,60 @@ with additional training samples.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 260-262
+.. GENERATED FROM PYTHON SOURCE LINES 290-298
 
-We can see in the convergence plot, that the error has stagnated.
-More iterations will likely not improve the performance of the surrogate. 
+The adaptive surrogate stores the test parameters and responses used to score
+each candidate surrogate during training. We can use the retained best
+surrogate to inspect which test samples were hardest to predict.
+We can use use  
+:meth:`~matcal.core.adaptive_surrogate.SparseGridAdaptiveSurrogate.plot_worse_N` 
+to plot the worst five test samples. For each test sample, the left column
+compares the surrogate prediction against the stored test data. The right
+column shows the signed error, surrogate minus test data.
+
+.. GENERATED FROM PYTHON SOURCE LINES 298-309
+
+.. code-block:: Python
+
+    fig, axes, worst_test_indices = surrogate.plot_worst_N(
+        N=5,
+        surrogate_index="best",
+        metric="max_error",
+        error_type="signed",
+        independent_variable_units="s",
+        target_field_units="K",
+    )
+    print("Worst test sample indices:", worst_test_indices)
+    plt.show()
+
+
+
+
+.. image-sg:: /introduction_examples/surrogate_studies/images/sphx_glr_plot_generate_surrogate_c_adaptive_sparse_grid_004.png
+   :alt: Worst stored test samples for retained surrogate 'best', Worst samples 1-5: surrogate vs. test data, Worst samples 1-5: signed error
+   :srcset: /introduction_examples/surrogate_studies/images/sphx_glr_plot_generate_surrogate_c_adaptive_sparse_grid_004.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Worst test sample indices: [44 14 27 28 43]
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 310-313
+
+We can see in the convergence plot whether the error has stagnated 
+and the worst-test-sample plots show where the remaining 
+surrogate error is concentrated.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (20 minutes 55.681 seconds)
+   **Total running time of the script:** (66 minutes 35.898 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_surrogate_studies_plot_generate_surrogate_c_adaptive_sparse_grid.py:

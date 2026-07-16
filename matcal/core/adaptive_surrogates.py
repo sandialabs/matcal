@@ -391,8 +391,8 @@ class AdaptiveSurrogate:
     and metadata for retained surrogates are available through
     ``stored_surrogate_scores`` using the same keys.
 
-    By default, only the best surrogate, as measured by RMSE on the test set,
-    is retained.
+    By default, only the best surrogate, as measured by maximum absolute error
+    on the test set, is retained.
     """
 
     _VALID_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
@@ -500,8 +500,6 @@ class AdaptiveSurrogate:
         If both rules are active, the retained surrogate set is the union of
         the best-score surrogates and the periodic-batch surrogates.
 
-        By default, only the best surrogate by RMSE is retained.
-
         :param best_n_surrogates: Retain the best N surrogate objects according
             to ``score_metric``. If ``None``, score-based retention is disabled.
         :type best_n_surrogates: int or None
@@ -525,15 +523,15 @@ class AdaptiveSurrogate:
 
         **Examples**
 
-        Retain only the best surrogate by RMSE:
+        Retain only the best surrogate by maximum absolute error:
 
         >>> study.set_surrogate_storage_options(best_n_surrogates=1)
 
-        Retain the best five surrogates by maximum absolute error:
+        Retain the best five surrogates by RMSE:
 
         >>> study.set_surrogate_storage_options(
         ...     best_n_surrogates=5,
-        ...     score_metric="max_error",
+        ...     score_metric="rmse",
         ... )
 
         Retain every tenth adaptive batch surrogate:
@@ -543,7 +541,7 @@ class AdaptiveSurrogate:
         ...     save_every_n_batches=10,
         ... )
 
-        Retain the best two surrogates and every fifth batch surrogate:
+        Retain the best two surrogates and every fifth batch surrogate by RMSE:
 
         >>> study.set_surrogate_storage_options(
         ...     best_n_surrogates=2,
@@ -2911,12 +2909,10 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
     def _stopping_criterion_met(self, training_batch_number, stop=False):
         if training_batch_number > 0:
             if np.abs(self._surrogate.rmse_history[-1]) <= self._rmse_goal:
-                logger.info(f"Root mean squared error converged! "+
-                            f"\nFinal RMSE: {self._surrogate.rmse_history[-1]}")
+                logger.info(f"Root mean squared error converged!")
                 stop=True
             elif np.abs(self._surrogate.max_error_history[-1]) <=self._max_abs_error_goal:
-                logger.info(f"Max absolute error score converged! "+
-                            f"\nFinal max error: {self._surrogate.max_error_history[-1]}")
+                logger.info(f"Max absolute error score converged!")
                 stop=True
         if self._results.number_of_evaluations > self._max_training_samples and not stop:
             logger.info("Surrogate not converged yet, but maximum training "+
@@ -3047,8 +3043,6 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         All score histories, test parameters, and test responses are always
         stored. This method only controls which surrogate model objects are
         retained.
-
-        By default, only the best surrogate by RMSE is retained.
 
         :param best_n_surrogates: Retain the best N surrogate objects according
             to ``score_metric``. Set to ``None`` to disable score-based retention.

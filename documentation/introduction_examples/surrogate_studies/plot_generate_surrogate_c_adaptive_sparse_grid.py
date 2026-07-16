@@ -251,7 +251,7 @@ plt.show()
 # The error is less than 1 K for all time. However, the 
 # adaptive surrogate did not reach this low value for all 50 samples
 # in the test set. However, it did reach the convergence criteria of 
-# a maximum error for all test samples of 1.5 K at 353 samples. 
+# a maximum error for all test samples of 1.5 K at 321 samples. 
 # You can access this information using the 
 # :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate.max_error_history`
 # and :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate.sample_count_history`
