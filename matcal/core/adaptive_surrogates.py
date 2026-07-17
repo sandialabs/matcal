@@ -3420,44 +3420,104 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._convergence_metric = convergence_metric
 
     def set_cross_validation_options(self, nsplits=5, nmax_folds=3, nmax_loo=10, cv_scale=1.0,
-                                     cv_metric='rmse', group_kfold=False):
-        """Set options for cross validation. Properties that can be altered are listed below.
-        
-        :param nsplits: The number of folds to use in k-fold cross validation. 
-            If nsplits = 0, k-fold cross-validation is skipped entirely and new samples
-            are instead selected from every region of the Voronoi tessellation defined 
-            by the current set of training samples.
+                                     cv_metric='sum_abs', group_kfold=False):
+        """
+        Configure the cross-validation options used to select Voronoi refinement
+        regions.
+
+        The Voronoi adaptive sampler can use a two-stage error filter modeled after
+        the KFCV-Voronoi procedure:
+
+        1. Split the current training samples into ``nsplits`` folds and build one
+        surrogate per held-out fold.
+        2. Compute the physical response-space prediction error on each held-out
+        fold.
+        3. Select the ``nmax_folds`` folds with the largest physical
+        cross-validation errors.
+        4. Optionally perform leave-one-out cross validation only on the samples
+        contained in those selected folds.
+        5. Select Voronoi cells associated with the largest leave-one-out physical
+        errors and place new samples at farthest vertices of those cells.
+
+        If ``nsplits`` is set to ``0``, the cross-validation filter is disabled.
+        In that case, all current training samples are treated as candidate Voronoi
+        cell seeds.
+
+        Cross-validation and leave-one-out errors are computed in physical response
+        space by comparing held-out model responses with surrogate predictions at
+        the same held-out parameter locations. They are not based on latent-space
+        surrogate diagnostics.
+
+        :param nsplits: Number of folds used for K-fold cross validation. If
+            ``nsplits=0``, K-fold cross validation and leave-one-out cross
+            validation are skipped and candidate Voronoi regions are drawn from all
+            current training samples. If ``nsplits`` is larger than the current
+            number of training samples, it is reduced internally.
         :type nsplits: int
-        
-        :param nmax_folds: Points in the folds with the highest k-fold error 
-            (the top nmax_folds) define the Voronoi regions from which new samples 
-            will be drawn. 
+
+        :param nmax_folds: Number of highest-error K-folds retained for possible
+            refinement. Samples contained in these folds define the candidate
+            regions for leave-one-out cross validation. This corresponds to the
+            number of K-fold groups selected by the global KFCV filter.
         :type nmax_folds: int
-        
-        :param nmax_loo: Points with the largest leave-one-out cross-validation (LOOCV)
-            errors (the top nmax_loo). These define the Voronoi regions from which new 
-            samples will be drawn. If nmax_loo = 'all', then new samples are drawn from
-            all Voronoi regions defined by nmax_folds, and leave-one-out cross-validation
-            is not performed.
-        :type nmax_loo: int or 'all'
-        
-        :param cv_scale: Optional scaling applied to output before calculating errors in
-            cross-validation and leave-one-out cross-validation. This can be used to 
-            balance error magnitude across dimensions or outputs.
-        :type scale: float
-        
-        :param cv_metric: Determines which metric is used when computing errors during
-            cross-validation. Supported options are:
-                * rmse -- root mean squared error (Default)
-                * nlpd -- negative log posterior density
+
+        :param nmax_loo: Number of highest-error leave-one-out samples retained
+            after the K-fold filter. These samples define the Voronoi regions from
+            which new adaptive samples are drawn. If ``nmax_loo='all'``,
+            leave-one-out cross validation is skipped and all samples in the
+            selected high-error folds are used as candidate Voronoi regions.
+        :type nmax_loo: int or str
+
+        :param cv_scale: Optional scaling applied to physical responses before
+            computing cross-validation errors. Use this to normalize response
+            magnitudes when the target response has multiple components or when
+            different response locations have substantially different scales.
+            Accepted values are:
+
+            * ``None`` or ``1.0``: no scaling;
+            * positive scalar: divide all response values by this scalar;
+            * positive array-like: divide response values componentwise; or
+            * ``"cbrt"``: apply a cube-root transform to true and predicted
+            responses before error calculation.
+
+        :type cv_scale: float, array-like, str, or None
+
+        :param cv_metric: Physical response-space error metric used for both K-fold
+            and leave-one-out ranking. Supported values are:
+
+            * ``"rmse"``: root mean squared physical response error.
+            * ``"mae"`` or ``"abs"``: mean absolute physical response error.
+            * ``"sum_abs"``: sum of absolute physical response errors. This is
+            closest to the error expression used in the KFCV-Voronoi paper.
+            * ``"nrmse"``: normalized root mean squared physical response error.
+            * ``"nlpd"``: accepted for backward compatibility. Because physical
+            NLPD requires predictive variances, this option is evaluated as
+            physical RMSE for adaptive region ranking.
+
         :type cv_metric: str
-        
-        :param group_kfold: If True, samples are grouped using k-means clustering
-            prior to k-fold cross-validation so that nearby points are allways assigned
-            to the same fold. This prevents spatially correllated points from being split
-            across training and validation sets. If False, folds are assigned randomly
-            by the standard KFold algorithm. 
+
+        :param group_kfold: If ``True``, samples are grouped using k-means
+            clustering before K-fold cross validation and nearby samples are kept in
+            the same validation fold using ``GroupKFold``. This can reduce leakage
+            between spatially correlated training and validation points. If
+            ``False``, samples are assigned to folds with standard shuffled
+            ``KFold``.
         :type group_kfold: bool
+
+        :raises TypeError: If input types are invalid.
+        :raises ValueError: If numeric options are out of range, if ``nmax_loo`` is
+            a string other than ``"all"``, or if ``cv_metric`` is unsupported.
+
+        :notes:
+            * ``nmax_folds`` controls how many high-error K-fold groups pass the
+            global KFCV filter.
+            * ``nmax_loo`` controls how many individual high-error samples are used
+            after the optional leave-one-out refinement step.
+            * The actual number of new samples added in a batch may be smaller than
+            ``nmax_loo`` if some Voronoi regions produce invalid, duplicate, or
+            out-of-bounds candidate points.
+            * For behavior closest to the paper, use ``cv_metric="sum_abs"``.
+            For fold-size-independent ranking, use ``cv_metric="rmse"``.
         """
         check_value_is_nonnegative_integer(nsplits, "nsplits")
         self._nsplits = nsplits
@@ -3481,10 +3541,12 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._cv_scale = cv_scale
         check_value_is_nonempty_str(cv_metric, "cv_metric")
         self._cv_metric = cv_metric
-        valid_cv_metrics = ['rmse', 'nlpd']
+        valid_cv_metrics = ['rmse', 'mae', 'abs', 'sum_abs', 'nrmse', 'nlpd']
         if self._cv_metric not in valid_cv_metrics:
-            raise ValueError("cv_metric not implemented. 'cv_metric' must one of"
-                             " 'rmse', 'nlpd'")
+            raise ValueError(
+                "cv_metric not implemented. 'cv_metric' must be one of "
+                f"{valid_cv_metrics}"
+            )
         check_value_is_bool(group_kfold, "group_kfold")
         self._group_kfold = group_kfold
     
@@ -3803,20 +3865,61 @@ class VoronoiTessellation:
         return np.vstack(tuple(coords_ravel)).T
         
     def create_ghost_points(self, stretchCoef=1.75, centCoef=1.5):
-        """Reflect points nearest to the boundary hull across the nearest
-        face of the boundary hull """
+        """
+        Create auxiliary ``ghost`` seed points outside the bounded parameter domain.
 
-        boundary_points_stretched = self.boundary_points * stretchCoef
-        self._ghost_points = boundary_points_stretched
+        The Voronoi tessellation is built from the physical training samples plus
+        additional ghost points. These ghost points help make the Voronoi regions
+        associated with physical samples finite inside the bounded parameter space.
+        They are not valid training samples and are used only to stabilize the
+        tessellation near the domain boundary.
 
+        Ghost points are generated in two groups:
+
+        1. Boundary-corner ghost points:
+        Each corner of the bounded parameter domain is moved outward from the
+        domain centroid by ``stretchCoef``. Stretching about the centroid is
+        important because it works for both centered domains, such as
+        ``[-5, 5]^d``, and noncentered domains, such as ``[0, 1]^d``. Stretching
+        about the origin can incorrectly leave ghost points inside the domain.
+
+        2. Axis-direction ghost points:
+        Additional points are placed in the positive and negative coordinate
+        directions from the domain centroid. These points improve tessellation
+        robustness, especially in higher dimensions.
+
+        :param stretchCoef: Multiplicative factor used to move each boundary corner
+            away from the domain centroid. Values greater than one place the
+            stretched boundary points outside the original domain.
+        :type stretchCoef: float
+
+        :param centCoef: Multiplicative factor used with the maximum distance from
+            the domain centroid to a boundary corner when placing the additional
+            axis-direction ghost points.
+        :type centCoef: float
+
+        :ivar _ghost_points: Array of generated ghost points with shape
+            ``(n_ghost_points, n_dimensions)``.
+        :vartype _ghost_points: numpy.ndarray
+        """
         boundary_centroid = np.mean(self.boundary_points, axis=0)
-        max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
-        self._ghost_points = \
-            np.vstack([self._ghost_points, \
-                boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
-        self._ghost_points =\
-            np.vstack([self._ghost_points, \
-                boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
+
+        # Stretch boundary points outward from the domain centroid, not from the
+        # origin. This keeps ghost points outside non-origin-centered domains.
+        self._ghost_points = (
+            boundary_centroid
+            + stretchCoef * (self.boundary_points - boundary_centroid)
+        )
+
+        max_dist = np.max(
+            np.linalg.norm(self.boundary_points - boundary_centroid, axis=1)
+        )
+
+        self._ghost_points = np.vstack([
+            self._ghost_points,
+            boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1]),
+            boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1]),
+        ])
 
     def ghost_busters(self):
         """ Identify which points in self._all_points are ghost points"""
@@ -4159,40 +4262,96 @@ class VoronoiTessellation:
         return arr[mask]
     
     def add_points(self, points):
-        """Process a set of additional points.
-        
-        Voronoi has a built in function to add points 
-            -- self.vor.add_points(points, restart=True).
-        However, 'incremental` must be set to True to use the built-in add_points() 
-        method and is very slow. Qhull throws an error for dim>2 when 
-        incremental=True and restart=False. This class method, which rebuilds 
-        'manually` is faster.
         """
-        from scipy.spatial import Voronoi 
+        Add physical sample points and rebuild the Voronoi tessellation.
+
+        The Voronoi tessellation contains two classes of seed points:
+
+        * physical sample points stored in ``self.points``; and
+        * auxiliary ghost points stored in ``self._ghost_points``.
+
+        Only physical sample points should be added through this method. After new
+        physical points are added, all derived tessellation state is rebuilt,
+        including ghost points, the combined point array, the SciPy Voronoi object,
+        ghost-point bookkeeping, and boundary-region bookkeeping.
+
+        Rebuilding all derived state is necessary because SciPy Voronoi region
+        indices and point-region mappings can change whenever points are added. If
+        only ``self.vor`` is rebuilt while cached arrays such as ``self._boo`` or
+        ``self.boundary_regions`` are left unchanged, later calls to region and
+        vertex-selection methods can use stale indices and select incorrect adaptive
+        samples.
+
+        Invalid rows containing ``NaN`` or infinite values are discarded. Duplicate
+        physical points are removed before rebuilding the tessellation.
+
+        :param points: New physical sample point or points to add. A single point
+            may be supplied with shape ``(n_dimensions,)``. Multiple points should
+            have shape ``(n_points, n_dimensions)``.
+        :type points: numpy.ndarray
+
+        :raises TypeError: If ``points`` is not a NumPy array.
+        :raises ValueError: If the supplied points do not have the same dimension as
+            the existing physical sample points.
+
+        :ivar points: Updated unique physical sample points.
+        :vartype points: numpy.ndarray
+
+        :ivar _ghost_points: Regenerated ghost points corresponding to the current
+            physical sample set and parameter bounds.
+        :vartype _ghost_points: numpy.ndarray
+
+        :ivar _all_points: Combined physical and ghost seed points used to construct
+            the Voronoi tessellation.
+        :vartype _all_points: numpy.ndarray
+
+        :ivar vor: Rebuilt SciPy Voronoi tessellation.
+        :vartype vor: scipy.spatial.Voronoi
+
+        :ivar _boo: Boolean list marking which entries of ``_all_points`` are ghost
+            points.
+        :vartype _boo: list[bool]
+
+        :ivar boundary_regions: Updated Voronoi region indices associated with the
+            domain boundary points.
+        :vartype boundary_regions: list[list[int]]
+        """
+        from scipy.spatial import Voronoi
+
         if not isinstance(points, np.ndarray):
             raise TypeError("Input to add_points must be a NumPy array.")
+
         points = np.atleast_2d(points)
-        
-        if not points.shape[-1] == self._all_points.shape[-1]:
-            raise ValueError(f"Points in add_points have a different dimension"
-                             " ({points.shape[-1]}) than points in voronoi"
-                             " tessellation ({self._all_points.shape[-1]})")
-        
+
+        if points.shape[-1] != self.points.shape[-1]:
+            raise ValueError(
+                f"Points in add_points have a different dimension "
+                f"({points.shape[-1]}) than points in tessellation "
+                f"({self.points.shape[-1]})"
+            )
+
         points = self.remove_invalid_rows(points)
         if points.size == 0:
-            logger.warning("All input points were NaN or Inf."
-                           " No new points added to voronoi tessellation.")
+            logger.warning(
+                "All input points were NaN or Inf. "
+                "No new points added to voronoi tessellation."
+            )
             return
 
-        # make sure all new points are unique
-        all_points = np.vstack((self._all_points, points))
-        unique_points = set(tuple(row) for row in all_points)
-        self._all_points = np.asarray([list(row) for row in unique_points])
-        self.vor = Voronoi(self._all_points)
+        # Keep only physical sample points in self.points. Ghost points are
+        # regenerated below and should not be mixed into this array.
+        self.points = np.unique(
+            np.vstack((self.points, points)),
+            axis=0,
+        )
 
-    def raise_if_invalid_region_index(self, region_index):
-        if region_index > len(self.vor.regions) or region_index < 0:
-            raise ValueError('Invalid region index. Index must be in (0, nregions]')
+        # Rebuild all derived tessellation state. This prevents stale region indices,
+        # stale ghost masks, and stale boundary-region mappings after points are added.
+        self.create_ghost_points()
+        self._all_points = np.vstack([self.points, self._ghost_points])
+        self.vor = Voronoi(self._all_points, incremental=self.incremental)
+        self.ghost_busters()
+        self.boundary_regions = self.get_voronoi_region(self.boundary_points)
 
 
 class KFoldCrossValidation:
@@ -4253,17 +4412,76 @@ class KFoldCrossValidation:
         return kf
 
     def evaluate_fold(self, train_index, test_index, X, y, kfold_count):
-        logger.info(f"\tEvaluating test '{self.metric}' error for surrogate for kfold cross validation set {kfold_count}..." +
-                    "")
+        """
+        Evaluate one K-fold split using physical response-space error.
+
+        The previous implementation ranked folds using latent surrogate scores from
+        ``fold_surrogate._latent_scores['test']``. The KFCV-Voronoi method described
+        in the paper ranks folds by the physical prediction error on the held-out
+        samples,
+
+        .. math::
+
+            e_i^{KF}
+            =
+            \\sum_{s_j \\in kf_i}
+            \\left|
+            y(s_j) - \\hat{y}_{S \\setminus kf_i}(s_j)
+            \\right|.
+
+        This implementation evaluates the fold surrogate at the held-out physical
+        parameter samples and compares those predictions directly with the held-out
+        physical responses.
+
+        :param train_index: Indices used to train the fold surrogate.
+        :type train_index: array-like
+
+        :param test_index: Held-out fold indices.
+        :type test_index: array-like
+
+        :param X: Full parameter sample matrix.
+        :type X: numpy.ndarray
+
+        :param y: Full list of physical model-evaluation dictionaries.
+        :type y: list[dict]
+
+        :param kfold_count: Fold counter used for logging.
+        :type kfold_count: int
+
+        :return: Tuple containing the physical fold error and the held-out indices.
+        :rtype: tuple[float, numpy.ndarray]
+        """
+        logger.info(
+            f"\tEvaluating physical '{self.metric}' error for surrogate "
+            f"for kfold cross validation set {kfold_count}..."
+        )
+
         info = self.extract_fold_info(train_index, test_index, X, y)
         train_eval_info, test_eval_info, X_test, y_test = info
-        fold_surrogate = _fit_surrogate_model(train_eval_info, self.interpolation_field, 
-                                              self.interpolation_values, test_eval_info, 
-                                              self.target_field,
-                                              "kfold_validation_surrogate.joblib", logger_on=False, 
-                                              **self.surrogate_options)
-        error = _get_surrogate_metric(fold_surrogate._latent_scores['test'], self.metric)
-        logger.info(f"\t\terror = {error}")
+
+        fold_surrogate = _fit_surrogate_model(
+            train_eval_info,
+            self.interpolation_field,
+            self.interpolation_values,
+            test_eval_info,
+            self.target_field,
+            "kfold_validation_surrogate.joblib",
+            logger_on=False,
+            **self.surrogate_options,
+        )
+
+        error = _calculate_physical_cv_error(
+            fold_surrogate,
+            X_test,
+            y_test,
+            self.target_field,
+            self.interpolation_field,
+            self.interpolation_values,
+            self.metric,
+            self.scale,
+        )
+
+        logger.info(f"\t\tphysical error = {error}")
         return error, test_index
    
     def extract_fold_info(self, train_index, test_index, X, y):
@@ -4314,19 +4532,68 @@ class LeaveOneOutCrossValidation:
         return loo
     
     def evaluate_loo_sample(self, X, y, index):
-        # Leave one out: create training and test sets
-        logger.info(f"\tEvaluating test '{self.metric}' error for surrogate leaving out sample {index}" +
-                    "")
+        """
+        Evaluate one leave-one-out split using physical response-space error.
+
+        The previous implementation ranked samples using latent surrogate scores.
+        The CV-Voronoi and KFCV-Voronoi methods require the physical prediction
+        error at the omitted sample,
+
+        .. math::
+
+            e_i^{LOO}
+            =
+            \\left|
+            y(s_i) - \\hat{y}_{S \\setminus s_i}(s_i)
+            \\right|.
+
+        This implementation builds the leave-one-out surrogate, evaluates it at the
+        omitted physical parameter sample, and compares the prediction directly with
+        the omitted physical model response.
+
+        :param X: Full parameter sample matrix.
+        :type X: numpy.ndarray
+
+        :param y: Full list of physical model-evaluation dictionaries.
+        :type y: list[dict]
+
+        :param index: Index of the omitted sample.
+        :type index: int
+
+        :return: Tuple containing the physical LOO error and omitted sample index.
+        :rtype: tuple[float, int]
+        """
+        logger.info(
+            f"\tEvaluating physical '{self.metric}' error for surrogate "
+            f"leaving out sample {index}"
+        )
+
         info = self.extract_loo_info(index, X, y)
         train_eval_info, test_eval_info, X_test, y_test = info
-        fold_surrogate = _fit_surrogate_model(train_eval_info, self.interpolation_field, 
-                                              self.interpolation_values, test_eval_info, 
-                                              self.target_field,
-                                              "kfold_validation_surrogate.joblib", 
-                                               logger_on=False, 
-                                               **self.surrogate_options)
-        error = _get_surrogate_metric(fold_surrogate._latent_scores['test'], self.metric)
-        logger.info(f"\t\terror = {error}")
+
+        fold_surrogate = _fit_surrogate_model(
+            train_eval_info,
+            self.interpolation_field,
+            self.interpolation_values,
+            test_eval_info,
+            self.target_field,
+            "kfold_validation_surrogate.joblib",
+            logger_on=False,
+            **self.surrogate_options,
+        )
+
+        error = _calculate_physical_cv_error(
+            fold_surrogate,
+            X_test,
+            y_test,
+            self.target_field,
+            self.interpolation_field,
+            self.interpolation_values,
+            self.metric,
+            self.scale,
+        )
+
+        logger.info(f"\t\tphysical error = {error}")
         return error, index
 
     def extract_loo_info(self, index, X, y):
@@ -4387,3 +4654,317 @@ def _get_surrogate_metric(latent_scores_test, metric):
         return np.sum(combined_score)
     else:
         return np.mean(combined_score)
+
+def _extract_physical_response_matrix(model_evals, target_field,
+                                      interpolation_field=None,
+                                      interpolation_values=None):
+    """
+    Extract physical target-response values from a list of model-evaluation
+    dictionaries.
+
+    The cross-validation adaptive-sampling criteria should be based on physical
+    response error,
+
+    .. math::
+
+        y(s_i) - \\hat{y}_{S \\setminus s_i}(s_i),
+
+    not on latent-space surrogate diagnostics. This helper converts the held-out
+    model responses into a dense array suitable for direct comparison with
+    surrogate predictions.
+
+    If ``interpolation_values`` are provided and the stored target response is
+    defined on a different independent-variable grid, the target response is
+    interpolated onto ``interpolation_values`` using ``interpolation_field``.
+
+    :param model_evals: List of model-evaluation dictionaries. Each dictionary
+        must contain ``target_field`` and, when interpolation is needed,
+        ``interpolation_field``.
+    :type model_evals: list[dict]
+
+    :param target_field: Name of the physical response field to compare.
+    :type target_field: str
+
+    :param interpolation_field: Name of the independent-variable field used for
+        interpolation, e.g. ``"time"`` or ``"x"``.
+    :type interpolation_field: str or None
+
+    :param interpolation_values: Independent-variable values at which the
+        surrogate response is evaluated.
+    :type interpolation_values: array-like or None
+
+    :return: Physical response array with shape ``(n_samples, n_qois)``.
+    :rtype: numpy.ndarray
+    """
+    responses = []
+
+    if interpolation_values is not None:
+        interpolation_values = np.asarray(interpolation_values, dtype=float).reshape(-1)
+
+    for eval_data in model_evals:
+        if target_field not in eval_data:
+            raise KeyError(
+                f"Target field '{target_field}' was not found in a "
+                "cross-validation model evaluation."
+            )
+
+        target_response = np.asarray(eval_data[target_field], dtype=float).reshape(-1)
+
+        needs_interpolation = (
+            interpolation_values is not None
+            and target_response.size != interpolation_values.size
+        )
+
+        if needs_interpolation:
+            if interpolation_field is None:
+                raise RuntimeError(
+                    "Cannot interpolate held-out physical response because "
+                    "interpolation_field is None."
+                )
+
+            if interpolation_field not in eval_data:
+                raise KeyError(
+                    f"Interpolation field '{interpolation_field}' was not found "
+                    "in a cross-validation model evaluation."
+                )
+
+            source_x = np.asarray(eval_data[interpolation_field], dtype=float).reshape(-1)
+
+            if source_x.size != target_response.size:
+                raise RuntimeError(
+                    "Cannot interpolate held-out physical response because the "
+                    f"independent field '{interpolation_field}' has length "
+                    f"{source_x.size}, but target field '{target_field}' has "
+                    f"length {target_response.size}."
+                )
+
+            sort_idx = np.argsort(source_x)
+            source_x = source_x[sort_idx]
+            target_response = target_response[sort_idx]
+
+            target_response = np.interp(
+                interpolation_values,
+                source_x,
+                target_response,
+            )
+
+        responses.append(target_response)
+
+    return np.asarray(responses, dtype=float)
+
+
+def _evaluate_surrogate_physical_response(surrogate, X_test, target_field):
+    """
+    Evaluate a surrogate at held-out parameter samples and return its physical
+    target-field response.
+
+    The returned array is normalized to shape ``(n_samples, n_qois)`` so that it
+    can be directly compared with the held-out physical model responses.
+
+    :param surrogate: Surrogate object returned by ``_fit_surrogate_model``.
+    :type surrogate: object
+
+    :param X_test: Held-out parameter samples with shape
+        ``(n_test_samples, n_parameters)``.
+    :type X_test: numpy.ndarray
+
+    :param target_field: Name of the physical target field.
+    :type target_field: str
+
+    :return: Surrogate predictions with shape ``(n_test_samples, n_qois)``.
+    :rtype: numpy.ndarray
+    """
+    X_test = np.asarray(X_test, dtype=float)
+    n_test_samples = X_test.shape[0]
+
+    surrogate_results = surrogate(X_test, batch_evaluate=True)
+
+    if target_field not in surrogate_results:
+        raise KeyError(
+            f"Target field '{target_field}' was not returned by the surrogate."
+        )
+
+    predicted_response = np.asarray(surrogate_results[target_field], dtype=float)
+
+    if predicted_response.ndim == 0:
+        predicted_response = predicted_response.reshape(1, 1)
+
+    elif predicted_response.ndim == 1:
+        if n_test_samples == 1:
+            predicted_response = predicted_response.reshape(1, -1)
+        else:
+            predicted_response = predicted_response.reshape(n_test_samples, -1)
+
+    elif predicted_response.ndim == 2:
+        if predicted_response.shape[0] == n_test_samples:
+            pass
+        elif predicted_response.shape[1] == n_test_samples:
+            predicted_response = predicted_response.T
+        else:
+            raise RuntimeError(
+                "Could not orient surrogate prediction array for physical "
+                f"cross-validation error. Prediction shape is "
+                f"{predicted_response.shape}; expected one dimension to equal "
+                f"the number of held-out samples, {n_test_samples}."
+            )
+
+    else:
+        raise RuntimeError(
+            "Physical cross-validation error only supports scalar, vector, or "
+            f"matrix surrogate responses. Received response with shape "
+            f"{predicted_response.shape}."
+        )
+
+    return predicted_response
+
+
+def _apply_physical_response_scaling(true_response, predicted_response, scale):
+    """
+    Apply optional scaling to physical responses before error calculation.
+
+    ``scale`` is intended to normalize response magnitudes before computing
+    cross-validation errors. If ``scale`` is ``None`` or ``1``, responses are
+    returned unchanged.
+
+    The legacy string option ``"cbrt"`` is supported for compatibility.
+
+    :param true_response: Held-out physical response.
+    :type true_response: numpy.ndarray
+
+    :param predicted_response: Surrogate-predicted physical response.
+    :type predicted_response: numpy.ndarray
+
+    :param scale: Response scaling option.
+    :type scale: float, str, numpy.ndarray, or None
+
+    :return: Scaled true and predicted responses.
+    :rtype: tuple[numpy.ndarray, numpy.ndarray]
+    """
+    if scale is None:
+        return true_response, predicted_response
+
+    if isinstance(scale, str):
+        scale_lower = scale.lower().strip()
+        if scale_lower == "cbrt":
+            return np.cbrt(true_response), np.cbrt(predicted_response)
+        raise ValueError(
+            f"Unsupported physical response scale option '{scale}'."
+        )
+
+    scale = np.asarray(scale, dtype=float)
+
+    if np.any(scale <= 0):
+        raise ValueError("Physical response scale values must be positive.")
+
+    return true_response / scale, predicted_response / scale
+
+
+def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
+                                 interpolation_field, interpolation_values,
+                                 metric="rmse", scale=1.0):
+    """
+    Calculate cross-validation error in physical response space.
+
+    This replaces the previous latent-score-based adaptive-sampling criterion.
+    The returned error is based on the held-out physical response and the
+    surrogate prediction at the same held-out parameter locations.
+
+    For K-fold CV, ``X_test`` and ``y_test`` contain all samples in the held-out
+    fold. For LOOCV, they contain one held-out sample.
+
+    Supported metrics are:
+
+    * ``"rmse"``: root mean squared physical response error.
+    * ``"mae"`` or ``"abs"``: mean absolute physical response error.
+    * ``"sum_abs"``: sum of absolute physical response errors, closest to the
+      paper's stated error form.
+    * ``"nrmse"``: normalized root mean squared physical response error.
+    * ``"nlpd"``: accepted for backward compatibility, but evaluated as physical
+      RMSE because true NLPD requires predictive variances.
+
+    :param surrogate: Surrogate object returned by ``_fit_surrogate_model``.
+    :type surrogate: object
+
+    :param X_test: Held-out parameter samples.
+    :type X_test: numpy.ndarray
+
+    :param y_test: Held-out model-evaluation dictionaries.
+    :type y_test: list[dict]
+
+    :param target_field: Name of the physical response field.
+    :type target_field: str
+
+    :param interpolation_field: Independent-variable field used to align
+        physical responses with surrogate outputs.
+    :type interpolation_field: str
+
+    :param interpolation_values: Independent-variable values at which the
+        surrogate response is evaluated.
+    :type interpolation_values: array-like
+
+    :param metric: Physical error metric.
+    :type metric: str
+
+    :param scale: Optional physical response scale.
+    :type scale: float, str, numpy.ndarray, or None
+
+    :return: Scalar physical cross-validation error.
+    :rtype: float
+    """
+    true_response = _extract_physical_response_matrix(
+        y_test,
+        target_field,
+        interpolation_field,
+        interpolation_values,
+    )
+
+    predicted_response = _evaluate_surrogate_physical_response(
+        surrogate,
+        X_test,
+        target_field,
+    )
+
+    if true_response.shape != predicted_response.shape:
+        raise RuntimeError(
+            "Held-out physical response and surrogate prediction have "
+            "different shapes during cross-validation error calculation. "
+            f"True response shape: {true_response.shape}. "
+            f"Predicted response shape: {predicted_response.shape}."
+        )
+
+    true_response, predicted_response = _apply_physical_response_scaling(
+        true_response,
+        predicted_response,
+        scale,
+    )
+
+    residual = true_response - predicted_response
+
+    metric = metric.lower().strip()
+
+    if metric == "rmse":
+        return float(np.sqrt(np.mean(residual ** 2)))
+
+    if metric == "nlpd":
+        # Backward-compatible behavior. True physical NLPD would require a
+        # physical predictive variance. For adaptive region ranking, use physical
+        # RMSE rather than latent-space NLPD.
+        return float(np.sqrt(np.mean(residual ** 2)))
+
+    if metric in ("mae", "abs"):
+        return float(np.mean(np.abs(residual)))
+
+    if metric == "sum_abs":
+        return float(np.sum(np.abs(residual)))
+
+    if metric == "nrmse":
+        denom = np.sum(true_response ** 2)
+        if denom <= 0:
+            return float(np.sqrt(np.mean(residual ** 2)))
+        return float(np.sqrt(np.sum(residual ** 2) / denom))
+
+    raise ValueError(
+        "Unsupported physical cross-validation metric "
+        f"'{metric}'. Supported metrics are 'rmse', 'mae', 'abs', "
+        "'sum_abs', 'nrmse', and backward-compatible 'nlpd'."
+    )
