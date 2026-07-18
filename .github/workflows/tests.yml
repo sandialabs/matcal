@@ -1,0 +1,125 @@
+name: MatCal Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit / ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: core
+            allow_failure: false
+          - module: cubit
+            allow_failure: false
+          - module: dakota
+            allow_failure: false
+          - module: exodus
+            allow_failure: false
+          - module: full_field
+            allow_failure: false
+          - module: sierra
+            allow_failure: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: matcal/requirements.txt
+
+      - name: Install MatCal dependencies
+        run: pip install -r matcal/requirements.txt
+
+      - name: Run unit tests
+        working-directory: matcal/${{ matrix.module }}/tests/unit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m unittest -v
+
+  integration-tests:
+    name: Integration / ${{ matrix.module }}
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: core
+            allow_failure: false
+          - module: cubit
+            allow_failure: true
+          - module: dakota
+            allow_failure: true
+          - module: exodus
+            allow_failure: false
+          - module: full_field
+            allow_failure: false
+          - module: sierra
+            allow_failure: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: matcal/requirements.txt
+
+      - name: Install MatCal dependencies
+        run: pip install -r matcal/requirements.txt
+
+      - name: Run integration tests
+        working-directory: matcal/${{ matrix.module }}/tests/integration
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m unittest -v
+
+  production-tests:
+    name: Production / ${{ matrix.module }}
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: core
+            allow_failure: false
+          - module: cubit
+            allow_failure: true
+          - module: dakota
+            allow_failure: true
+          - module: exodus
+            allow_failure: false
+          - module: full_field
+            allow_failure: false
+          - module: sierra
+            allow_failure: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: matcal/requirements.txt
+
+      - name: Install MatCal dependencies
+        run: pip install -r matcal/requirements.txt
+
+      - name: Run production tests
+        working-directory: matcal/${{ matrix.module }}/tests/production
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m unittest -v
