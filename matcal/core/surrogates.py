@@ -1249,9 +1249,7 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
                                         _root_mean_squared_error)
     max_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _max_error_inf_norm)
-    r2_test_score = _get_field_scores(surrogate, test_params, test_data, _global_r2_score, 
-                                          needs_length=True)
-
+    r2_test_score = _get_field_scores(surrogate, test_params, test_data, _global_r2_score)
 
     rmse_scores = (rmse_train_score, rmse_test_score)
     max_scores = (max_train_score, max_test_score)
@@ -1259,22 +1257,23 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
     return rmse_scores, max_scores, r2_scores
 
 
-def _get_field_scores(surrogate, params, data, score_function, needs_length=False):
+def _get_field_scores(surrogate, params, data, score_function):
+    """
+    Compute one native-space score per predicted physical field.
+
+    The score function is responsible for returning ``nan`` when a metric is not
+    defined, such as global R2 with fewer than two scalar comparisons.
+    """
     surrogate_data = surrogate(params)
     scores = OrderedDict()
-    eval_score=True
+
     for field in surrogate_data:
-        surogate_data_field = np.atleast_2d(surrogate_data[field])
-        if needs_length:
-            if len(surogate_data_field) > 1:
-                eval_score = surogate_data_field.shape[1] > 1
-            else:
-                eval_score = len(surogate_data_field) > 1
-        if field != surrogate._interpolation_field:
-            if eval_score:
-                scores[field] = score_function(data[field], surogate_data_field)
-            else:
-                scores[field] = np.nan
+        if field == surrogate._interpolation_field:
+            continue
+
+        surrogate_data_field = np.atleast_2d(surrogate_data[field])
+        scores[field] = score_function(data[field], surrogate_data_field)
+
     return scores
 
 

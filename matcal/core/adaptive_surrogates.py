@@ -14,7 +14,6 @@ from matcal.core.state import State
 from matcal.core.study_base import StudyResults
 from matcal.core.utilities import (check_value_is_positive_integer, 
                                    check_value_is_positive_integer_or_none,
-                                   check_value_is_array_like_of_reals, 
                                    check_value_is_nonempty_str, 
                                    check_value_is_array_like_of_reals, 
                                    check_value_is_positive_real, 
@@ -2983,7 +2982,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         :raises TypeError: If *filename* is not a string.
         """
         check_value_is_nonempty_str(filename, "filename")
-        if ".joblib" not in filename:
+        if not filename.endswith(".joblib"):
             raise ValueError("The save filename for the Adaptive Surrogate Study " +
                 f"must end with \".joblib\". Passed filename is \"{filename}\".")
         self._surrogate_save_filename = filename
@@ -3596,7 +3595,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 raise ValueError(f"The {__class__} 'nmax_loo' parameter must be a positive integer "+
                                 f"recieved value {nmax_loo}.")
         self._nmax_loo = nmax_loo
-        check_value_is_positive_real(cv_scale, "cv_scale")
+        _validate_cv_scale(cv_scale)
         self._cv_scale = cv_scale
         check_value_is_nonempty_str(cv_metric, "cv_metric")
         self._cv_metric = cv_metric
@@ -3996,101 +3995,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         return self._check_points_within_bounds(unique_points)
 
-    def _log_voronoi_location_progress(self, loc_idx):
-        """
-        Log progress while drawing samples from selected Voronoi regions.
-        """
-        if np.mod(loc_idx, 100) == 0:
-            logger.info(
-                f"Drawing new sample from region index {loc_idx} "
-                f"of {len(self._worst_sample_locations)}."
-            )
-
-    def _find_one_new_sample_location(self, location):
-        """
-        Return the furthest valid Voronoi vertex for one candidate location.
-        """
-        try:
-            vertices, vertex_index = self._find_furthest_vertex_for_location(location)
-        except (TypeError, ValueError, RuntimeError) as err:
-            logger.warning(f"Skipping invalid Voronoi region: {err}")
-            return None
-
-        if vertices is None or vertex_index is None:
-            return None
-
-        return vertices[vertex_index]
-
-    def _find_furthest_vertex_for_location(self, location):
-        """
-        Find the furthest Voronoi vertex for a full or local tessellation.
-        """
-        if self._voronoi_type == "full":
-            region = self._voronoi_tessellation.get_voronoi_region(location)[0][0]
-            return self._voronoi_tessellation.find_furthest_vertex(region)
-
-        return self._find_local_furthest_vertex(location)
-
-    def _find_local_furthest_vertex(self, location):
-        """
-        Build a local Voronoi tessellation and return the furthest local vertex.
-        """
-        neighbor_points = self._get_local_neighbor_points(location)
-        local_voronoi = VoronoiTessellation(neighbor_points, self._bounds, self._finite_only)
-        local_voronoi.build()
-
-        region = local_voronoi.get_voronoi_region(location)[0][0]
-        return local_voronoi.find_furthest_vertex(region)
-
-    def _get_local_neighbor_points(self, location):
-        """
-        Return nearest-neighbor points for local Voronoi construction.
-        """
-        n_available = self._all_tree_points.shape[0]
-        min_neighbors = self._number_parameters + 2
-
-        if n_available < min_neighbors:
-            raise RuntimeError("Not enough points for local Voronoi tessellation.")
-
-        k = min(max(min_neighbors, int(0.25 * n_available)), n_available)
-        nearest = np.asarray(self._tree.query(location, k=k)[1]).reshape(-1)
-
-        return self._all_tree_points[nearest]
-
-    def _update_tessellation_with_new_point(self, point):
-        """
-        Update the active tessellation/tree after adding a batch point.
-        """
-        if not self._iterative_updates:
-            return
-
-        if self._voronoi_type == "full":
-            self._voronoi_tessellation.add_points(np.asarray(point, dtype=float))
-            return
-
-        self._update_local_tree_with_new_point(point)
-
-    def _update_local_tree_with_new_point(self, point):
-        """
-        Add a point to the local-Voronoi KDTree.
-        """
-        from scipy.spatial import KDTree
-
-        self._all_tree_points = np.vstack((self._all_tree_points, np.atleast_2d(point)))
-        self._tree = KDTree(self._all_tree_points)
-
-    def _package_new_sample_points(self, new_points):
-        """
-        Convert selected points to a unique, bounded sample array.
-        """
-        if len(new_points) == 0:
-            return np.empty((0, self._number_parameters))
-
-        new_points = np.asarray(new_points, dtype=float)
-        new_points = np.unique(new_points, axis=0)
-
-        return self._check_points_within_bounds(new_points)
-
     def _check_points_within_bounds(self, points):
         """
         Return finite candidate points that lie inside the parameter bounds.
@@ -4119,13 +4023,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             raise ValueError(
                 f"Expected {self._number_parameters} columns, got {points.shape[1]}."
             )   
-
-    def _check_points_within_bounds(self, points):
-        # verify that all samples are within bounds
-        lb = self._bounds[:,0]
-        ub = self._bounds[:,1]
-        mask = ((points >= lb) & (points <= ub)).all(axis=1)
-        return points[mask]
         
     def _perform_kfold_cross_validation(self, training_params, training_data):
         """
@@ -4237,22 +4134,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         # Extract the arrays associated with the top n largest floats
         result_arrays = {key: array for key, _, array in top_n_items}
         return result_arrays
-
-    def _find_indices_of_n_largest_errors(self):
-        """Find the indices of the n largest values in an array of errors.
-
-        :return: Returns an array of indices corresponding to the n largest errors.
-        """
-        nkeep = int(self._nmax_loo)
-        # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
-        # Sort the items based on the error in descending order
-        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-        # Get the top n items
-        top_n_items = sorted_items[:nkeep]
-        # Extract the indices associated with the top n largest floats
-        indices = [item[2] for item in top_n_items]
-        return np.array(indices)
 
     def _add_parameter_evaluation(self, **p):
       super()._add_parameter_evaluation(**p)
@@ -4494,34 +4375,55 @@ class VoronoiTessellation:
         
     def identify_vertices_outside_bounds(self, region):
         """
-        Identify vertices that sit outside the bounding region
-
-        :param region: A list of the voronoi regions. Each list contains indices of the voronoi 
-            vertices forming each Voronoi region.
-        :type region: list
-
-        :return: Returns a new list of voronoi regions with vertices outside
-            the bounding region replaced with -2.
+        Mark infinite or out-of-bounds Voronoi vertices as ``-2``.
         """
+        region = np.asarray(region, dtype=int)
 
-        #outside = lambda lb, ub, x: (x < lb) + (x > ub)
-        # Create a boolean mask for vertices outside the bounds
-        region = np.array(region)
-        region_vertices = self.vor.vertices[region]
-        outside_mask = np.zeros(region_vertices.shape, dtype=bool)
+        if region.size == 0:
+            return []
 
-        for col_index in range(self.ndim):
-            lb, ub = self.bounds[col_index,0], self.bounds[col_index, 1]
-            #vert_outside, = np.where(outside(lb, ub, region_vertices[:, col_index]))
-            outside_mask[:, col_index] |= \
-                (region_vertices[:, col_index] < lb) | (region_vertices[:, col_index] > ub)
+        updated_region = self._mark_infinite_vertices(region)
+        updated_region = self._mark_outside_finite_vertices(updated_region)
 
-        # Get the indices of vertices that are outside the bounds
-        vert_outside = np.where(outside_mask.any(axis=1))[0]
-        if len(vert_outside) > 0:
-            outside_vert_index = [region[i] for i in vert_outside]
-            region[vert_outside] = -2
-        return region.tolist()
+        return updated_region.tolist()
+
+    def _mark_infinite_vertices(self, region):
+        """
+        Convert SciPy infinite vertex markers from ``-1`` to ``-2``.
+        """
+        updated_region = region.copy()
+        updated_region[updated_region == -1] = -2
+        return updated_region
+
+    def _mark_outside_finite_vertices(self, updated_region):
+        """
+        Mark finite Voronoi vertices outside the parameter bounds as ``-2``.
+        """
+        finite_mask = updated_region >= 0
+
+        if not np.any(finite_mask):
+            return updated_region
+
+        finite_vertices = self.vor.vertices[updated_region[finite_mask]]
+        outside_mask = self._outside_bounds_mask(finite_vertices)
+
+        finite_positions = np.where(finite_mask)[0]
+        updated_region[finite_positions[outside_mask]] = -2
+
+        return updated_region
+
+    def _outside_bounds_mask(self, vertices):
+        """
+        Return a mask indicating which vertices lie outside the parameter bounds.
+        """
+        outside_mask = np.zeros(vertices.shape[0], dtype=bool)
+
+        for dim in range(self.ndim):
+            lb = self.bounds[dim, 0]
+            ub = self.bounds[dim, 1]
+            outside_mask |= (vertices[:, dim] < lb) | (vertices[:, dim] > ub)
+
+        return outside_mask
 
     def replace_unbounded_vertices(self, region, region_index, region_tuple):
         """
