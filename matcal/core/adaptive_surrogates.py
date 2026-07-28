@@ -4197,6 +4197,42 @@ class VoronoiTessellation:
             furthest_vertex_index = None
         return vertices, furthest_vertex_index
 
+    def raise_if_invalid_region_index(self, region_index):
+        """
+        Validate that a Voronoi region index refers to a valid, nonempty region.
+
+        This method is used before accessing ``self.vor.regions[region_index]``.
+        SciPy Voronoi objects may contain empty regions, and invalid region indices
+        can otherwise produce confusing downstream errors when selecting adaptive
+        sample locations.
+
+        :param region_index: Index into ``self.vor.regions``.
+        :type region_index: int or numpy.integer
+
+        :raises TypeError: If ``region_index`` is not an integer.
+        :raises ValueError: If ``region_index`` is outside the valid range or refers
+            to an empty Voronoi region.
+        """
+        if not isinstance(region_index, (int, np.integer)):
+            raise TypeError(
+                "Voronoi region index must be an integer. "
+                f"Received type '{type(region_index)}'."
+            )
+
+        n_regions = len(self.vor.regions)
+
+        if region_index < 0 or region_index >= n_regions:
+            raise ValueError(
+                f"Invalid Voronoi region index {region_index}. "
+                f"Valid region indices are in [0, {n_regions - 1}]."
+            )
+
+        if len(self.vor.regions[region_index]) == 0:
+            raise ValueError(
+                f"Voronoi region {region_index} is empty and cannot be used "
+                "to select a new adaptive sample."
+            )
+
     def get_region_seed(self, region_index):
         """Given a region_index, return the seed of the Voronoi tesselation that
         belongs to the region.
