@@ -1193,7 +1193,7 @@ def _process_surrogate_args_call(param_names, *args,
         processed_args = np.asarray(args[0], dtype=float)
         if transpose:
             processed_args = processed_args.T
-    elif len(args)==1 and isinstance(args[0], dict or OrderedDict):
+    elif len(args)==1 and isinstance(args[0], (dict, OrderedDict)):
         if _all_params_exist_dict(param_names, args[0]):
             params = _convert_param_dict_to_array(args[0], param_names)
         batch_evaluate=True

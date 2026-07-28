@@ -267,6 +267,52 @@ def _get_parameter_bounds(parameters):
     return bounds
 
 
+def _validate_cv_scale(cv_scale):
+    """
+    Validate and normalize the cross-validation response scaling option.
+
+    Accepted values are ``None``, a positive scalar, a positive array-like
+    object, or the string ``"cbrt"``.
+    """
+    if cv_scale is None:
+        return None
+
+    if isinstance(cv_scale, str):
+        cv_scale = cv_scale.lower().strip()
+        if cv_scale == "cbrt":
+            return cv_scale
+        raise ValueError("cv_scale string option must be 'cbrt'.")
+
+    scale = np.asarray(cv_scale, dtype=float)
+    if scale.size == 0 or np.any(~np.isfinite(scale)) or np.any(scale <= 0):
+        raise ValueError("cv_scale must contain finite positive values.")
+
+    return float(scale) if scale.ndim == 0 else scale
+
+
+def _get_valid_kfold_split_count(nsplits, n_samples):
+    """
+    Return a valid number of K-fold splits for the current sample count.
+
+    If the requested split count is larger than the sample count, it is reduced
+    to a valid value and a warning is emitted.
+    """
+    check_value_is_nonnegative_integer(nsplits, "nsplits")
+
+    if nsplits == 0:
+        return 0
+
+    if n_samples < 2:
+        raise ValueError("At least two samples are required for K-fold CV.")
+
+    if nsplits <= n_samples:
+        return int(nsplits)
+
+    new_nsplits = min(max(2, n_samples // 2), n_samples)
+    logger.warning(f"Reducing nsplits from {nsplits} to {new_nsplits}.")
+    return int(new_nsplits)
+
+
 def _setup_pyapprox_adaptive_sparse_grid_fitter(
     n_parameters: int,
     n_qois: int,
@@ -3478,7 +3524,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._convergence_metric = convergence_metric
 
     def set_cross_validation_options(self, nsplits=5, nmax_folds=3, nmax_loo=10, cv_scale=1.0,
-                                     cv_metric='sum_abs', group_kfold=False):
+                                     cv_metric='sum_abs', group_kfold=False, batch_size=None):
         """
         Configure the cross-validation options used to select Voronoi refinement
         regions.
@@ -3578,36 +3624,50 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             For fold-size-independent ranking, use ``cv_metric="rmse"``.
         """
         check_value_is_nonnegative_integer(nsplits, "nsplits")
-        self._nsplits = nsplits
+        self._nsplits = int(nsplits)
+
         check_value_is_positive_integer(nmax_folds, "nmax_folds")
-        self._nmax_folds = nmax_folds
-        if isinstance(nmax_loo, str):
-            if nmax_loo != 'all':
-                raise ValueError(f"If the {__class__} 'nmax_loo' parameter is a string, "+
-                    "it must be 'all'.")
-        else:
-            try:   
-                check_value_is_positive_integer(nmax_loo, "nmax_loo")
-            except TypeError:
-                raise TypeError(f"The {__class__} 'nmax_loo' parameter must be a positive integer "+
-                                f"or the string 'all'. Recieved value {nmax_loo}.")
-            except  ValueError:
-                raise ValueError(f"The {__class__} 'nmax_loo' parameter must be a positive integer "+
-                                f"recieved value {nmax_loo}.")
-        self._nmax_loo = nmax_loo
-        _validate_cv_scale(cv_scale)
-        self._cv_scale = cv_scale
-        check_value_is_nonempty_str(cv_metric, "cv_metric")
-        self._cv_metric = cv_metric
-        valid_cv_metrics = ['rmse', 'mae', 'abs', 'sum_abs', 'nrmse', 'nlpd']
-        if self._cv_metric not in valid_cv_metrics:
-            raise ValueError(
-                "cv_metric not implemented. 'cv_metric' must be one of "
-                f"{valid_cv_metrics}"
-            )
+        self._nmax_folds = int(nmax_folds)
+
+        self._nmax_loo = self._validate_nmax_loo(nmax_loo)
+        self._cv_scale = _validate_cv_scale(cv_scale)
+        self._cv_metric = self._validate_cv_metric(cv_metric)
+
         check_value_is_bool(group_kfold, "group_kfold")
         self._group_kfold = group_kfold
-    
+
+        self.set_batch_size(batch_size)
+
+    def _validate_nmax_loo(self, nmax_loo):
+        """
+        Validate the number of LOO-ranked candidates retained after KFCV filtering.
+        """
+        if isinstance(nmax_loo, str):
+            nmax_loo = nmax_loo.lower().strip()
+            if nmax_loo == "all":
+                return nmax_loo
+            raise ValueError("If nmax_loo is a string, it must be 'all'.")
+
+        check_value_is_positive_integer(nmax_loo, "nmax_loo")
+        return int(nmax_loo)
+
+
+    def _validate_cv_metric(self, cv_metric):
+        """
+        Validate and normalize the physical cross-validation error metric.
+        """
+        check_value_is_nonempty_str(cv_metric, "cv_metric")
+        cv_metric = cv_metric.lower().strip()
+
+        valid_cv_metrics = ("rmse", "mae", "abs", "sum_abs", "nrmse", "nlpd")
+        if cv_metric not in valid_cv_metrics:
+            raise ValueError(
+                "cv_metric not implemented. cv_metric must be one of "
+                f"{valid_cv_metrics}. Received '{cv_metric}'."
+            )
+
+        return cv_metric
+
     def _format_output_for_surrogate_gen(self, results):
         from matcal.core.data import convert_data_to_dictionary
         model_name = self._get_model_names()[0]
@@ -4251,7 +4311,7 @@ class VoronoiTessellation:
         """ Identify which points in self._all_points are ghost points"""
         self._boo = []
         for point in self._all_points:
-            if point in self._ghost_points:
+            if np.any(np.all(np.isclose(self._ghost_points, point), axis=1)):
                 self._boo.append(True)
             else:
                 self._boo.append(False)
@@ -4279,17 +4339,43 @@ class VoronoiTessellation:
         finite_indices = self._finite_vertex_indices(region)
         return self._vertices_from_indices(finite_indices)
 
+    def _finite_vertex_indices(self, region):
+        """
+        Return valid finite Voronoi vertex indices from a region list.
+
+        SciPy uses ``-1`` to mark infinite vertices. The updated bounded-region
+        logic uses ``-2`` for vertices that are infinite or outside the parameter
+        bounds. Both are excluded. Valid vertex index ``0`` is retained.
+        """
+        return [int(idx) for idx in region if int(idx) >= 0]
+
+
+    def _vertices_from_indices(self, vertex_indices):
+        """
+        Return Voronoi vertex coordinates for a list of valid finite vertex indices.
+
+        Returns ``None`` if no valid finite vertices are available.
+        """
+        if len(vertex_indices) == 0:
+            return None
+
+        return self.vor.vertices[vertex_indices]
+
     def _get_clipped_region_vertices(self, region_index, region):
         """
         Return region vertices clipped or filtered to the parameter bounds.
+
+        Finite vertices, clipped ridge-boundary intersections, and associated
+        boundary vertices are combined, filtered for finite in-bound coordinates,
+        and uniqued.
         """
         updated_region = self.identify_vertices_outside_bounds(region)
         vertices = self._vertices_from_updated_region(region_index, region, updated_region)
-
-        if vertices is None or len(vertices) == 0:
-            return None
-
         vertices = self._append_boundary_vertices_for_region(region_index, vertices)
+        vertices = self._filter_vertices_inside_bounds(vertices)
+
+        if vertices is None or vertices.shape[0] == 0:
+            return None
 
         return np.unique(np.atleast_2d(vertices), axis=0)
 
@@ -4312,15 +4398,20 @@ class VoronoiTessellation:
         """
         Append boundary-corner vertices associated with a bounded Voronoi region.
         """
-        if self.finite_only:
-            return vertices
+        pieces = []
 
-        boundary_vertices = self._get_boundary_vertices_for_region(region_index)
+        if vertices is not None and len(vertices) > 0:
+            pieces.append(np.atleast_2d(vertices))
 
-        if boundary_vertices is None:
-            return vertices
+        if not self.finite_only:
+            boundary_vertices = self._get_boundary_vertices_for_region(region_index)
+            if boundary_vertices is not None and len(boundary_vertices) > 0:
+                pieces.append(np.atleast_2d(boundary_vertices))
 
-        return np.concatenate((np.atleast_2d(vertices), boundary_vertices))
+        if len(pieces) == 0:
+            return None
+
+        return np.concatenate(pieces, axis=0)
 
     def _get_boundary_vertices_for_region(self, region_index):
         """
@@ -4336,6 +4427,26 @@ class VoronoiTessellation:
             return None
 
         return self.boundary_points[boundary_indices]
+
+    def _filter_vertices_inside_bounds(self, vertices):
+        """
+        Keep only finite vertices inside the parameter bounds.
+        """
+        if vertices is None:
+            return None
+
+        vertices = np.atleast_2d(np.asarray(vertices, dtype=float))
+
+        if vertices.size == 0:
+            return np.empty((0, self.ndim))
+
+        lb = self.bounds[:, 0]
+        ub = self.bounds[:, 1]
+
+        mask = np.isfinite(vertices).all(axis=1)
+        mask &= ((vertices >= lb) & (vertices <= ub)).all(axis=1)
+
+        return vertices[mask]
 
     def get_voronoi_vertices(self, identify_outside_vertices=True):
         """
@@ -4463,8 +4574,8 @@ class VoronoiTessellation:
                 return None
 
         else:
-            region_vertices = self.vor.vertices[region]
-
+            finite_indices = [idx for idx in region if idx >= 0]
+            region_vertices = self.vor.vertices[finite_indices]
         return region_vertices
 
     def snip_ridge_vertices(self, region_index, region_point_index, region_tuple):
@@ -4499,6 +4610,9 @@ class VoronoiTessellation:
     def _snip_one_ridge(self, ridge_id, region_dict, region_index):
         """
         Return clipped vertices generated from one Voronoi ridge.
+
+        Ridges containing SciPy's ``-1`` infinite vertex marker are skipped to avoid
+        accidental negative indexing.
         """
         ridge_vertices = self.vor.ridge_vertices[ridge_id]
 
@@ -4518,17 +4632,27 @@ class VoronoiTessellation:
             if clipped is not None:
                 clipped_vertices.append(clipped)
 
-        return clipped_vertices
-
+        return self._unique_vertex_list(clipped_vertices)
+    
     def _outside_inside_ridge_edges(self, updated_vertices):
         """
         Yield ridge-edge positions with one outside and one finite inside vertex.
-        """
-        positions = range(len(updated_vertices))
 
-        for a, b in zip(positions, np.roll(list(positions), -1)):
-            if updated_vertices[a] == -2 and updated_vertices[b] >= 0:
+        The returned tuple is always ``(outside_position, inside_position)``.
+        Both edge orientations are handled.
+        """
+        positions = list(range(len(updated_vertices)))
+
+        for a, b in zip(positions, np.roll(positions, -1)):
+            a_outside = updated_vertices[a] == -2
+            b_outside = updated_vertices[b] == -2
+            a_finite = updated_vertices[a] >= 0
+            b_finite = updated_vertices[b] >= 0
+
+            if a_outside and b_finite:
                 yield a, b
+            elif b_outside and a_finite:
+                yield b, a
 
     def _snip_one_edge(self, origin_vertex_id, end_vertex_id, region_index):
         """
@@ -4550,19 +4674,44 @@ class VoronoiTessellation:
 
     def _new_vertex_is_valid_for_region(self, new_vertex, region_index):
         """
-        Return True if a clipped vertex is finite, in-region, and in-bounds.
+        Return True if a clipped vertex is finite and inside the boundary hull.
+
+        The explicit Voronoi-region membership check is intentionally omitted here
+        because clipped boundary intersections can be numerically assigned to an
+        adjacent or ghost-influenced region even when they are valid for bounding
+        the physical cell.
         """
         if new_vertex is None:
             return False
 
-        if region_index not in self.get_voronoi_region(new_vertex)[0]:
+        new_vertex = np.asarray(new_vertex, dtype=float)
+
+        if not np.isfinite(new_vertex).all():
             return False
 
-        return self.bhullD.find_simplex(new_vertex) >= 0
+        return self.bhullD.find_simplex(new_vertex, tol=1e-10) >= 0
+
+    def _unique_vertex_list(self, vertices):
+        """
+        Return a list of unique vertices from a possibly duplicated vertex list.
+        """
+        if len(vertices) == 0:
+            return []
+
+        vertices = np.unique(np.asarray(vertices, dtype=float), axis=0)
+        return [vertex for vertex in vertices]
 
     def get_normal_ray_direction(self, ray_origin, ray_end):
+        """
+        Return the normalized direction from ``ray_origin`` to ``ray_end``.
+        """
         ray_direction = ray_end - ray_origin
-        return ray_direction / np.linalg.norm(ray_direction)
+        norm = np.linalg.norm(ray_direction)
+
+        if norm <= 0:
+            raise ValueError("Cannot normalize a zero-length Voronoi ray direction.")
+
+        return ray_direction / norm
         
     def find_boundary_hull_ray_crossings(self, U, z):
         """Find where a ray crosses the convex hull of the boundary.
@@ -4586,17 +4735,23 @@ class VoronoiTessellation:
         return np.min(alpha[alpha >0]) * U + z
 
     def find_furthest_vertex(self, region_index, identify_outside_vertices=True):
-        """Find the vertex that has the greatest distance from the cell centroid."""
-
+        """
+        Find the Voronoi vertex farthest from the region seed.
+        """
         self.raise_if_invalid_region_index(region_index)
-        vertices = self.get_region_vertices(region_index,\
-            identify_outside_vertices=identify_outside_vertices)
-        if vertices is not None:
-            centroid = self.get_region_seed(region_index)
-            distances = np.linalg.norm(vertices - centroid, axis=1)
-            furthest_vertex_index = np.argmax(distances)
-        else:
-            furthest_vertex_index = None
+
+        vertices = self.get_region_vertices(
+            region_index,
+            identify_outside_vertices=identify_outside_vertices,
+        )
+
+        if vertices is None or len(vertices) == 0:
+            return None, None
+
+        centroid = self.get_region_seed(region_index)
+        distances = np.linalg.norm(vertices - centroid, axis=1)
+        furthest_vertex_index = int(np.argmax(distances))
+
         return vertices, furthest_vertex_index
 
     def raise_if_invalid_region_index(self, region_index):
@@ -5457,48 +5612,3 @@ def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
         f"'{metric}'. Supported metrics are 'rmse', 'mae', 'abs', "
         "'sum_abs', 'nrmse', and backward-compatible 'nlpd'."
     )
-
-def _validate_cv_scale(cv_scale):
-    """
-    Validate and normalize the cross-validation response scaling option.
-
-    Accepted values are ``None``, a positive scalar, a positive array-like
-    object, or the string ``"cbrt"``.
-    """
-    if cv_scale is None:
-        return None
-
-    if isinstance(cv_scale, str):
-        cv_scale = cv_scale.lower().strip()
-        if cv_scale == "cbrt":
-            return cv_scale
-        raise ValueError("cv_scale string option must be 'cbrt'.")
-
-    scale = np.asarray(cv_scale, dtype=float)
-    if scale.size == 0 or np.any(~np.isfinite(scale)) or np.any(scale <= 0):
-        raise ValueError("cv_scale must contain finite positive values.")
-
-    return float(scale) if scale.ndim == 0 else scale
-
-
-def _get_valid_kfold_split_count(nsplits, n_samples):
-    """
-    Return a valid number of K-fold splits for the current sample count.
-
-    If the requested split count is larger than the sample count, it is reduced
-    to a valid value and a warning is emitted.
-    """
-    check_value_is_nonnegative_integer(nsplits, "nsplits")
-
-    if nsplits == 0:
-        return 0
-
-    if n_samples < 2:
-        raise ValueError("At least two samples are required for K-fold CV.")
-
-    if nsplits <= n_samples:
-        return int(nsplits)
-
-    new_nsplits = min(max(2, n_samples // 2), n_samples)
-    logger.warning(f"Reducing nsplits from {nsplits} to {new_nsplits}.")
-    return int(new_nsplits)

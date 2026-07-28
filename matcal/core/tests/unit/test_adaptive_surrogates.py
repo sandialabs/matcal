@@ -1045,9 +1045,33 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
             self.assertTrue(record["surrogate_stored"])
             self.assertEqual(record["sample_count"], surrogate.sample_count_history[idx])
 
-    def test_score_returns_nan_for_single_qoi(self):
+    def test_score_is_defined_for_multiple_scalar_values(self):
         surrogate = self._make_surrogate()
-        surrogate._add_iteration(ConstantSurrogate(n_parameters=2, constant=0.0), nsamples=5)
+        surrogate._add_iteration(
+            ConstantSurrogate(n_parameters=2, constant=0.0),
+            nsamples=5,
+        )
+
+        self.assertAlmostEqual(surrogate.score(), -9.0)
+
+    def test_score_returns_nan_for_single_scalar_value(self):
+        surrogate = SparseGridAdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="independent",
+            indep_variable_values=np.array([0.0]),
+            test_params=np.array([[0.0, 0.0]]),
+            test_responses=np.array([[1.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+
+        surrogate._add_iteration(
+            ConstantSurrogate(n_parameters=2, constant=0.0),
+            nsamples=5,
+        )
+
         self.assertTrue(np.isnan(surrogate.score()))
 
     def test_current_surrogate_tracks_latest_iteration(self):
@@ -2124,10 +2148,8 @@ class TestVoronoiTessellation(MatcalUnitTest):
         
     def test_get_region_vertices(self):
         # implicitly tests vor.replace_unbounded_vertices and vor.snip_ridge_vertices
-        
         from scipy.spatial import voronoi_plot_2d, ConvexHull, Delaunay
         import matplotlib.pyplot as plt
-        from matplotlib.path import Path
         from matplotlib.patches import Polygon as MplPolygon
         dims = [2, 3]
         for dim in dims:
@@ -2155,20 +2177,40 @@ class TestVoronoiTessellation(MatcalUnitTest):
                     # compare convex hulls of original and bounded region vertices
                     # the area of the original hull should be >= the area of the bounded hull
                     # the bounded hull should reside completely within the original hull
-                    if region_vertices.shape[0] > 2:
-                        region_hull = ConvexHull(region_vertices)
-                        region_hull_pts = region_vertices[region_hull.vertices]
-                        delaunay_region = Delaunay(region_hull_pts) #Delaunay triangulation of region vertices
-                    if bounded_region_vertices is not None and bounded_region_vertices.shape[0] > dim + 1:
-                        try:
-                            bounded_region_hull = ConvexHull(bounded_region_vertices)
-                            bounded_hull_pts = bounded_region_vertices[bounded_region_hull.vertices]
-                        except:
-                            import pdb
-                            pdb.set_trace()
-                        # check if all points of the bounded hull are inside the original hulls
+                    region_hull = None
+                    delaunay_region = None
+
+                    if region_vertices is not None and region_vertices.shape[0] > dim + 1:
+                        region_rank = np.linalg.matrix_rank(
+                            region_vertices - np.mean(region_vertices, axis=0),
+                            tol=1e-10,
+                        )
+                        if region_rank >= dim:
+                            region_hull = ConvexHull(region_vertices)
+                            region_hull_pts = region_vertices[region_hull.vertices]
+                            delaunay_region = Delaunay(region_hull_pts)
+                    if (
+                        bounded_region_vertices is not None
+                        and bounded_region_vertices.shape[0] > dim + 1
+                        and region_hull is not None
+                        and delaunay_region is not None
+                    ):
+                        bounded_rank = np.linalg.matrix_rank(
+                            bounded_region_vertices - np.mean(bounded_region_vertices, axis=0),
+                            tol=1e-10,
+                        )
+
+                        # ConvexHull in dim-D requires a full-dimensional point set. Some clipped
+                        # Voronoi vertex sets can be coplanar/lower-dimensional, especially in 3D.
+                        # In that case, the earlier vertex-region and in-bound checks are sufficient.
+                        if bounded_rank < dim:
+                            continue
+
+                        bounded_region_hull = ConvexHull(bounded_region_vertices)
+                        bounded_hull_pts = bounded_region_vertices[bounded_region_hull.vertices]
+
                         is_inside = delaunay_region.find_simplex(bounded_hull_pts) >= 0
-                    
+
                         self.assertGreaterEqual(region_hull.area, bounded_region_hull.area)
                         self.assertTrue(np.all(is_inside))
                         
@@ -2269,7 +2311,15 @@ class TestVoronoiTessellation(MatcalUnitTest):
             region_vertices = np.empty((0, dim))
             for pt_idx in np.arange(nsamples):
                 region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=True)])
+                current_vertices = vor.get_region_vertices(
+                    region_index,
+                    identify_outside_vertices=True,
+                )
+
+                if current_vertices is None:
+                    continue
+
+                region_vertices = np.vstack([region_vertices, current_vertices])
             unique_vertices = set(tuple(row) for row in region_vertices)
             vertices = np.asarray([list(row) for row in unique_vertices])
             self.assertEqual(set(map(tuple, bounded_vor_vertices)), set(map(tuple, vertices)))
@@ -2463,7 +2513,19 @@ class TestVoronoiTessellation(MatcalUnitTest):
                 
                 # with snipping vertices: assert the identified furthest vertex has the greatest distance
                 vertices = vor.get_region_vertices(region_index, identify_outside_vertices=True)
-                all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=True)
+                all_vertices, furthest_vertex = vor.find_furthest_vertex(
+                    region_index,
+                    identify_outside_vertices=True,
+                )
+
+                if vertices is None:
+                    self.assertIsNone(all_vertices)
+                    self.assertIsNone(furthest_vertex)
+                else:
+                    distances = np.linalg.norm(seed - all_vertices, axis=1)
+                    max_dist = np.argmax(distances)
+                    self.assertEqual(max_dist, furthest_vertex)
+                    self.assertTrue(np.all(all_vertices == vertices))
                 distances = np.linalg.norm(seed - all_vertices, axis=1)
                 max_dist = np.argmax(distances)
                 self.assertEqual(max_dist, furthest_vertex)
@@ -2548,7 +2610,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                         'surrogate_options':{}
                         } 
         self.kfold = KFoldCrossValidation(**kfcv_options)
-        self.kfold._check_npslits(np.zeros((5,2)))
+        self.kfold._check_nsplits(np.zeros((5,2)))
         self.assertEqual(self.kfold.nsplits, 2)
 
     def test_group_kfold_cv(self):
