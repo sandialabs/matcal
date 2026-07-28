@@ -302,6 +302,10 @@ def _get_valid_kfold_split_count(nsplits, n_samples):
     if nsplits == 0:
         return 0
 
+    if nsplits == 1:
+        raise ValueError("nsplits must be 0 to disable K-fold CV or at least 2.")
+
+
     if n_samples < 2:
         raise ValueError("At least two samples are required for K-fold CV.")
 
@@ -3523,7 +3527,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._eps = eps
         self._convergence_metric = convergence_metric
 
-    def set_cross_validation_options(self, nsplits=5, nmax_folds=3, nmax_loo=10, cv_scale=1.0,
+    def set_cross_validation_options(self, nsplits=10, nmax_folds=3, nmax_loo=10, cv_scale=1.0,
                                      cv_metric='sum_abs', group_kfold=False, batch_size=None):
         """
         Configure the cross-validation options used to select Voronoi refinement
