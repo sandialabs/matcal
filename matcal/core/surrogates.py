@@ -14,7 +14,6 @@ from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.state import State
 from matcal.core.utilities import (check_value_is_nonempty_str, 
                                    check_item_is_correct_type, 
-                                   _time_interpolate, 
                                    _find_smallest_rect, 
                                    check_value_is_bool)
 
@@ -1244,13 +1243,13 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
                                         _root_mean_squared_error)
     max_train_score = _get_field_scores(surrogate, train_params, train_data, 
                                         _max_error_inf_norm)
-    r2_train_score = _get_field_scores(surrogate, train_params, train_data, r2_score)
+    r2_train_score = _get_field_scores(surrogate, train_params, train_data, _global_r2_score)
 
     rmse_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _root_mean_squared_error)
     max_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _max_error_inf_norm)
-    r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score, 
+    r2_test_score = _get_field_scores(surrogate, test_params, test_data, _global_r2_score, 
                                           needs_length=True)
 
 
@@ -1568,3 +1567,20 @@ def _root_mean_squared_error(test_values, surrogate_values):
 def _max_error_inf_norm(test_values, surrogate_values):
     #expects arrays to be sized (n_samples, n_qois)
     return np.linalg.norm((test_values - surrogate_values).flatten(), ord=np.inf)
+
+
+def _global_r2_score(test_responses, surrogate_values):
+    """
+    Compute a global R2 score over all scalar response values.
+
+    This treats all test samples and QoI locations as one pooled set of scalar
+    observations. The score is defined when at least two scalar values are
+    available.
+    """
+    test_responses = np.asarray(test_responses, dtype=float).ravel()
+    surrogate_values = np.asarray(surrogate_values, dtype=float).ravel()
+
+    if test_responses.size < 2:
+        return np.nan
+
+    return r2_score(test_responses, surrogate_values)
