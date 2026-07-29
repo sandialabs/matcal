@@ -82,11 +82,11 @@ class SurrogateGenerator:
         :param interpolation_field: the field that will be the independent field for surrogate results.            
         :type interpolation_field: str
 
-        :interpolation_locations: the number of interpolation locations for the 
+        :param interpolation_locations: the number of interpolation locations for the 
             surrogate to output at or an array-like of values for the interpolation locations.
             If a number of locations is given, the surrogate will linearly space the points
             over the min and max value for the interpolation field for all evaluations.
-        :interpolation_locations: int or Array-like
+        :type interpolation_locations: int or Array-like
         
         :param surrogate_type: What type of surrogate to run. Details of each are detailed in the 
             surrogate's documentation. Currently the only available 
@@ -106,7 +106,7 @@ class SurrogateGenerator:
             information to test a surrogate generated
             from a MatCal sampling study. This data is only used and must
             be provided if training_fraction == 1.0.
-        :type test_evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        :type test_eval_info: :class:`~matcal.core.study_base.StudyResults`
         
         :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
             Please refer to the sklearn documentation for more information for what can be passed to 
@@ -140,7 +140,7 @@ class SurrogateGenerator:
            generate results. 
            If no argument is passed, the surrogate generator will 
            expect the study to have a single model. 
-        :type eval_set_key: str 
+        :type model_name: str or None 
 
         :param state: This specifies the state for the model for which the surrogate 
             will generate results. It can be either a :class:`~matcal.core.state.State` 
@@ -159,6 +159,8 @@ class SurrogateGenerator:
    
     def set_PCA_details(self, decomp_var=.99, reconstruction_error=None):
         """
+        Set options that control how many PCA modes are retained.
+
         :param decomp_var: What level of the total variance should be accounted for in the PCA
             decomposition. Values closer to 1 will keep more modes than lower values. The more modes
             kept the more difficult it can become to train the predictors. A default value of .99 is 
@@ -166,8 +168,14 @@ class SurrogateGenerator:
             seen behavior, and for an appropriate data set can lead
             to very few modes being retained. 
         :type decomp_var: float
+
+        :param reconstruction_error: Optional reconstruction-error tolerance used to
+            tune the number of retained modes. If provided, this overrides variance-based
+            mode selection.
+        :type reconstruction_error: float or None
         """
         self._decomp_tool = _assign_decomp(decomp_var, reconstruction_error)
+        
 
     def set_surrogate_details(self, surrogate_type="PCA Multiple Regressors", 
                               regressor_type="Gaussian Process", 
@@ -185,8 +193,9 @@ class SurrogateGenerator:
             better performance but uses more memory than the monolithic surrogate. 
         :type surrogate_type: str
 
-        :param training_fraction: What fraction of the source data to use as 
-            training data. Value should be 0 < training_fraction < 1. 
+        :param training_fraction: Fraction of source data used for training. Must satisfy
+            ``0 < training_fraction <= 1``. If equal to ``1.0``, ``test_eval_info`` must
+            be provided.
         :type training_fraction: float
 
         :param regressor_type: The identifier key for what core regressor 
@@ -261,23 +270,16 @@ class SurrogateGenerator:
         """
         Generates a surrogate based on the information passed to it upon initialization
 
-        :parameter save_filename: the base of a filename without any extensions 
+        :param save_filename: the base of a filename without any extensions 
             to be used to record the surrogate. 
         :type save_filename: str
 
-        :parameter preprocessing_function: an optional function that modifies
+        :param preprocessing_function: an optional function that modifies
             the model data before it is passed to the tools that generate the 
             surrogate model.
         :type preprocessing_function: Callable
 
-        :parameter source_data_dict: a dictionary of training data from which to generate
-            the surrogate. Its keys are the field names for the data, rows contain
-            data samples and  and columns are the data pts at each independent variable
-            data point. Not intended to be an argument for users. Passing data this way 
-            will take the place of any other data source. 
-        :type source_data_dict: dict(str, Array-Like)
-            
-        :parameter plot_n_worst: Generate a number of plots that show the worst 
+        :param plot_n_worst: Generate a number of plots that show the worst 
             recreations made by the surrogate. The number of plots made is equal to the 
             value passed to this argument. Any values less than 1 will result in no
             plots being generated or worst analysis being performed.
@@ -1093,14 +1095,26 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         By executing a call on the surrogate object. [Example my_surrogate(my_parameters)]
         return a dictionary of the different field predictions
 
+        If passing a batch array with shape ``(n_samples, n_parameters)``, call with
+        ``batch_evaluate=True``. For a single sample, pass one positional value per
+        parameter, keyword arguments for all parameters, or a parameter dictionary.
+
+        :param batch_evaluate: If ``True``, treat the first positional argument as a
+            batch parameter array.
+        :type batch_evaluate: bool
+
+        :param transpose: If ``True``, transpose the batch array before evaluation.
+        :type transpose: bool
+
         :param parameters: parameter values to evaluate the surrogate at.
             If not a dict, the parameters are expected to be in an order as detailed by 
             :meth:`~matcal.core.surrogates.MatCalPCASurrogateBase.parameter_order`. 
             As an array, the input should have shape (n_samples, n_parameters).
         :type parameters: np.ndarray or list or dict
 
-        :return: A dictionary of the various field predictions.
-        :rtype: dict
+        :return: Ordered dictionary containing predicted fields and, when applicable,
+            the interpolation field.
+        :rtype: OrderedDict
         """
         param_names = self._parameter_scaler.parameter_order
         params_array = _process_surrogate_args_call(param_names, *args, 

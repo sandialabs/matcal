@@ -2130,12 +2130,6 @@ class AdaptiveSurrogate:
         )
         return figures, axes_groups, worst_indices
 
-    def plot_worst_n(self, n=5, **kwargs):
-        """
-        Lowercase alias for :meth:`plot_worst_N`.
-        """
-        return self.plot_worst_N(N=n, **kwargs)
-
     def _validate_plot_worst_N_inputs(self, N, n_figures, metric, error_type):
         check_value_is_positive_integer(N, "N")
         check_value_is_positive_integer(n_figures, "n_figures")
@@ -2585,7 +2579,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         When
         the *rmse* falls below ``rmse_goal`` **or** the
         *maximum absolute* error falls below ``max_abs_error_goal`` the training
-        loop terminates (provided at least two batches have been evaluated).
+        loop terminates after at least one surrogate has been scored.
 
         :param rmse_goal: Desired upper bound for the root mean squared
             error. Must be a positive number. 
@@ -2634,8 +2628,8 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         By default we test against ``max_training_samples``/20 or 
         the number of parameters*10, whichever is greater.
         
-        :param max_training_samples: desired number of test samples
-        :type max_training_samples: int
+        :param number_of_test_samples: Number of test samples used for scoring the adaptive surrogate.
+        :type number_of_test_samples: int
         """
         self._test_samples_user_set = True
         check_value_is_positive_integer(number_of_test_samples, "number_of_test_samples")
@@ -2646,7 +2640,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
     def set_max_training_samples(self, max_training_samples=1000):
         """
         Set the maximum number of training samples you want to be run for 
-        Sparse Grid surrogate generation. If the convergence criteria is not reached, 
+        adaptive surrogate generation. If the convergence criteria is not reached, 
         the training for the surrogate will stop after max_training_samples has been 
         reached.
         
@@ -3383,10 +3377,10 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def set_number_of_initial_samples(self, num_initial_samples=None):
         """
-        :param num_initial_samples: The number of samples to initiate the algorithm with.
-        The initial samples are used to train the initial surrogate and built the 
-        initial voronoi tessellation. Default 10*ndim.
-        :type initial_training_length: None or int
+        :param num_initial_samples: Number of initial training samples used before
+            adaptive Voronoi refinement begins. If ``None``, defaults to
+            ``10 * number_of_parameters``.
+        :type num_initial_samples: int or None
         """
         if num_initial_samples is None:
             self._num_initial_samples = 10*self._number_parameters
@@ -3401,6 +3395,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         If ``batch_size`` is ``None``, the legacy behavior is preserved by using
         ``nmax_loo`` when it is an integer. If ``nmax_loo='all'``, the default
         batch size is one.
+
+        :param batch_size: Number of new Voronoi sample locations requested per adaptive
+            batch. If ``None``, defaults to ``nmax_loo`` when ``nmax_loo`` is an integer,
+            or to one when ``nmax_loo='all'``.
+        :type batch_size: int or None
         """
         if batch_size is None:
             if isinstance(self._nmax_loo, (int, np.integer)):
@@ -3423,7 +3422,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """Set options pertaining to the voronoi sampling algorithm. Properties
         that can be altered are listed below.
         
-        :param vornoi_type: Defines which Vornoi-based sampling strategy to use.
+        :param voronoi_type: Defines which Vornoi-based sampling strategy to use.
             Supported options are:
                 * 'full': Constructs the full Voronoi tessellation over all points (Default)
                 * 'local': Constructs a local Voronoi tessellation using only nearby
@@ -3504,9 +3503,15 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def set_surrogate_options(self, **kwargs):
         """
-        :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
-            Please refer to the sklearn documentation for more information for what can be passed to 
-            the predictors. 
+        Set keyword options forwarded to :class:`matcal.core.surrogates.SurrogateGenerator`.
+
+        These options may include surrogate-generation options such as ``decomp_var``,
+        ``surrogate_type``, ``regressor_type``, or regressor-specific keyword arguments,
+        depending on what :class:`SurrogateGenerator` accepts.
+
+        :param kwargs: Keyword options passed to surrogate generation during adaptive
+            training and cross-validation surrogate fitting.
+        :type kwargs: dict
         """
         self._surrogate_options = kwargs
 
@@ -3515,16 +3520,19 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         Convergence is determined by comparing RMSE or NLPD of
         surrogate between two successive batches.
 
-        :param convergence_metric: Choose from root mean squared error ('rmse') 
-            or negative log posterior density ('nlpd') to track surrogate performance
-            at each batch iteration. This metric is used to determine if the surrogate
-            has converged according to eps. 
-        :type convergence metric: str
-        
-        :param eps: Tolerance for surrogate convergence. 
-        :type eps: float 
+        :param convergence_metric: Surrogate latent-space metric used for convergence.
+            Supported values are ``"rmse"``, ``"nlpd"``, and ``"score"``.
+        :type convergence_metric: str
+
+        :param eps: Absolute tolerance for the change in the selected convergence metric
+            between successive adaptive batches.
+        :type eps: float
         """
         self._eps = eps
+        valid_metrics = ("rmse", "nlpd", "score")
+        if convergence_metric not in valid_metrics:
+            raise ValueError(f"Selected metric \"{convergence_metric}\" is not valid."
+                             f" Use one of the following: {valid_metrics}")
         self._convergence_metric = convergence_metric
 
     def set_cross_validation_options(self, nsplits=10, nmax_folds=3, nmax_loo=10, cv_scale=1.0,
@@ -3612,6 +3620,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             ``KFold``.
         :type group_kfold: bool
 
+        :param batch_size: Number of Voronoi-selected sample locations requested per
+            adaptive batch. If ``None``, the batch size defaults to ``nmax_loo`` when
+            ``nmax_loo`` is an integer, or to one when ``nmax_loo='all'``.
+        :type batch_size: int or None
+        
         :raises TypeError: If input types are invalid.
         :raises ValueError: If numeric options are out of range, if ``nmax_loo`` is
             a string other than ``"all"``, or if ``cv_metric`` is unsupported.
@@ -3707,7 +3720,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             if new_points.size == 0:
                 logger.warning("No valid Voronoi sample locations found. Stopping.")
                 break
-
+            self._remove_existing_training_points(new_points, training_params)
             self._evaluate_voronoi_batch(new_points)
             training_params, training_data = self._train_surrogate_with_current_results()
             batch_number += 1
@@ -3745,6 +3758,21 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         )
 
         return self._check_points_within_bounds(new_points)
+
+    def _remove_existing_training_points(self, candidate_points, training_params, atol=1e-12):
+        kept = []
+
+        for point in np.atleast_2d(candidate_points):
+            already_exists = np.any(
+                np.all(np.isclose(training_params, point, atol=atol, rtol=0.0), axis=1)
+            )
+            if not already_exists:
+                kept.append(point)
+
+        if len(kept) == 0:
+            return np.empty((0, self._number_parameters))
+
+        return np.asarray(kept, dtype=float)
 
     def _evaluate_voronoi_batch(self, new_points):
         """
@@ -4203,7 +4231,17 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
       super()._add_parameter_evaluation(**p)
 
     def add_parameter_evaluation(self, **parameters):
-        """"""
+        """
+        Manual parameter-evaluation insertion for Voronoi adaptive studies is disabled.
+
+        Voronoi adaptive studies choose new parameter evaluations internally based on
+        the current surrogate error and Voronoi tessellation. Users should not manually
+        add evaluations.
+
+        :raises StudyInputError: Always raised because manual evaluations are not
+            supported.
+
+        """
         raise self.StudyInputError("Users cannot add parameter evaluations to"
                                    " a VoronoiAdaptiveSurrogateStudy.")
 
@@ -4726,7 +4764,9 @@ class VoronoiTessellation:
         :param z: Ray origin.
         :type z: np.ndarray
 
-        :return: Returns a list of intersection points with the convex hull.
+        :return: Closest positive ray intersection with the boundary hull, or ``None``
+            if the ray has no positive intersection.
+        :rtype: numpy.ndarray or None
         """
         V = self.boundary_hull_V
         b = self.boundary_hull_b
@@ -4838,7 +4878,7 @@ class VoronoiTessellation:
         """Return the index of the seed of the Voronoi cell that contains the given point.
             If the point lies on a ridge or vertex, multiple seeds are returned."""
         closest_seed_index = self.get_closest_point(self.vor.points, point)
-        return closest_seed_index[0]
+        return closest_seed_index
 
     def get_closest_point(self, candidates, target_point):
         """Return the index of the candidate point that has the min distance
@@ -4846,7 +4886,7 @@ class VoronoiTessellation:
         distances = np.linalg.norm(candidates - target_point, axis=1)
         min_dist = min(distances)
         closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-10))
-        return closest_candidate_index        
+        return closest_candidate_index[0]        
 
     def remove_invalid_rows(self, arr):
         """ Remove points from NumPy array that contain NaN or infinite values."""
@@ -5165,9 +5205,12 @@ class LeaveOneOutCrossValidation:
         :param y: Target values (ground truth).
         :type y: np.ndarray
 
-        :return: Returns the index of the sample with the greatest 
-            prediction error and the corresponding error value.
-            tuple: (index_of_max_error, max_error)
+        :param indices: Original sample indices for which leave-one-out validation is performed.
+        :type indices: array-like of int
+
+        :return: Dictionary mapping local LOO evaluation number to a tuple
+            ``(error, original_sample_index)``.
+        :rtype: dict[int, tuple[float, int]]
         """
         from joblib import Parallel, delayed
         

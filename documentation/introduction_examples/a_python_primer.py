@@ -8,7 +8,7 @@ Python Introduction
 -------------------
 
 Python is a very flexible coding language that has been around since the early 1990's. Python has a wealth of pre-written code that makes it very easy to 
-get up and running quicky with almost any coding project. MatCal is one of these libraries of pre-written code. Using MatCal does not require any 
+get up and running quickly with almost any coding project. MatCal is one of these libraries of pre-written code. Using MatCal does not require any 
 advanced knowledge of Python but understanding some of Python's fundamental operations is critical for using MatCal. 
 
 This primer covers the topics that are relevant for using MatCal. The selected topics are by no means an exhaustive list of the topics in Python
