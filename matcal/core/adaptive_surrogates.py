@@ -3720,8 +3720,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             if new_points.size == 0:
                 logger.warning("No valid Voronoi sample locations found. Stopping.")
                 break
-            self._remove_existing_training_points(new_points, training_params)
-            self._evaluate_voronoi_batch(new_points)
+            new_points = self._remove_existing_training_points(new_points, training_params)
+            if new_points.size == 0:
+                logger.warning("All proposed Voronoi points were duplicates. Stopping.")
+                break
+            self._evaluate_voronoi_batch(new_points)            
             training_params, training_data = self._train_surrogate_with_current_results()
             batch_number += 1
 
@@ -3759,14 +3762,32 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         return self._check_points_within_bounds(new_points)
 
-    def _remove_existing_training_points(self, candidate_points, training_params, atol=1e-12):
+    def _remove_existing_training_points(self, candidate_points, training_params, atol=1e-10):
+        """
+        Remove candidate points that are duplicates of existing training points or
+        duplicates of earlier accepted candidates in the same proposed batch.
+
+        A slightly looser absolute tolerance than machine epsilon is used because
+        Voronoi vertex calculations can introduce tiny floating-point perturbations.
+        """
         kept = []
 
-        for point in np.atleast_2d(candidate_points):
-            already_exists = np.any(
+        candidate_points = np.atleast_2d(np.asarray(candidate_points, dtype=float))
+        training_params = np.atleast_2d(np.asarray(training_params, dtype=float))
+
+        for point in candidate_points:
+            duplicate_training = np.any(
                 np.all(np.isclose(training_params, point, atol=atol, rtol=0.0), axis=1)
             )
-            if not already_exists:
+
+            duplicate_kept = False
+            if len(kept) > 0:
+                kept_array = np.atleast_2d(np.asarray(kept, dtype=float))
+                duplicate_kept = np.any(
+                    np.all(np.isclose(kept_array, point, atol=atol, rtol=0.0), axis=1)
+                )
+
+            if not duplicate_training and not duplicate_kept:
                 kept.append(point)
 
         if len(kept) == 0:
@@ -3832,11 +3853,20 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         Select candidate regions, build the Voronoi object, and choose new samples.
         """
         candidates = self._get_voronoi_candidate_locations(training_params, training_data)
-        self._worst_sample_locations = self._reduce_candidates(candidates)
+        candidates = self._reduce_candidates(candidates)
 
         logger.info(f"Initializing voronoi/tree for batch {iteration}")
         self._create_voronoi_tess(training_params)
 
+        # Paper-faithful one-at-a-time mode:
+        # preserve the candidate ranking and choose the first valid point.
+        if self._batch_size == 1:
+            point = self._find_first_valid_ranked_candidate_point(candidates)
+            if point is None:
+                return np.empty((0, self._number_parameters))
+            return np.atleast_2d(point)
+
+        self._worst_sample_locations = candidates
         return self._find_new_sample_locations()
 
     def _get_voronoi_candidate_locations(self, training_params, training_data):
@@ -3858,11 +3888,17 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def _reduce_candidates(self, candidates):
         """
-        Apply thinning, random down-selection, and the batch-size limit.
+        Apply optional thinning/random down-selection and then the batch-size limit.
+
+        In one-at-a-time mode, preserve full ranked candidate order so the first
+        valid candidate can be selected in a paper-faithful manner.
         """
         candidates = self._normalize_candidate_array(candidates)
 
         if candidates.shape[0] == 0:
+            return candidates
+
+        if self._batch_size == 1:
             return candidates
 
         if self._thin is not None:
@@ -4037,7 +4073,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         _, nearest_indices = self._tree.query(location, k=neighbor_count)
         return np.asarray(nearest_indices, dtype=int).reshape(-1)
 
-
     def _build_local_voronoi_tessellation(self, neighbor_points):
         """
         Build and return a local Voronoi tessellation from nearest neighbors.
@@ -4106,6 +4141,30 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         mask &= ((points >= lb) & (points <= ub)).all(axis=1)
 
         return points[mask]
+
+    def _find_first_valid_ranked_candidate_point(self, candidate_locations):
+        """
+        In one-at-a-time mode, try candidate locations in ranked order and return
+        the first valid new point that can be generated from a candidate Voronoi
+        region.
+
+        This preserves the KFCV->LOOCV ranking when geometry or duplication causes
+        the top-ranked candidate to fail.
+        """
+        candidate_locations = self._normalize_candidate_array(candidate_locations)
+
+        for location in candidate_locations:
+            new_point = self._find_new_sample_location_for_candidate(location)
+            if new_point is None:
+                continue
+
+            new_point = self._check_points_within_bounds(np.atleast_2d(new_point))
+            if new_point.size == 0:
+                continue
+
+            return new_point[0]
+
+        return None
 
     def _check_candidate_point_dimension(self, points):
         """
@@ -4181,7 +4240,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         Return training locations associated with the largest LOO errors.
         """
         self._worst_sample_locations = None
-        max_loo_indices = self._find_indices_of_n_largest_errors()
+        max_loo_indices = self._get_ordered_loo_candidate_indices()
 
         logger.info(
             "\n\tWorst errors when the following sample indices are left out of "
@@ -4215,7 +4274,19 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """
         items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
         return sorted(items, key=lambda x: x[1], reverse=True)
-        
+
+    def _get_ordered_loo_candidate_indices(self):
+        """
+        Return candidate training-sample indices ordered from largest LOO error
+        to smallest LOO error.
+
+        The number returned is limited by ``nmax_loo`` unless ``nmax_loo='all'``.
+        """
+        nkeep = self._get_number_of_loo_errors_to_keep()
+        sorted_items = self._sorted_loo_error_items()
+        indices = [item[2] for item in sorted_items[:nkeep]]
+        return np.asarray(indices, dtype=int)
+
     def _find_indices_of_n_largest_kf_errors(self):
         # Create a list of (key, error, sample_index) tuples
         items = [(key, value[0], value[1]) for key, value in self._kf.items()]
@@ -5092,9 +5163,14 @@ class KFoldCrossValidation:
         """
         from joblib import Parallel, delayed
 
+        split_list = list(splits)
+
+        for i, (_, te) in enumerate(split_list):
+            logger.debug(f"\tKFold split {i} test indices: {np.asarray(te, dtype=int)}")
+
         results = Parallel(n_jobs=1)(
             delayed(self.evaluate_fold)(tr, te, training_params, training_data, i)
-            for i, (tr, te) in enumerate(splits)
+            for i, (tr, te) in enumerate(split_list)
         )
 
         return {i: result for i, result in enumerate(results)}
@@ -5484,8 +5560,13 @@ def _evaluate_surrogate_physical_response(surrogate, X_test, target_field):
         if n_test_samples == 1:
             predicted_response = predicted_response.reshape(1, -1)
         else:
+            if predicted_response.size % n_test_samples != 0:
+                raise RuntimeError(
+                    "One-dimensional surrogate prediction cannot be reshaped into "
+                    f"(n_test_samples, n_qois). Prediction size is "
+                    f"{predicted_response.size}, n_test_samples is {n_test_samples}."
+                )
             predicted_response = predicted_response.reshape(n_test_samples, -1)
-
     elif predicted_response.ndim == 2:
         if predicted_response.shape[0] == n_test_samples:
             pass

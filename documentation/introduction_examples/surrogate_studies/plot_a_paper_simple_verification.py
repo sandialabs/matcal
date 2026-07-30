@@ -100,7 +100,7 @@ N_INITIAL_SAMPLES = INITIAL_GRID_POINTS_PER_DIMENSION**2
 FINAL_SAMPLE_COUNT = 150
 
 # Paper uses t = 500,000 validation points. Reduce for debugging if needed.
-N_TEST_SAMPLES = 10000
+N_TEST_SAMPLES = 1000
 
 # KFCV-Voronoi paper settings.
 K_FOLDS = 10
@@ -1021,20 +1021,21 @@ if __name__ == "__main__":
     # Run maximin LHS one-shot comparison at enough sample counts to give a
     # usable convergence curve.
     # -------------------------------------------------------------------------
-    lhs_results_by_count = run_lhs_comparison(
-        parameters,
-        model,
-        study.results_synchronizer,
-        validation_results,
-        sample_counts=LHS_SAMPLE_COUNTS,
-    )
 
-    print("\nLHS comparison NRMSE:")
-    for count in sorted(lhs_results_by_count):
-        print(
-            f"  LHS samples = {count:4d}, "
-            f"NRMSE = {lhs_results_by_count[count]['nrmse']:.6e}"
-        )
+    # lhs_results_by_count = run_lhs_comparison(
+    #     parameters,
+    #     model,
+    #     study.results_synchronizer,
+    #     validation_results,
+    #     sample_counts=LHS_SAMPLE_COUNTS,
+    # )
+
+    # print("\nLHS comparison NRMSE:")
+    # for count in sorted(lhs_results_by_count):
+    #     print(
+    #         f"  LHS samples = {count:4d}, "
+    #         f"NRMSE = {lhs_results_by_count[count]['nrmse']:.6e}"
+    #     )
 
     # -------------------------------------------------------------------------
     # Plots.
@@ -1042,7 +1043,7 @@ if __name__ == "__main__":
     plot_nrmse_history(
         sample_counts,
         nrmse_values,
-        lhs_results_by_count=lhs_results_by_count,
+#        lhs_results_by_count=lhs_results_by_count,
     )
 
     plot_peaks_function_with_samples_at_counts(
