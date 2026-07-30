@@ -5921,7 +5921,7 @@ def _extract_physical_response_matrix(model_evals, target_field,
             target_response = np.interp(
                 interpolation_values,
                 source_x,
-                target_response,
+                target_response
             )
 
         responses.append(target_response)
