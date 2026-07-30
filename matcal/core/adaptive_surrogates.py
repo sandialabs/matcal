@@ -3289,6 +3289,380 @@ def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations
     return surrogate_generator.generate(save_filename)
         
 
+def _make_bounded_nd_grid(bounds, npts_along_dim):
+    """
+    Create a Cartesian grid over a bounded parameter domain.
+
+    This is a deterministic, side-effect-free helper used by both
+    :class:`VoronoiAdaptiveSurrogateStudy` and :class:`VoronoiTessellation`.
+
+    :param bounds: Parameter bounds with shape ``(n_parameters, 2)``.
+        Column 0 contains lower bounds and column 1 contains upper bounds.
+    :type bounds: array-like
+
+    :param npts_along_dim: Number of grid points along each parameter dimension.
+    :type npts_along_dim: int
+
+    :return: Grid points with shape ``(npts_along_dim**n_parameters,
+        n_parameters)``.
+    :rtype: numpy.ndarray
+
+    :raises ValueError: If ``bounds`` does not have shape ``(n_parameters, 2)``.
+    """
+    check_value_is_positive_integer(npts_along_dim, "npts_along_dim")
+
+    bounds = np.asarray(bounds, dtype=float)
+
+    if bounds.ndim != 2 or bounds.shape[1] != 2:
+        raise ValueError(
+            "bounds must have shape (n_parameters, 2). "
+            f"Received shape {bounds.shape}."
+        )
+
+    axes = [
+        np.linspace(bounds[dim, 0], bounds[dim, 1], npts_along_dim)
+        for dim in range(bounds.shape[0])
+    ]
+
+    mesh = np.meshgrid(*axes, indexing="xy")
+    return np.column_stack([axis_values.ravel() for axis_values in mesh])
+
+
+def _normalize_candidate_array(candidates, n_parameters):
+    """
+    Convert candidate sample locations to a two-dimensional floating-point array.
+
+    Empty input is normalized to shape ``(0, n_parameters)``. A single candidate
+    point with shape ``(n_parameters,)`` is normalized to shape
+    ``(1, n_parameters)``.
+
+    :param candidates: Candidate points.
+    :type candidates: array-like
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :return: Candidate array with shape ``(n_candidates, n_parameters)``.
+    :rtype: numpy.ndarray
+
+    :raises ValueError: If the candidate array does not have one column per
+        parameter.
+    """
+    check_value_is_positive_integer(n_parameters, "n_parameters")
+
+    candidates = np.asarray(candidates, dtype=float)
+
+    if candidates.size == 0:
+        return np.empty((0, n_parameters))
+
+    candidates = np.atleast_2d(candidates)
+
+    if candidates.ndim != 2 or candidates.shape[1] != n_parameters:
+        raise ValueError(
+            f"Expected candidate points with {n_parameters} columns. "
+            f"Received shape {candidates.shape}."
+        )
+
+    return candidates
+
+
+def _filter_points_within_bounds(points, bounds, n_parameters):
+    """
+    Return finite points that lie inside inclusive parameter bounds.
+
+    Points containing ``NaN`` or infinite values are discarded. Bounds are
+    inclusive, so points exactly on the lower or upper bound are retained.
+
+    :param points: Candidate points.
+    :type points: array-like
+
+    :param bounds: Parameter bounds with shape ``(n_parameters, 2)``.
+    :type bounds: array-like
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :return: Bounded finite points with shape ``(n_valid, n_parameters)``.
+    :rtype: numpy.ndarray
+    """
+    points = _normalize_candidate_array(points, n_parameters)
+    bounds = np.asarray(bounds, dtype=float)
+
+    expected_shape = (n_parameters, 2)
+    if bounds.shape != expected_shape:
+        raise ValueError(
+            f"bounds must have shape {expected_shape}. Received {bounds.shape}."
+        )
+
+    if points.size == 0:
+        return np.empty((0, n_parameters))
+
+    lower_bounds = bounds[:, 0]
+    upper_bounds = bounds[:, 1]
+
+    mask = np.isfinite(points).all(axis=1)
+    mask &= ((points >= lower_bounds) & (points <= upper_bounds)).all(axis=1)
+
+    return points[mask]
+
+
+def _remove_duplicate_rows_against_existing(
+    candidate_points,
+    existing_points,
+    n_parameters,
+    atol=1.0e-10,
+):
+    """
+    Remove candidate points that duplicate existing points or earlier candidates.
+
+    Duplicate detection uses ``numpy.isclose`` with ``rtol=0`` and the supplied
+    absolute tolerance. Candidate order is preserved.
+
+    :param candidate_points: Proposed new points.
+    :type candidate_points: array-like
+
+    :param existing_points: Existing training points.
+    :type existing_points: array-like
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :param atol: Absolute tolerance for duplicate detection.
+    :type atol: float
+
+    :return: Non-duplicate candidate points.
+    :rtype: numpy.ndarray
+    """
+    candidates = _normalize_candidate_array(candidate_points, n_parameters)
+    existing = _normalize_candidate_array(existing_points, n_parameters)
+
+    if candidates.size == 0:
+        return np.empty((0, n_parameters))
+
+    kept = []
+
+    for point in candidates:
+        duplicate_existing = False
+        if existing.size > 0:
+            duplicate_existing = np.any(
+                np.all(np.isclose(existing, point, atol=atol, rtol=0.0), axis=1)
+            )
+
+        duplicate_kept = False
+        if kept:
+            kept_array = np.asarray(kept, dtype=float)
+            duplicate_kept = np.any(
+                np.all(np.isclose(kept_array, point, atol=atol, rtol=0.0), axis=1)
+            )
+
+        if not duplicate_existing and not duplicate_kept:
+            kept.append(point)
+
+    if not kept:
+        return np.empty((0, n_parameters))
+
+    return np.asarray(kept, dtype=float)
+
+
+def _random_subset_rows(values, n_rows, random_generator, n_parameters):
+    """
+    Select a reproducible random subset of rows.
+
+    Selected row indices are sorted before returning, preserving the original row
+    ordering in the returned subset.
+
+    :param values: Candidate rows.
+    :type values: array-like
+
+    :param n_rows: Maximum number of rows to select.
+    :type n_rows: int
+
+    :param random_generator: NumPy random generator.
+    :type random_generator: numpy.random.Generator
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :return: Random row subset.
+    :rtype: numpy.ndarray
+    """
+    check_value_is_nonnegative_integer(n_rows, "n_rows")
+
+    values = _normalize_candidate_array(values, n_parameters)
+    n_rows = min(int(n_rows), values.shape[0])
+
+    if n_rows <= 0:
+        return np.empty((0, n_parameters))
+
+    rows = random_generator.choice(values.shape[0], n_rows, replace=False)
+    return values[np.sort(rows)]
+
+
+def _find_matching_row_index(rows, target_row, atol=1.0e-10):
+    """
+    Return the first row index matching ``target_row`` within tolerance.
+
+    :param rows: Candidate row array.
+    :type rows: array-like
+
+    :param target_row: Row to find.
+    :type target_row: array-like
+
+    :param atol: Absolute matching tolerance.
+    :type atol: float
+
+    :return: Matching row index, or ``None`` if no match is found.
+    :rtype: int or None
+    """
+    rows = np.atleast_2d(np.asarray(rows, dtype=float))
+    target_row = np.asarray(target_row, dtype=float).reshape(-1)
+
+    matches = np.where(
+        np.all(np.isclose(rows, target_row, atol=atol, rtol=0.0), axis=1)
+    )[0]
+
+    if matches.size == 0:
+        return None
+
+    return int(matches[0])
+
+
+def _assign_points_to_nearest_seed(query_points, seed_points):
+    """
+    Assign each query point to its nearest seed point.
+
+    :param query_points: Points to classify.
+    :type query_points: array-like
+
+    :param seed_points: Seed points defining nearest-neighbor cells.
+    :type seed_points: array-like
+
+    :return: Seed index for each query point.
+    :rtype: numpy.ndarray
+    """
+    query_points = np.atleast_2d(np.asarray(query_points, dtype=float))
+    seed_points = np.atleast_2d(np.asarray(seed_points, dtype=float))
+
+    if seed_points.size == 0:
+        raise ValueError("At least one seed point is required.")
+
+    if query_points.size == 0:
+        return np.empty(0, dtype=int)
+
+    diff = query_points[:, None, :] - seed_points[None, :, :]
+    distance_squared = np.sum(diff**2, axis=2)
+
+    return np.argmin(distance_squared, axis=1)
+
+
+def _select_farthest_point(candidate_points, seed_location):
+    """
+    Select the candidate point farthest from a seed location.
+
+    :param candidate_points: Candidate points in a selected Voronoi cell.
+    :type candidate_points: array-like
+
+    :param seed_location: Selected Voronoi seed.
+    :type seed_location: array-like
+
+    :return: Farthest candidate point, or ``None`` if no candidates exist.
+    :rtype: numpy.ndarray or None
+    """
+    candidate_points = np.atleast_2d(np.asarray(candidate_points, dtype=float))
+
+    if candidate_points.size == 0:
+        return None
+
+    seed_location = np.asarray(seed_location, dtype=float).reshape(1, -1)
+    distances = np.linalg.norm(candidate_points - seed_location, axis=1)
+
+    return candidate_points[int(np.argmax(distances))]
+
+
+def _create_ghost_points(boundary_points, n_dimensions, stretch_coef=1.75,
+                         centroid_distance_coef=1.5):
+    """
+    Create auxiliary ghost seed points outside a bounded parameter domain.
+
+    Ghost points are generated by stretching domain boundary-corner points away
+    from the domain centroid and by adding positive/negative coordinate-direction
+    points about that centroid. Stretching about the centroid works for both
+    centered and non-centered domains.
+
+    :param boundary_points: Boundary corner points of the domain.
+    :type boundary_points: numpy.ndarray
+
+    :param n_dimensions: Number of parameter dimensions.
+    :type n_dimensions: int
+
+    :param stretch_coef: Multiplicative factor used to stretch boundary corners
+        away from the centroid.
+    :type stretch_coef: float
+
+    :param centroid_distance_coef: Multiplicative factor used with the maximum
+        centroid-to-corner distance for axis ghost points.
+    :type centroid_distance_coef: float
+
+    :return: Ghost points.
+    :rtype: numpy.ndarray
+    """
+    boundary_points = np.asarray(boundary_points, dtype=float)
+    check_value_is_positive_integer(n_dimensions, "n_dimensions")
+    check_value_is_positive_real(stretch_coef, "stretch_coef")
+    check_value_is_positive_real(centroid_distance_coef, "centroid_distance_coef")
+
+    boundary_centroid = np.mean(boundary_points, axis=0)
+
+    stretched_boundary_points = (
+        boundary_centroid
+        + stretch_coef * (boundary_points - boundary_centroid)
+    )
+
+    max_centroid_distance = np.max(
+        np.linalg.norm(boundary_points - boundary_centroid, axis=1)
+    )
+
+    axis_ghost_points = np.vstack([
+        boundary_centroid
+        + centroid_distance_coef * max_centroid_distance * np.eye(n_dimensions),
+        boundary_centroid
+        - centroid_distance_coef * max_centroid_distance * np.eye(n_dimensions),
+    ])
+
+    return np.vstack([stretched_boundary_points, axis_ghost_points])
+
+
+def _finite_vertex_indices(region):
+    """
+    Return valid finite Voronoi vertex indices.
+
+    SciPy uses ``-1`` for infinite vertices. This module also uses ``-2`` for
+    vertices that are infinite or outside the bounded parameter domain. Both are
+    excluded. Valid vertex index ``0`` is retained.
+
+    :param region: Voronoi region vertex-index list.
+    :type region: sequence[int]
+
+    :return: Valid finite vertex indices.
+    :rtype: list[int]
+    """
+    return [int(idx) for idx in region if int(idx) >= 0]
+
+
+def _remove_invalid_rows(array):
+    """
+    Remove rows containing ``NaN`` or infinite values.
+
+    :param array: Input array.
+    :type array: array-like
+
+    :return: Array containing only finite rows.
+    :rtype: numpy.ndarray
+    """
+    array = np.atleast_2d(np.asarray(array, dtype=float))
+    mask = np.isfinite(array).all(axis=1)
+    return array[mask]
+
 class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     _adaptive_surrogate_class = AdaptiveSurrogate
@@ -3379,21 +3753,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
          
     def _build_boundary_hull(self):
         from scipy.spatial import ConvexHull, Delaunay
-        self._boundary_points = self._make_nd_grid(2)
+        self._boundary_points = _make_bounded_nd_grid(
+            self._bounds, 2
+        )
         self._boundary_hull = ConvexHull(self._boundary_points)
         self._boundary_hull_eq = self._boundary_hull.equations # (nfacet, ndim + 1)
         self._boundary_hull_V, self._boundary_hull_b = self._boundary_hull_eq[:, :-1],\
             self._boundary_hull_eq[:, -1] # normal, offset
         self._bhullD = Delaunay(self._boundary_points)
-
-    def _make_nd_grid(self, npts_along_dim):
-        grid_pts = []
-        for param_index in np.arange(self._number_parameters):
-            grid_pts.append(np.linspace(self._bounds[param_index][0], self._bounds[param_index][1],
-                                        npts_along_dim))
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self._number_parameters)]
-        return np.vstack(tuple(coords_ravel)).T
 
     def set_number_of_initial_samples(self, num_initial_samples=None):
         """
@@ -3740,7 +4107,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             if new_points.size == 0:
                 logger.warning("No valid Voronoi sample locations found. Stopping.")
                 break
-            new_points = self._remove_existing_training_points(new_points, training_params)
+            new_points = _remove_duplicate_rows_against_existing(
+                new_points,    
+                training_params, 
+                self._number_parameters
+            )
             if new_points.size == 0:
                 logger.warning("All proposed Voronoi points were duplicates. Stopping.")
                 break
@@ -3781,39 +4152,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         )
 
         return self._check_points_within_bounds(new_points)
-
-    def _remove_existing_training_points(self, candidate_points, training_params, atol=1e-10):
-        """
-        Remove candidate points that are duplicates of existing training points or
-        duplicates of earlier accepted candidates in the same proposed batch.
-
-        A slightly looser absolute tolerance than machine epsilon is used because
-        Voronoi vertex calculations can introduce tiny floating-point perturbations.
-        """
-        kept = []
-
-        candidate_points = np.atleast_2d(np.asarray(candidate_points, dtype=float))
-        training_params = np.atleast_2d(np.asarray(training_params, dtype=float))
-
-        for point in candidate_points:
-            duplicate_training = np.any(
-                np.all(np.isclose(training_params, point, atol=atol, rtol=0.0), axis=1)
-            )
-
-            duplicate_kept = False
-            if len(kept) > 0:
-                kept_array = np.atleast_2d(np.asarray(kept, dtype=float))
-                duplicate_kept = np.any(
-                    np.all(np.isclose(kept_array, point, atol=atol, rtol=0.0), axis=1)
-                )
-
-            if not duplicate_training and not duplicate_kept:
-                kept.append(point)
-
-        if len(kept) == 0:
-            return np.empty((0, self._number_parameters))
-
-        return np.asarray(kept, dtype=float)
 
     def _evaluate_voronoi_batch(self, new_points):
         """
@@ -3901,7 +4239,12 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         if self._nmax_loo == "all":
             candidates = training_params[self._max_fold_error_indices]
-            return self._random_subset_rows(candidates, self._batch_size)
+            return _random_subset_rows(
+                candidates, 
+                self._batch_size, 
+                self._random_generator,
+                self._number_parameters
+            )
 
         self._perform_loo_cross_validation(training_params, training_data)
         return self._find_loo_max_errors(training_params)
@@ -3913,7 +4256,10 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         In one-at-a-time mode, preserve full ranked candidate order so the first
         valid candidate can be selected in a paper-faithful manner.
         """
-        candidates = self._normalize_candidate_array(candidates)
+        candidates = _normalize_candidate_array(
+            candidates, 
+            self._number_parameters
+        )
 
         if candidates.shape[0] == 0:
             return candidates
@@ -3925,34 +4271,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             candidates = candidates[:: self._thin]
 
         elif self._random_selection is not None:
-            draw_n = min(candidates.shape[0], self._random_selection, self._batch_size)
-            candidates = self._random_subset_rows(candidates, draw_n)
+            candidates = _random_subset_rows(
+                candidates, 
+                self._batch_size, 
+                self._random_generator,
+                self._number_parameters
+            )
 
         return candidates[: self._batch_size]
-
-    def _normalize_candidate_array(self, candidates):
-        """
-        Convert candidate locations to a two-dimensional floating-point array.
-        """
-        candidates = np.asarray(candidates, dtype=float)
-
-        if candidates.size == 0:
-            return np.empty((0, self._number_parameters))
-
-        return np.atleast_2d(candidates)
-
-    def _random_subset_rows(self, values, n_rows):
-        """
-        Select a reproducible random subset of rows using the study RNG.
-        """
-        values = self._normalize_candidate_array(values)
-        n_rows = min(int(n_rows), values.shape[0])
-
-        if n_rows <= 0:
-            return np.empty((0, self._number_parameters))
-
-        rows = self._random_generator.choice(values.shape[0], n_rows, replace=False)
-        return values[np.sort(rows)]
         
     def _create_voronoi_tess(self, training_params):
         if self._voronoi_type == 'full':
@@ -4050,7 +4376,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         if candidate_points is None or candidate_points.shape[0] == 0:
             return None
 
-        return self._select_farthest_point_from_selected_seed(
+        return _select_farthest_point(
             candidate_points,
             location,
         )
@@ -4116,7 +4442,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             return np.empty((0, self._number_parameters))
 
         points = np.atleast_2d(points)
-        points = self._check_points_within_bounds(points)
+        points = _filter_points_within_bounds(
+            points,
+            self._bounds,
+            self._number_parameters,
+        )
 
         if points.size == 0:
             return np.empty((0, self._number_parameters))
@@ -4171,77 +4501,24 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         seed_location = np.asarray(seed_location, dtype=float).reshape(-1)
         training_points = np.asarray(self._voronoi_tessellation.points, dtype=float)
 
-        seed_index = self._find_matching_seed_index(training_points, seed_location)
+        seed_index = _find_matching_row_index(
+            training_points,
+            seed_location
+        )
         if seed_index is None:
             return np.empty((0, self._number_parameters))
 
-        candidate_grid = self._make_selected_cell_candidate_grid(
+        candidate_grid = _make_bounded_nd_grid(
+            self._bounds, 
             self._selected_cell_search_grid_points
         )
 
-        owner_indices = self._assign_grid_points_to_nearest_seed(
+        owner_indices = _assign_points_to_nearest_seed(
             candidate_grid,
             training_points,
         )
 
         return candidate_grid[owner_indices == seed_index]
-
-    def _make_selected_cell_candidate_grid(self, npts_per_dim):
-        """
-        Build a deterministic Cartesian grid over the bounded parameter domain.
-        """
-        coords = []
-        for dim in range(self._number_parameters):
-            coords.append(
-                np.linspace(
-                    self._bounds[dim, 0],
-                    self._bounds[dim, 1],
-                    npts_per_dim,
-                )
-            )
-
-        mesh = np.meshgrid(*coords, indexing="xy")
-        flat = [m.ravel() for m in mesh]
-        return np.column_stack(flat)
-
-    def _find_matching_seed_index(self, training_points, target_point, atol=1.0e-10):
-        """
-        Return the row index of the selected seed in the current training set.
-        """
-        matches = np.where(
-            np.all(
-                np.isclose(training_points, target_point, atol=atol, rtol=0.0),
-                axis=1,
-            )
-        )[0]
-
-        if matches.size == 0:
-            return None
-
-        return int(matches[0])
-
-    def _assign_grid_points_to_nearest_seed(self, query_points, training_points):
-        """
-        Assign each query point to its nearest current training seed.
-        """
-        query_points = np.asarray(query_points, dtype=float)
-        training_points = np.asarray(training_points, dtype=float)
-
-        diff = query_points[:, None, :] - training_points[None, :, :]
-        dist2 = np.sum(diff ** 2, axis=2)
-        return np.argmin(dist2, axis=1)
-
-    def _select_farthest_point_from_selected_seed(self, candidate_points, seed_location):
-        """
-        Select the point in the selected Voronoi cell that is farthest from the
-        selected sample/seed.
-        """
-        candidate_points = np.asarray(candidate_points, dtype=float)
-        seed_location = np.asarray(seed_location, dtype=float).reshape(1, -1)
-
-        distances = np.linalg.norm(candidate_points - seed_location, axis=1)
-        best_index = int(np.argmax(distances))
-        return candidate_points[best_index]
 
     def _find_local_voronoi_new_point(self, location):
         """
@@ -4355,27 +4632,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         new_points = np.asarray(new_points, dtype=float)
         unique_points = np.unique(new_points, axis=0)
 
-        return self._check_points_within_bounds(unique_points)
-
-    def _check_points_within_bounds(self, points):
-        """
-        Return finite candidate points that lie inside the parameter bounds.
-        """
-        points = np.asarray(points, dtype=float)
-
-        if points.size == 0:
-            return np.empty((0, self._number_parameters))
-
-        points = np.atleast_2d(points)
-        self._check_candidate_point_dimension(points)
-
-        lb = self._bounds[:, 0]
-        ub = self._bounds[:, 1]
-
-        mask = np.isfinite(points).all(axis=1)
-        mask &= ((points >= lb) & (points <= ub)).all(axis=1)
-
-        return points[mask]
+        return _filter_points_within_bounds(
+            unique_points,
+            self._bounds,
+            self._number_parameters,
+        )
 
     def _find_first_valid_ranked_candidate_point(self, candidate_locations):
         """
@@ -4386,14 +4647,21 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         This preserves the KFCV->LOOCV ranking when geometry or duplication causes
         the top-ranked candidate to fail.
         """
-        candidate_locations = self._normalize_candidate_array(candidate_locations)
+        candidate_locations = _normalize_candidate_array(
+            candidate_locations, 
+            self._number_parameters
+        )
 
         for location in candidate_locations:
             new_point = self._find_new_sample_location_for_candidate(location)
             if new_point is None:
                 continue
 
-            new_point = self._check_points_within_bounds(np.atleast_2d(new_point))
+            new_point = _filter_points_within_bounds(
+                np.atleast_2d(new_point),
+                self._bounds,
+                self._number_parameters,
+            )
             if new_point.size == 0:
                 continue
 
@@ -4573,7 +4841,10 @@ class VoronoiTessellation:
         """Initialize the Voronoi tessellation with given points and bounds.
         """
         from scipy.spatial import Voronoi, Delaunay, ConvexHull
-        self.boundary_points = self._make_nd_grid(npts_along_dim=2)
+        self.boundary_points = _make_bounded_nd_grid(
+            self.bounds,
+            npts_along_dim=2
+        )
         if not self.finite_only:
             self.boundary_hull = ConvexHull(self.boundary_points)
             self.boundary_hull_eq = self.boundary_hull.equations # (nfacet, ndim + 1)
@@ -4583,83 +4854,21 @@ class VoronoiTessellation:
         else:
             self.boundary_hull = None
             self.bhullD = None
-        self.create_ghost_points()
-        self._all_points = np.vstack([self.points, self._ghost_points])
+        ghost_points = _create_ghost_points(
+            self.boundary_points, 
+            self.ndim
+        )
+        self._all_points = np.vstack([self.points, ghost_points])
         
         self.vor = Voronoi(self._all_points, incremental=self.incremental)
-        self.ghost_busters()
+        self.ghost_busters(ghost_points)
         self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
-       
-    def _make_nd_grid(self, npts_along_dim):
-        grid_pts = []
-        for dim in np.arange(self.ndim):
-            grid_pts.append(np.linspace(self.bounds[dim,0], self.bounds[dim,1], npts_along_dim))
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.ndim)]
-        return np.vstack(tuple(coords_ravel)).T
-        
-    def create_ghost_points(self, stretchCoef=1.75, centCoef=1.5):
-        """
-        Create auxiliary ``ghost`` seed points outside the bounded parameter domain.
 
-        The Voronoi tessellation is built from the physical training samples plus
-        additional ghost points. These ghost points help make the Voronoi regions
-        associated with physical samples finite inside the bounded parameter space.
-        They are not valid training samples and are used only to stabilize the
-        tessellation near the domain boundary.
-
-        Ghost points are generated in two groups:
-
-        1. Boundary-corner ghost points:
-        Each corner of the bounded parameter domain is moved outward from the
-        domain centroid by ``stretchCoef``. Stretching about the centroid is
-        important because it works for both centered domains, such as
-        ``[-5, 5]^d``, and noncentered domains, such as ``[0, 1]^d``. Stretching
-        about the origin can incorrectly leave ghost points inside the domain.
-
-        2. Axis-direction ghost points:
-        Additional points are placed in the positive and negative coordinate
-        directions from the domain centroid. These points improve tessellation
-        robustness, especially in higher dimensions.
-
-        :param stretchCoef: Multiplicative factor used to move each boundary corner
-            away from the domain centroid. Values greater than one place the
-            stretched boundary points outside the original domain.
-        :type stretchCoef: float
-
-        :param centCoef: Multiplicative factor used with the maximum distance from
-            the domain centroid to a boundary corner when placing the additional
-            axis-direction ghost points.
-        :type centCoef: float
-
-        :ivar _ghost_points: Array of generated ghost points with shape
-            ``(n_ghost_points, n_dimensions)``.
-        :vartype _ghost_points: numpy.ndarray
-        """
-        boundary_centroid = np.mean(self.boundary_points, axis=0)
-
-        # Stretch boundary points outward from the domain centroid, not from the
-        # origin. This keeps ghost points outside non-origin-centered domains.
-        self._ghost_points = (
-            boundary_centroid
-            + stretchCoef * (self.boundary_points - boundary_centroid)
-        )
-
-        max_dist = np.max(
-            np.linalg.norm(self.boundary_points - boundary_centroid, axis=1)
-        )
-
-        self._ghost_points = np.vstack([
-            self._ghost_points,
-            boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1]),
-            boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1]),
-        ])
-
-    def ghost_busters(self):
+    def ghost_busters(self, ghost_points):
         """ Identify which points in self._all_points are ghost points"""
         self._boo = []
         for point in self._all_points:
-            if np.any(np.all(np.isclose(self._ghost_points, point), axis=1)):
+            if np.any(np.all(np.isclose(ghost_points, point), axis=1)):
                 self._boo.append(True)
             else:
                 self._boo.append(False)
@@ -4684,19 +4893,8 @@ class VoronoiTessellation:
         """
         Return finite region vertices without clipping to the parameter bounds.
         """
-        finite_indices = self._finite_vertex_indices(region)
+        finite_indices = _finite_vertex_indices(region)
         return self._vertices_from_indices(finite_indices)
-
-    def _finite_vertex_indices(self, region):
-        """
-        Return valid finite Voronoi vertex indices from a region list.
-
-        SciPy uses ``-1`` to mark infinite vertices. The updated bounded-region
-        logic uses ``-2`` for vertices that are infinite or outside the parameter
-        bounds. Both are excluded. Valid vertex index ``0`` is retained.
-        """
-        return [int(idx) for idx in region if int(idx) >= 0]
-
 
     def _vertices_from_indices(self, vertex_indices):
         """
@@ -4720,7 +4918,11 @@ class VoronoiTessellation:
         updated_region = self.identify_vertices_outside_bounds(region)
         vertices = self._vertices_from_updated_region(region_index, region, updated_region)
         vertices = self._append_boundary_vertices_for_region(region_index, vertices)
-        vertices = self._filter_vertices_inside_bounds(vertices)
+        vertices = _filter_points_within_bounds(
+            vertices, 
+            self.bounds, 
+            self.ndim
+        )
 
         if vertices is None or vertices.shape[0] == 0:
             return None
@@ -4731,7 +4933,7 @@ class VoronoiTessellation:
         """
         Return valid region vertices from an updated bounded-region list.
         """
-        finite_indices = self._finite_vertex_indices(updated_region)
+        finite_indices = _finite_vertex_indices(updated_region)
 
         if -2 not in updated_region:
             return self._vertices_from_indices(finite_indices)
@@ -4775,26 +4977,6 @@ class VoronoiTessellation:
             return None
 
         return self.boundary_points[boundary_indices]
-
-    def _filter_vertices_inside_bounds(self, vertices):
-        """
-        Keep only finite vertices inside the parameter bounds.
-        """
-        if vertices is None:
-            return None
-
-        vertices = np.atleast_2d(np.asarray(vertices, dtype=float))
-
-        if vertices.size == 0:
-            return np.empty((0, self.ndim))
-
-        lb = self.bounds[:, 0]
-        ub = self.bounds[:, 1]
-
-        mask = np.isfinite(vertices).all(axis=1)
-        mask &= ((vertices >= lb) & (vertices <= ub)).all(axis=1)
-
-        return vertices[mask]
 
     def get_voronoi_vertices(self, identify_outside_vertices=True):
         """
@@ -5193,16 +5375,6 @@ class VoronoiTessellation:
         min_dist = min(distances)
         closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-10))
         return closest_candidate_index[0]        
-
-    def remove_invalid_rows(self, arr):
-        """ Remove points from NumPy array that contain NaN or infinite values."""
-        if not isinstance(arr, np.ndarray):
-            raise TypeError("Input to remove_invalid_rows must be a NumPy array.")
-        arr = np.atleast_2d(arr)
-        
-        # Create a boolean mask for valid rows (no NaN, no inf, no -inf)
-        mask = np.isfinite(arr).all(axis=1)
-        return arr[mask]
     
     def add_points(self, points):
         """
@@ -5211,7 +5383,6 @@ class VoronoiTessellation:
         The Voronoi tessellation contains two classes of seed points:
 
         * physical sample points stored in ``self.points``; and
-        * auxiliary ghost points stored in ``self._ghost_points``.
 
         Only physical sample points should be added through this method. After new
         physical points are added, all derived tessellation state is rebuilt,
@@ -5277,7 +5448,7 @@ class VoronoiTessellation:
         if points.size == 0:
             return np.empty((0, self.ndim))
 
-        points = self.remove_invalid_rows(np.atleast_2d(points))
+        points = _remove_invalid_rows(np.atleast_2d(points))
         self._check_added_point_dimension(points)
 
         return points
@@ -5301,10 +5472,13 @@ class VoronoiTessellation:
         """
         from scipy.spatial import Voronoi
 
-        self.create_ghost_points()
-        self._all_points = np.vstack([self.points, self._ghost_points])
+        ghost_points = _create_ghost_points(
+            self.boundary_points, 
+            self.ndim
+        )
+        self._all_points = np.vstack([self.points, ghost_points])
         self.vor = Voronoi(self._all_points, incremental=self.incremental)
-        self.ghost_busters()
+        self.ghost_busters(ghost_points)
         self.boundary_regions = self.get_voronoi_region(self.boundary_points)
 
 
