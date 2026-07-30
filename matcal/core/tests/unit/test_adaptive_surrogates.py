@@ -8,13 +8,18 @@ from matcal.core.adaptive_surrogates import (
     _assign_points_to_nearest_seed,
     _calculate_native_cv_error,
     _create_ghost_points,
+    _evaluate_kfold_cv_splits,
     _filter_points_within_bounds,
     _find_matching_row_index,
     _finite_vertex_indices,
     _get_parameter_bounds, 
     _make_bounded_nd_grid,
+    _make_group_kfold_splits,
+    _make_standard_kfold_splits,
     _normalize_candidate_array,
     _package_unique_bounded_points,
+    _perform_kfold_cv,
+    _perform_leave_one_out_cv,
     _random_subset_rows,
     _reduce_voronoi_candidates,
     _remove_duplicate_rows_against_existing,
@@ -1835,8 +1840,12 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
 
         loocv.evaluate_loo_sample = fake_evaluate_loo_sample
 
-        results = loocv.perform_loocv(X, y, indices=np.array([2, 0]))
-
+        results = _perform_leave_one_out_cv(
+            loocv,
+            X,
+            y,
+            indices=np.array([2, 0]),
+        )
         self.assertEqual(results[0], (12.0, 2))
         self.assertEqual(results[1], (10.0, 0))
 
@@ -1923,8 +1932,20 @@ class TestKFoldCrossValidation(MatcalUnitTest):
             random_seed=42,
         )
 
-        splits_a = list(kfcv_a._make_standard_kfold_splits(X))
-        splits_b = list(kfcv_b._make_standard_kfold_splits(X))
+        splits_a = list(
+            _make_standard_kfold_splits(
+                X,
+                kfcv_a.nsplits,
+                kfcv_a.random_seed,
+            )
+        )
+        splits_b = list(
+            _make_standard_kfold_splits(
+                X,
+                kfcv_b.nsplits,
+                kfcv_b.random_seed,
+            )
+        )
 
         self.assertEqual(len(splits_a), 2)
         self.assertEqual(len(splits_b), 2)
@@ -1938,7 +1959,14 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         kfcv = self._make_kfold_cv(nsplits=2, group_kfold=True)
 
         with self.assertRaises(RuntimeError):
-            list(kfcv._make_group_kfold_splits(X, y, groups=None))
+            list(
+                _make_group_kfold_splits(
+                    X,
+                    y,
+                    groups=None,
+                    nsplits=kfcv.nsplits,
+                )
+            )
 
     def test_make_group_kfold_splits_uses_group_labels(self):
         X, y = self._make_training_arrays()
@@ -1946,8 +1974,14 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
         groups = np.array([0, 0, 1, 1])
 
-        splits = list(kfcv._make_group_kfold_splits(X, y, groups))
-
+        splits = list(
+            _make_group_kfold_splits(
+                X,
+                y,
+                groups,
+                kfcv.nsplits,
+            )
+        )
         self.assertEqual(len(splits), 2)
 
         for _, test_index in splits:
@@ -2047,13 +2081,27 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
         kfcv.evaluate_fold = fake_evaluate_fold
 
-        results = kfcv._evaluate_cv_splits(X, y, splits)
-
+        results = _evaluate_kfold_cv_splits(kfcv, X, y, splits)
         self.assertEqual(set(results.keys()), {0, 1})
         self.assertEqual(results[0][0], 0.0)
         self.assertEqual(results[1][0], 1.0)
         self.assert_close_arrays(results[0][1], np.array([2, 3]))
         self.assert_close_arrays(results[1][1], np.array([0, 1]))
+
+    def test_perform_kfold_cv_uses_global_split_and_evaluation_helpers(self):
+        X, y = self._make_training_arrays()
+        kfcv = self._make_kfold_cv(nsplits=2)
+
+        def fake_evaluate_fold(train_index, test_index, X_arg, y_arg, kfold_count):
+            return float(kfold_count), test_index
+
+        kfcv.evaluate_fold = fake_evaluate_fold
+
+        results = _perform_kfold_cv(kfcv, X, y)
+
+        self.assertEqual(set(results.keys()), {0, 1})
+        self.assertEqual(results[0][0], 0.0)
+        self.assertEqual(results[1][0], 1.0)
 
 
 class TestVoronoiTessellation(MatcalUnitTest):
@@ -2082,6 +2130,17 @@ class TestVoronoiTessellation(MatcalUnitTest):
             finite_only=finite_only,
         )
   
+    def _expected_number_of_ghost_points(self, tessellation):
+        """
+        Match the ghost-point construction used by _create_ghost_points.
+
+        _create_ghost_points returns:
+
+        * one stretched ghost point for each boundary point; and
+        * positive/negative axis ghost points for each dimension.
+        """
+        return tessellation.boundary_points.shape[0] + 2 * tessellation.ndim
+
     def test_module_level_remove_invalid_rows_removes_nonfinite_rows(self):
         values = np.array([
             [0.0, 0.0],

@@ -373,6 +373,107 @@ def _get_valid_kfold_split_count(nsplits, n_samples):
     return int(new_nsplits)
 
 
+def _make_standard_kfold_splits(X, nsplits, random_seed=None):
+    """
+    Make reproducible shuffled K-fold splits.
+    """
+    from sklearn.model_selection import KFold
+
+    splitter = KFold(
+        n_splits=nsplits,
+        shuffle=True,
+        random_state=random_seed,
+    )
+    return splitter.split(X)
+
+
+def _make_group_kfold_splits(X, y, groups, nsplits):
+    """
+    Make group-aware K-fold splits.
+    """
+    if groups is None:
+        raise RuntimeError(
+            "groups must be provided when group_kfold is True."
+        )
+
+    from sklearn.model_selection import GroupKFold
+
+    splitter = GroupKFold(n_splits=nsplits)
+    return splitter.split(X, y, groups)
+
+
+def _make_kfold_cv_splits(
+    X,
+    y,
+    nsplits,
+    group_kfold=False,
+    groups=None,
+    random_seed=None,
+):
+    """
+    Make either standard or grouped K-fold splits.
+    """
+    if group_kfold:
+        return _make_group_kfold_splits(X, y, groups, nsplits)
+
+    return _make_standard_kfold_splits(X, nsplits, random_seed)
+
+
+def _evaluate_kfold_cv_splits(kfold_runner, X, y, splits):
+    """
+    Evaluate supplied K-fold splits with a KFoldCrossValidation-like runner.
+    """
+    fold_errors = OrderedDict()
+
+    for kfold_count, (train_index, test_index) in enumerate(splits):
+        fold_errors[kfold_count] = kfold_runner.evaluate_fold(
+            train_index,
+            test_index,
+            X,
+            y,
+            kfold_count,
+        )
+
+    return fold_errors
+
+
+def _perform_kfold_cv(kfold_runner, X, y, groups=None):
+    """
+    Perform K-fold cross validation using a KFoldCrossValidation-like runner.
+    """
+    splits = _make_kfold_cv_splits(
+        X,
+        y,
+        kfold_runner.nsplits,
+        group_kfold=kfold_runner.group_kfold,
+        groups=groups,
+        random_seed=kfold_runner.random_seed,
+    )
+
+    return _evaluate_kfold_cv_splits(kfold_runner, X, y, splits)
+
+
+def _perform_leave_one_out_cv(loo_runner, X, y, indices=None):
+    """
+    Perform leave-one-out cross validation for selected sample indices.
+    """
+    if indices is None:
+        indices = np.arange(X.shape[0], dtype=int)
+    else:
+        indices = np.asarray(indices, dtype=int)
+
+    loo_errors = OrderedDict()
+
+    for loo_count, index in enumerate(indices):
+        loo_errors[loo_count] = loo_runner.evaluate_loo_sample(
+            X,
+            y,
+            int(index),
+        )
+
+    return loo_errors
+
+
 _VALID_SURROGATE_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
 
 
@@ -4301,7 +4402,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             batch_number, training_params, training_data
         )
 
-        return _check_points_within_bounds(new_points)
+        return _filter_points_within_bounds(
+            new_points,
+            self._bounds,
+            self._number_parameters,
+        )
 
     def _evaluate_voronoi_batch(self, new_points):
         """
@@ -4776,11 +4881,19 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """
         logger.info("Performing kfold cross-validation")
 
-        nsplits = _get_valid_kfold_split_count(self._nsplits, training_params.shape[0])
+        nsplits = _get_valid_kfold_split_count(
+            self._nsplits,
+            training_params.shape[0],
+        )
         kfcv = self._make_kfold_cross_validation_runner(nsplits)
         groups = self._make_kfold_groups(training_params, nsplits)
 
-        self._kf = kfcv.perform_kfold_cv(training_params, training_data, groups)
+        self._kf = _perform_kfold_cv(
+            kfcv,
+            training_params,
+            training_data,
+            groups,
+        )
 
     def _make_kfold_cross_validation_runner(self, nsplits):
         """
@@ -4822,13 +4935,23 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _perform_loo_cross_validation(self, training_params, training_data):
         self._loo_errors = None
         logger.info("Finding worst sample locations using leave one out validation...")
-        loocv = LeaveOneOutCrossValidation(self._cv_scale, self._cv_metric, 
-                                           self._independent_variable, 
-                                           self._independent_variable_values, 
-                                           self._target_field_name,
-                                           self.param_names, self._surrogate_options)
-        self._loo_errors = loocv.perform_loocv(training_params, training_data,
-                                               self._max_fold_error_indices)
+
+        loocv = LeaveOneOutCrossValidation(
+            self._cv_scale,
+            self._cv_metric,
+            self._independent_variable,
+            self._independent_variable_values,
+            self._target_field_name,
+            self.param_names,
+            self._surrogate_options,
+        )
+
+        self._loo_errors = _perform_leave_one_out_cv(
+            loocv,
+            training_params,
+            training_data,
+            self._max_fold_error_indices,
+        )
     
     def _find_loo_max_errors(self, training_params):
         """
