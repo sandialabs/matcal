@@ -69,3 +69,10 @@ samples simultaneously, reducing overall computational cost. By balancing explor
 through cross-validation error estimates and spatial partitioning, the method concentrates the sampling 
 efforts to regions of high uncertainty or error, steadily improving surrogate accuracy while 
 minimizing expensive model evaluations.
+
+
+.. include:: surrogate_verification/index.rst
+   :start-after: :orphan:   
+
+.. include:: surrogate_examples/index.rst
+   :start-after: :orphan: 

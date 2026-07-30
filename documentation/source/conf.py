@@ -93,7 +93,9 @@ sphinx_gallery_conf = {
                       '../advanced_examples',
                       '../matcal_model_v_and_v', 
                       '../full_field_verification_examples',
-                      '../full_field_study_verification_examples',  
+                      '../full_field_study_verification_examples',
+                      '../surrogate_examples',
+                      '../surrogate_verification'  
                       ],
     # '../solid_mechanics_steel'],   # path to your example scripts
 
@@ -102,6 +104,8 @@ sphinx_gallery_conf = {
                      'matcal_model_v_and_v', 
                      'full_field_verification_examples',
                      'full_field_study_verification_examples', 
+                     'surrogate_examples',
+                     'surrogate_verification'
                      ],
     # 'solid_mechanics_steel'],  # path to where to save gallery generated out
     'within_subsection_order': FileNameSortKey,
