@@ -2,6 +2,7 @@ from collections import OrderedDict
 import numpy as np
 from scipy.stats import qmc
 from sklearn.discriminant_analysis import StandardScaler
+from unittest.mock import patch
 
 
 from matcal.core.data import convert_dictionary_to_data, DataCollection
@@ -11,6 +12,7 @@ from matcal.core.parameter_studies import ParameterStudy
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.study_base import StudyResults
 from matcal.core.surrogates import (
+    _DoNothingDataTransformer,
     _MatCalLogScaler, 
     _ReconstructionDecomposition, 
     _RBFInterpolatorRegressor,
@@ -24,6 +26,7 @@ from matcal.core.surrogates import (
     _make_parameter_scaler_set,  
     _package_parameter_ranges, 
     _parse_evaluation_info, 
+    _print_scores,
     _process_data_for_surrogate, 
     _process_interpolation_locations, 
     _process_surrogate_args_call,
@@ -463,7 +466,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
                 results.append(cur_res)
             return np.array(params), np.array(results)
 
-
     def test_convert_data_and_make_bias_tuner(self):
         recreation_error_tolerance = 1e-3
         def my_fun(a, b):
@@ -594,7 +596,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
         t_data = scaler.fit_transform(data)
         i_data = scaler.inverse_transform(t_data)
         self.assert_close_arrays(i_data, data)
-                
     
     def test_works_for_negative_numbers(self): 
         scaler = _MatCalLogScaler()
@@ -670,6 +671,92 @@ class TestSurrogateFunctions(MatcalUnitTest):
         regressor.fit(x, y)
 
         self.assertEqual(regressor._effective_neighbors, n_samples)
+
+    def test_print_scores_omits_latent_space_scores_when_no_pca_used(self):
+        latent_train_score = OrderedDict()
+        latent_test_score = OrderedDict()
+        native_train_score = OrderedDict()
+        native_test_score = OrderedDict()
+        decomposers = OrderedDict()
+
+        field = "response"
+
+        latent_train_score[field] = {
+            "score": np.array([0.99]),
+            "nlpd": np.array([np.nan]),
+            "rmse": np.array([0.01]),
+        }
+        latent_test_score[field] = {
+            "score": np.array([0.98]),
+            "nlpd": np.array([np.nan]),
+            "rmse": np.array([0.02]),
+        }
+
+        native_train_score[field] = 0.995
+        native_test_score[field] = 0.985
+
+        decomposers[field] = _DoNothingDataTransformer()
+
+        with patch("matcal.core.surrogates.logger.info") as logger_info:
+            _print_scores(
+                latent_train_score,
+                latent_test_score,
+                native_train_score,
+                native_test_score,
+                decomposers=decomposers,
+            )
+
+        logged_text = "\n".join(
+            str(call.args[0]) for call in logger_info.call_args_list
+        )
+
+        self.assertIn("native space score", logged_text)
+        self.assertNotIn("latent space score", logged_text)
+        self.assertNotIn("PCA latent space score", logged_text)
+        
+    def test_print_scores_reports_latent_space_scores_when_pca_used(self):
+        latent_train_score = OrderedDict()
+        latent_test_score = OrderedDict()
+        native_train_score = OrderedDict()
+        native_test_score = OrderedDict()
+        decomposers = OrderedDict()
+
+        field = "response"
+
+        latent_train_score[field] = {
+            "score": np.array([0.99]),
+            "nlpd": np.array([np.nan]),
+            "rmse": np.array([0.01]),
+        }
+        latent_test_score[field] = {
+            "score": np.array([0.98]),
+            "nlpd": np.array([np.nan]),
+            "rmse": np.array([0.02]),
+        }
+
+        native_train_score[field] = 0.995
+        native_test_score[field] = 0.985
+
+        class FakePCA:
+            pass
+
+        decomposers[field] = FakePCA()
+
+        with patch("matcal.core.surrogates.logger.info") as logger_info:
+            _print_scores(
+                latent_train_score,
+                latent_test_score,
+                native_train_score,
+                native_test_score,
+                decomposers=decomposers,
+            )
+
+        logged_text = "\n".join(
+            str(call.args[0]) for call in logger_info.call_args_list
+        )
+
+        self.assertIn("native space score", logged_text)
+        self.assertIn("PCA latent space score", logged_text)
 
 
 class TestSurrogateGenerator(MatcalUnitTest):

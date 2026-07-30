@@ -1003,15 +1003,45 @@ def _score_regressor_in_latent_space(regressor, scaled_train_params,
     return train_score, test_score
 
 
-def _print_scores(latent_train_score, latent_test_score, native_train_score, native_test_score):
+def _field_uses_pca(decomposers, field):
+    """
+    Return True if the field was actually decomposed with PCA.
+
+    For fields with <= 15 features, MatCal uses _DoNothingDataTransformer,
+    so the so-called latent-space scores are really scaled response-space
+    regressor scores and should not be reported as PCA latent-space scores.
+    """
+    if decomposers is None:
+        return True
+
+    return not isinstance(decomposers[field], _DoNothingDataTransformer)
+
+
+def _print_scores(latent_train_score, latent_test_score, 
+                  native_train_score, native_test_score, decomposers=None):
     for field in latent_train_score:
         logger.info(f"\nSurrogate scores for {field}: ")
-        score_message = f"\tTrain:\n"
-        score_message += f"\t\tlatent space score: {latent_train_score[field]['score']}\n"    
-        score_message += f"\t\tnative space score: {native_train_score[field]}\n"    
-        score_message += f"\tTest:\n"
-        score_message += f"\t\tlatent space score: {latent_test_score[field]['score']}\n"    
-        score_message += f"\t\tnative space score: {native_test_score[field]}\n"    
+
+        score_message = "\tTrain:\n"
+
+        if _field_uses_pca(decomposers, field):
+            score_message += (
+                f"\t\tPCA latent space score: "
+                f"{latent_train_score[field]['score']}\n"
+            )
+
+        score_message += f"\t\tnative space score: {native_train_score[field]}\n"
+
+        score_message += "\tTest:\n"
+
+        if _field_uses_pca(decomposers, field):
+            score_message += (
+                f"\t\tPCA latent space score: "
+                f"{latent_test_score[field]['score']}\n"
+            )
+
+        score_message += f"\t\tnative space score: {native_test_score[field]}\n"
+
         logger.info(score_message)
 
 
@@ -1309,7 +1339,7 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         rmse_scores, max_scores, r2_scores = native_space_scores
         surrogate._set_native_space_scores(rmse_scores, max_scores, r2_scores)
         if logger_on:
-            _print_scores(*latent_scores, *r2_scores)
+            _print_scores(*latent_scores, *r2_scores, decomposers=decomposers)
         return surrogate
 
 
