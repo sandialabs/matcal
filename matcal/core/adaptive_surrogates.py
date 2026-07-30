@@ -3339,7 +3339,27 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._surrogate_options = {}
 
         self._random_generator = np.random.default_rng(getattr(self, "_seed", None))
-            
+        self._selected_cell_search_grid_points = 51
+
+    def set_selected_cell_search_grid_points(self, selected_cell_search_grid_points=51):
+        """
+        Set the number of grid points per dimension used when constructing a
+        deterministic candidate set inside the selected Voronoi cell.
+
+        This candidate set is only used to better approximate the paper's rule:
+        choose the point within the selected Voronoi cell that is furthest from
+        the selected sample.
+
+        :param selected_cell_search_grid_points: Number of grid points per
+            dimension in the bounded domain candidate grid.
+        :type selected_cell_search_grid_points: int
+        """
+        check_value_is_positive_integer(
+            selected_cell_search_grid_points,
+            "selected_cell_search_grid_points",
+        )
+        self._selected_cell_search_grid_points = int(selected_cell_search_grid_points)
+
     def _update_surrogate_score(self, surrogate=None):
         """
         Store the latent-space scores for the surrogate produced by the current
@@ -3999,14 +4019,229 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def _find_full_voronoi_new_point(self, location):
         """
-        Find the furthest valid vertex in the full Voronoi tessellation.
+        Find a new sample in the selected Voronoi cell by choosing the point in
+        that cell that is farthest from the selected seed/sample.
+
+        This follows the paper's intended rule:
+            choose the point within the selected Voronoi cell that is furthest
+            from the existing sample associated with that cell.
+
+        The search uses:
+          1. bounded Voronoi-cell geometry points, when available,
+          2. otherwise, a deterministic bounded-domain candidate grid filtered
+             to the selected Voronoi cell.
+
+        :param location: The selected sample location whose Voronoi cell is used.
+        :type location: numpy.ndarray
+
+        :return: New sample point or ``None`` if no valid in-cell point is found.
+        :rtype: numpy.ndarray or None
         """
+        location = np.asarray(location, dtype=float).reshape(-1)
+
         region_index = self._voronoi_tessellation.get_voronoi_region(location)[0][0]
-        vertices, furthest_vertex_index = (
-            self._voronoi_tessellation.find_furthest_vertex(region_index)
+        self._voronoi_tessellation.raise_if_invalid_region_index(region_index)
+
+        candidate_points = self._get_points_in_selected_voronoi_cell(
+            region_index,
+            location,
         )
 
-        return self._select_furthest_vertex(vertices, furthest_vertex_index)
+        if candidate_points is None or candidate_points.shape[0] == 0:
+            return None
+
+        return self._select_farthest_point_from_selected_seed(
+            candidate_points,
+            location,
+        )
+
+    def _get_points_in_selected_voronoi_cell(self, region_index, seed_location):
+        """
+        Return candidate points inside the selected Voronoi cell.
+
+        The method first uses the bounded Voronoi-cell geometry returned by the
+        tessellation. If that does not yield valid candidate points, it creates a
+        deterministic bounded-domain grid and retains only those grid points that
+        belong to the selected Voronoi cell.
+
+        :param region_index: Region index of the selected Voronoi cell.
+        :type region_index: int
+
+        :param seed_location: Coordinates of the selected sample/seed.
+        :type seed_location: numpy.ndarray
+
+        :return: Candidate points in the selected Voronoi cell.
+        :rtype: numpy.ndarray or None
+        """
+        geometry_points = self._voronoi_tessellation.get_region_vertices(
+            region_index,
+            identify_outside_vertices=True,
+        )
+
+        geometry_points = self._filter_selected_cell_candidate_points(
+            geometry_points,
+            seed_location,
+        )
+
+        if geometry_points is not None and geometry_points.shape[0] > 0:
+            return geometry_points
+
+        grid_points = self._get_deterministic_in_cell_grid_points(seed_location)
+        grid_points = self._filter_selected_cell_candidate_points(
+            grid_points,
+            seed_location,
+        )
+
+        if grid_points is None or grid_points.shape[0] == 0:
+            return None
+
+        return grid_points
+
+    def _filter_selected_cell_candidate_points(self, points, seed_location, atol=1.0e-10):
+        """
+        Filter candidate points for the selected-cell farthest-point search.
+
+        Points must be:
+          * finite,
+          * in bounds,
+          * not the selected seed itself,
+          * not duplicates of existing training points,
+          * unique.
+        """
+        if points is None:
+            return None
+
+        points = np.asarray(points, dtype=float)
+        if points.size == 0:
+            return np.empty((0, self._number_parameters))
+
+        points = np.atleast_2d(points)
+        points = self._check_points_within_bounds(points)
+
+        if points.size == 0:
+            return np.empty((0, self._number_parameters))
+
+        training_points = np.asarray(self._format_params(self._results), dtype=float)
+        kept = []
+
+        for point in points:
+            same_as_seed = np.all(
+                np.isclose(point, seed_location, atol=atol, rtol=0.0)
+            )
+
+            duplicate_training = np.any(
+                np.all(
+                    np.isclose(training_points, point, atol=atol, rtol=0.0),
+                    axis=1,
+                )
+            )
+
+            duplicate_kept = False
+            if len(kept) > 0:
+                kept_array = np.asarray(kept, dtype=float)
+                duplicate_kept = np.any(
+                    np.all(
+                        np.isclose(kept_array, point, atol=atol, rtol=0.0),
+                        axis=1,
+                    )
+                )
+
+            if (not same_as_seed) and (not duplicate_training) and (not duplicate_kept):
+                kept.append(point)
+
+        if len(kept) == 0:
+            return np.empty((0, self._number_parameters))
+
+        return np.asarray(kept, dtype=float)
+
+    def _get_deterministic_in_cell_grid_points(self, seed_location):
+        """
+        Create a deterministic bounded-domain grid and retain only the points
+        belonging to the selected Voronoi cell of the given seed.
+
+        Voronoi-cell membership is determined by nearest-seed assignment to the
+        current physical training points.
+
+        :param seed_location: Selected sample/seed location.
+        :type seed_location: numpy.ndarray
+
+        :return: Grid points belonging to the selected Voronoi cell.
+        :rtype: numpy.ndarray
+        """
+        seed_location = np.asarray(seed_location, dtype=float).reshape(-1)
+        training_points = np.asarray(self._voronoi_tessellation.points, dtype=float)
+
+        seed_index = self._find_matching_seed_index(training_points, seed_location)
+        if seed_index is None:
+            return np.empty((0, self._number_parameters))
+
+        candidate_grid = self._make_selected_cell_candidate_grid(
+            self._selected_cell_search_grid_points
+        )
+
+        owner_indices = self._assign_grid_points_to_nearest_seed(
+            candidate_grid,
+            training_points,
+        )
+
+        return candidate_grid[owner_indices == seed_index]
+
+    def _make_selected_cell_candidate_grid(self, npts_per_dim):
+        """
+        Build a deterministic Cartesian grid over the bounded parameter domain.
+        """
+        coords = []
+        for dim in range(self._number_parameters):
+            coords.append(
+                np.linspace(
+                    self._bounds[dim, 0],
+                    self._bounds[dim, 1],
+                    npts_per_dim,
+                )
+            )
+
+        mesh = np.meshgrid(*coords, indexing="xy")
+        flat = [m.ravel() for m in mesh]
+        return np.column_stack(flat)
+
+    def _find_matching_seed_index(self, training_points, target_point, atol=1.0e-10):
+        """
+        Return the row index of the selected seed in the current training set.
+        """
+        matches = np.where(
+            np.all(
+                np.isclose(training_points, target_point, atol=atol, rtol=0.0),
+                axis=1,
+            )
+        )[0]
+
+        if matches.size == 0:
+            return None
+
+        return int(matches[0])
+
+    def _assign_grid_points_to_nearest_seed(self, query_points, training_points):
+        """
+        Assign each query point to its nearest current training seed.
+        """
+        query_points = np.asarray(query_points, dtype=float)
+        training_points = np.asarray(training_points, dtype=float)
+
+        diff = query_points[:, None, :] - training_points[None, :, :]
+        dist2 = np.sum(diff ** 2, axis=2)
+        return np.argmin(dist2, axis=1)
+
+    def _select_farthest_point_from_selected_seed(self, candidate_points, seed_location):
+        """
+        Select the point in the selected Voronoi cell that is farthest from the
+        selected sample/seed.
+        """
+        candidate_points = np.asarray(candidate_points, dtype=float)
+        seed_location = np.asarray(seed_location, dtype=float).reshape(1, -1)
+
+        distances = np.linalg.norm(candidate_points - seed_location, axis=1)
+        best_index = int(np.argmax(distances))
+        return candidate_points[best_index]
 
     def _find_local_voronoi_new_point(self, location):
         """
