@@ -25,6 +25,7 @@ from matcal.core.adaptive_surrogates import (
     _remove_duplicate_rows_against_existing,
     _remove_invalid_rows,
     _select_farthest_point,
+    _validate_surrogate_generator_regressor_type,
     _validate_surrogate_storage_options,
     KFoldCrossValidation,
     LeaveOneOutCrossValidation,
@@ -1380,6 +1381,19 @@ class TestGlobalHelperFunctions(MatcalUnitTest):
 
         self.assert_close_arrays(packaged, expected)
 
+    def test_validate_surrogate_generator_regressor_type_accepts_random_forest(self):
+        regressor_type = _validate_surrogate_generator_regressor_type("Random Forest")
+        self.assertEqual(regressor_type, "Random Forest")
+
+    def test_validate_surrogate_generator_regressor_type_accepts_rbf(self):
+        regressor_type = _validate_surrogate_generator_regressor_type("RBF")
+        self.assertEqual(regressor_type, "RBF")
+
+    def test_validate_surrogate_generator_regressor_type_rejects_unknown_regressor(self):
+        with self.assertRaises(ValueError):
+            _validate_surrogate_generator_regressor_type("not_a_regressor")
+
+
 class TestVoronoiPureFunctions(MatcalUnitTest):
 
     def setUp(self):
@@ -1849,6 +1863,74 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         self.assertEqual(results[0], (12.0, 2))
         self.assertEqual(results[1], (10.0, 0))
 
+    def test_evaluate_loo_sample_forwards_random_forest_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        loocv = LeaveOneOutCrossValidation(
+            scale=1.0,
+            metric="sum_abs",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            target_field="response",
+            par_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "Random Forest",
+                "n_estimators": 4,
+                "random_state": 456,
+            },
+        )
+
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                return_value=12.5,
+            ):
+                loocv.evaluate_loo_sample(X, y, 1)
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "Random Forest")
+        self.assertEqual(fit_kwargs["n_estimators"], 4)
+        self.assertEqual(fit_kwargs["random_state"], 456)
+
+    def test_evaluate_loo_sample_forwards_rbf_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        loocv = LeaveOneOutCrossValidation(
+            scale=1.0,
+            metric="sum_abs",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            target_field="response",
+            par_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "RBF",
+                "neighbors": 5,
+            },
+        )
+
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                return_value=12.5,
+            ):
+                loocv.evaluate_loo_sample(X, y, 1)
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "RBF")
+        self.assertEqual(fit_kwargs["neighbors"], 5)
+
 
 class TestKFoldCrossValidation(MatcalUnitTest):
 
@@ -2102,6 +2184,96 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assertEqual(set(results.keys()), {0, 1})
         self.assertEqual(results[0][0], 0.0)
         self.assertEqual(results[1][0], 1.0)
+
+    def test_evaluate_fold_forwards_random_forest_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        kfcv = KFoldCrossValidation(
+            nsplits=2,
+            group_kfold=False,
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            scale=1.0,
+            metric="rmse",
+            target_field="response",
+            param_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "Random Forest",
+                "n_estimators": 3,
+                "random_state": 123,
+            },
+            random_seed=123,
+        )
+
+        train_index = np.array([0, 2])
+        test_index = np.array([1, 3])
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                return_value=4.25,
+            ):
+                kfcv.evaluate_fold(
+                    train_index,
+                    test_index,
+                    X,
+                    y,
+                    kfold_count=0,
+                )
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "Random Forest")
+        self.assertEqual(fit_kwargs["n_estimators"], 3)
+        self.assertEqual(fit_kwargs["random_state"], 123)
+
+    def test_evaluate_fold_forwards_rbf_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        kfcv = KFoldCrossValidation(
+            nsplits=2,
+            group_kfold=False,
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            scale=1.0,
+            metric="rmse",
+            target_field="response",
+            param_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "RBF",
+                "neighbors": 7,
+            },
+            random_seed=123,
+        )
+
+        train_index = np.array([0, 2])
+        test_index = np.array([1, 3])
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                return_value=4.25,
+            ):
+                kfcv.evaluate_fold(
+                    train_index,
+                    test_index,
+                    X,
+                    y,
+                    kfold_count=0,
+                )
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "RBF")
+        self.assertEqual(fit_kwargs["neighbors"], 7)
 
 
 class TestVoronoiTessellation(MatcalUnitTest):
@@ -2663,6 +2835,86 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
 
         self.assert_close_arrays(point, np.array([0.25, -0.5]))
 
+    def test_set_surrogate_regressor_accepts_random_forest(self):
+        study = self._make_two_parameter_study()
+
+        self.assertEqual(study._convergence_metric, "nlpd")
+
+        study.set_surrogate_regressor(
+            "Random Forest",
+            n_estimators=7,
+            random_state=123,
+        )
+
+        self.assertEqual(
+            study._surrogate_options["regressor_type"],
+            "Random Forest",
+        )
+        self.assertEqual(study._surrogate_options["n_estimators"], 7)
+        self.assertEqual(study._surrogate_options["random_state"], 123)
+
+        # Random Forest does not provide return_std, so default nlpd should be
+        # switched to rmse.
+        self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_set_surrogate_regressor_accepts_rbf(self):
+        study = self._make_two_parameter_study()
+
+        self.assertEqual(study._convergence_metric, "nlpd")
+
+        study.set_surrogate_regressor(
+            "RBF",
+            neighbors=11,
+        )
+
+        self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
+        self.assertEqual(study._surrogate_options["neighbors"], 11)
+
+        # RBFInterpolator does not provide return_std, so default nlpd should be
+        # switched to rmse.
+        self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_set_surrogate_regressor_rejects_unknown_regressor(self):
+        study = self._make_two_parameter_study()
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_regressor("not_a_regressor")
+
+    def test_set_surrogate_options_validates_random_forest_regressor(self):
+        study = self._make_two_parameter_study()
+
+        study.set_surrogate_options(
+            regressor_type="Random Forest",
+            n_estimators=5,
+            random_state=321,
+        )
+
+        self.assertEqual(
+            study._surrogate_options["regressor_type"],
+            "Random Forest",
+        )
+        self.assertEqual(study._surrogate_options["n_estimators"], 5)
+        self.assertEqual(study._surrogate_options["random_state"], 321)
+        self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_set_surrogate_options_validates_rbf_regressor(self):
+        study = self._make_two_parameter_study()
+
+        study.set_surrogate_options(
+            regressor_type="RBF",
+            neighbors=9,
+        )
+
+        self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
+        self.assertEqual(study._surrogate_options["neighbors"], 9)
+        self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_set_surrogate_options_rejects_unknown_regressor(self):
+        study = self._make_two_parameter_study()
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_options(regressor_type="bad_regressor")
+
 
 class TestSparseGridAdaptiveSurrogateStudy(
     AdaptiveSurrogateStudyBaseBehaviorMixin,
@@ -3211,4 +3463,74 @@ class TestVoronoiAdaptiveSurrogateActualFit(
             best_n_surrogates=1,
             save_every_n_batches=None,
             score_metric="max_error",
+        )
+
+class TestVoronoiAdaptiveSurrogateActualFitWithRBF(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return VoronoiAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_number_of_initial_samples(4)
+        study.set_cross_validation_options(
+            nsplits=0,
+            nmax_folds=1,
+            nmax_loo="all",
+            cv_metric="sum_abs",
+            batch_size=1,
+        )
+        study.set_voronoi_sampling_options(
+            voronoi_type="full",
+            finite_only=False,
+            iterative_updates=True,
+        )
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )
+        study.set_surrogate_regressor(
+            "RBF",
+            neighbors=3,
+        )
+
+
+class TestVoronoiAdaptiveSurrogateActualFitWithRandomForest(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return VoronoiAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_number_of_initial_samples(4)
+        study.set_cross_validation_options(
+            nsplits=0,
+            nmax_folds=1,
+            nmax_loo="all",
+            cv_metric="sum_abs",
+            batch_size=1,
+        )
+        study.set_voronoi_sampling_options(
+            voronoi_type="full",
+            finite_only=False,
+            iterative_updates=True,
+        )
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )
+        study.set_surrogate_regressor(
+            "Random Forest",
+            n_estimators=5,
+            random_state=123,
         )

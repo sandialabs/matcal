@@ -279,18 +279,8 @@ def make_paper_gp_regressor_options():
     :return: Keyword options for MatCal's Gaussian-process regressor.
     :rtype: dict
     """
-    kernel = ConstantKernel(
-        constant_value=1.0,
-        constant_value_bounds=(1.0e-3, 1.0e3),
-    ) * RBF(
-        length_scale=np.ones(2),
-        length_scale_bounds=(1.0e-2, 1.0e2),
-    )
-
     return {
-        "surrogate_type": "PCA Multiple Regressors",
         "regressor_type": "Gaussian Process",
-        "kernel": kernel,
         "n_restarts_optimizer": 10,
         "alpha": 1.0e-10,
         "normalize_y": True,

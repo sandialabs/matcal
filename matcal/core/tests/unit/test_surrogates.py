@@ -10,21 +10,30 @@ from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.parameter_studies import ParameterStudy
 from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.study_base import StudyResults
-from matcal.core.surrogates import (_ReconstructionDecomposition, 
-                                    _VarianceDecomposition, _MatCalLogScaler, 
-                                    _assign_decomp, 
-                                    _identify_fields_of_interest, 
-                                    _import_parameter_hist, 
-                                    _make_parameter_scaler_set,  
-                                    _package_parameter_ranges, _parse_evaluation_info, 
-                                    _process_data_for_surrogate, _process_interpolation_locations, 
-                                    _process_surrogate_args_call,
-                                    _scale_data_for_surrogate, _score_recreation,
-                                    _tune_data_decomposition, 
-                                    _WorstEvaluations, _select_state_data, _select_model, 
-                                    _apply_preprocessing_function, 
-                                    SurrogateGenerator, 
-                                    _root_mean_squared_error)
+from matcal.core.surrogates import (
+    _MatCalLogScaler, 
+    _ReconstructionDecomposition, 
+    _RBFInterpolatorRegressor,
+    SurrogateGenerator, 
+    _VarianceDecomposition, 
+    _WorstEvaluations,
+    _apply_preprocessing_function, 
+    _assign_decomp, 
+    _identify_fields_of_interest, 
+    _import_parameter_hist, 
+    _make_parameter_scaler_set,  
+    _package_parameter_ranges, 
+    _parse_evaluation_info, 
+    _process_data_for_surrogate, 
+    _process_interpolation_locations, 
+    _process_surrogate_args_call,
+    _root_mean_squared_error,
+    _scale_data_for_surrogate,
+    _score_recreation,
+    _select_model,
+    _select_state_data,  
+    _tune_data_decomposition 
+)
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.utilities_for_tests import _generate_singe_model_single_state_mock_eval_hist
@@ -435,7 +444,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
             samples[i_dim, :] = grids[i_dim].flatten()
         return samples.T
     
-    
     class _DataGenerator:
         
         def __init__(self, func, *nominal_args):
@@ -473,8 +481,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
         recreated_scaled_test_data = decomposer.inverse_transform(test_latent_data)
         recreated_test_data = data_scaler.inverse_transform(recreated_scaled_test_data)
         self.assert_close_arrays(test_source_data, recreated_test_data, atol=recreation_error_tolerance, show_arrays=True)
-        
-        
         
     def test_worst_evaluations_collector_have_nothing_at_start(self):
         n_track = 2
@@ -522,14 +528,12 @@ class TestSurrogateFunctions(MatcalUnitTest):
         self.assertEqual(r_field, field_0)
         self.assertEqual(r_idx, eval_idx_0)
         
-        
     def test_assign_decomp_if_no_reconstuction_error_get_variance_based(self):
         var_decomp = .9
         recon_error = None
         decomp_tool = _assign_decomp(var_decomp, recon_error)
         self.assertIsInstance(decomp_tool, _VarianceDecomposition)
-        
-    
+            
     def test_assign_decomp_if_reconstuction_error_get_recon_based(self):
         var_decomp = .9
         recon_error = .1
@@ -549,7 +553,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
             _assign_decomp(-1, None)
         with self.assertRaises(RuntimeError):
             _assign_decomp(1.2, None)
-            
             
     def test_score_recreation_get_result_scaled_on_reference_data_constant(self):
         n_pts = 10
@@ -628,6 +631,45 @@ class TestSurrogateFunctions(MatcalUnitTest):
         with self.assertRaises(TypeError):
             scaler.fit(data_2d)
             scaler.transform(data_list)
+
+    def test_rbf_interpolator_regressor_uses_default_neighbors(self):
+        rng = np.random.default_rng(123)
+        n_samples = 80
+        x = rng.uniform(-1, 1, (n_samples, 2))
+        y = x[:, 0] + 2.0 * x[:, 1]
+
+        regressor = _RBFInterpolatorRegressor()
+        regressor.fit(x, y)
+
+        self.assertEqual(regressor._effective_neighbors, 50)
+
+        prediction = regressor.predict(x[:5])
+        self.assertEqual(prediction.shape, (5,))
+
+        score = regressor.score(x, y)
+        self.assertGreater(score, 0.99)
+
+    def test_rbf_interpolator_regressor_respects_user_neighbors(self):
+        rng = np.random.default_rng(123)
+        n_samples = 40
+        x = rng.uniform(-1, 1, (n_samples, 2))
+        y = np.sin(x[:, 0]) + x[:, 1] ** 2
+
+        regressor = _RBFInterpolatorRegressor(neighbors=12)
+        regressor.fit(x, y)
+
+        self.assertEqual(regressor._effective_neighbors, 12)
+
+    def test_rbf_interpolator_regressor_caps_neighbors_to_training_size(self):
+        rng = np.random.default_rng(123)
+        n_samples = 10
+        x = rng.uniform(-1, 1, (n_samples, 2))
+        y = x[:, 0] - x[:, 1]
+
+        regressor = _RBFInterpolatorRegressor(neighbors=50)
+        regressor.fit(x, y)
+
+        self.assertEqual(regressor._effective_neighbors, n_samples)
 
 
 class TestSurrogateGenerator(MatcalUnitTest):
@@ -892,6 +934,59 @@ class TestSurrogateGenerator(MatcalUnitTest):
                 out_data[f'var_{i_var}'] = np.array(record)
             matcal_save('passed_failed_parameters.joblib', out_data)
         self.assertTrue(N_passed / (N_failed + N_passed) > .9)
+
+    def test_surrogate_for_line_with_rbf_regressor(self):
+        def test_function(m, b, n_features=None):
+            if n_features is None:
+                n_features = np.random.randint(10, 50)
+            x = np.linspace(0, 10, n_features)
+            y = m * x + b
+            return {'x': x, 'y': y}
+
+        n_samples = 200
+        p_names = ['m', 'b']
+        p_low = [0, -1]
+        p_high = [1, 1]
+        show_array = True
+        probes = ['y']
+        indep_var = 'x'
+        err_tol = 5e-2
+        n_interp = 200
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples,
+            p_names,
+            p_low,
+            p_high,
+            indep_var,
+            test_function,
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Multiple Regressors",
+            regressor_type="RBF",
+            neighbors=25,
+        )
+
+        surrogate = sur_gen.generate('my_rbf_surrogate')
+
+        self._confirm_alignment_to_function(
+            p_low,
+            p_high,
+            show_array,
+            probes,
+            err_tol,
+            n_interp,
+            test_function,
+            surrogate,
+        )
+
+        self._confirm_good_test_scores(surrogate)
+
+        for field, modal_regressor in surrogate._regressors.items():
+            for mode_regressor in modal_regressor._mode_regressors:
+                self.assertIsInstance(mode_regressor, _RBFInterpolatorRegressor)
+                self.assertEqual(mode_regressor._effective_neighbors, 25)
 
 
 class TestProcessSurrogateArgsCall(MatcalUnitTest):

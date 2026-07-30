@@ -98,8 +98,11 @@ class SurrogateGenerator:
 
         :param regressor_type: The identifier key for what core regressor 
             form to use as the predictor. 
-            Only "Random Forest" and "Gaussian Process" are accepted. Currently, MatCal
-            uses the implementations of these tools from the sklearn library. 
+            Only "Random Forest", "Gaussian Process" and "RBF" are accepted. Currently, MatCal
+            uses the implementations of the random forest and Gaussian Process tools
+            from the sklearn library. For "RBF", MatCal uses scipy.interpolate.RBFInterpolator with a default
+            local-neighbor count of 50. This can be changed by passing neighbors=<int>
+            through regressor_kwargs.
         :type regressor_type: str
 
         :param test_eval_info: A container of the relevant
@@ -544,6 +547,85 @@ class _WorstEvaluations:
         return self._field_eval_sets
 
 
+class _RBFInterpolatorRegressor(BaseEstimator):
+    """
+    sklearn-like wrapper around scipy.interpolate.RBFInterpolator.
+
+    By default, this uses a local RBF interpolant with a limited number of
+    nearest neighbors so that prediction cost does not grow too aggressively
+    for large training sets.
+    """
+
+    def __init__(self, neighbors=50, **rbf_kwargs):
+        self.neighbors = neighbors
+        self.rbf_kwargs = rbf_kwargs
+        self._rbf = None
+        self._effective_neighbors = None
+        self._single_output = False
+
+    def fit(self, input_values, output_values):
+        from scipy.interpolate import RBFInterpolator
+
+        input_values = np.asarray(input_values, dtype=float)
+        output_values = np.asarray(output_values, dtype=float)
+
+        if input_values.ndim != 2:
+            raise ValueError("RBFInterpolator input values must be a 2D array.")
+
+        if output_values.ndim == 1:
+            self._single_output = True
+        elif output_values.ndim == 2 and output_values.shape[1] == 1:
+            self._single_output = True
+
+        n_samples = input_values.shape[0]
+
+        if self.neighbors is None:
+            effective_neighbors = None
+        else:
+            effective_neighbors = min(int(self.neighbors), n_samples)
+            if effective_neighbors < 1:
+                raise ValueError("RBFInterpolator neighbors must be at least 1.")
+
+        self._effective_neighbors = effective_neighbors
+        self._rbf = RBFInterpolator(
+            input_values,
+            output_values,
+            neighbors=effective_neighbors,
+            **self.rbf_kwargs,
+        )
+
+        return self
+
+    def predict(self, input_values):
+        if self._rbf is None:
+            raise RuntimeError("RBFInterpolatorRegressor must be fit before predict is called.")
+
+        input_values = np.asarray(input_values, dtype=float)
+        prediction = self._rbf(input_values)
+
+        if self._single_output:
+            prediction = np.asarray(prediction).ravel()
+
+        return prediction
+
+    def score(self, input_values, output_values):
+        prediction = np.asarray(self.predict(input_values))
+        output_values = np.asarray(output_values)
+
+        if prediction.shape != output_values.shape and prediction.size == output_values.size:
+            prediction = prediction.reshape(output_values.shape)
+
+        if output_values.ndim == 2 and output_values.shape[1] == 1:
+            output_values = output_values.ravel()
+            prediction = prediction.ravel()
+
+        return r2_score(output_values, prediction)
+
+
+def _init_rbf_surrogate(n_inputs, **kwargs):
+    return _RBFInterpolatorRegressor(**kwargs)
+
+
 def _init_random_forest_surrogate(n_inputs, **kwargs):
     from sklearn.ensemble import RandomForestRegressor
     return RandomForestRegressor(**kwargs)
@@ -551,14 +633,30 @@ def _init_random_forest_surrogate(n_inputs, **kwargs):
 
 def _init_gp_surrogate(n_inputs, **kwargs):
     from sklearn.gaussian_process import GaussianProcessRegressor
-    # reference for later for anisotropic kernel generation
-    # aniso_kernel = RBF(1e-1 * np.ones(n_inputs), length_scale_bounds=(1e-5, 1e5))
+
+    if "kernel" not in kwargs:
+        from sklearn.gaussian_process.kernels import (
+            RBF, 
+            ConstantKernel, 
+            WhiteKernel
+        )
+
+        kernel = ConstantKernel(1.0, (1e-6, 1e6)) * RBF(
+            length_scale=np.ones(n_inputs),
+            length_scale_bounds=(1e-6, 1e4),
+        )+ WhiteKernel(noise_level=1e-8, noise_level_bounds=(1e-12, 1e-3))
+        kwargs["kernel"] = kernel
+    if "alpha" not in kwargs:
+        kwargs["alpha"] = 1e-8
     gpr = GaussianProcessRegressor(**kwargs)
     return gpr
 
 
-_regressor_lookup = {"Random Forest":_init_random_forest_surrogate,
-                        "Gaussian Process":_init_gp_surrogate}
+_regressor_lookup = {
+    "Random Forest":_init_random_forest_surrogate,
+    "Gaussian Process":_init_gp_surrogate, 
+    "RBF": _init_rbf_surrogate
+}
 
 
 def _initialize_regressor(regressor_type, n_inputs, regressor_kwargs):
@@ -999,17 +1097,31 @@ def _regressor_rmse(regressor, input_values, evals):
 
 
 def _calculate_nlpd(gpr, input_values, y_true):
+    variance_floor = 1e-12
+
     mu, std = gpr.predict(input_values, return_std=True)
+
+    y_true = np.asarray(y_true, dtype=float)
+    mu = np.asarray(mu, dtype=float)
+    std = np.asarray(std, dtype=float)
+
+    if mu.shape != y_true.shape and mu.size == y_true.size:
+        mu = mu.reshape(y_true.shape)
+
+    if std.shape != y_true.shape and std.size == y_true.size:
+        std = std.reshape(y_true.shape)
 
     y_true = y_true.ravel()
     mu = mu.ravel()
+    std = std.ravel()
 
     var = std ** 2
+    var = np.maximum(var, variance_floor)
+
     residuals = y_true - mu
 
-    return 0.5 * np.mean(
-        np.log(2 * np.pi * var) + (residuals ** 2) / var
-    )
+    nlpd_terms = np.log(2 * np.pi * var) + (residuals ** 2) / var
+    return 0.5 * np.mean(nlpd_terms)
 
 
 def _calculate_rmse(regressor, input_values, y_true):
@@ -1574,6 +1686,10 @@ def _root_mean_squared_error(test_values, surrogate_values):
     """
     test_values = np.asarray(test_values, dtype=float)
     surrogate_values = np.asarray(surrogate_values, dtype=float)
+
+    if test_values.shape != surrogate_values.shape and test_values.size == surrogate_values.size:
+        surrogate_values = surrogate_values.reshape(test_values.shape)
+
     return np.sqrt(np.mean((test_values - surrogate_values) ** 2))
 
 

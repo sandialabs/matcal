@@ -3981,6 +3981,30 @@ def _validate_cv_metric(cv_metric):
     return cv_metric
 
 
+def _validate_surrogate_generator_regressor_type(regressor_type):
+    """
+    Validate a regressor type against the regressors registered with
+    SurrogateGenerator.
+
+    This intentionally uses the SurrogateGenerator regressor registry so that
+    Voronoi adaptive surrogate studies support the same regressor names as the
+    standard surrogate generator.
+    """
+    check_value_is_nonempty_str(regressor_type, "regressor_type")
+
+    from matcal.core.surrogates import _regressor_lookup
+
+    valid_regressor_types = tuple(_regressor_lookup.keys())
+
+    if regressor_type not in valid_regressor_types:
+        raise ValueError(
+            "Unsupported surrogate regressor type. Supported regressor types "
+            f"are {valid_regressor_types}. Received '{regressor_type}'."
+        )
+
+    return regressor_type
+
+
 class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     _adaptive_surrogate_class = AdaptiveSurrogate
@@ -4082,6 +4106,81 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             check_value_is_positive_integer(num_initial_samples, "num_initial_samples")
             self._num_initial_samples = num_initial_samples
 
+    def set_surrogate_regressor(self, regressor_type="Gaussian Process",
+                                **regressor_kwargs):
+        """
+        Select the regressor used by the internal
+        :class:`matcal.core.surrogates.SurrogateGenerator`.
+
+        Supported regressor types are those registered with
+        ``SurrogateGenerator``, including:
+
+        * ``"Gaussian Process"``
+        * ``"Random Forest"``
+        * ``"RBF"``
+        * ``"RBF Interpolator"``
+
+        Additional keyword arguments are forwarded directly to the underlying
+        regressor constructor.
+
+        For example, to use a local SciPy RBF interpolator:
+
+        .. code-block:: python
+
+            study.set_surrogate_regressor(
+                "RBF",
+                neighbors=25,
+            )
+
+        To use a random forest:
+
+        .. code-block:: python
+
+            study.set_surrogate_regressor(
+                "Random Forest",
+                n_estimators=50,
+                random_state=123,
+            )
+
+        .. note::
+
+            ``"Random Forest"`` and ``"RBF"`` do not provide predictive
+            standard deviations. Therefore, the latent-space ``"nlpd"``
+            convergence metric is not meaningful for these regressors. If the
+            study is still using the default ``"nlpd"`` convergence metric, this
+            method switches it to ``"rmse"``.
+
+        :param regressor_type: SurrogateGenerator regressor identifier.
+        :type regressor_type: str
+
+        :param regressor_kwargs: Keyword arguments forwarded to the regressor.
+        """
+        regressor_type = _validate_surrogate_generator_regressor_type(regressor_type)
+
+        self._surrogate_options["regressor_type"] = regressor_type
+        self._surrogate_options.update(regressor_kwargs)
+
+        self._update_convergence_metric_for_current_surrogate_regressor()
+
+    def _update_convergence_metric_for_current_surrogate_regressor(self):
+        """
+        Use RMSE convergence by default for regressors that do not provide
+        predictive uncertainty.
+        """
+        regressor_type = self._surrogate_options.get(
+            "regressor_type",
+            "Gaussian Process",
+        )
+
+        if regressor_type != "Gaussian Process" and self._convergence_metric == "nlpd":
+            logger.warning(
+                "The Voronoi adaptive surrogate convergence metric was set to "
+                "'nlpd', but regressor type "
+                f"'{regressor_type}' does not provide predictive standard "
+                "deviations. Switching convergence_metric to 'rmse'."
+            )
+            self._convergence_metric = "rmse"
+
     def set_batch_size(self, batch_size=None):
         """
         Set the number of new Voronoi sample locations requested per batch.
@@ -4173,17 +4272,47 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def set_surrogate_options(self, **kwargs):
         """
-        Set keyword options forwarded to :class:`matcal.core.surrogates.SurrogateGenerator`.
+        Set keyword options forwarded to
+        :class:`matcal.core.surrogates.SurrogateGenerator`.
 
-        These options may include surrogate-generation options such as ``decomp_var``,
-        ``surrogate_type``, ``regressor_type``, or regressor-specific keyword arguments,
-        depending on what :class:`SurrogateGenerator` accepts.
+        These options may include surrogate-generation options such as
+        ``decomp_var``, ``surrogate_type``, ``regressor_type``, or
+        regressor-specific keyword arguments.
 
-        :param kwargs: Keyword options passed to surrogate generation during adaptive
-            training and cross-validation surrogate fitting.
+        Examples
+        --------
+
+        Use the default PCA surrogate with a random forest latent-space
+        regressor:
+
+        .. code-block:: python
+
+            study.set_surrogate_options(
+                regressor_type="Random Forest",
+                n_estimators=25,
+                random_state=123,
+            )
+
+        Use a local RBF interpolator:
+
+        .. code-block:: python
+
+            study.set_surrogate_options(
+                regressor_type="RBF",
+                neighbors=30,
+            )
+
+        :param kwargs: Keyword options passed to surrogate generation during
+            adaptive training and cross-validation surrogate fitting.
         :type kwargs: dict
         """
+        if "regressor_type" in kwargs:
+            kwargs["regressor_type"] = _validate_surrogate_generator_regressor_type(
+                kwargs["regressor_type"]
+            )
+
         self._surrogate_options = kwargs
+        self._update_convergence_metric_for_current_surrogate_regressor()
 
     def set_convergence_criteria(self, eps=1e-12, convergence_metric='nlpd'):
         """
