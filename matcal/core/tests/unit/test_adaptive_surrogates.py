@@ -91,630 +91,6 @@ b = Parameter("b", 0, 10)
 c = Parameter("c", 0.1, 2)
 
 
-class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
-    """
-    All tests inherit from MatcalUnitTest so that they get the same
-    temporary build directory handling that the original MatCal unit tests use.
-    """
-
-    def setUp(self):
-        super().setUp(__file__)           
-        p1 = Parameter("p1", 0.0, 1.0, 0.5)
-        p2 = Parameter("p2", -1.0, 1.0, 0.0)
-        self.simple_parameters =(p1, p2)
-        self.study = SparseGridAdaptiveSurrogateStudy(*self.simple_parameters)
-
-    def test_parameter_bounds(self):
-        bounds = _get_parameter_bounds(self.study._parameter_collection)
-        expected = np.array([[0.0, 1.0],
-                             [-1.0, 1.0]])
-        np.testing.assert_array_equal(bounds, expected)
-
-    def test_set_independent_variable(self):
-        self.study.set_independent_variable("time", np.linspace(0, 1, 5))
-        self.assertEqual(self.study._independent_variable, "time")
-        np.testing.assert_array_equal(
-            self.study._independent_variable_values,
-            np.linspace(0, 1, 5)
-        )
-        with self.assertRaises(TypeError):
-            self.study.set_independent_variable(1.0, np.linspace(0,1,2))
-
-        with self.assertRaises(ValueError):
-            self.study.set_independent_variable("", "")
-
-        with self.assertRaises(TypeError):
-            self.study.set_independent_variable("1", "")
-    
-    def test_error_with_add_parameter_set(self):
-        with self.assertRaises(RuntimeError):
-            self.study.add_parameter_evaluation(p1=1, p2=2)
-
-    def test_set_target_field(self):
-        self.study.set_target_field_name("temperature")
-        self.assertEqual(self.study._target_field_name, "temperature")
-
-        with self.assertRaises(TypeError):
-            self.study.set_target_field_name(1.0)
-
-    def test_set_number_of_test_samples(self):
-        self.study.set_number_of_test_samples(20)
-        self.assertEqual(self.study._number_of_test_samples, 20)
-        with self.assertRaises(TypeError):
-            self.study.set_number_of_test_samples("a")
-
-    def test_set_number_max_training_samples(self):
-        self.study.set_max_training_samples(500)
-        self.assertEqual(self.study._max_training_samples, 500)
-
-        with self.assertRaises(TypeError):
-            self.study.set_max_training_samples("a")
-
-    def test_set_group_random_seed(self):
-        #appears to be no way to really test the seed that gets into the SciPy Halton class.
-        self.study.set_seed(10)
-        self.study.set_test_group_random_seed(1234)
-        self.assertEqual(self.study._test_group_random_seed, 1234)
-        self.assertEqual(self.study._seed, 10)
-
-        with self.assertRaises(TypeError):
-            self.study.set_test_group_random_seed("")
-        
-    def test_default_test_samples_calculation(self):
-        self.study.set_max_training_samples(200)# 200//20 = 10; 2 params*10 = 20 → default = 20
-        default = self.study._set_default_number_of_test_samples()
-        self.assertEqual(default, 20)
-        
-        self.study.set_max_training_samples(2000)# 2000//20 = 100; 2 params*10 = 20 → default = 100
-        default = self.study._set_default_number_of_test_samples()
-        self.assertEqual(default, 100)
-
-    def test_make_simulation_results_synchronizer_success(self):
-        self.study.set_independent_variable("x", [0.0, 1.0])
-        self.study.set_target_field_name("y")
-        sync = self.study._make_simulation_results_synchronizer(None)
-        self.assertIsInstance(sync, SimulationResultsSynchronizer)
-        self.assertEqual(sync.independent_field, "x")
-        self.assertEqual(sync._independent_field_values, [0.0, 1.0])
-        self.assertEqual(sync.fields_of_interest, ("y",))
-
-    def test_make_simulation_results_synchronizer_missing(self):
-        self.study.set_independent_variable("x", [0, 1])
-        with self.assertRaises(RuntimeError) as ctx:
-            self.study._make_simulation_results_synchronizer(None)
-        self.assertIn("Target field name", str(ctx.exception))
-
-        self.study._independent_variable = None
-        self.study._independent_variable_values = None
-        self.study.set_target_field_name("test")
-        with self.assertRaises(RuntimeError) as ctx:
-            self.study._make_simulation_results_synchronizer(None)
-        self.assertIn("Independent variable name", str(ctx.exception))
-
-    def test_add_evaluation_set_once(self):
-        """First call succeeds, second call raises."""
-        self.study.set_independent_variable("t", [0, 1])
-        self.study.set_target_field_name("z")
-        # First call – ok
-        self.assertFalse(self.study._evaluation_set_added)
-        self.study.add_evaluation_set(light_model)
-        self.assertTrue(self.study._evaluation_set_added)
-
-        # Second call – must raise
-        with self.assertRaises(RuntimeError):
-            self.study.add_evaluation_set(light_model)
-
-    def test_add_evaluation_set_invalid_state(self):
-        self.study.set_independent_variable("t", [0, 1])
-        self.study.set_target_field_name("z")
-        with self.assertRaises(TypeError):
-            self.study.add_evaluation_set(light_model, state="not_a_state")
-
-    def test_update_work_dir_for_test_sampling(self):
-        original = self.study._working_directory
-        returned = self.study._update_work_dir_for_test_sampling()
-        self.assertEqual(returned, original)
-        self.assertEqual(self.study._working_directory, os.path.abspath("test_samples"))
-
-        self.study.set_working_directory("work")
-        returned = self.study._update_work_dir_for_test_sampling()
-        self.assertEqual(os.path.abspath("work"), returned)
-
-        expected = os.path.abspath("work" + "_test_samples")
-        self.assertEqual(os.path.abspath(self.study._working_directory), expected)
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_launch_creates_test_directory_and_restores(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("y")
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        self.study.add_evaluation_set(light_model)
-        self.study.launch()
-        test_dir = os.path.abspath("test_samples")
-        self.assertTrue(os.path.isdir(test_dir))
-
-        self.study._reset_study_after_test_sampling_generation(None, True)
-        self.study.set_working_directory("work")
-        test_dir = os.path.abspath("work_test_samples")
-        self.study.launch()
-        self.assertTrue(os.path.isdir(test_dir))
-        self.assertTrue(os.path.isdir("work"))
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_user_qoi_extractor_in_add_eval_set(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("z")
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        extractor = UserDefinedExtractor(change_y_to_z, "y", "x")
-        with self.assertRaises(TypeError):
-            self.study.add_evaluation_set(light_model, qoi_extractor="yay")
-        self.study.add_evaluation_set(light_model, qoi_extractor=extractor)
-        results = self.study.launch()
-        objs = results.get_objectives_for_model("light_model")
-        self.assertTrue("z" in results.best_simulation_qois("light_model", objs[0], 
-                                                             "matcal_default_state", 0).field_names)
-
-    def test_format_params_and_output(self):
-        """Check that the two formatting helpers produce the expected arrays."""
-        class FakeResults:
-            def __init__(self):
-                self.parameter_history = {"p1": [0.1, 0.2, 0.4],
-                                          "p2": [0.3, 0.4, 0.25]}
-                self.number_of_evaluations = 3
-                self.simulation_history = {}
-                self.qoi_history = {}
-
-        fake = FakeResults()
-
-        params = self.study._format_params(fake)
-        self.assertIsInstance(params, np.ndarray)
-        self.assertTupleEqual(params.shape, (3, 2))
-
-        model_name = "dummy_model"
-
-        class DummyObjective:
-            def __init__(self, name):
-                self.name = name
-        dummy_obj = DummyObjective("obj")
-
-        class DummySimQoi:
-            def __init__(self, state_name, target, values):
-                self._data = {state_name: [{target: np.array(values)}]}
-
-            def __getitem__(self, key):
-                return self._data[key]
-
-        state_name = "state0"
-        target = "temperature"
-        sim0 = DummySimQoi(state_name, target, [1.0, 2.0])
-        sim1 = DummySimQoi(state_name, target, [3.0, 4.0])
-        sim2 = DummySimQoi(state_name, target, [5.0, 6.0])
-
-        class DummyQoiContainer:
-            def __init__(self, sim_qois):
-                self.simulation_qois = sim_qois
-
-        fake.qoi_history[f"{model_name}:{dummy_obj.name}"] = DummyQoiContainer([sim0, sim1, sim2])
-
-        # simulation_history must provide state_names
-        fake.simulation_history = {
-            model_name: types.SimpleNamespace(state_names=[state_name])
-        }
-
-        self.study.set_independent_variable("time", np.array([0.0, 1.0]))
-        self.study.set_target_field_name(target)
-
-        # Monkey‑patch the private helpers that would otherwise inspect the real
-        # evaluation‑set collections.
-        self.study._get_model_names = lambda: [model_name]
-        self.study._results_synchronizer = dummy_obj
-
-        # ----- _format_output -----
-        output = self.study._format_output(fake)
-        self.assertIsInstance(output, np.ndarray)
-        self.assertTupleEqual(output.shape, (3, 2))
-
-        expected = np.array([[1.0, 2.0],
-                             [3.0, 4.0], 
-                             [5.0, 6.0]])
-        np.testing.assert_array_equal(output, expected)
-
-    def test_format_batch_results_returns_expected_array(self):
-        class DummyQoiInfo:
-            def __init__(self, state, target, values):
-                # store as: {state: [{target: np.array(values)}]}
-                self.simulation_qois = {
-                    state: [{target: np.array(values)}]
-                }
-
-        sample_values = [
-            [10.0, 20.0, 30.0],  
-            [40.0, 50.0, 60.0],  
-            [70.0, 80.0, 90.0]   
-        ]
-
-        self.study.set_independent_variable("x", np.linspace(0,1,3))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        state_name = "state"
-
-        class FakeResults:
-            class FakeDC:
-                def __init__(self, state):
-                    self.state_names = [state]
-
-            def __init__(self,state):
-                self.simulation_history = {light_model.name:self.FakeDC(state)}
-
-        self.study._results = FakeResults(state_name)
-        target = "y"
-        model_name = light_model.name
-        qois_list = []
-        for vals in sample_values:
-            qoi_obj = DummyQoiInfo(state_name, target, vals)
-            # The outer dict is {model_name: {objective_name: qoi_obj}}
-            qois_list.append({model_name: {self.study._results_synchronizer.name: qoi_obj}})
-
-        batch_results = {"qois": qois_list}
-
-        n_params = 2
-        n_samples = len(sample_values)          # 3 samples
-        param_sets = np.zeros((n_params, n_samples))
-
-        formatted = self.study._format_batch_results(batch_results, param_sets)
-
-        expected = np.array(sample_values, dtype=float)
-
-        self.assertIsInstance(formatted, np.ndarray)
-        self.assertEqual(formatted.shape, (n_samples, len(self.study._independent_variable_values)))
-        np.testing.assert_array_equal(formatted, expected)
-
-    def test_populate_parameter_evaluations_adaptive(self):
-        """
-        Verify that the method:
-        * treats the sample matrix as native parameter values,
-        * creates a list ``_parameter_sets_to_evaluate`` with one dict per
-            sample,
-        * each dict contains the correct parameter names and values, and
-        * ``_add_parameter_evaluation`` is called with the same dictionaries.
-        """
-        native_samples = np.array([
-            [0.1, 0.2, 0.3],    # p1 values
-            [0.1, 0.5, -0.1],   # p2 values
-        ])
-
-        self.study._populate_parameter_evaluations_adaptive(native_samples)
-        self.assertEqual(len(self.study._parameter_sets_to_evaluate), 3)
-
-        expected_names = self.study._parameter_collection.get_item_names()
-        expected_names = list(expected_names)
-
-        for i, param_dict in enumerate(self.study._parameter_sets_to_evaluate):
-            self.assertCountEqual(param_dict.keys(), expected_names)
-            for name, col_idx in zip(expected_names, range(len(expected_names))):
-                expected_value = native_samples[col_idx, i]
-                self.assertAlmostEqual(param_dict[name], expected_value)
-
-    def test_update_surrogate_score(self):
-        self.study._test_params = np.array([[0.0, 1.0],
-                                            [0.5, 0.5],
-                                            [1.0, 0.0]])
-        self.study._test_responses = np.array([[1.0, 2.0],
-                                            [1.5, 2.5],
-                                            [0.75, 0.85]])
-
-        class DoubleParamSurrogate:
-            def __init__(self):
-                self.surrogate = self
-
-            def __call__(self, params):
-                results = np.array(params) * 2.0
-                return results
-
-        self.study._surrogate = SparseGridAdaptiveSurrogate(
-            "target",
-            "independent",
-            np.array([0.0, 1.0]),
-            self.study._test_params,
-            self.study._test_responses,
-            ["p1", "p2"],
-            np.array([[-1.0, 1.0], [-1.0, 1.0]]),
-        )
-
-        self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)
-
-        self.assertEqual(len(self.study.surrogate.rmse_history), 1)
-        self.assertEqual(len(self.study.surrogate.max_error_history), 1)
-
-        expected_rmse = np.sqrt(
-            np.mean(
-                (
-                    self.study._test_responses
-                    - DoubleParamSurrogate()(self.study._test_params.T).T
-                ) ** 2
-            )
-        )
-        self.assertAlmostEqual(self.study.surrogate.rmse_history[0], expected_rmse)
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_study_results_is_not_none(self):
-        """launch must eventually call the sparse‑grid routine."""
-        self.study.set_independent_variable("x", np.linspace(0,1,3))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(30)
-        self.study.set_number_of_test_samples(1)
-        self.study.launch()
-        self.assertIsNotNone(self.study.results)
-        sur_file = self.study.surrogate_save_filename
-        sur_results = matcal_load(sur_file)
-        self.assertEqual(self.study.surrogate.rmse_history, 
-                         sur_results.rmse_history)
-        self.assertEqual(self.study.surrogate.sample_count_history, 
-                         sur_results.sample_count_history)
-        self.assertEqual(self.study.surrogate.max_error_history, 
-                         sur_results.max_error_history) 
-        self.assertEqual(len(self.study.surrogate._surrogates), 
-                         len(sur_results._surrogates))
-        self.assert_close_dicts_or_data(sur_results(p1=0, p2=0), 
-                                        self.study.surrogate(p1=0, p2=0))
-
-    def _set_number_of_evaluations(self, n):
-        self.fake_results = types.SimpleNamespace(number_of_evaluations=0)
-        self.study._results = self.fake_results
-        self.fake_results.number_of_evaluations = n
-
-    def test_default_goals(self):
-        self.assertAlmostEqual(
-            self.study._rmse_goal,
-            1e-2,
-        )
-        self.assertAlmostEqual(
-            self.study._max_abs_error_goal,
-            1e-1,
-        )
-
-    def test_setting_both_goals(self):
-        new_rmse = 5e-3
-        new_max = 2e-3
-        self.study.set_error_stopping_criteria(
-            rmse_goal=new_rmse,
-            max_abs_error_goal=new_max,
-        )
-        self.assertAlmostEqual(
-            self.study._rmse_goal,
-            new_rmse,
-        )
-        self.assertAlmostEqual(
-            self.study._max_abs_error_goal,
-            new_max,
-        )
-
-    def test_setting_one_goal_keeps_other_untouched(self):
-        new_rmse = 1e-4
-        self.study.set_error_stopping_criteria(
-            rmse_goal=new_rmse
-        )
-        self.assertAlmostEqual(
-            self.study._rmse_goal,
-            new_rmse,
-        )
-        self.assertAlmostEqual(
-            self.study._max_abs_error_goal,
-            1e-1,
-        )
-    def test_invalid_non_numeric_raises_type_error(self):
-        with self.assertRaises(TypeError):
-            self.study.set_error_stopping_criteria(rmse_goal="bad")
-
-        with self.assertRaises(TypeError):
-            self.study.set_error_stopping_criteria(max_abs_error_goal=[1, 2])
-
-    def test_invalid_non_positive_raises_value_error(self):
-        with self.assertRaises(ValueError):
-            self.study.set_error_stopping_criteria(rmse_goal=0.0)
-
-        with self.assertRaises(ValueError):
-            self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
-
-    def test_set_save_filename(self):
-        self.assertEqual(self.study._surrogate_save_filename, None)
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_save_filename("my_surrogate_name")
-        with self.assertRaises(TypeError):
-            self.study.set_surrogate_save_filename(0)
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_save_filename("")
-        self.study.set_surrogate_save_filename("my_surrogate_name.joblib")
-        self.assertEqual(self.study._surrogate_save_filename, "my_surrogate_name.joblib")
-        self.assertEqual(self.study.surrogate_save_filename, "my_surrogate_name.joblib")
-
-    def test_set_surrogate_storage_options(self):
-        self.assertEqual(self.study._surrogate_storage_best_n_surrogates, 1)
-        self.assertIsNone(self.study._surrogate_storage_every_n_batches)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "max_error")
-
-        self.study.set_surrogate_storage_options(
-            best_n_surrogates=3,
-            save_every_n_batches=5,
-            score_metric="max_error",
-        )
-
-        self.assertEqual(self.study._surrogate_storage_best_n_surrogates, 3)
-        self.assertEqual(self.study._surrogate_storage_every_n_batches, 5)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "max_error")
-
-        self.study.set_surrogate_storage_options(
-            best_n_surrogates=None,
-            save_every_n_batches=2,
-            score_metric="score",
-        )
-
-        self.assertIsNone(self.study._surrogate_storage_best_n_surrogates)
-        self.assertEqual(self.study._surrogate_storage_every_n_batches, 2)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "r2")
-
-    def test_set_surrogate_storage_options_invalid_inputs(self):
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_storage_options(
-                best_n_surrogates=None,
-                save_every_n_batches=None,
-            )
-
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_storage_options(score_metric="not_a_metric")
-
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_storage_options(best_n_surrogates=0)
-
-        with self.assertRaises(TypeError):
-            self.study.set_surrogate_storage_options(save_every_n_batches="bad")
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_user_study_set_test_data_as_study_result(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        
-        p1 = Parameter("p1", 0.0, 1.0, 0.5)
-        p2 = Parameter("p2", -1.0, 1.0, 0.0)
-        self.simple_parameters =(p1, p2)
-        self.test_study = HaltonStudy(*self.simple_parameters)
-        self.test_study.set_number_of_samples(50)
-        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
-
-        results = self.test_study.launch()
-        self.study.set_test_data(results)
-        results = self.study.launch()
-        self.assertFalse(os.path.exists("test_samples"))
-        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_user_study_set_test_data_as_string(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        
-        p1 = Parameter("p1", 0.0, 1.0, 0.5)
-        p2 = Parameter("p2", -1.0, 1.0, 0.0)
-        self.simple_parameters =(p1, p2)
-        self.test_study = HaltonStudy(*self.simple_parameters)
-        self.test_study.set_number_of_samples(50)
-        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
-
-        results = self.test_study.launch()
-        self.study.set_test_data("final_results.joblib")
-        results = self.study.launch()
-        self.assertFalse(os.path.exists("test_samples"))
-        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
-    # -------------------------
-    # Validation / API errors
-    # -------------------------
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_rejects_invalid_basis_type(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        with self.assertRaises(ValueError):
-            sg_study.set_sparse_grid_basis(basis_type="not-a-basis")
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_rejects_invalid_piecewise_degree(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        with self.assertRaises(ValueError):
-            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=0)
-        with self.assertRaises(ValueError):
-            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=4)
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_adaptivity_limits_validation(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        # If you did not implement this method, remove/skip this test
-        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
-            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
-
-        with self.assertRaises((ValueError, TypeError)):
-            sg_study.set_sparse_grid_adaptivity_limits(max_level=0, pnorm=1.0)
-        with self.assertRaises((ValueError, TypeError)):
-            sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_sets_lagrange(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        sg_study.set_sparse_grid_basis(basis_type="lagrange")
-        self.assertEqual(sg_study._sg_basis_type, "lagrange")
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_sets_piecewise_degree(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=2)
-        self.assertEqual(sg_study._sg_basis_type, "piecewise")
-        self.assertEqual(sg_study._sg_piecewise_degree, 2)
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_adaptivity_limits_sets_values(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
-            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
-
-        sg_study.set_sparse_grid_adaptivity_limits(max_level=7, pnorm=2.0)
-        self.assertEqual(sg_study._sg_max_level, 7)
-        self.assertEqual(sg_study._sg_pnorm, 2.0)
-
-    def test_results_synchronizer_property_before_and_after_add_evaluation_set(self):
-        self.assertIsNone(self.study.results_synchronizer)
-
-        self.study.set_independent_variable("x", [0.0, 1.0])
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-
-        self.assertIsInstance(self.study.results_synchronizer, SimulationResultsSynchronizer)
-
-    def test_set_test_data_invalid_type_raises(self):
-        with self.assertRaises(TypeError):
-            self.study.set_test_data(123)
-
-    def test_set_test_data_string_invalid_loaded_object_raises(self):
-        with open("not_a_study_results.joblib", "wb") as f:
-            import pickle
-            pickle.dump({"not": "study_results"}, f)
-
-        with self.assertRaises(RuntimeError):
-            self.study.set_test_data("not_a_study_results.joblib")
-
-    def test_default_save_filename_is_none_before_launch(self):
-        self.assertIsNone(self.study._surrogate_save_filename)
-        self.assertIsNone(self.study.surrogate_save_filename)
-
-
 class ConstantSurrogate:
     """
     Callable surrogate model used in the tests.
@@ -2216,6 +1592,34 @@ class TestVoronoiPureFunctions(MatcalUnitTest):
 
         self.assert_close_arrays(reduced, candidates)
 
+    def test_reduce_voronoi_candidates_uses_random_selection_before_batch_limit(self):
+        candidates = np.array([
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [2.0, 2.0],
+            [3.0, 3.0],
+            [4.0, 4.0],
+            [5.0, 5.0],
+        ])
+
+        rng = np.random.default_rng(123)
+
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            n_parameters=2,
+            batch_size=2,
+            thin=None,
+            random_selection=4,
+            random_generator=rng,
+        )
+
+        self.assertEqual(reduced.shape, (2, 2))
+
+        for row in reduced:
+            self.assertTrue(
+                np.any(np.all(np.isclose(candidates, row), axis=1))
+            )
+
 
 class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
 
@@ -2299,306 +1703,6 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
 
         # Residual = true - predicted = [-1, 2], sum(abs(residual)) = 3.
         self.assertAlmostEqual(error, 3.0)
-
-
-class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
-
-    def setUp(self):
-        super().setUp(__file__)
-
-    def _make_two_parameter_study(self):
-        return VoronoiAdaptiveSurrogateStudy(
-            Parameter("x", 0.0, 1.0),
-            Parameter("y", -1.0, 1.0),
-        )
-
-    def test_module_level_make_bounded_nd_grid_from_study_bounds(self):
-        study = self._make_two_parameter_study()
-
-        grid = _make_bounded_nd_grid(study._bounds, 2)
-
-        expected_points = np.array([
-            [0.0, -1.0],
-            [1.0, -1.0],
-            [0.0, 1.0],
-            [1.0, 1.0],
-        ])
-
-        self.assertEqual(grid.shape, (4, 2))
-        for point in expected_points:
-            self.assertTrue(
-                np.any(np.all(np.isclose(grid, point), axis=1)),
-                msg=f"Expected point {point} was not found in {grid}.",
-            )
-
-    def test_module_level_filter_points_within_study_bounds(self):
-        study = self._make_two_parameter_study()
-
-        candidate_points = np.array([
-            [0.0, -1.0],
-            [0.5, 0.0],
-            [1.0, 1.0],
-            [-0.1, 0.0],
-            [0.5, 1.1],
-            [np.nan, 0.0],
-            [0.5, np.inf],
-        ])
-
-        filtered = _filter_points_within_bounds(
-            candidate_points,
-            study._bounds,
-            study._number_parameters,
-        )
-
-        expected = np.array([
-            [0.0, -1.0],
-            [0.5, 0.0],
-            [1.0, 1.0],
-        ])
-
-        self.assert_close_arrays(filtered, expected)
-
-    def test_module_level_remove_duplicate_rows_against_training_points(self):
-        study = self._make_two_parameter_study()
-
-        training_points = np.array([
-            [0.0, -1.0],
-            [1.0, 1.0],
-        ])
-
-        candidate_points = np.array([
-            [1.0, 1.0 + 5.0e-11],
-            [0.25, -0.5],
-            [0.25, -0.5 + 5.0e-11],
-            [0.75, 0.5],
-        ])
-
-        filtered = _remove_duplicate_rows_against_existing(
-            candidate_points,
-            training_points,
-            study._number_parameters,
-            atol=1.0e-10,
-        )
-
-        expected = np.array([
-            [0.25, -0.5],
-            [0.75, 0.5],
-        ])
-
-        self.assert_close_arrays(filtered, expected)
-
-    def test_module_level_random_subset_rows_is_reproducible_with_study_rng(self):
-        values = np.array([
-            [0.0, -1.0],
-            [0.25, -0.5],
-            [0.5, 0.0],
-            [0.75, 0.5],
-            [1.0, 1.0],
-        ])
-
-        study_a = self._make_two_parameter_study()
-        study_b = self._make_two_parameter_study()
-        study_a.set_seed(123)
-        study_b.set_seed(123)
-
-        subset_a = _random_subset_rows(
-            values,
-            n_rows=3,
-            random_generator=study_a._random_generator,
-            n_parameters=study_a._number_parameters,
-        )
-        subset_b = _random_subset_rows(
-            values,
-            n_rows=3,
-            random_generator=study_b._random_generator,
-            n_parameters=study_b._number_parameters,
-        )
-
-        self.assert_close_arrays(subset_a, subset_b)
-        self.assertEqual(subset_a.shape, (3, 2))
-
-    def test_reduce_voronoi_candidates_returns_all_candidates_in_one_at_a_time_mode(self):
-        study = self._make_two_parameter_study()
-        study._batch_size = 1
-        study._thin = 2
-        study._random_selection = None
-
-        candidates = np.array([
-            [0.0, -1.0],
-            [0.25, -0.5],
-            [0.5, 0.0],
-            [0.75, 0.5],
-        ])
-
-        reduced = _reduce_voronoi_candidates(
-            candidates,
-            study._number_parameters,
-            study._batch_size,
-            study._thin,
-            study._random_selection,
-            study._random_generator,
-        )
-
-        self.assert_close_arrays(reduced, candidates)
-
-    def test_reduce_voronoi_candidates_applies_thinning_and_batch_size_limit(self):
-        study = self._make_two_parameter_study()
-        study._batch_size = 2
-        study._thin = 2
-        study._random_selection = None
-
-        candidates = np.array([
-            [0.0, -1.0],
-            [0.25, -0.5],
-            [0.5, 0.0],
-            [0.75, 0.5],
-            [1.0, 1.0],
-        ])
-
-        reduced = _reduce_voronoi_candidates(
-            candidates,
-            study._number_parameters,
-            study._batch_size,
-            study._thin,
-            study._random_selection,
-            study._random_generator,
-        )
-
-        expected = np.array([
-            [0.0, -1.0],
-            [0.5, 0.0],
-        ])
-
-        self.assert_close_arrays(reduced, expected)
-
-    def test_reduce_voronoi_candidates_applies_random_selection_and_batch_size_limit(self):
-        study_a = self._make_two_parameter_study()
-        study_b = self._make_two_parameter_study()
-        study_a.set_seed(456)
-        study_b.set_seed(456)
-
-        for study in (study_a, study_b):
-            study._batch_size = 2
-            study._thin = None
-            study._random_selection = 4
-
-        candidates = np.array([
-            [0.0, -1.0],
-            [0.25, -0.5],
-            [0.5, 0.0],
-            [0.75, 0.5],
-            [1.0, 1.0],
-        ])
-
-        reduced_a = _reduce_voronoi_candidates(
-            candidates,
-            study_a._number_parameters,
-            study_a._batch_size,
-            study_a._thin,
-            study_a._random_selection,
-            study_a._random_generator,
-        )
-
-        reduced_b = _reduce_voronoi_candidates(
-            candidates,
-            study_b._number_parameters,
-            study_b._batch_size,
-            study_b._thin,
-            study_b._random_selection,
-            study_b._random_generator,
-        )
-
-        self.assert_close_arrays(reduced_a, reduced_b)
-        self.assertEqual(reduced_a.shape, (2, 2))
-
-    def test_package_unique_bounded_points_uniques_and_filters_bounds(self):
-        study = self._make_two_parameter_study()
-
-        new_points = np.array([
-            [0.5, 0.0],
-            [0.5, 0.0],
-            [1.1, 0.0],
-            [0.25, -0.5],
-            [np.nan, 0.0],
-        ])
-
-        packaged = _package_unique_bounded_points(
-            new_points,
-            study._bounds,
-            study._number_parameters,
-        )
-
-        expected = np.array([
-            [0.25, -0.5],
-            [0.5, 0.0],
-        ])
-
-        self.assert_close_arrays(packaged, expected)
-
-    def test_get_deterministic_in_cell_grid_points_uses_nearest_seed_assignment(self):
-        study = self._make_two_parameter_study()
-        study.set_selected_cell_search_grid_points(3)
-
-        class FakeVoronoiTessellation:
-            points = np.array([
-                [0.0, -1.0],
-                [1.0, 1.0],
-            ])
-
-        study._voronoi_tessellation = FakeVoronoiTessellation()
-
-        seed_location = np.array([0.0, -1.0])
-        in_cell_points = study._get_deterministic_in_cell_grid_points(seed_location)
-
-        seed_points = study._voronoi_tessellation.points
-        owner_indices = _assign_points_to_nearest_seed(in_cell_points, seed_points)
-
-        self.assertTrue(in_cell_points.shape[0] > 0)
-        self.assertTrue(np.all(owner_indices == 0))
-
-    def test_find_first_valid_ranked_candidate_point_returns_first_valid_generated_point(self):
-        study = self._make_two_parameter_study()
-
-        candidate_locations = np.array([
-            [0.0, -1.0],
-            [0.5, 0.0],
-            [1.0, 1.0],
-        ])
-
-        def fake_find_new_sample_location(location):
-            if np.allclose(location, [0.0, -1.0]):
-                return None
-            if np.allclose(location, [0.5, 0.0]):
-                return np.array([0.25, -0.5])
-            return np.array([0.75, 0.5])
-
-        study._find_new_sample_location_for_candidate = fake_find_new_sample_location
-
-        point = study._find_first_valid_ranked_candidate_point(candidate_locations)
-
-        self.assert_close_arrays(point, np.array([0.25, -0.5]))
-
-    def test_find_first_valid_ranked_candidate_point_skips_out_of_bounds_points(self):
-        study = self._make_two_parameter_study()
-
-        candidate_locations = np.array([
-            [0.0, -1.0],
-            [0.5, 0.0],
-        ])
-
-        proposed_points = [
-            np.array([2.0, 0.0]),
-            np.array([0.25, -0.5]),
-        ]
-
-        def fake_find_new_sample_location(_):
-            return proposed_points.pop(0)
-
-        study._find_new_sample_location_for_candidate = fake_find_new_sample_location
-
-        point = study._find_first_valid_ranked_candidate_point(candidate_locations)
-
-        self.assert_close_arrays(point, np.array([0.25, -0.5]))
 
 
 class TestLeaveOneOutCrossValidation(MatcalUnitTest):
@@ -2977,84 +2081,7 @@ class TestVoronoiTessellation(MatcalUnitTest):
             self._make_bounds(),
             finite_only=finite_only,
         )
-
-    def _expected_number_of_ghost_points(self, tessellation):
-        boundary_points = _make_bounded_nd_grid(tessellation.bounds, 2)
-        ghost_points = _create_ghost_points(
-            boundary_points,
-            n_dimensions=tessellation.ndim,
-        )
-        return ghost_points.shape[0]
-
-    def test_module_level_normalize_candidate_array_handles_empty_single_and_batch(self):
-        empty = _normalize_candidate_array([], 2)
-        single = _normalize_candidate_array([1.0, 2.0], 2)
-        batch = _normalize_candidate_array([[1.0, 2.0], [3.0, 4.0]], 2)
-
-        self.assertEqual(empty.shape, (0, 2))
-        self.assert_close_arrays(single, np.array([[1.0, 2.0]]))
-        self.assert_close_arrays(batch, np.array([[1.0, 2.0], [3.0, 4.0]]))
-
-    def test_module_level_find_matching_row_index(self):
-        rows = np.array([
-            [0.0, 0.0],
-            [0.5, 0.5],
-            [1.0, 1.0],
-        ])
-
-        index = _find_matching_row_index(rows, np.array([0.5, 0.5]))
-
-        self.assertEqual(index, 1)
-
-    def test_module_level_find_matching_row_index_returns_none_without_match(self):
-        rows = np.array([
-            [0.0, 0.0],
-            [0.5, 0.5],
-        ])
-
-        index = _find_matching_row_index(rows, np.array([1.0, 1.0]))
-
-        self.assertIsNone(index)
-
-    def test_module_level_assign_points_to_nearest_seed(self):
-        query_points = np.array([
-            [0.1, 0.0],
-            [0.9, 0.0],
-            [2.2, 0.0],
-        ])
-        seed_points = np.array([
-            [0.0, 0.0],
-            [1.0, 0.0],
-            [2.0, 0.0],
-        ])
-
-        owners = _assign_points_to_nearest_seed(query_points, seed_points)
-
-        self.assert_close_arrays(owners, np.array([0, 1, 2]))
-
-    def test_module_level_select_farthest_point(self):
-        candidate_points = np.array([
-            [0.1, 0.0],
-            [0.5, 0.0],
-            [2.0, 0.0],
-        ])
-
-        farthest = _select_farthest_point(candidate_points, np.array([0.0, 0.0]))
-
-        self.assert_close_arrays(farthest, np.array([2.0, 0.0]))
-
-    def test_module_level_select_farthest_point_returns_none_for_empty_candidates(self):
-        farthest = _select_farthest_point(np.empty((0, 2)), np.array([0.0, 0.0]))
-
-        self.assertIsNone(farthest)
-
-    def test_module_level_finite_vertex_indices_keeps_zero_and_removes_negative_markers(self):
-        region = [-2, -1, 0, 3, 7]
-
-        indices = _finite_vertex_indices(region)
-
-        self.assertEqual(indices, [0, 3, 7])
-
+  
     def test_module_level_remove_invalid_rows_removes_nonfinite_rows(self):
         values = np.array([
             [0.0, 0.0],
@@ -3071,22 +2098,6 @@ class TestVoronoiTessellation(MatcalUnitTest):
         ])
 
         self.assert_close_arrays(filtered, expected)
-
-    def test_module_level_create_ghost_points_for_noncentered_domain_are_outside_domain(self):
-        bounds = np.array([
-            [2.0, 4.0],
-            [10.0, 20.0],
-        ])
-        boundary_points = _make_bounded_nd_grid(bounds, 2)
-
-        ghost_points = _create_ghost_points(boundary_points, n_dimensions=2)
-
-        inside_mask = (
-            (ghost_points >= bounds[:, 0])
-            & (ghost_points <= bounds[:, 1])
-        ).all(axis=1)
-
-        self.assertFalse(np.any(inside_mask))
 
     def test_build_creates_expected_boundary_points(self):
         tessellation = self._make_tessellation(finite_only=False)
@@ -3265,3 +2276,880 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
         with self.assertRaises(ValueError):
             tessellation.raise_if_invalid_region_index(len(tessellation.vor.regions))
+
+class AdaptiveSurrogateStudyBaseBehaviorMixin:
+    """
+    Tests for behavior implemented by AdaptiveSurrogateStudyBase.
+
+    Concrete test classes must provide:
+
+    * ``StudyClass``
+    * ``make_study()``
+    """
+
+    StudyClass = None
+
+    def make_study(self):
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        return self.StudyClass(p1, p2)
+
+    def test_parameter_bounds(self):
+        study = self.make_study()
+        bounds = _get_parameter_bounds(study._parameter_collection)
+        expected = np.array([[0.0, 1.0], [-1.0, 1.0]])
+        np.testing.assert_array_equal(bounds, expected)
+
+    def test_set_independent_variable(self):
+        study = self.make_study()
+        study.set_independent_variable("time", np.linspace(0, 1, 5))
+
+        self.assertEqual(study._independent_variable, "time")
+        np.testing.assert_array_equal(
+            study._independent_variable_values,
+            np.linspace(0, 1, 5),
+        )
+
+        with self.assertRaises(TypeError):
+            study.set_independent_variable(1.0, np.linspace(0, 1, 2))
+
+        with self.assertRaises(ValueError):
+            study.set_independent_variable("", "")
+
+        with self.assertRaises(TypeError):
+            study.set_independent_variable("x", "")
+
+    def test_set_target_field(self):
+        study = self.make_study()
+
+        study.set_target_field_name("temperature")
+        self.assertEqual(study._target_field_name, "temperature")
+
+        with self.assertRaises(TypeError):
+            study.set_target_field_name(1.0)
+
+    def test_set_number_of_test_samples(self):
+        study = self.make_study()
+
+        study.set_number_of_test_samples(20)
+        self.assertEqual(study._number_of_test_samples, 20)
+
+        with self.assertRaises(TypeError):
+            study.set_number_of_test_samples("a")
+
+    def test_set_max_training_samples(self):
+        study = self.make_study()
+
+        study.set_max_training_samples(500)
+        self.assertEqual(study._max_training_samples, 500)
+
+        with self.assertRaises(TypeError):
+            study.set_max_training_samples("a")
+
+    def test_set_test_group_random_seed(self):
+        study = self.make_study()
+
+        study.set_seed(10)
+        study.set_test_group_random_seed(1234)
+
+        self.assertEqual(study._test_group_random_seed, 1234)
+        self.assertEqual(study._seed, 10)
+
+        with self.assertRaises(TypeError):
+            study.set_test_group_random_seed("bad")
+
+    def test_default_test_samples_calculation(self):
+        study = self.make_study()
+
+        study.set_max_training_samples(200)
+        self.assertEqual(study._set_default_number_of_test_samples(), 20)
+
+        study.set_max_training_samples(2000)
+        self.assertEqual(study._set_default_number_of_test_samples(), 100)
+
+    def test_make_simulation_results_synchronizer_success(self):
+        study = self.make_study()
+
+        study.set_independent_variable("x", [0.0, 1.0])
+        study.set_target_field_name("y")
+
+        sync = study._make_simulation_results_synchronizer(None)
+
+        self.assertIsInstance(sync, SimulationResultsSynchronizer)
+        self.assertEqual(sync.independent_field, "x")
+        self.assertEqual(sync._independent_field_values, [0.0, 1.0])
+        self.assertEqual(sync.fields_of_interest, ("y",))
+
+    def test_make_simulation_results_synchronizer_missing_inputs(self):
+        study = self.make_study()
+
+        study.set_independent_variable("x", [0, 1])
+        with self.assertRaises(RuntimeError) as ctx:
+            study._make_simulation_results_synchronizer(None)
+        self.assertIn("Target field name", str(ctx.exception))
+
+        study._independent_variable = None
+        study._independent_variable_values = None
+        study.set_target_field_name("test")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            study._make_simulation_results_synchronizer(None)
+        self.assertIn("Independent variable name", str(ctx.exception))
+
+    def test_add_evaluation_set_once(self):
+        study = self.make_study()
+
+        study.set_independent_variable("t", [0, 1])
+        study.set_target_field_name("z")
+
+        self.assertFalse(study._evaluation_set_added)
+        study.add_evaluation_set(light_model)
+        self.assertTrue(study._evaluation_set_added)
+
+        with self.assertRaises(RuntimeError):
+            study.add_evaluation_set(light_model)
+
+    def test_add_evaluation_set_invalid_state(self):
+        study = self.make_study()
+
+        study.set_independent_variable("t", [0, 1])
+        study.set_target_field_name("z")
+
+        with self.assertRaises(TypeError):
+            study.add_evaluation_set(light_model, state="not_a_state")
+
+    def test_results_synchronizer_property_before_and_after_add_evaluation_set(self):
+        study = self.make_study()
+
+        self.assertIsNone(study.results_synchronizer)
+
+        study.set_independent_variable("x", [0.0, 1.0])
+        study.set_target_field_name("y")
+        study.add_evaluation_set(light_model)
+
+        self.assertIsInstance(
+            study.results_synchronizer,
+            SimulationResultsSynchronizer,
+        )
+
+    def test_set_save_filename(self):
+        study = self.make_study()
+
+        self.assertIsNone(study.surrogate_save_filename)
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_save_filename("my_surrogate_name")
+
+        with self.assertRaises(TypeError):
+            study.set_surrogate_save_filename(0)
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_save_filename("")
+
+        study.set_surrogate_save_filename("my_surrogate_name.joblib")
+        self.assertEqual(
+            study.surrogate_save_filename,
+            "my_surrogate_name.joblib",
+        )
+
+    def test_set_surrogate_storage_options(self):
+        study = self.make_study()
+
+        self.assertEqual(study._surrogate_storage_best_n_surrogates, 1)
+        self.assertIsNone(study._surrogate_storage_every_n_batches)
+        self.assertEqual(study._surrogate_storage_score_metric, "max_error")
+
+        study.set_surrogate_storage_options(
+            best_n_surrogates=3,
+            save_every_n_batches=5,
+            score_metric="max_error",
+        )
+
+        self.assertEqual(study._surrogate_storage_best_n_surrogates, 3)
+        self.assertEqual(study._surrogate_storage_every_n_batches, 5)
+        self.assertEqual(study._surrogate_storage_score_metric, "max_error")
+
+        study.set_surrogate_storage_options(
+            best_n_surrogates=None,
+            save_every_n_batches=2,
+            score_metric="score",
+        )
+
+        self.assertIsNone(study._surrogate_storage_best_n_surrogates)
+        self.assertEqual(study._surrogate_storage_every_n_batches, 2)
+        self.assertEqual(study._surrogate_storage_score_metric, "r2")
+
+    def test_set_surrogate_storage_options_invalid_inputs(self):
+        study = self.make_study()
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_storage_options(
+                best_n_surrogates=None,
+                save_every_n_batches=None,
+            )
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_storage_options(score_metric="not_a_metric")
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_storage_options(best_n_surrogates=0)
+
+        with self.assertRaises(TypeError):
+            study.set_surrogate_storage_options(save_every_n_batches="bad")
+
+
+
+class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
+    AdaptiveSurrogateStudyBaseBehaviorMixin,
+    MatcalUnitTest,
+):
+    StudyClass = VoronoiAdaptiveSurrogateStudy
+
+    def setUp(self):
+        super().setUp(__file__)
+        self.study = self.make_study()
+
+    def _make_two_parameter_study(self):
+        return VoronoiAdaptiveSurrogateStudy(
+            Parameter("x", 0.0, 1.0),
+            Parameter("y", -1.0, 1.0),
+        )
+
+    def test_reduce_voronoi_candidates_returns_all_candidates_in_one_at_a_time_mode(self):
+        study = self._make_two_parameter_study()
+        study._batch_size = 1
+        study._thin = 2
+        study._random_selection = None
+
+        candidates = np.array([
+            [0.0, -1.0],
+            [0.25, -0.5],
+            [0.5, 0.0],
+            [0.75, 0.5],
+        ])
+
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            study._number_parameters,
+            study._batch_size,
+            study._thin,
+            study._random_selection,
+            study._random_generator,
+        )
+
+        self.assert_close_arrays(reduced, candidates)
+
+    def test_get_deterministic_in_cell_grid_points_uses_nearest_seed_assignment(self):
+        study = self._make_two_parameter_study()
+        study.set_selected_cell_search_grid_points(3)
+
+        class FakeVoronoiTessellation:
+            points = np.array([
+                [0.0, -1.0],
+                [1.0, 1.0],
+            ])
+
+        study._voronoi_tessellation = FakeVoronoiTessellation()
+
+        seed_location = np.array([0.0, -1.0])
+        in_cell_points = study._get_deterministic_in_cell_grid_points(seed_location)
+
+        seed_points = study._voronoi_tessellation.points
+        owner_indices = _assign_points_to_nearest_seed(in_cell_points, seed_points)
+
+        self.assertTrue(in_cell_points.shape[0] > 0)
+        self.assertTrue(np.all(owner_indices == 0))
+
+    def test_find_first_valid_ranked_candidate_point_returns_first_valid_generated_point(self):
+        study = self._make_two_parameter_study()
+
+        candidate_locations = np.array([
+            [0.0, -1.0],
+            [0.5, 0.0],
+            [1.0, 1.0],
+        ])
+
+        def fake_find_new_sample_location(location):
+            if np.allclose(location, [0.0, -1.0]):
+                return None
+            if np.allclose(location, [0.5, 0.0]):
+                return np.array([0.25, -0.5])
+            return np.array([0.75, 0.5])
+
+        study._find_new_sample_location_for_candidate = fake_find_new_sample_location
+
+        point = study._find_first_valid_ranked_candidate_point(candidate_locations)
+
+        self.assert_close_arrays(point, np.array([0.25, -0.5]))
+
+    def test_find_first_valid_ranked_candidate_point_skips_out_of_bounds_points(self):
+        study = self._make_two_parameter_study()
+
+        candidate_locations = np.array([
+            [0.0, -1.0],
+            [0.5, 0.0],
+        ])
+
+        proposed_points = [
+            np.array([2.0, 0.0]),
+            np.array([0.25, -0.5]),
+        ]
+
+        def fake_find_new_sample_location(_):
+            return proposed_points.pop(0)
+
+        study._find_new_sample_location_for_candidate = fake_find_new_sample_location
+
+        point = study._find_first_valid_ranked_candidate_point(candidate_locations)
+
+        self.assert_close_arrays(point, np.array([0.25, -0.5]))
+
+
+class TestSparseGridAdaptiveSurrogateStudy(
+    AdaptiveSurrogateStudyBaseBehaviorMixin,
+    MatcalUnitTest,
+):
+    StudyClass = SparseGridAdaptiveSurrogateStudy
+
+    def setUp(self):
+        super().setUp(__file__)
+        self.study = self.make_study()
+    
+    def test_error_with_add_parameter_set(self):
+        with self.assertRaises(RuntimeError):
+            self.study.add_parameter_evaluation(p1=1, p2=2)
+
+    def test_update_work_dir_for_test_sampling(self):
+        original = self.study._working_directory
+        returned = self.study._update_work_dir_for_test_sampling()
+        self.assertEqual(returned, original)
+        self.assertEqual(self.study._working_directory, os.path.abspath("test_samples"))
+
+        self.study.set_working_directory("work")
+        returned = self.study._update_work_dir_for_test_sampling()
+        self.assertEqual(os.path.abspath("work"), returned)
+
+        expected = os.path.abspath("work" + "_test_samples")
+        self.assertEqual(os.path.abspath(self.study._working_directory), expected)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_launch_creates_test_directory_and_restores(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        self.study.add_evaluation_set(light_model)
+        self.study.launch()
+        test_dir = os.path.abspath("test_samples")
+        self.assertTrue(os.path.isdir(test_dir))
+
+        self.study._reset_study_after_test_sampling_generation(None, True)
+        self.study.set_working_directory("work")
+        test_dir = os.path.abspath("work_test_samples")
+        self.study.launch()
+        self.assertTrue(os.path.isdir(test_dir))
+        self.assertTrue(os.path.isdir("work"))
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_qoi_extractor_in_add_eval_set(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("z")
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        extractor = UserDefinedExtractor(change_y_to_z, "y", "x")
+        with self.assertRaises(TypeError):
+            self.study.add_evaluation_set(light_model, qoi_extractor="yay")
+        self.study.add_evaluation_set(light_model, qoi_extractor=extractor)
+        results = self.study.launch()
+        objs = results.get_objectives_for_model("light_model")
+        self.assertTrue("z" in results.best_simulation_qois("light_model", objs[0], 
+                                                             "matcal_default_state", 0).field_names)
+
+    def test_format_params_and_output(self):
+        """Check that the two formatting helpers produce the expected arrays."""
+        class FakeResults:
+            def __init__(self):
+                self.parameter_history = {"p1": [0.1, 0.2, 0.4],
+                                          "p2": [0.3, 0.4, 0.25]}
+                self.number_of_evaluations = 3
+                self.simulation_history = {}
+                self.qoi_history = {}
+
+        fake = FakeResults()
+
+        params = self.study._format_params(fake)
+        self.assertIsInstance(params, np.ndarray)
+        self.assertTupleEqual(params.shape, (3, 2))
+
+        model_name = "dummy_model"
+
+        class DummyObjective:
+            def __init__(self, name):
+                self.name = name
+        dummy_obj = DummyObjective("obj")
+
+        class DummySimQoi:
+            def __init__(self, state_name, target, values):
+                self._data = {state_name: [{target: np.array(values)}]}
+
+            def __getitem__(self, key):
+                return self._data[key]
+
+        state_name = "state0"
+        target = "temperature"
+        sim0 = DummySimQoi(state_name, target, [1.0, 2.0])
+        sim1 = DummySimQoi(state_name, target, [3.0, 4.0])
+        sim2 = DummySimQoi(state_name, target, [5.0, 6.0])
+
+        class DummyQoiContainer:
+            def __init__(self, sim_qois):
+                self.simulation_qois = sim_qois
+
+        fake.qoi_history[f"{model_name}:{dummy_obj.name}"] = DummyQoiContainer([sim0, sim1, sim2])
+
+        # simulation_history must provide state_names
+        fake.simulation_history = {
+            model_name: types.SimpleNamespace(state_names=[state_name])
+        }
+
+        self.study.set_independent_variable("time", np.array([0.0, 1.0]))
+        self.study.set_target_field_name(target)
+
+        # Monkey‑patch the private helpers that would otherwise inspect the real
+        # evaluation‑set collections.
+        self.study._get_model_names = lambda: [model_name]
+        self.study._results_synchronizer = dummy_obj
+
+        # ----- _format_output -----
+        output = self.study._format_output(fake)
+        self.assertIsInstance(output, np.ndarray)
+        self.assertTupleEqual(output.shape, (3, 2))
+
+        expected = np.array([[1.0, 2.0],
+                             [3.0, 4.0], 
+                             [5.0, 6.0]])
+        np.testing.assert_array_equal(output, expected)
+
+    def test_format_batch_results_returns_expected_array(self):
+        class DummyQoiInfo:
+            def __init__(self, state, target, values):
+                # store as: {state: [{target: np.array(values)}]}
+                self.simulation_qois = {
+                    state: [{target: np.array(values)}]
+                }
+
+        sample_values = [
+            [10.0, 20.0, 30.0],  
+            [40.0, 50.0, 60.0],  
+            [70.0, 80.0, 90.0]   
+        ]
+
+        self.study.set_independent_variable("x", np.linspace(0,1,3))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        state_name = "state"
+
+        class FakeResults:
+            class FakeDC:
+                def __init__(self, state):
+                    self.state_names = [state]
+
+            def __init__(self,state):
+                self.simulation_history = {light_model.name:self.FakeDC(state)}
+
+        self.study._results = FakeResults(state_name)
+        target = "y"
+        model_name = light_model.name
+        qois_list = []
+        for vals in sample_values:
+            qoi_obj = DummyQoiInfo(state_name, target, vals)
+            # The outer dict is {model_name: {objective_name: qoi_obj}}
+            qois_list.append({model_name: {self.study._results_synchronizer.name: qoi_obj}})
+
+        batch_results = {"qois": qois_list}
+
+        n_params = 2
+        n_samples = len(sample_values)          # 3 samples
+        param_sets = np.zeros((n_params, n_samples))
+
+        formatted = self.study._format_batch_results(batch_results, param_sets)
+
+        expected = np.array(sample_values, dtype=float)
+
+        self.assertIsInstance(formatted, np.ndarray)
+        self.assertEqual(formatted.shape, (n_samples, len(self.study._independent_variable_values)))
+        np.testing.assert_array_equal(formatted, expected)
+
+    def test_populate_parameter_evaluations_adaptive(self):
+        """
+        Verify that the method:
+        * treats the sample matrix as native parameter values,
+        * creates a list ``_parameter_sets_to_evaluate`` with one dict per
+            sample,
+        * each dict contains the correct parameter names and values, and
+        * ``_add_parameter_evaluation`` is called with the same dictionaries.
+        """
+        native_samples = np.array([
+            [0.1, 0.2, 0.3],    # p1 values
+            [0.1, 0.5, -0.1],   # p2 values
+        ])
+
+        self.study._populate_parameter_evaluations_adaptive(native_samples)
+        self.assertEqual(len(self.study._parameter_sets_to_evaluate), 3)
+
+        expected_names = self.study._parameter_collection.get_item_names()
+        expected_names = list(expected_names)
+
+        for i, param_dict in enumerate(self.study._parameter_sets_to_evaluate):
+            self.assertCountEqual(param_dict.keys(), expected_names)
+            for name, col_idx in zip(expected_names, range(len(expected_names))):
+                expected_value = native_samples[col_idx, i]
+                self.assertAlmostEqual(param_dict[name], expected_value)
+
+    def test_update_surrogate_score(self):
+        self.study._test_params = np.array([[0.0, 1.0],
+                                            [0.5, 0.5],
+                                            [1.0, 0.0]])
+        self.study._test_responses = np.array([[1.0, 2.0],
+                                            [1.5, 2.5],
+                                            [0.75, 0.85]])
+
+        class DoubleParamSurrogate:
+            def __init__(self):
+                self.surrogate = self
+
+            def __call__(self, params):
+                results = np.array(params) * 2.0
+                return results
+
+        self.study._surrogate = SparseGridAdaptiveSurrogate(
+            "target",
+            "independent",
+            np.array([0.0, 1.0]),
+            self.study._test_params,
+            self.study._test_responses,
+            ["p1", "p2"],
+            np.array([[-1.0, 1.0], [-1.0, 1.0]]),
+        )
+
+        self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)
+
+        self.assertEqual(len(self.study.surrogate.rmse_history), 1)
+        self.assertEqual(len(self.study.surrogate.max_error_history), 1)
+
+        expected_rmse = np.sqrt(
+            np.mean(
+                (
+                    self.study._test_responses
+                    - DoubleParamSurrogate()(self.study._test_params.T).T
+                ) ** 2
+            )
+        )
+        self.assertAlmostEqual(self.study.surrogate.rmse_history[0], expected_rmse)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_study_results_is_not_none(self):
+        """launch must eventually call the sparse‑grid routine."""
+        self.study.set_independent_variable("x", np.linspace(0,1,3))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(30)
+        self.study.set_number_of_test_samples(1)
+        self.study.launch()
+        self.assertIsNotNone(self.study.results)
+        sur_file = self.study.surrogate_save_filename
+        sur_results = matcal_load(sur_file)
+        self.assertEqual(self.study.surrogate.rmse_history, 
+                         sur_results.rmse_history)
+        self.assertEqual(self.study.surrogate.sample_count_history, 
+                         sur_results.sample_count_history)
+        self.assertEqual(self.study.surrogate.max_error_history, 
+                         sur_results.max_error_history) 
+        self.assertEqual(len(self.study.surrogate._surrogates), 
+                         len(sur_results._surrogates))
+        self.assert_close_dicts_or_data(sur_results(p1=0, p2=0), 
+                                        self.study.surrogate(p1=0, p2=0))
+
+    def _set_number_of_evaluations(self, n):
+        self.fake_results = types.SimpleNamespace(number_of_evaluations=0)
+        self.study._results = self.fake_results
+        self.fake_results.number_of_evaluations = n
+
+    def test_default_goals(self):
+        self.assertAlmostEqual(
+            self.study._rmse_goal,
+            1e-2,
+        )
+        self.assertAlmostEqual(
+            self.study._max_abs_error_goal,
+            1e-1,
+        )
+
+    def test_setting_both_goals(self):
+        new_rmse = 5e-3
+        new_max = 2e-3
+        self.study.set_error_stopping_criteria(
+            rmse_goal=new_rmse,
+            max_abs_error_goal=new_max,
+        )
+        self.assertAlmostEqual(
+            self.study._rmse_goal,
+            new_rmse,
+        )
+        self.assertAlmostEqual(
+            self.study._max_abs_error_goal,
+            new_max,
+        )
+
+    def test_setting_one_goal_keeps_other_untouched(self):
+        new_rmse = 1e-4
+        self.study.set_error_stopping_criteria(
+            rmse_goal=new_rmse
+        )
+        self.assertAlmostEqual(
+            self.study._rmse_goal,
+            new_rmse,
+        )
+        self.assertAlmostEqual(
+            self.study._max_abs_error_goal,
+            1e-1,
+        )
+    def test_invalid_non_numeric_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.study.set_error_stopping_criteria(rmse_goal="bad")
+
+        with self.assertRaises(TypeError):
+            self.study.set_error_stopping_criteria(max_abs_error_goal=[1, 2])
+
+    def test_invalid_non_positive_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.study.set_error_stopping_criteria(rmse_goal=0.0)
+
+        with self.assertRaises(ValueError):
+            self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_study_set_test_data_as_study_result(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        self.simple_parameters =(p1, p2)
+        self.test_study = HaltonStudy(*self.simple_parameters)
+        self.test_study.set_number_of_samples(50)
+        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
+
+        results = self.test_study.launch()
+        self.study.set_test_data(results)
+        results = self.study.launch()
+        self.assertFalse(os.path.exists("test_samples"))
+        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_study_set_test_data_as_string(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        self.simple_parameters =(p1, p2)
+        self.test_study = HaltonStudy(*self.simple_parameters)
+        self.test_study.set_number_of_samples(50)
+        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
+
+        results = self.test_study.launch()
+        self.study.set_test_data("final_results.joblib")
+        results = self.study.launch()
+        self.assertFalse(os.path.exists("test_samples"))
+        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+    # -------------------------
+    # Validation / API errors
+    # -------------------------
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_basis_type(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="not-a-basis")
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=0)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=4)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_validation(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        # If you did not implement this method, remove/skip this test
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=0, pnorm=1.0)
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_lagrange(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="lagrange")
+        self.assertEqual(sg_study._sg_basis_type, "lagrange")
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=2)
+        self.assertEqual(sg_study._sg_basis_type, "piecewise")
+        self.assertEqual(sg_study._sg_piecewise_degree, 2)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_sets_values(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        sg_study.set_sparse_grid_adaptivity_limits(max_level=7, pnorm=2.0)
+        self.assertEqual(sg_study._sg_max_level, 7)
+        self.assertEqual(sg_study._sg_pnorm, 2.0)
+
+    def test_set_test_data_invalid_type_raises(self):
+        with self.assertRaises(TypeError):
+            self.study.set_test_data(123)
+
+    def test_set_test_data_string_invalid_loaded_object_raises(self):
+        with open("not_a_study_results.joblib", "wb") as f:
+            import pickle
+            pickle.dump({"not": "study_results"}, f)
+
+        with self.assertRaises(RuntimeError):
+            self.study.set_test_data("not_a_study_results.joblib")
+
+    def test_default_save_filename_is_none_before_launch(self):
+        self.assertIsNone(self.study._surrogate_save_filename)
+        self.assertIsNone(self.study.surrogate_save_filename)
+
+
+class AdaptiveSurrogateActualFitMixin:
+    """
+    Smoke test that launches an adaptive surrogate study and fits at least one
+    surrogate. This intentionally does not assert convergence.
+    """
+
+    StudyClass = None
+
+    def make_study(self):
+        raise NotImplementedError
+
+    def configure_method_specific_options(self, study):
+        pass
+
+    def test_launch_fits_at_least_one_surrogate_without_checking_convergence(self):
+        study = self.make_study()
+
+        study.set_independent_variable("x", np.linspace(0.0, 1.0, 8))
+        study.set_target_field_name("f")
+        study.set_number_of_test_samples(2)
+        study.set_max_training_samples(5)
+        study.set_error_stopping_criteria(
+            rmse_goal=1.0e-30,
+            max_abs_error_goal=1.0e-30,
+        )
+        study.add_evaluation_set(PythonModel(linear_model_2d))
+
+        self.configure_method_specific_options(study)
+
+        results = study.launch()
+
+        self.assertIsNotNone(results)
+        self.assertIsNotNone(study.surrogate)
+        self.assertGreaterEqual(len(study.surrogate.rmse_history), 1)
+        self.assertGreaterEqual(len(study.surrogate.max_error_history), 1)
+        self.assertGreaterEqual(len(study.surrogate.sample_count_history), 1)
+        self.assertGreaterEqual(len(study.surrogate.surrogate_records), 1)
+
+
+@unittest.skipIf(
+    not HAS_PYAPPROX,
+    "pyapprox not installed – skipping sparse-grid fit smoke test",
+)
+class TestSparseGridAdaptiveSurrogateActualFit(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return SparseGridAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_sparse_grid_adaptivity_limits(max_level=1, pnorm=1.0)
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )
+
+
+class TestVoronoiAdaptiveSurrogateActualFit(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return VoronoiAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_number_of_initial_samples(4)
+        study.set_cross_validation_options(
+            nsplits=0,
+            nmax_folds=1,
+            nmax_loo="all",
+            cv_metric="sum_abs",
+            batch_size=1,
+        )
+        study.set_voronoi_sampling_options(
+            voronoi_type="full",
+            finite_only=False,
+            iterative_updates=True,
+        )
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )

@@ -217,6 +217,62 @@ def _add_label_to_first_curve(style, label, curve_index):
     return style
 
 
+def _get_first_state_name(results, model_name):
+    """
+    Return the first state name stored for a model in StudyResults-like objects.
+    """
+    return results.simulation_history[model_name].state_names[0]
+
+
+def _extract_target_values_from_sim_qoi(sim_qoi, state_name, target_field):
+    """
+    Extract target-field values from a MatCal simulation QoI-like object.
+    """
+    return np.asarray(sim_qoi[state_name][0][target_field], dtype=float)
+
+
+def _format_sim_qois_to_matrix(sim_qois, state_name, target_field, n_qois):
+    """
+    Convert a sequence of simulation QoI objects into a dense matrix.
+
+    Returns an array with shape ``(n_samples, n_qois)``.
+    """
+    data = np.zeros((len(sim_qois), n_qois))
+
+    for idx, sim_qoi in enumerate(sim_qois):
+        data[idx, :] = _extract_target_values_from_sim_qoi(
+            sim_qoi,
+            state_name,
+            target_field,
+        )
+
+    return data
+
+
+def _format_batch_qois_to_matrix(
+    batch_qois,
+    model_name,
+    objective_name,
+    state_name,
+    target_field,
+    n_qois,
+):
+    """
+    Convert MatCal batch-evaluation QoIs into a dense matrix.
+    """
+    data = np.zeros((len(batch_qois), n_qois))
+
+    for idx, qoi_container in enumerate(batch_qois):
+        sim_qoi = qoi_container[model_name][objective_name]
+        data[idx, :] = _extract_target_values_from_sim_qoi(
+            sim_qoi.simulation_qois,
+            state_name,
+            target_field,
+        )
+
+    return data
+
+
 def _validate_error_type(error_type):
     check_value_is_nonempty_str(error_type, "error_type")
     error_type = error_type.lower().strip()
@@ -500,51 +556,12 @@ def _reduce_voronoi_candidates(
     elif random_selection is not None:
         candidates = _random_subset_rows(
             candidates,
-            batch_size,
+            random_selection,
             random_generator,
             n_parameters,
         )
 
     return candidates[:batch_size]
-
-
-def _fit_cv_surrogate_and_calculate_native_error(
-    train_eval_info,
-    test_eval_info,
-    X_test,
-    y_test,
-    interpolation_field,
-    interpolation_values,
-    target_field,
-    surrogate_options,
-    metric,
-    scale,
-    save_filename="kfold_validation_surrogate.joblib",
-):
-    """
-    Shared native-CV surrogate fitting and scoring helper used by K-fold and LOO.
-    """
-    fold_surrogate = _fit_surrogate_model(
-        train_eval_info,
-        interpolation_field,
-        interpolation_values,
-        test_eval_info,
-        target_field,
-        save_filename,
-        logger_on=False,
-        **surrogate_options,
-    )
-
-    return _calculate_native_cv_error(
-        fold_surrogate,
-        X_test,
-        y_test,
-        target_field,
-        interpolation_field,
-        interpolation_values,
-        metric,
-        scale,
-    )
 
 
 def _setup_pyapprox_adaptive_sparse_grid_fitter(
@@ -3221,15 +3238,17 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
     def _format_output(self, results):
         model_name = self._get_model_names()[0]
         objective = self._results_synchronizer
-        state_name = results.simulation_history[model_name].state_names[0]
+        state_name = _get_first_state_name(results, model_name)
+
         qois = results.qoi_history[f"{model_name}:{objective.name}"]
         sim_qois = qois.simulation_qois
-        nsamples = results.number_of_evaluations
-        nqois = len(self._independent_variable_values)
-        data = np.zeros((nsamples, nqois))
-        for idx, sim_qoi in enumerate(sim_qois):
-            data[idx,:] = sim_qoi[state_name][0][self._target_field_name]
-        return data
+
+        return _format_sim_qois_to_matrix(
+            sim_qois,
+            state_name,
+            self._target_field_name,
+            len(self._independent_variable_values),
+        )
 
     def set_surrogate_storage_options(self, best_n_surrogates=1,
                                       save_every_n_batches=None,
@@ -3357,13 +3376,16 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _format_batch_results(self, batch_results, parameter_sets_from_pyapprox):
         model_name = self._get_model_names()[0]
         objective_name = self._results_synchronizer.name
-        state_name = self._results.simulation_history[model_name].state_names[0]
-        formatted_results = np.zeros((parameter_sets_from_pyapprox.shape[1],
-                                      len(self._independent_variable_values)))
-        for idx, qoi in enumerate(batch_results["qois"]):
-            qoi = qoi[model_name][objective_name]
-            formatted_results[idx, :] = qoi.simulation_qois[state_name][0][self._target_field_name]
-        return formatted_results
+        state_name = _get_first_state_name(self._results, model_name)
+
+        return _format_batch_qois_to_matrix(
+            batch_results["qois"],
+            model_name,
+            objective_name,
+            state_name,
+            self._target_field_name,
+            len(self._independent_variable_values),
+        )
 
     def set_sparse_grid_basis(self, basis_type="lagrange", piecewise_degree=2):
         """
@@ -3800,6 +3822,64 @@ def _remove_invalid_rows(array):
     mask = np.isfinite(array).all(axis=1)
     return array[mask]
 
+
+def _validate_voronoi_type(voronoi_type):
+    """
+    Validate and normalize the Voronoi tessellation mode.
+    """
+    check_value_is_nonempty_str(voronoi_type, "voronoi_type")
+    voronoi_type = voronoi_type.lower().strip()
+
+    if voronoi_type not in ("full", "local"):
+        raise ValueError(
+            "Voronoi type must be either 'full' or 'local', "
+            f"received '{voronoi_type}'."
+        )
+    return voronoi_type
+
+
+def _validate_optional_positive_integer(value, name):
+    """
+    Validate an optional positive integer setting.
+    """
+    if value is None:
+        return None
+
+    check_value_is_positive_integer(value, name)
+    return int(value)
+
+
+def _validate_nmax_loo(nmax_loo):
+    """
+    Validate the number of LOO-ranked candidates retained after KFCV filtering.
+    """
+    if isinstance(nmax_loo, str):
+        nmax_loo = nmax_loo.lower().strip()
+        if nmax_loo == "all":
+            return nmax_loo
+        raise ValueError("If nmax_loo is a string, it must be 'all'.")
+
+    check_value_is_positive_integer(nmax_loo, "nmax_loo")
+    return int(nmax_loo)
+
+
+def _validate_cv_metric(cv_metric):
+    """
+    Validate and normalize the native cross-validation error metric.
+    """
+    check_value_is_nonempty_str(cv_metric, "cv_metric")
+    cv_metric = cv_metric.lower().strip()
+
+    valid_cv_metrics = ("rmse", "mae", "abs", "sum_abs", "nrmse", "nlpd")
+    if cv_metric not in valid_cv_metrics:
+        raise ValueError(
+            "cv_metric not implemented. cv_metric must be one of "
+            f"{valid_cv_metrics}. Received '{cv_metric}'."
+        )
+
+    return cv_metric
+
+
 class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     _adaptive_surrogate_class = AdaptiveSurrogate
@@ -3967,42 +4047,18 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             alternative way to reduce computational cost in high-dimensional problems. 
         :type random_selection: int or None
         """
-        self._voronoi_type = self._validate_voronoi_type(voronoi_type)
+        self._voronoi_type = _validate_voronoi_type(voronoi_type)
 
         check_value_is_bool(finite_only, "finite_only")
         check_value_is_bool(iterative_updates, "iterative_updates")
 
         self._finite_only = finite_only
         self._iterative_updates = iterative_updates
-        self._thin = self._validate_optional_positive_integer(thin, "thin")
-        self._random_selection = self._validate_optional_positive_integer(
+        self._thin = _validate_optional_positive_integer(thin, "thin")
+        self._random_selection = _validate_optional_positive_integer(
             random_selection, "random_selection"
         )
         self._raise_if_multiple_candidate_reduction_options_active()
-    
-    def _validate_voronoi_type(self, voronoi_type):
-        """
-        Validate and normalize the Voronoi tessellation mode.
-        """
-        check_value_is_nonempty_str(voronoi_type, "voronoi_type")
-        voronoi_type = voronoi_type.lower().strip()
-
-        if voronoi_type not in ("full", "local"):
-            raise ValueError(
-                "Voronoi type must be either 'full' or 'local', "
-                f"received '{voronoi_type}'."
-            )
-        return voronoi_type
-
-    def _validate_optional_positive_integer(self, value, name):
-        """
-        Validate an optional positive integer setting.
-        """
-        if value is None:
-            return None
-
-        check_value_is_positive_integer(value, name)
-        return int(value)
 
     def _raise_if_multiple_candidate_reduction_options_active(self):
         """
@@ -4159,50 +4215,20 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         check_value_is_positive_integer(nmax_folds, "nmax_folds")
         self._nmax_folds = int(nmax_folds)
 
-        self._nmax_loo = self._validate_nmax_loo(nmax_loo)
+        self._nmax_loo = _validate_nmax_loo(nmax_loo)
         self._cv_scale = _validate_cv_scale(cv_scale)
-        self._cv_metric = self._validate_cv_metric(cv_metric)
+        self._cv_metric = _validate_cv_metric(cv_metric)
 
         check_value_is_bool(group_kfold, "group_kfold")
         self._group_kfold = group_kfold
 
         self.set_batch_size(batch_size)
 
-    def _validate_nmax_loo(self, nmax_loo):
-        """
-        Validate the number of LOO-ranked candidates retained after KFCV filtering.
-        """
-        if isinstance(nmax_loo, str):
-            nmax_loo = nmax_loo.lower().strip()
-            if nmax_loo == "all":
-                return nmax_loo
-            raise ValueError("If nmax_loo is a string, it must be 'all'.")
-
-        check_value_is_positive_integer(nmax_loo, "nmax_loo")
-        return int(nmax_loo)
-
-
-    def _validate_cv_metric(self, cv_metric):
-        """
-        Validate and normalize the native cross-validation error metric.
-        """
-        check_value_is_nonempty_str(cv_metric, "cv_metric")
-        cv_metric = cv_metric.lower().strip()
-
-        valid_cv_metrics = ("rmse", "mae", "abs", "sum_abs", "nrmse", "nlpd")
-        if cv_metric not in valid_cv_metrics:
-            raise ValueError(
-                "cv_metric not implemented. cv_metric must be one of "
-                f"{valid_cv_metrics}. Received '{cv_metric}'."
-            )
-
-        return cv_metric
-
     def _format_output_for_surrogate_gen(self, results):
         from matcal.core.data import convert_data_to_dictionary
         model_name = self._get_model_names()[0]
         state_name = results.simulation_history[model_name].state_names[0]
-        sim_history = self._results.simulation_history[model_name][state_name]
+        sim_history = results.simulation_history[model_name][state_name]
         nsamples = results.number_of_evaluations
         data = []
         for nn in np.arange(nsamples):
@@ -4275,7 +4301,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             batch_number, training_params, training_data
         )
 
-        return self._check_points_within_bounds(new_points)
+        return _check_points_within_bounds(new_points)
 
     def _evaluate_voronoi_batch(self, new_points):
         """
@@ -4529,23 +4555,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def _filter_selected_cell_candidate_points(self, points, seed_location, atol=1.0e-10):
         """
-        Filter candidate points for the selected-cell farthest-point search.
+        Filter candidate points for selected-cell farthest-point search.
 
-        Points must be:
-          * finite,
-          * in bounds,
-          * not the selected seed itself,
-          * not duplicates of existing training points,
-          * unique.
+        Points must be finite, in bounds, not equal to the selected seed, not
+        duplicates of existing training points, and unique.
         """
         if points is None:
             return None
 
-        points = np.asarray(points, dtype=float)
-        if points.size == 0:
-            return np.empty((0, self._number_parameters))
-
-        points = np.atleast_2d(points)
         points = _filter_points_within_bounds(
             points,
             self._bounds,
@@ -4555,38 +4572,25 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         if points.size == 0:
             return np.empty((0, self._number_parameters))
 
-        training_points = np.asarray(self._format_params(self._results), dtype=float)
-        kept = []
+        seed_location = np.asarray(seed_location, dtype=float).reshape(1, -1)
 
-        for point in points:
-            same_as_seed = np.all(
-                np.isclose(point, seed_location, atol=atol, rtol=0.0)
-            )
+        not_seed = ~np.all(
+            np.isclose(points, seed_location, atol=atol, rtol=0.0),
+            axis=1,
+        )
+        points = points[not_seed]
 
-            duplicate_training = np.any(
-                np.all(
-                    np.isclose(training_points, point, atol=atol, rtol=0.0),
-                    axis=1,
-                )
-            )
-
-            duplicate_kept = False
-            if len(kept) > 0:
-                kept_array = np.asarray(kept, dtype=float)
-                duplicate_kept = np.any(
-                    np.all(
-                        np.isclose(kept_array, point, atol=atol, rtol=0.0),
-                        axis=1,
-                    )
-                )
-
-            if (not same_as_seed) and (not duplicate_training) and (not duplicate_kept):
-                kept.append(point)
-
-        if len(kept) == 0:
+        if points.size == 0:
             return np.empty((0, self._number_parameters))
 
-        return np.asarray(kept, dtype=float)
+        training_points = np.asarray(self._format_params(self._results), dtype=float)
+
+        return _remove_duplicate_rows_against_existing(
+            points,
+            training_points,
+            self._number_parameters,
+            atol=atol,
+        )
 
     def _get_deterministic_in_cell_grid_points(self, seed_location):
         """
@@ -4867,7 +4871,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         The number returned is limited by ``nmax_loo`` unless ``nmax_loo='all'``.
         """
         nkeep = self._get_number_of_loo_errors_to_keep()
-        sorted_items = self._sorted_loo_error_items()
+        sorted_items = _sorted_error_items(self._loo_errors)
         indices = [item[2] for item in sorted_items[:nkeep]]
         return np.asarray(indices, dtype=int)
     
@@ -5557,7 +5561,61 @@ class VoronoiTessellation:
         self.boundary_regions = self.get_voronoi_region(self.boundary_points)
 
 
-class KFoldCrossValidation:
+class NativeCrossValidationBase:
+    """
+    Shared native-response cross-validation behavior.
+    """
+    def __init__(
+        self,
+        scale,
+        metric,
+        interpolation_field,
+        interpolation_values,
+        target_field,
+        param_names,
+        surrogate_options,
+    ):
+        self.scale = scale
+        self.metric = metric
+        self.interpolation_field = interpolation_field
+        self.interpolation_values = interpolation_values
+        self.target_field = target_field
+        self.param_names = param_names
+        self.surrogate_options = surrogate_options
+
+    def _fit_and_score_native_cv_split(
+        self,
+        train_eval_info,
+        test_eval_info,
+        X_test,
+        y_test,
+        save_filename="kfold_validation_surrogate.joblib",
+    ):
+        return _fit_cv_surrogate_and_calculate_native_error(
+            train_eval_info,
+            test_eval_info,
+            X_test,
+            y_test,
+            self.interpolation_field,
+            self.interpolation_values,
+            self.target_field,
+            self.surrogate_options,
+            self.metric,
+            self.scale,
+            save_filename=save_filename,
+        )
+
+    def _make_cv_study_results(self, X_train, X_test, y_train, y_test):
+        return _setup_studies_for_cv(
+            self.param_names,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
+
+
+class KFoldCrossValidation(NativeCrossValidationBase):
     def __init__(
         self,
         nsplits,
@@ -5571,274 +5629,122 @@ class KFoldCrossValidation:
         surrogate_options,
         random_seed=None,
     ):
-        """
-        Initialize the K-fold cross-validation helper.
-        """
+        super().__init__(
+            scale,
+            metric,
+            interpolation_field,
+            interpolation_values,
+            target_field,
+            param_names,
+            surrogate_options,
+        )
         self.nsplits = nsplits
         self.group_kfold = group_kfold
-        self.scale = scale
-        self.metric = metric
-        self.interpolation_field = interpolation_field
-        self.interpolation_values = interpolation_values
-        self.target_field = target_field
-        self.param_names = param_names
-        self.surrogate_options = surrogate_options
         self.random_seed = random_seed
 
-    def _check_nsplits(self, training_params):
-        """
-        Normalize the K-fold split count for the current training sample count.
-        """
-        self.nsplits = _get_valid_kfold_split_count(
-            self.nsplits,
-            training_params.shape[0],
+    def extract_fold_info(self, train_index, test_index, X, y):
+        X_train, X_test = X[train_index], X[test_index]
+        y_train = [y[i] for i in train_index]
+        y_test = [y[i] for i in test_index]
+        train_res, test_res = self._make_cv_study_results(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
         )
-            
-    def perform_kfold_cv(self, training_params, training_data, groups):
-        """
-        Perform K-fold or grouped K-fold cross validation.
-        """
-        self._check_nsplits(training_params)
-        splits = self._make_cv_splits(training_params, training_data, groups)
-
-        return self._evaluate_cv_splits(training_params, training_data, splits)
-
-
-    def _make_cv_splits(self, training_params, training_data, groups):
-        """
-        Create the K-fold or GroupKFold split generator.
-        """
-        if self.group_kfold:
-            return self._make_group_kfold_splits(training_params, training_data, groups)
-
-        return self._make_standard_kfold_splits(training_params)
-
-
-    def _make_group_kfold_splits(self, training_params, training_data, groups):
-        """
-        Create grouped K-fold splits.
-        """
-        from sklearn.model_selection import GroupKFold
-
-        if groups is None:
-            raise RuntimeError("GroupKFold requested but no groups were provided.")
-
-        cv = GroupKFold(n_splits=self.nsplits)
-        return cv.split(training_params, training_data, groups)
-
-
-    def _make_standard_kfold_splits(self, training_params):
-        """
-        Create reproducible shuffled K-fold splits.
-        """
-        from sklearn.model_selection import KFold
-
-        cv = KFold(
-            n_splits=self.nsplits,
-            shuffle=True,
-            random_state=self.random_seed,
-        )
-        return cv.split(training_params)
-
-
-    def _evaluate_cv_splits(self, training_params, training_data, splits):
-        """
-        Evaluate all K-fold splits and return results in a dictionary.
-        """
-        from joblib import Parallel, delayed
-
-        split_list = list(splits)
-
-        for i, (_, te) in enumerate(split_list):
-            logger.debug(f"\tKFold split {i} test indices: {np.asarray(te, dtype=int)}")
-
-        results = Parallel(n_jobs=1)(
-            delayed(self.evaluate_fold)(tr, te, training_params, training_data, i)
-            for i, (tr, te) in enumerate(split_list)
-        )
-
-        return {i: result for i, result in enumerate(results)}
+        return train_res, test_res, X_test, y_test
 
     def evaluate_fold(self, train_index, test_index, X, y, kfold_count):
-        """
-        Evaluate one K-fold split using native response-space error.
-
-        The previous implementation ranked folds using latent surrogate scores from
-        ``fold_surrogate._latent_scores['test']``. The KFCV-Voronoi method described
-        in the paper ranks folds by the native prediction error on the held-out
-        samples,
-
-        .. math::
-
-            e_i^{KF}
-            =
-            \\sum_{s_j \\in kf_i}
-            \\left|
-            y(s_j) - \\hat{y}_{S \\setminus kf_i}(s_j)
-            \\right|.
-
-        This implementation evaluates the fold surrogate at the held-out native
-        parameter samples and compares those predictions directly with the held-out
-        native responses.
-
-        :param train_index: Indices used to train the fold surrogate.
-        :type train_index: array-like
-
-        :param test_index: Held-out fold indices.
-        :type test_index: array-like
-
-        :param X: Full parameter sample matrix.
-        :type X: numpy.ndarray
-
-        :param y: Full list of native model-evaluation dictionaries.
-        :type y: list[dict]
-
-        :param kfold_count: Fold counter used for logging.
-        :type kfold_count: int
-
-        :return: Tuple containing the native fold error and the held-out indices.
-        :rtype: tuple[float, numpy.ndarray]
-        """
         logger.info(
             f"\tEvaluating native '{self.metric}' error for surrogate "
             f"for kfold cross validation set {kfold_count}..."
         )
 
-        info = self.extract_fold_info(train_index, test_index, X, y)
-        train_eval_info, test_eval_info, X_test, y_test = info
+        train_eval_info, test_eval_info, X_test, y_test = self.extract_fold_info(
+            train_index,
+            test_index,
+            X,
+            y,
+        )
 
-        error = _fit_cv_surrogate_and_calculate_native_error(
+        error = self._fit_and_score_native_cv_split(
             train_eval_info,
             test_eval_info,
             X_test,
             y_test,
-            self.interpolation_field,
-            self.interpolation_values,
-            self.target_field,
-            self.surrogate_options,
-            self.metric,
-            self.scale,
         )
 
         logger.info(f"\t\tnative error = {error}")
         return error, test_index
-   
-    def extract_fold_info(self, train_index, test_index, X, y):
-        X_train, X_test = X[train_index], X[test_index]
-        y_train = [y[i] for i in train_index]
-        y_test = [y[i] for i in test_index]
-        train_res, test_res = _setup_studies_for_cv(self.param_names,
-                                                    X_train, X_test, y_train, y_test)
-        return train_res, test_res, X_test, y_test
 
 
-class LeaveOneOutCrossValidation:
-    def __init__(self, scale, metric, interpolation_field, 
-                 interpolation_values, target_field, par_names, surrogate_options):
-        """
-        Initialize the LOOCV.
-        """
-        self.scale = scale
-        self.metric = metric
-        self.interpolation_field = interpolation_field
-        self.interpolation_values = interpolation_values
-        self.target_field = target_field
-        self.par_names = par_names
-        self.surrogate_options = surrogate_options
-
-    def perform_loocv(self, X, y, indices):
-
-        """Perform Leave-One-Out Cross-Validation.
-
-        :param X: Feature matrix (training samples).
-        :type X: np.ndarray
-        
-        :param y: Target values (ground truth).
-        :type y: np.ndarray
-
-        :param indices: Original sample indices for which leave-one-out validation is performed.
-        :type indices: array-like of int
-
-        :return: Dictionary mapping local LOO evaluation number to a tuple
-            ``(error, original_sample_index)``.
-        :rtype: dict[int, tuple[float, int]]
-        """
-        from joblib import Parallel, delayed
-        
-        loo_results = Parallel(n_jobs=1)(
-            delayed(self.evaluate_loo_sample)(X, y, i)
-            for i in indices
+class LeaveOneOutCrossValidation(NativeCrossValidationBase):
+    def __init__(
+        self,
+        scale,
+        metric,
+        interpolation_field,
+        interpolation_values,
+        target_field,
+        par_names,
+        surrogate_options,
+    ):
+        super().__init__(
+            scale,
+            metric,
+            interpolation_field,
+            interpolation_values,
+            target_field,
+            par_names,
+            surrogate_options,
         )
 
-        loo = {loo_idx: result for loo_idx, result in enumerate(loo_results)}
-        return loo
-    
-    def evaluate_loo_sample(self, X, y, index):
+    @property
+    def par_names(self):
         """
-        Evaluate one leave-one-out split using native response-space error.
-
-        The previous implementation ranked samples using latent surrogate scores.
-        The CV-Voronoi and KFCV-Voronoi methods require the native prediction
-        error at the omitted sample,
-
-        .. math::
-
-            e_i^{LOO}
-            =
-            \\left|
-            y(s_i) - \\hat{y}_{S \\setminus s_i}(s_i)
-            \\right|.
-
-        This implementation builds the leave-one-out surrogate, evaluates it at the
-        omitted native parameter sample, and compares the prediction directly with
-        the omitted native model response.
-
-        :param X: Full parameter sample matrix.
-        :type X: numpy.ndarray
-
-        :param y: Full list of native model-evaluation dictionaries.
-        :type y: list[dict]
-
-        :param index: Index of the omitted sample.
-        :type index: int
-
-        :return: Tuple containing the native LOO error and omitted sample index.
-        :rtype: tuple[float, int]
+        Backward-compatible alias for older tests/code.
         """
-        logger.info(
-            f"\tEvaluating native '{self.metric}' error for surrogate "
-            f"leaving out sample {index}"
-        )
-
-        info = self.extract_loo_info(index, X, y)
-        train_eval_info, test_eval_info, X_test, y_test = info
-
-        error = _fit_cv_surrogate_and_calculate_native_error(
-            train_eval_info,
-            test_eval_info,
-            X_test,
-            y_test,
-            self.interpolation_field,
-            self.interpolation_values,
-            self.target_field,
-            self.surrogate_options,
-            self.metric,
-            self.scale,
-        )
-
-        logger.info(f"\t\tnative error = {error}")
-        return error, index
+        return self.param_names
 
     def extract_loo_info(self, index, X, y):
         X_train = np.delete(X, index, axis=0)
         y_train = y.copy()
         del y_train[index]
-        X_test = X[index].reshape(1, -1)  # Reshape for a single sample
+
+        X_test = X[index].reshape(1, -1)
         y_test = [y[index]]
-        train_res, test_res = _setup_studies_for_cv(self.par_names,
-                                                    X_train, X_test,
-                                                    y_train, y_test)
+
+        train_res, test_res = self._make_cv_study_results(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
+
         return train_res, test_res, X_test, y_test
+
+    def evaluate_loo_sample(self, X, y, index):
+        logger.info(
+            f"\tEvaluating native '{self.metric}' error for surrogate "
+            f"leaving out sample {index}"
+        )
+
+        train_eval_info, test_eval_info, X_test, y_test = self.extract_loo_info(
+            index,
+            X,
+            y,
+        )
+
+        error = self._fit_and_score_native_cv_split(
+            train_eval_info,
+            test_eval_info,
+            X_test,
+            y_test,
+            save_filename="loo_validation_surrogate.joblib",
+        )
+
+        logger.info(f"\t\tnative error = {error}")
+        return error, index
 
 
 def _setup_studies_for_cv(p_names, train_samples, test_samples,
