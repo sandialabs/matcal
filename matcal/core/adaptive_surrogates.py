@@ -317,9 +317,238 @@ def _get_valid_kfold_split_count(nsplits, n_samples):
     return int(new_nsplits)
 
 
+_VALID_SURROGATE_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
+
+
+def _validate_surrogate_storage_options(
+    best_n_surrogates=1,
+    save_every_n_batches=None,
+    score_metric="max_error",
+):
+    """
+    Validate and normalize surrogate-storage options.
+
+    Returns
+    -------
+    tuple
+        ``(best_n_surrogates, save_every_n_batches, normalized_score_metric)``.
+        The metric alias ``"score"`` is normalized to ``"r2"``.
+    """
+    check_value_is_positive_integer_or_none(
+        best_n_surrogates,
+        "best_n_surrogates",
+    )
+    check_value_is_positive_integer_or_none(
+        save_every_n_batches,
+        "save_every_n_batches",
+    )
+    check_value_is_nonempty_str(score_metric, "score_metric")
+
+    score_metric = score_metric.lower().strip()
+
+    if score_metric not in _VALID_SURROGATE_STORAGE_METRICS:
+        raise ValueError(
+            "Invalid surrogate storage score metric. "
+            f"Supported metrics are {_VALID_SURROGATE_STORAGE_METRICS}. "
+            f"Received '{score_metric}'."
+        )
+
+    if best_n_surrogates is None and save_every_n_batches is None:
+        raise ValueError(
+            "At least one surrogate retention option must be active. "
+            "Set best_n_surrogates to a positive integer or "
+            "save_every_n_batches to a positive integer."
+        )
+
+    if score_metric == "score":
+        score_metric = "r2"
+
+    return best_n_surrogates, save_every_n_batches, score_metric
+
+
+def _metric_value_for_record(record, metric):
+    value = record[metric]
+
+    if value is None or np.isnan(value):
+        if metric == "r2":
+            return -np.inf
+        return np.inf
+
+    return value
+
+
+def _sorted_record_indices_by_metric(records, metric):
+    reverse = metric == "r2"
+
+    return [
+        rec["iteration_index"]
+        for rec in sorted(
+            records,
+            key=lambda rec: _metric_value_for_record(rec, metric),
+            reverse=reverse,
+        )
+    ]
+
+
+def _validate_test_sample_error_metric(metric):
+    check_value_is_nonempty_str(metric, "metric")
+    metric = metric.lower().strip()
+
+    valid_metrics = (
+        "max_error",
+        "max_abs_error",
+        "linf",
+        "rmse",
+        "mae",
+        "mean_abs_error",
+    )
+
+    if metric not in valid_metrics:
+        raise ValueError(
+            "Unsupported test-sample error metric. Supported values are "
+            "'max_error', 'max_abs_error', 'linf', 'rmse', 'mae', and "
+            "'mean_abs_error'. "
+            f"Received '{metric}'."
+        )
+
+    return metric
+
+
+def _plot_limit_padding(lower, upper):
+    if np.isclose(lower, upper):
+        return 0.05 * max(abs(lower), 1.0)
+    return 0.05 * (upper - lower)
+
+
+def _padded_limits_from_finite_values(values):
+    if values.size == 0:
+        return None
+
+    lower = np.nanmin(values)
+    upper = np.nanmax(values)
+    pad = _plot_limit_padding(lower, upper)
+
+    return lower - pad, upper + pad
+
+
+def _get_padded_plot_limits(values, include_zero=False):
+    values = np.asarray(values, dtype=float).ravel()
+    values = values[np.isfinite(values)]
+
+    if include_zero:
+        values = np.concatenate((values, np.array([0.0])))
+
+    return _padded_limits_from_finite_values(values)
+
+
+def _sorted_error_items(error_records):
+    """
+    Sort error records from largest scalar error to smallest.
+
+    Expected record values are ``(error, payload)``.
+    """
+    items = [
+        (key, value[0], value[1])
+        for key, value in error_records.items()
+    ]
+
+    return sorted(items, key=lambda item: item[1], reverse=True)
+
+
+def _package_unique_bounded_points(points, bounds, n_parameters):
+    """
+    Return unique finite in-bound points.
+    """
+    points = _normalize_candidate_array(points, n_parameters)
+
+    if points.size == 0:
+        return np.empty((0, n_parameters))
+
+    points = np.unique(points, axis=0)
+
+    return _filter_points_within_bounds(
+        points,
+        bounds,
+        n_parameters,
+    )
+
+
+def _reduce_voronoi_candidates(
+    candidates,
+    n_parameters,
+    batch_size,
+    thin,
+    random_selection,
+    random_generator,
+):
+    """
+    Apply Voronoi candidate thinning/random down-selection.
+
+    In one-at-a-time mode, preserve full ranked candidate order.
+    """
+    candidates = _normalize_candidate_array(candidates, n_parameters)
+
+    if candidates.shape[0] == 0:
+        return candidates
+
+    if batch_size == 1:
+        return candidates
+
+    if thin is not None:
+        candidates = candidates[::thin]
+
+    elif random_selection is not None:
+        candidates = _random_subset_rows(
+            candidates,
+            batch_size,
+            random_generator,
+            n_parameters,
+        )
+
+    return candidates[:batch_size]
+
+
+def _fit_cv_surrogate_and_calculate_native_error(
+    train_eval_info,
+    test_eval_info,
+    X_test,
+    y_test,
+    interpolation_field,
+    interpolation_values,
+    target_field,
+    surrogate_options,
+    metric,
+    scale,
+    save_filename="kfold_validation_surrogate.joblib",
+):
+    """
+    Shared native-CV surrogate fitting and scoring helper used by K-fold and LOO.
+    """
+    fold_surrogate = _fit_surrogate_model(
+        train_eval_info,
+        interpolation_field,
+        interpolation_values,
+        test_eval_info,
+        target_field,
+        save_filename,
+        logger_on=False,
+        **surrogate_options,
+    )
+
+    return _calculate_native_cv_error(
+        fold_surrogate,
+        X_test,
+        y_test,
+        target_field,
+        interpolation_field,
+        interpolation_values,
+        metric,
+        scale,
+    )
+
+
 def _setup_pyapprox_adaptive_sparse_grid_fitter(
     n_parameters: int,
-    n_qois: int,
     bounds,
     basis_type: str = "lagrange",
     piecewise_degree: int = 2,
@@ -331,8 +560,8 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
 
     Notes
     -----
-    * Parameters are assumed to be in native/physical parameter space.
-    * The physical parameter bounds are supplied to PyApprox through the
+    * Parameters are assumed to be in native parameter space.
+    * The native parameter bounds are supplied to PyApprox through the
       one-dimensional marginal distributions.
     * basis_type:
         - 'lagrange': global Clenshaw-Curtis Lagrange
@@ -443,9 +672,6 @@ class AdaptiveSurrogate:
     By default, only the best surrogate, as measured by maximum absolute error
     on the test set, is retained.
     """
-
-    _VALID_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
-
     def __init__(self, target_field_name, indep_variable_name,
                 indep_variable_values, test_params, test_responses,
                 param_names, bounds,
@@ -598,31 +824,15 @@ class AdaptiveSurrogate:
         ...     score_metric="rmse",
         ... )
         """
-        check_value_is_positive_integer_or_none(best_n_surrogates, "best_n_surrogates")
-        check_value_is_positive_integer_or_none(save_every_n_batches, "save_every_n_batches")
-        check_value_is_nonempty_str(score_metric, "score_metric")
-
-        score_metric = score_metric.lower().strip()
-        if score_metric not in self._VALID_STORAGE_METRICS:
-            raise ValueError(
-                "Invalid surrogate storage score metric. "
-                f"Supported metrics are {self._VALID_STORAGE_METRICS}. "
-                f"Received '{score_metric}'."
-            )
-
-        if best_n_surrogates is None and save_every_n_batches is None:
-            raise ValueError(
-                "At least one surrogate retention option must be active. "
-                "Set best_n_surrogates to a positive integer or "
-                "save_every_n_batches to a positive integer."
-            )
-
-        if score_metric == "score":
-            score_metric = "r2"
-
-        self._storage_best_n_surrogates = best_n_surrogates
-        self._storage_every_n_batches = save_every_n_batches
-        self._storage_score_metric = score_metric
+        (
+            self._storage_best_n_surrogates,
+            self._storage_every_n_batches,
+            self._storage_score_metric,
+        ) = _validate_surrogate_storage_options(
+            best_n_surrogates,
+            save_every_n_batches,
+            score_metric,
+        )
 
     def enforce_training_data_parameter_range(self, enforce_training_data_parameter_range=True):
         """
@@ -711,28 +921,6 @@ class AdaptiveSurrogate:
 
         self._prune_score_based_retained_surrogates()
 
-    def _metric_value_for_record(self, record):
-        metric = self._storage_score_metric
-        value = record[metric]
-        if value is None or np.isnan(value):
-            if metric == "r2":
-                return -np.inf
-            return np.inf
-        return value
-
-    def _sorted_record_indices_by_metric(self):
-        metric = self._storage_score_metric
-        reverse = metric == "r2"
-
-        return [
-            rec["iteration_index"]
-            for rec in sorted(
-                self._surrogate_iteration_records,
-                key=self._metric_value_for_record,
-                reverse=reverse,
-            )
-        ]
-
     def _prune_score_based_retained_surrogates(self):
         """
         Retain:
@@ -745,7 +933,10 @@ class AdaptiveSurrogate:
             return
 
         best_indices = set(
-            self._sorted_record_indices_by_metric()[:self._storage_best_n_surrogates]
+            _sorted_record_indices_by_metric(
+                self._surrogate_iteration_records,
+                self._storage_score_metric,
+            )[:self._storage_best_n_surrogates]
         )
 
         periodic_indices = set()
@@ -842,7 +1033,10 @@ class AdaptiveSurrogate:
         """
         if not self._surrogate_iteration_records:
             return None
-        best_order = self._sorted_record_indices_by_metric()
+        best_order = _sorted_record_indices_by_metric(
+            self._surrogate_iteration_records,
+            self._storage_score_metric,
+        )
         for idx in best_order:
             if idx in self._surrogates:
                 return idx
@@ -974,28 +1168,6 @@ class AdaptiveSurrogate:
         error_type = _validate_error_type(error_type)
         return self._get_surrogate_error_array(surrogate_index, error_type)
 
-    def _validate_test_sample_error_metric(self, metric):
-        check_value_is_nonempty_str(metric, "metric")
-        metric = metric.lower().strip()
-
-        valid_metrics = (
-            "max_error",
-            "max_abs_error",
-            "linf",
-            "rmse",
-            "mae",
-            "mean_abs_error",
-        )
-        if metric not in valid_metrics:
-            raise ValueError(
-                "Unsupported test-sample error metric. Supported values are "
-                "'max_error', 'max_abs_error', 'linf', 'rmse', 'mae', and "
-                "'mean_abs_error'. "
-                f"Received '{metric}'."
-            )
-
-        return metric
-
     def test_sample_errors(self, surrogate_index="best", metric="max_error"):
         """
         Return one scalar error per stored test sample.
@@ -1019,7 +1191,7 @@ class AdaptiveSurrogate:
         :return: One scalar error value per stored test sample.
         :rtype: numpy.ndarray
         """
-        metric = self._validate_test_sample_error_metric(metric)
+        metric = _validate_test_sample_error_metric(metric)
         raw_error = self._raw_surrogate_error(surrogate_index)
 
         if metric in ("max_error", "max_abs_error", "linf"):
@@ -2133,7 +2305,7 @@ class AdaptiveSurrogate:
     def _validate_plot_worst_N_inputs(self, N, n_figures, metric, error_type):
         check_value_is_positive_integer(N, "N")
         check_value_is_positive_integer(n_figures, "n_figures")
-        metric = self._validate_test_sample_error_metric(metric)
+        metric = _validate_test_sample_error_metric(metric)
         error_type = _validate_error_type(error_type)
         return metric, error_type
 
@@ -2220,11 +2392,11 @@ class AdaptiveSurrogate:
 
     def _get_plot_worst_N_limits(self, arrays, worst_indices, error_type):
         limits = {}
-        limits["x"] = self._get_padded_plot_limits(arrays["x"])
+        limits["x"] = _get_padded_plot_limits(arrays["x"])
         limits["response_y"] = self._get_plot_worst_N_response_limits(
             arrays, worst_indices
         )
-        limits["error_y"] = self._get_padded_plot_limits(
+        limits["error_y"] = _get_padded_plot_limits(
             arrays["error"][worst_indices, :].ravel(),
             include_zero=error_type == "signed",
         )
@@ -2235,27 +2407,7 @@ class AdaptiveSurrogate:
             arrays["test"][worst_indices, :].ravel(),
             arrays["prediction"][worst_indices, :].ravel(),
         ))
-        return self._get_padded_plot_limits(values)
-
-    def _get_padded_plot_limits(self, values, include_zero=False):
-        values = np.asarray(values, dtype=float).ravel()
-        values = values[np.isfinite(values)]
-        if include_zero:
-            values = np.concatenate((values, np.array([0.0])))
-        return self._padded_limits_from_finite_values(values)
-
-    def _padded_limits_from_finite_values(self, values):
-        if values.size == 0:
-            return None
-        lower = np.nanmin(values)
-        upper = np.nanmax(values)
-        pad = self._plot_limit_padding(lower, upper)
-        return lower - pad, upper + pad
-
-    def _plot_limit_padding(self, lower, upper):
-        if np.isclose(lower, upper):
-            return 0.05 * max(abs(lower), 1.0)
-        return 0.05 * (upper - lower)
+        return _get_padded_plot_limits(values)
 
     def _make_plot_worst_N_figures(
         self, index_groups, arrays, labels, styles, limits, sample_errors,
@@ -2447,7 +2599,7 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
     handles the additional steps required to evaluate those objects:
 
     * process MatCal-style positional, keyword, dictionary, or batch inputs;
-    * check physical parameter bounds;
+    * check native parameter bounds;
     * evaluate the PyApprox sparse-grid surrogate in native parameter space; and
     * package the response with the independent-variable values.
 
@@ -2472,14 +2624,14 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
             if params_array.shape[0] != len(self._param_names):
                 params_array = params_array.T
 
-        # Range check in physical/native parameter space.
+        # Range check in native parameter space.
         params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
         _check_params_in_range(
             params_dict, self._bounds.T,
             self._enforce_training_data_parameter_range
         )
 
-        # PyApprox sparse grids are constructed directly on the physical/native
+        # PyApprox sparse grids are constructed directly on the native
         # parameter domain. No parameter transform is performed.
 
         # PyApprox returns (n_qois, nsamples).
@@ -2988,9 +3140,6 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         batch_results = eval_meth(self._parameter_sets_to_evaluate)
         return self._format_batch_results(batch_results, parameter_sets)
 
-    def _add_parameter_evaluation(self, **p):
-      super()._add_parameter_evaluation(**p)
-
     @property
     def surrogate(self):
         """
@@ -3107,26 +3256,15 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             ``"score"`` is treated as an alias for ``"r2"``.
         :type score_metric: str
         """
-        check_value_is_positive_integer_or_none(best_n_surrogates, "best_n_surrogates")
-        check_value_is_positive_integer_or_none(save_every_n_batches, "save_every_n_batches")
-        check_value_is_nonempty_str(score_metric, "score_metric")
-
-        score_metric = score_metric.lower().strip()
-        valid_metrics = ("rmse", "max_error", "r2", "score")
-        if score_metric not in valid_metrics:
-            raise ValueError(
-                f"score_metric must be one of {valid_metrics}. "
-                f"Received '{score_metric}'."
-            )
-
-        if best_n_surrogates is None and save_every_n_batches is None:
-            raise ValueError(
-                "At least one surrogate retention option must be active."
-            )
-
-        self._surrogate_storage_best_n_surrogates = best_n_surrogates
-        self._surrogate_storage_every_n_batches = save_every_n_batches
-        self._surrogate_storage_score_metric = score_metric
+        (
+            self._surrogate_storage_best_n_surrogates,
+            self._surrogate_storage_every_n_batches,
+            self._surrogate_storage_score_metric,
+        ) = _validate_surrogate_storage_options(
+            best_n_surrogates,
+            save_every_n_batches,
+            score_metric,
+        )
 
 
 class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
@@ -3171,7 +3309,6 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         fitter = _setup_pyapprox_adaptive_sparse_grid_fitter(
             self._number_parameters,
-            n_qois,
             bounds=self._bounds,
             basis_type=self._sg_basis_type,
             piecewise_degree=self._sg_piecewise_degree,
@@ -3186,7 +3323,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 logger.info("No more admissible sparse-grid indices. Stopping.")
                 break
 
-            # new_samples are physical/native parameter values with shape
+            # new_samples are native parameter values with shape
             # (nvars, nsamples_new).
             new_vals = self._matcal_evaluate_parameter_sets_batch_adaptive_training(new_samples)
 
@@ -3750,17 +3887,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._current_surrogate_score['score'].append(_get_surrogate_metric(latent_score, 'score'))
         self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(latent_score, 'nlpd'))
         self._current_surrogate_score['rmse'].append(_get_surrogate_metric(latent_score, 'rmse'))
-         
-    def _build_boundary_hull(self):
-        from scipy.spatial import ConvexHull, Delaunay
-        self._boundary_points = _make_bounded_nd_grid(
-            self._bounds, 2
-        )
-        self._boundary_hull = ConvexHull(self._boundary_points)
-        self._boundary_hull_eq = self._boundary_hull.equations # (nfacet, ndim + 1)
-        self._boundary_hull_V, self._boundary_hull_b = self._boundary_hull_eq[:, :-1],\
-            self._boundary_hull_eq[:, -1] # normal, offset
-        self._bhullD = Delaunay(self._boundary_points)
 
     def set_number_of_initial_samples(self, num_initial_samples=None):
         """
@@ -3933,20 +4059,20 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         1. Split the current training samples into ``nsplits`` folds and build one
         surrogate per held-out fold.
-        2. Compute the physical response-space prediction error on each held-out
+        2. Compute the native response-space prediction error on each held-out
         fold.
-        3. Select the ``nmax_folds`` folds with the largest physical
+        3. Select the ``nmax_folds`` folds with the largest native
         cross-validation errors.
         4. Optionally perform leave-one-out cross validation only on the samples
         contained in those selected folds.
-        5. Select Voronoi cells associated with the largest leave-one-out physical
+        5. Select Voronoi cells associated with the largest leave-one-out native
         errors and place new samples at farthest vertices of those cells.
 
         If ``nsplits`` is set to ``0``, the cross-validation filter is disabled.
         In that case, all current training samples are treated as candidate Voronoi
         cell seeds.
 
-        Cross-validation and leave-one-out errors are computed in physical response
+        Cross-validation and leave-one-out errors are computed in native response
         space by comparing held-out model responses with surrogate predictions at
         the same held-out parameter locations. They are not based on latent-space
         surrogate diagnostics.
@@ -3971,7 +4097,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             selected high-error folds are used as candidate Voronoi regions.
         :type nmax_loo: int or str
 
-        :param cv_scale: Optional scaling applied to physical responses before
+        :param cv_scale: Optional scaling applied to native responses before
             computing cross-validation errors. Use this to normalize response
             magnitudes when the target response has multiple components or when
             different response locations have substantially different scales.
@@ -3988,14 +4114,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         :param cv_metric: Physical response-space error metric used for both K-fold
             and leave-one-out ranking. Supported values are:
 
-            * ``"rmse"``: root mean squared physical response error.
-            * ``"mae"`` or ``"abs"``: mean absolute physical response error.
-            * ``"sum_abs"``: sum of absolute physical response errors. This is
+            * ``"rmse"``: root mean squared native response error.
+            * ``"mae"`` or ``"abs"``: mean absolute native response error.
+            * ``"sum_abs"``: sum of absolute native response errors. This is
             closest to the error expression used in the KFCV-Voronoi paper.
-            * ``"nrmse"``: normalized root mean squared physical response error.
-            * ``"nlpd"``: accepted for backward compatibility. Because physical
+            * ``"nrmse"``: normalized root mean squared native response error.
+            * ``"nlpd"``: accepted for backward compatibility. Because native
             NLPD requires predictive variances, this option is evaluated as
-            physical RMSE for adaptive region ranking.
+            native RMSE for adaptive region ranking.
 
         :type cv_metric: str
 
@@ -4058,7 +4184,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def _validate_cv_metric(self, cv_metric):
         """
-        Validate and normalize the physical cross-validation error metric.
+        Validate and normalize the native cross-validation error metric.
         """
         check_value_is_nonempty_str(cv_metric, "cv_metric")
         cv_metric = cv_metric.lower().strip()
@@ -4129,8 +4255,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             self.set_surrogate_save_filename(
                 f"{self._get_model_names()[0]}_voronoi_adaptive_surrogate.joblib"
             )
-
-        self._build_boundary_hull()
         self.param_names = self._parameter_collection.get_item_names()
 
     def _log_voronoi_batch_start(self, batch_number):
@@ -4211,8 +4335,15 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         Select candidate regions, build the Voronoi object, and choose new samples.
         """
         candidates = self._get_voronoi_candidate_locations(training_params, training_data)
-        candidates = self._reduce_candidates(candidates)
-
+        candidates = _reduce_voronoi_candidates(
+            candidates,
+            self._number_parameters,
+            self._batch_size,
+            self._thin,
+            self._random_selection,
+            self._random_generator
+        )
+    
         logger.info(f"Initializing voronoi/tree for batch {iteration}")
         self._create_voronoi_tess(training_params)
 
@@ -4248,37 +4379,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         self._perform_loo_cross_validation(training_params, training_data)
         return self._find_loo_max_errors(training_params)
-
-    def _reduce_candidates(self, candidates):
-        """
-        Apply optional thinning/random down-selection and then the batch-size limit.
-
-        In one-at-a-time mode, preserve full ranked candidate order so the first
-        valid candidate can be selected in a paper-faithful manner.
-        """
-        candidates = _normalize_candidate_array(
-            candidates, 
-            self._number_parameters
-        )
-
-        if candidates.shape[0] == 0:
-            return candidates
-
-        if self._batch_size == 1:
-            return candidates
-
-        if self._thin is not None:
-            candidates = candidates[:: self._thin]
-
-        elif self._random_selection is not None:
-            candidates = _random_subset_rows(
-                candidates, 
-                self._batch_size, 
-                self._random_generator,
-                self._number_parameters
-            )
-
-        return candidates[: self._batch_size]
         
     def _create_voronoi_tess(self, training_params):
         if self._voronoi_type == 'full':
@@ -4314,7 +4414,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             new_points.append(new_point)
             self._update_adaptive_voronoi_after_new_point(new_point)
 
-        return self._package_new_voronoi_points(new_points)
+        return _package_unique_bounded_points(
+            new_points,
+            self._bounds,
+            self._number_parameters,
+        )
 
     def _log_new_sample_location_progress(self, loc_idx):
         """
@@ -4490,7 +4594,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         belonging to the selected Voronoi cell of the given seed.
 
         Voronoi-cell membership is determined by nearest-seed assignment to the
-        current physical training points.
+        current native training points.
 
         :param seed_location: Selected sample/seed location.
         :type seed_location: numpy.ndarray
@@ -4622,22 +4726,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         )
         self._tree = KDTree(self._all_tree_points)
 
-    def _package_new_voronoi_points(self, new_points):
-        """
-        Convert selected Voronoi points to a unique bounded point array.
-        """
-        if len(new_points) == 0:
-            return np.empty((0, self._number_parameters))
-
-        new_points = np.asarray(new_points, dtype=float)
-        unique_points = np.unique(new_points, axis=0)
-
-        return _filter_points_within_bounds(
-            unique_points,
-            self._bounds,
-            self._number_parameters,
-        )
-
     def _find_first_valid_ranked_candidate_point(self, candidate_locations):
         """
         In one-at-a-time mode, try candidate locations in ranked order and return
@@ -4757,7 +4845,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         Return sample indices with the largest LOO errors, limited by batch size.
         """
         nkeep = self._get_number_of_loo_errors_to_keep()
-        sorted_items = self._sorted_loo_error_items()
+        sorted_items = _sorted_error_items(self._loo_errors)
         indices = [item[2] for item in sorted_items[:nkeep]]
 
         return np.asarray(indices[: self._batch_size], dtype=int)
@@ -4771,13 +4859,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         return min(int(self._nmax_loo), len(self._loo_errors))
 
-    def _sorted_loo_error_items(self):
-        """
-        Return LOO error records sorted from largest error to smallest error.
-        """
-        items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
-        return sorted(items, key=lambda x: x[1], reverse=True)
-
     def _get_ordered_loo_candidate_indices(self):
         """
         Return candidate training-sample indices ordered from largest LOO error
@@ -4789,20 +4870,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         sorted_items = self._sorted_loo_error_items()
         indices = [item[2] for item in sorted_items[:nkeep]]
         return np.asarray(indices, dtype=int)
-
+    
     def _find_indices_of_n_largest_kf_errors(self):
-        # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in self._kf.items()]
-        # Sort the items based on the error in descending order
-        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-        # Get the top n items
+        sorted_items = _sorted_error_items(self._kf)
         top_n_items = sorted_items[:self._nmax_folds]
-        # Extract the arrays associated with the top n largest floats
-        result_arrays = {key: array for key, _, array in top_n_items}
-        return result_arrays
-
-    def _add_parameter_evaluation(self, **p):
-      super()._add_parameter_evaluation(**p)
+        return {
+            key: sample_indices
+            for key, _, sample_indices in top_n_items
+        }
 
     def add_parameter_evaluation(self, **parameters):
         """
@@ -4980,7 +5055,7 @@ class VoronoiTessellation:
 
     def get_voronoi_vertices(self, identify_outside_vertices=True):
         """
-        Return all valid physical Voronoi vertices.
+        Return all valid native Voronoi vertices.
 
         Regions belonging to ghost points are skipped.
         """
@@ -5209,7 +5284,7 @@ class VoronoiTessellation:
         The explicit Voronoi-region membership check is intentionally omitted here
         because clipped boundary intersections can be numerically assigned to an
         adjacent or ghost-influenced region even when they are valid for bounding
-        the physical cell.
+        the native cell.
         """
         if new_vertex is None:
             return False
@@ -5378,14 +5453,14 @@ class VoronoiTessellation:
     
     def add_points(self, points):
         """
-        Add physical sample points and rebuild the Voronoi tessellation.
+        Add native sample points and rebuild the Voronoi tessellation.
 
         The Voronoi tessellation contains two classes of seed points:
 
-        * physical sample points stored in ``self.points``; and
+        * native sample points stored in ``self.points``; and
 
-        Only physical sample points should be added through this method. After new
-        physical points are added, all derived tessellation state is rebuilt,
+        Only native sample points should be added through this method. After new
+        native points are added, all derived tessellation state is rebuilt,
         including ghost points, the combined point array, the SciPy Voronoi object,
         ghost-point bookkeeping, and boundary-region bookkeeping.
 
@@ -5397,25 +5472,25 @@ class VoronoiTessellation:
         samples.
 
         Invalid rows containing ``NaN`` or infinite values are discarded. Duplicate
-        physical points are removed before rebuilding the tessellation.
+        native points are removed before rebuilding the tessellation.
 
-        :param points: New physical sample point or points to add. A single point
+        :param points: New native sample point or points to add. A single point
             may be supplied with shape ``(n_dimensions,)``. Multiple points should
             have shape ``(n_points, n_dimensions)``.
         :type points: numpy.ndarray
 
         :raises TypeError: If ``points`` is not a NumPy array.
         :raises ValueError: If the supplied points do not have the same dimension as
-            the existing physical sample points.
+            the existing native sample points.
 
-        :ivar points: Updated unique physical sample points.
+        :ivar points: Updated unique native sample points.
         :vartype points: numpy.ndarray
 
         :ivar _ghost_points: Regenerated ghost points corresponding to the current
-            physical sample set and parameter bounds.
+            native sample set and parameter bounds.
         :vartype _ghost_points: numpy.ndarray
 
-        :ivar _all_points: Combined physical and ghost seed points used to construct
+        :ivar _all_points: Combined native and ghost seed points used to construct
             the Voronoi tessellation.
         :vartype _all_points: numpy.ndarray
 
@@ -5436,7 +5511,7 @@ class VoronoiTessellation:
             logger.warning("No finite points were added to the Voronoi tessellation.")
             return
 
-        self._append_unique_physical_points(points)
+        self._append_unique_native_points(points)
         self._rebuild_voronoi_state()
 
     def _prepare_points_to_add(self, points):
@@ -5460,9 +5535,9 @@ class VoronoiTessellation:
         if points.size > 0 and points.shape[1] != self.points.shape[1]:
             raise ValueError("New points have the wrong dimension.")
 
-    def _append_unique_physical_points(self, points):
+    def _append_unique_native_points(self, points):
         """
-        Append physical points and remove duplicates.
+        Append native points and remove duplicates.
         """
         self.points = np.unique(np.vstack((self.points, points)), axis=0)
 
@@ -5586,11 +5661,11 @@ class KFoldCrossValidation:
 
     def evaluate_fold(self, train_index, test_index, X, y, kfold_count):
         """
-        Evaluate one K-fold split using physical response-space error.
+        Evaluate one K-fold split using native response-space error.
 
         The previous implementation ranked folds using latent surrogate scores from
         ``fold_surrogate._latent_scores['test']``. The KFCV-Voronoi method described
-        in the paper ranks folds by the physical prediction error on the held-out
+        in the paper ranks folds by the native prediction error on the held-out
         samples,
 
         .. math::
@@ -5602,9 +5677,9 @@ class KFoldCrossValidation:
             y(s_j) - \\hat{y}_{S \\setminus kf_i}(s_j)
             \\right|.
 
-        This implementation evaluates the fold surrogate at the held-out physical
+        This implementation evaluates the fold surrogate at the held-out native
         parameter samples and compares those predictions directly with the held-out
-        physical responses.
+        native responses.
 
         :param train_index: Indices used to train the fold surrogate.
         :type train_index: array-like
@@ -5615,46 +5690,37 @@ class KFoldCrossValidation:
         :param X: Full parameter sample matrix.
         :type X: numpy.ndarray
 
-        :param y: Full list of physical model-evaluation dictionaries.
+        :param y: Full list of native model-evaluation dictionaries.
         :type y: list[dict]
 
         :param kfold_count: Fold counter used for logging.
         :type kfold_count: int
 
-        :return: Tuple containing the physical fold error and the held-out indices.
+        :return: Tuple containing the native fold error and the held-out indices.
         :rtype: tuple[float, numpy.ndarray]
         """
         logger.info(
-            f"\tEvaluating physical '{self.metric}' error for surrogate "
+            f"\tEvaluating native '{self.metric}' error for surrogate "
             f"for kfold cross validation set {kfold_count}..."
         )
 
         info = self.extract_fold_info(train_index, test_index, X, y)
         train_eval_info, test_eval_info, X_test, y_test = info
 
-        fold_surrogate = _fit_surrogate_model(
+        error = _fit_cv_surrogate_and_calculate_native_error(
             train_eval_info,
-            self.interpolation_field,
-            self.interpolation_values,
             test_eval_info,
-            self.target_field,
-            "kfold_validation_surrogate.joblib",
-            logger_on=False,
-            **self.surrogate_options,
-        )
-
-        error = _calculate_physical_cv_error(
-            fold_surrogate,
             X_test,
             y_test,
-            self.target_field,
             self.interpolation_field,
             self.interpolation_values,
+            self.target_field,
+            self.surrogate_options,
             self.metric,
             self.scale,
         )
 
-        logger.info(f"\t\tphysical error = {error}")
+        logger.info(f"\t\tnative error = {error}")
         return error, test_index
    
     def extract_fold_info(self, train_index, test_index, X, y):
@@ -5709,10 +5775,10 @@ class LeaveOneOutCrossValidation:
     
     def evaluate_loo_sample(self, X, y, index):
         """
-        Evaluate one leave-one-out split using physical response-space error.
+        Evaluate one leave-one-out split using native response-space error.
 
         The previous implementation ranked samples using latent surrogate scores.
-        The CV-Voronoi and KFCV-Voronoi methods require the physical prediction
+        The CV-Voronoi and KFCV-Voronoi methods require the native prediction
         error at the omitted sample,
 
         .. math::
@@ -5724,52 +5790,43 @@ class LeaveOneOutCrossValidation:
             \\right|.
 
         This implementation builds the leave-one-out surrogate, evaluates it at the
-        omitted physical parameter sample, and compares the prediction directly with
-        the omitted physical model response.
+        omitted native parameter sample, and compares the prediction directly with
+        the omitted native model response.
 
         :param X: Full parameter sample matrix.
         :type X: numpy.ndarray
 
-        :param y: Full list of physical model-evaluation dictionaries.
+        :param y: Full list of native model-evaluation dictionaries.
         :type y: list[dict]
 
         :param index: Index of the omitted sample.
         :type index: int
 
-        :return: Tuple containing the physical LOO error and omitted sample index.
+        :return: Tuple containing the native LOO error and omitted sample index.
         :rtype: tuple[float, int]
         """
         logger.info(
-            f"\tEvaluating physical '{self.metric}' error for surrogate "
+            f"\tEvaluating native '{self.metric}' error for surrogate "
             f"leaving out sample {index}"
         )
 
         info = self.extract_loo_info(index, X, y)
         train_eval_info, test_eval_info, X_test, y_test = info
 
-        fold_surrogate = _fit_surrogate_model(
+        error = _fit_cv_surrogate_and_calculate_native_error(
             train_eval_info,
-            self.interpolation_field,
-            self.interpolation_values,
             test_eval_info,
-            self.target_field,
-            "kfold_validation_surrogate.joblib",
-            logger_on=False,
-            **self.surrogate_options,
-        )
-
-        error = _calculate_physical_cv_error(
-            fold_surrogate,
             X_test,
             y_test,
-            self.target_field,
             self.interpolation_field,
             self.interpolation_values,
+            self.target_field,
+            self.surrogate_options,
             self.metric,
             self.scale,
         )
 
-        logger.info(f"\t\tphysical error = {error}")
+        logger.info(f"\t\tnative error = {error}")
         return error, index
 
     def extract_loo_info(self, index, X, y):
@@ -5831,14 +5888,14 @@ def _get_surrogate_metric(latent_scores_test, metric):
     else:
         return np.mean(combined_score)
 
-def _extract_physical_response_matrix(model_evals, target_field,
+def _extract_native_response_matrix(model_evals, target_field,
                                       interpolation_field=None,
                                       interpolation_values=None):
     """
-    Extract physical target-response values from a list of model-evaluation
+    Extract native target-response values from a list of model-evaluation
     dictionaries.
 
-    The cross-validation adaptive-sampling criteria should be based on physical
+    The cross-validation adaptive-sampling criteria should be based on native
     response error,
 
     .. math::
@@ -5858,7 +5915,7 @@ def _extract_physical_response_matrix(model_evals, target_field,
         ``interpolation_field``.
     :type model_evals: list[dict]
 
-    :param target_field: Name of the physical response field to compare.
+    :param target_field: Name of the native response field to compare.
     :type target_field: str
 
     :param interpolation_field: Name of the independent-variable field used for
@@ -5894,7 +5951,7 @@ def _extract_physical_response_matrix(model_evals, target_field,
         if needs_interpolation:
             if interpolation_field is None:
                 raise RuntimeError(
-                    "Cannot interpolate held-out physical response because "
+                    "Cannot interpolate held-out native response because "
                     "interpolation_field is None."
                 )
 
@@ -5908,7 +5965,7 @@ def _extract_physical_response_matrix(model_evals, target_field,
 
             if source_x.size != target_response.size:
                 raise RuntimeError(
-                    "Cannot interpolate held-out physical response because the "
+                    "Cannot interpolate held-out native response because the "
                     f"independent field '{interpolation_field}' has length "
                     f"{source_x.size}, but target field '{target_field}' has "
                     f"length {target_response.size}."
@@ -5929,13 +5986,13 @@ def _extract_physical_response_matrix(model_evals, target_field,
     return np.asarray(responses, dtype=float)
 
 
-def _evaluate_surrogate_physical_response(surrogate, X_test, target_field):
+def _evaluate_surrogate_native_response(surrogate, X_test, target_field):
     """
-    Evaluate a surrogate at held-out parameter samples and return its physical
+    Evaluate a surrogate at held-out parameter samples and return its native
     target-field response.
 
     The returned array is normalized to shape ``(n_samples, n_qois)`` so that it
-    can be directly compared with the held-out physical model responses.
+    can be directly compared with the held-out native model responses.
 
     :param surrogate: Surrogate object returned by ``_fit_surrogate_model``.
     :type surrogate: object
@@ -5944,7 +6001,7 @@ def _evaluate_surrogate_physical_response(surrogate, X_test, target_field):
         ``(n_test_samples, n_parameters)``.
     :type X_test: numpy.ndarray
 
-    :param target_field: Name of the physical target field.
+    :param target_field: Name of the native target field.
     :type target_field: str
 
     :return: Surrogate predictions with shape ``(n_test_samples, n_qois)``.
@@ -5983,7 +6040,7 @@ def _evaluate_surrogate_physical_response(surrogate, X_test, target_field):
             predicted_response = predicted_response.T
         else:
             raise RuntimeError(
-                "Could not orient surrogate prediction array for physical "
+                "Could not orient surrogate prediction array for native "
                 f"cross-validation error. Prediction shape is "
                 f"{predicted_response.shape}; expected one dimension to equal "
                 f"the number of held-out samples, {n_test_samples}."
@@ -5999,9 +6056,9 @@ def _evaluate_surrogate_physical_response(surrogate, X_test, target_field):
     return predicted_response
 
 
-def _apply_physical_response_scaling(true_response, predicted_response, scale):
+def _apply_native_response_scaling(true_response, predicted_response, scale):
     """
-    Apply optional scaling to physical responses before error calculation.
+    Apply optional scaling to native responses before error calculation.
 
     ``scale`` is intended to normalize response magnitudes before computing
     cross-validation errors. If ``scale`` is ``None`` or ``1``, responses are
@@ -6009,10 +6066,10 @@ def _apply_physical_response_scaling(true_response, predicted_response, scale):
 
     The legacy string option ``"cbrt"`` is supported for compatibility.
 
-    :param true_response: Held-out physical response.
+    :param true_response: Held-out native response.
     :type true_response: numpy.ndarray
 
-    :param predicted_response: Surrogate-predicted physical response.
+    :param predicted_response: Surrogate-predicted native response.
     :type predicted_response: numpy.ndarray
 
     :param scale: Response scaling option.
@@ -6029,7 +6086,7 @@ def _apply_physical_response_scaling(true_response, predicted_response, scale):
         if scale_lower == "cbrt":
             return np.cbrt(true_response), np.cbrt(predicted_response)
         raise ValueError(
-            f"Unsupported physical response scale option '{scale}'."
+            f"Unsupported native response scale option '{scale}'."
         )
 
     scale = np.asarray(scale, dtype=float)
@@ -6040,14 +6097,14 @@ def _apply_physical_response_scaling(true_response, predicted_response, scale):
     return true_response / scale, predicted_response / scale
 
 
-def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
+def _calculate_native_cv_error(surrogate, X_test, y_test, target_field,
                                  interpolation_field, interpolation_values,
                                  metric="rmse", scale=1.0):
     """
-    Calculate cross-validation error in physical response space.
+    Calculate cross-validation error in native response space.
 
     This replaces the previous latent-score-based adaptive-sampling criterion.
-    The returned error is based on the held-out physical response and the
+    The returned error is based on the held-out native response and the
     surrogate prediction at the same held-out parameter locations.
 
     For K-fold CV, ``X_test`` and ``y_test`` contain all samples in the held-out
@@ -6055,12 +6112,12 @@ def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
 
     Supported metrics are:
 
-    * ``"rmse"``: root mean squared physical response error.
-    * ``"mae"`` or ``"abs"``: mean absolute physical response error.
-    * ``"sum_abs"``: sum of absolute physical response errors, closest to the
+    * ``"rmse"``: root mean squared native response error.
+    * ``"mae"`` or ``"abs"``: mean absolute native response error.
+    * ``"sum_abs"``: sum of absolute native response errors, closest to the
       paper's stated error form.
-    * ``"nrmse"``: normalized root mean squared physical response error.
-    * ``"nlpd"``: accepted for backward compatibility, but evaluated as physical
+    * ``"nrmse"``: normalized root mean squared native response error.
+    * ``"nlpd"``: accepted for backward compatibility, but evaluated as native
       RMSE because true NLPD requires predictive variances.
 
     :param surrogate: Surrogate object returned by ``_fit_surrogate_model``.
@@ -6072,11 +6129,11 @@ def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
     :param y_test: Held-out model-evaluation dictionaries.
     :type y_test: list[dict]
 
-    :param target_field: Name of the physical response field.
+    :param target_field: Name of the native response field.
     :type target_field: str
 
     :param interpolation_field: Independent-variable field used to align
-        physical responses with surrogate outputs.
+        native responses with surrogate outputs.
     :type interpolation_field: str
 
     :param interpolation_values: Independent-variable values at which the
@@ -6086,20 +6143,20 @@ def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
     :param metric: Physical error metric.
     :type metric: str
 
-    :param scale: Optional physical response scale.
+    :param scale: Optional native response scale.
     :type scale: float, str, numpy.ndarray, or None
 
-    :return: Scalar physical cross-validation error.
+    :return: Scalar native cross-validation error.
     :rtype: float
     """
-    true_response = _extract_physical_response_matrix(
+    true_response = _extract_native_response_matrix(
         y_test,
         target_field,
         interpolation_field,
         interpolation_values,
     )
 
-    predicted_response = _evaluate_surrogate_physical_response(
+    predicted_response = _evaluate_surrogate_native_response(
         surrogate,
         X_test,
         target_field,
@@ -6107,13 +6164,13 @@ def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
 
     if true_response.shape != predicted_response.shape:
         raise RuntimeError(
-            "Held-out physical response and surrogate prediction have "
+            "Held-out native response and surrogate prediction have "
             "different shapes during cross-validation error calculation. "
             f"True response shape: {true_response.shape}. "
             f"Predicted response shape: {predicted_response.shape}."
         )
 
-    true_response, predicted_response = _apply_physical_response_scaling(
+    true_response, predicted_response = _apply_native_response_scaling(
         true_response,
         predicted_response,
         scale,
@@ -6127,8 +6184,8 @@ def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
         return float(np.sqrt(np.mean(residual ** 2)))
 
     if metric == "nlpd":
-        # Backward-compatible behavior. True physical NLPD would require a
-        # physical predictive variance. For adaptive region ranking, use physical
+        # Backward-compatible behavior. True native NLPD would require a
+        # native predictive variance. For adaptive region ranking, use native
         # RMSE rather than latent-space NLPD.
         return float(np.sqrt(np.mean(residual ** 2)))
 
@@ -6145,7 +6202,47 @@ def _calculate_physical_cv_error(surrogate, X_test, y_test, target_field,
         return float(np.sqrt(np.sum(residual ** 2) / denom))
 
     raise ValueError(
-        "Unsupported physical cross-validation metric "
+        "Unsupported native cross-validation metric "
         f"'{metric}'. Supported metrics are 'rmse', 'mae', 'abs', "
         "'sum_abs', 'nrmse', and backward-compatible 'nlpd'."
+    )
+
+def _fit_cv_surrogate_and_calculate_native_error(
+    train_eval_info,
+    test_eval_info,
+    X_test,
+    y_test,
+    interpolation_field,
+    interpolation_values,
+    target_field,
+    surrogate_options,
+    metric,
+    scale,
+    save_filename="kfold_validation_surrogate.joblib",
+):
+    """
+    Fit a cross-validation surrogate and calculate native response-space error.
+
+    This helper is shared by K-fold and leave-one-out cross validation.
+    """
+    fold_surrogate = _fit_surrogate_model(
+        train_eval_info,
+        interpolation_field,
+        interpolation_values,
+        test_eval_info,
+        target_field,
+        save_filename,
+        logger_on=False,
+        **surrogate_options,
+    )
+
+    return _calculate_native_cv_error(
+        fold_surrogate,
+        X_test,
+        y_test,
+        target_field,
+        interpolation_field,
+        interpolation_values,
+        metric,
+        scale,
     )

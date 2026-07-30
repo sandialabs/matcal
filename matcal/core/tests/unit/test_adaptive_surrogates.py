@@ -2,13 +2,11 @@ import os
 import types
 import numpy as np
 import unittest
-
 from unittest.mock import patch
-import numpy as np
 
 from matcal.core.adaptive_surrogates import (
     _assign_points_to_nearest_seed,
-    _calculate_physical_cv_error,
+    _calculate_native_cv_error,
     _create_ghost_points,
     _filter_points_within_bounds,
     _find_matching_row_index,
@@ -16,10 +14,13 @@ from matcal.core.adaptive_surrogates import (
     _get_parameter_bounds, 
     _make_bounded_nd_grid,
     _normalize_candidate_array,
+    _package_unique_bounded_points,
     _random_subset_rows,
+    _reduce_voronoi_candidates,
     _remove_duplicate_rows_against_existing,
     _remove_invalid_rows,
     _select_farthest_point,
+    _validate_surrogate_storage_options,
     KFoldCrossValidation,
     LeaveOneOutCrossValidation,
     SparseGridAdaptiveSurrogateStudy,
@@ -375,7 +376,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
     def test_populate_parameter_evaluations_adaptive(self):
         """
         Verify that the method:
-        * treats the sample matrix as native/physical parameter values,
+        * treats the sample matrix as native parameter values,
         * creates a list ``_parameter_sets_to_evaluate`` with one dict per
             sample,
         * each dict contains the correct parameter names and values, and
@@ -556,7 +557,7 @@ class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
 
         self.assertIsNone(self.study._surrogate_storage_best_n_surrogates)
         self.assertEqual(self.study._surrogate_storage_every_n_batches, 2)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "score")
+        self.assertEqual(self.study._surrogate_storage_score_metric, "r2")
 
     def test_set_surrogate_storage_options_invalid_inputs(self):
         with self.assertRaises(ValueError):
@@ -1948,7 +1949,55 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         should_stop = self.study._stopping_criterion_met(training_batch_number=4)
         self.assertFalse(should_stop,
                          "Stopping should NOT be triggered when no criteria are met")
-        
+
+class TestGlobalHelperFunctions(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_validate_surrogate_storage_options_normalizes_score_alias(self):
+        best_n, every_n, metric = _validate_surrogate_storage_options(
+            best_n_surrogates=None,
+            save_every_n_batches=2,
+            score_metric="score",
+        )
+
+        self.assertIsNone(best_n)
+        self.assertEqual(every_n, 2)
+        self.assertEqual(metric, "r2")
+    def test_validate_surrogate_storage_options_rejects_disabled_retention(self):
+        with self.assertRaises(ValueError):
+            _validate_surrogate_storage_options(
+                best_n_surrogates=None,
+                save_every_n_batches=None,
+            )        
+
+    def test_package_unique_bounded_points_uniques_and_filters_bounds(self):
+        bounds = np.array([
+            [0.0, 1.0],
+            [-1.0, 1.0],
+        ])
+
+        points = np.array([
+            [0.5, 0.0],
+            [0.5, 0.0],
+            [1.2, 0.0],
+            [0.25, -0.5],
+            [np.nan, 0.0],
+        ])
+
+        packaged = _package_unique_bounded_points(
+            points,
+            bounds,
+            n_parameters=2,
+        )
+
+        expected = np.array([
+            [0.25, -0.5],
+            [0.5, 0.0],
+        ])
+
+        self.assert_close_arrays(packaged, expected)
 
 class TestVoronoiPureFunctions(MatcalUnitTest):
 
@@ -2149,13 +2198,31 @@ class TestVoronoiPureFunctions(MatcalUnitTest):
 
         self.assertEqual(finite_indices, [0, 3, 7])
 
+    def test_reduce_voronoi_candidates_preserves_order_in_one_at_a_time_mode(self):
+        candidates = np.array([
+            [0.0, -1.0],
+            [0.25, -0.5],
+            [0.5, 0.0],
+        ])
+
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            n_parameters=2,
+            batch_size=1,
+            thin=2,
+            random_selection=None,
+            random_generator=np.random.default_rng(123),
+        )
+
+        self.assert_close_arrays(reduced, candidates)
+
 
 class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
 
-    def test_calculate_physical_cv_error_is_zero_for_exact_fake_surrogate(self):
+    def test_calculate_native_cv_error_is_zero_for_exact_fake_surrogate(self):
 
         class ExactFakeSurrogate:
 
@@ -2183,7 +2250,7 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
             },
         ]
 
-        error = _calculate_physical_cv_error(
+        error = _calculate_native_cv_error(
             ExactFakeSurrogate(),
             X_test,
             y_test,
@@ -2196,7 +2263,7 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
 
         self.assertAlmostEqual(error, 0.0)
 
-    def test_calculate_physical_cv_error_sum_abs(self):
+    def test_calculate_native_cv_error_sum_abs(self):
 
         class BiasedFakeSurrogate:
 
@@ -2219,7 +2286,7 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
             },
         ]
 
-        error = _calculate_physical_cv_error(
+        error = _calculate_native_cv_error(
             BiasedFakeSurrogate(),
             X_test,
             y_test,
@@ -2350,7 +2417,7 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
         self.assert_close_arrays(subset_a, subset_b)
         self.assertEqual(subset_a.shape, (3, 2))
 
-    def test_reduce_candidates_returns_all_candidates_in_one_at_a_time_mode(self):
+    def test_reduce_voronoi_candidates_returns_all_candidates_in_one_at_a_time_mode(self):
         study = self._make_two_parameter_study()
         study._batch_size = 1
         study._thin = 2
@@ -2363,11 +2430,18 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             [0.75, 0.5],
         ])
 
-        reduced = study._reduce_candidates(candidates)
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            study._number_parameters,
+            study._batch_size,
+            study._thin,
+            study._random_selection,
+            study._random_generator,
+        )
 
         self.assert_close_arrays(reduced, candidates)
 
-    def test_reduce_candidates_applies_thinning_and_batch_size_limit(self):
+    def test_reduce_voronoi_candidates_applies_thinning_and_batch_size_limit(self):
         study = self._make_two_parameter_study()
         study._batch_size = 2
         study._thin = 2
@@ -2381,7 +2455,14 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             [1.0, 1.0],
         ])
 
-        reduced = study._reduce_candidates(candidates)
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            study._number_parameters,
+            study._batch_size,
+            study._thin,
+            study._random_selection,
+            study._random_generator,
+        )
 
         expected = np.array([
             [0.0, -1.0],
@@ -2390,7 +2471,7 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
 
         self.assert_close_arrays(reduced, expected)
 
-    def test_reduce_candidates_applies_random_selection_and_batch_size_limit(self):
+    def test_reduce_voronoi_candidates_applies_random_selection_and_batch_size_limit(self):
         study_a = self._make_two_parameter_study()
         study_b = self._make_two_parameter_study()
         study_a.set_seed(456)
@@ -2409,13 +2490,28 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             [1.0, 1.0],
         ])
 
-        reduced_a = study_a._reduce_candidates(candidates)
-        reduced_b = study_b._reduce_candidates(candidates)
+        reduced_a = _reduce_voronoi_candidates(
+            candidates,
+            study_a._number_parameters,
+            study_a._batch_size,
+            study_a._thin,
+            study_a._random_selection,
+            study_a._random_generator,
+        )
+
+        reduced_b = _reduce_voronoi_candidates(
+            candidates,
+            study_b._number_parameters,
+            study_b._batch_size,
+            study_b._thin,
+            study_b._random_selection,
+            study_b._random_generator,
+        )
 
         self.assert_close_arrays(reduced_a, reduced_b)
         self.assertEqual(reduced_a.shape, (2, 2))
 
-    def test_package_new_voronoi_points_uniques_and_filters_bounds(self):
+    def test_package_unique_bounded_points_uniques_and_filters_bounds(self):
         study = self._make_two_parameter_study()
 
         new_points = np.array([
@@ -2426,7 +2522,11 @@ class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
             [np.nan, 0.0],
         ])
 
-        packaged = study._package_new_voronoi_points(new_points)
+        packaged = _package_unique_bounded_points(
+            new_points,
+            study._bounds,
+            study._number_parameters,
+        )
 
         expected = np.array([
             [0.25, -0.5],
@@ -2590,7 +2690,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             expected_X_test,
         )
 
-    def test_evaluate_loo_sample_uses_physical_cv_error_function(self):
+    def test_evaluate_loo_sample_uses_native_cv_error_function(self):
         loocv = self._make_loocv()
         X, y = self._make_training_arrays()
 
@@ -2601,7 +2701,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_physical_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
                 return_value=12.5,
             ) as error_mock:
                 error, omitted_index = loocv.evaluate_loo_sample(X, y, 1)
@@ -2789,7 +2889,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
             expected_X_test,
         )
 
-    def test_evaluate_fold_uses_physical_cv_error_function(self):
+    def test_evaluate_fold_uses_native_cv_error_function(self):
         X, y = self._make_training_arrays()
         kfcv = self._make_kfold_cv(nsplits=2)
 
@@ -2802,7 +2902,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_physical_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
                 return_value=4.25,
             ) as error_mock:
                 error, returned_test_index = kfcv.evaluate_fold(
@@ -3000,36 +3100,36 @@ class TestVoronoiTessellation(MatcalUnitTest):
             expected_boundary_points,
         )
 
-    def test_build_uses_physical_and_ghost_points_in_voronoi_object(self):
+    def test_build_uses_native_and_ghost_points_in_voronoi_object(self):
         tessellation = self._make_tessellation(finite_only=False)
 
         tessellation.build()
 
-        n_physical_points = tessellation.points.shape[0]
+        n_native_points = tessellation.points.shape[0]
         n_ghost_points = self._expected_number_of_ghost_points(tessellation)
-        expected_total_points = n_physical_points + n_ghost_points
+        expected_total_points = n_native_points + n_ghost_points
 
         self.assertEqual(tessellation.vor.points.shape[0], expected_total_points)
 
-    def test_build_marks_physical_and_ghost_points_in_boolean_mask(self):
+    def test_build_marks_native_and_ghost_points_in_boolean_mask(self):
         tessellation = self._make_tessellation(finite_only=False)
 
         tessellation.build()
 
-        n_physical_points = tessellation.points.shape[0]
+        n_native_points = tessellation.points.shape[0]
         n_ghost_points = self._expected_number_of_ghost_points(tessellation)
 
-        self.assertEqual(len(tessellation._boo), n_physical_points + n_ghost_points)
+        self.assertEqual(len(tessellation._boo), n_native_points + n_ghost_points)
 
-        # The tessellation is constructed with physical points followed by local
-        # ghost points, so the first block should be physical and the second
+        # The tessellation is constructed with native points followed by local
+        # ghost points, so the first block should be native and the second
         # block should be ghost points.
         self.assertEqual(
-            tessellation._boo[:n_physical_points],
-            [False] * n_physical_points,
+            tessellation._boo[:n_native_points],
+            [False] * n_native_points,
         )
         self.assertEqual(
-            tessellation._boo[n_physical_points:],
+            tessellation._boo[n_native_points:],
             [True] * n_ghost_points,
         )
 
@@ -3121,13 +3221,13 @@ class TestVoronoiTessellation(MatcalUnitTest):
         self.assertFalse(hasattr(tessellation, "_ghost_points"))
         self.assertFalse(hasattr(tessellation, "ghost_points"))
 
-        n_physical_points = tessellation.points.shape[0]
+        n_native_points = tessellation.points.shape[0]
         n_ghost_points = self._expected_number_of_ghost_points(tessellation)
 
-        self.assertEqual(len(tessellation._boo), n_physical_points + n_ghost_points)
+        self.assertEqual(len(tessellation._boo), n_native_points + n_ghost_points)
         self.assertEqual(
             tessellation.vor.points.shape[0],
-            n_physical_points + n_ghost_points,
+            n_native_points + n_ghost_points,
         )
         self.assertEqual(
             len(tessellation.boundary_regions),
@@ -3140,15 +3240,15 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
         tessellation.add_points(np.array([[0.5, 0.5]]))
 
-        n_physical_points = tessellation.points.shape[0]
+        n_native_points = tessellation.points.shape[0]
         n_ghost_points = self._expected_number_of_ghost_points(tessellation)
 
         self.assertEqual(
-            tessellation._boo[:n_physical_points],
-            [False] * n_physical_points,
+            tessellation._boo[:n_native_points],
+            [False] * n_native_points,
         )
         self.assertEqual(
-            tessellation._boo[n_physical_points:],
+            tessellation._boo[n_native_points:],
             [True] * n_ghost_points,
         )
 
