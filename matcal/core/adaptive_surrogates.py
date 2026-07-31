@@ -768,7 +768,7 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
 
 class AdaptiveSurrogate:
     """
-    Stores retained surrogate objects, training/test score histories, test data,
+    Stores retained surrogate objects, test score histories, test data,
     and metadata describing the progress of adaptive surrogate training.
 
     The adaptive surrogate study may generate many surrogate models during
@@ -2831,6 +2831,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         self._surrogate = None
         self._user_test_data = None
+        self._test_eval_info = None
 
         self._max_training_samples=None
         self._training_samples_user_set = False
@@ -2920,11 +2921,10 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def set_max_training_samples(self, max_training_samples=1000):
         """
-        If the convergence criteria is not reached, 
-        the training for the surrogate will stop after max_training_samples has been 
-        reached or exceeded. The adaptive study checks this limit after each adaptive 
-        batch. Therefore, the final number of model evaluations can exceed 
-        ``max_training_samples`` when a batch adds multiple samples. 
+        If the convergence criteria are not reached, surrogate training stops after the
+        current number of model evaluations becomes greater than ``max_training_samples``.
+        The adaptive study checks this limit after each adaptive batch, so the final
+        number of evaluations can exceed ``max_training_samples``.
         
         :param max_training_samples: desired maximum number of samples
         :type max_training_samples: int
@@ -2962,8 +2962,8 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         :raises TypeError: If ``study_results`` is neither a ``StudyResults`` instance
             nor a string.
-        :raises FileNotFoundError: If ``study_results`` is a string but the file
-            cannot be located or loaded.
+        :raises Exception: Exceptions from ``matcal_load`` if
+            ``study_results`` is a string and the file cannot be located or loaded.
         :raises RuntimeError: If the loaded object is not a ``StudyResults`` instance.
 
         :notes:
@@ -3021,6 +3021,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             results = self._user_test_data
         else:
             results = self._run_test_sampling()
+        self._test_eval_info = results
         test_params = self._format_params(results)
         test_responses = self._format_output(results)
         return test_params, test_responses
@@ -4098,7 +4099,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._surrogate_options = {}
 
         self._num_initial_samples = None
-        self._test_eval_info = None
         self.set_number_of_initial_samples()
 
         self._voronoi_type = None
@@ -4188,10 +4188,8 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         See :meth:`~matcal.core.surrogates.SurrogateGenerator.set_surrogate_details`
         for more details.
 
-                Additional keyword arguments are forwarded directly to the underlying
-        regressor constructor.
-
-        For example, to use a local SciPy RBF interpolator:
+        Additional keyword arguments are forwarded directly to the underlying
+        regressor constructor. For example, to use a local SciPy RBF interpolator:
 
         .. code-block:: python
 
@@ -4475,8 +4473,9 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         :type cv_scale: float, array-like, str, or None
 
-        :param cv_metric: Physical response-space error metric used for both K-fold
-            and leave-one-out ranking. Supported values are:
+        :param cv_metric: Cross-validation ranking metric used for both K-fold and
+            leave-one-out ranking. Deterministic metrics are native response-space
+            errors; ``"nlpd"`` is a Gaussian-process latent-space uncertainty metric.
 
             * ``"rmse"``: root mean squared native response error.
             * ``"mae"`` or ``"abs"``: mean absolute native response error.
@@ -4547,11 +4546,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             data.append(convert_data_to_dictionary(sim_history[nn]))
         return data
     
-    def _reset_study_after_test_sampling_generation(self, orig_working_directory, remove_existing):
-        self._test_eval_info = copy.deepcopy(self._results)
-        super()._reset_study_after_test_sampling_generation(orig_working_directory, remove_existing)
-        
-    def _perform_adaptive_surrogate_batch_sampling(self):
+     def _perform_adaptive_surrogate_batch_sampling(self):
         """
         Run the Voronoi adaptive sampling loop.
 
@@ -5824,7 +5819,7 @@ class VoronoiTessellation:
         :param points: New native sample point or points to add. A single point
             may be supplied with shape ``(n_dimensions,)``. Multiple points should
             have shape ``(n_points, n_dimensions)``.
-        :type points: numpy.ndarray
+        :type points: array-like
 
         :raises TypeError or ValueError: If ``points`` cannot be converted to a
             floating-point NumPy array.
@@ -5904,7 +5899,8 @@ class VoronoiTessellation:
 
 class NativeCrossValidationBase:
     """
-    Shared native-response cross-validation behavior.
+    Shared cross-validation behavior for native response metrics and the special
+    Gaussian-process latent-space NLPD metric.
     """
     def __init__(
         self,
@@ -6179,17 +6175,20 @@ def _extract_native_response_matrix(model_evals, target_field,
     Extract native target-response values from a list of model-evaluation
     dictionaries.
 
-    The cross-validation adaptive-sampling criteria should be based on native
-    response error,
-
+    For deterministic cross-validation metrics, the adaptive-sampling criteria are
+    based on native response error rather than latent-space surrogate diagnostics.
+    For these metrics the diagnostic error is defined as
+    
     .. math::
 
-        y(s_i) - \\hat{y}_{S \\setminus s_i}(s_i),
+        y(s_i) - \\hat{y}_{S \\setminus s_i}(s_i).
 
-    not on latent-space surrogate diagnostics. This helper converts the held-out
+    This helper converts the held-out
     model responses into a dense array suitable for direct comparison with
     surrogate predictions.
 
+    The special ``"nlpd"`` metric is handled separately and does not use this helper.
+  
     If ``interpolation_values`` are provided and the stored target response is
     defined on a different independent-variable grid, the target response is
     interpolated onto ``interpolation_values`` using ``interpolation_field``.
@@ -6448,7 +6447,10 @@ def _fit_cv_surrogate_and_calculate_native_error(
     save_filename="kfold_validation_surrogate.joblib",
 ):
     """
-    Fit a cross-validation surrogate and calculate native response-space error.
+    Fit a cross-validation surrogate and calculate the requested CV metric.
+
+    Deterministic metrics are computed in native response space. ``"nlpd"`` uses
+    the fitted Gaussian-process latent-space NLPD.
 
     This helper is shared by K-fold and leave-one-out cross validation.
     """

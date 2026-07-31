@@ -12,10 +12,11 @@ is relatively smooth and low magnitude, while the important response behavior is
 localized near a small region of the parameter space. This makes it a good test
 for whether a sampling method can discover and refine important local features.
 
-The verification examples compare three surrogate workflows:
+The verification examples include several surrogate workflows:
 
-* a pretrained RBF surrogate built from random samples;
-* an adaptive Voronoi RBF surrogate;
+* pretrained Gaussian-process, RBF, and random-forest surrogates built from
+  nested random samples;
+* adaptive Voronoi Gaussian-process, RBF, and random-forest surrogates;
 * an adaptive sparse-grid surrogate.
 
 Each example reports validation RMSE, validation maximum absolute error, and an

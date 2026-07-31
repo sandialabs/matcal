@@ -65,12 +65,10 @@ class SurrogateGenerator:
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
                 regressor_type="Gaussian Process", test_eval_info=None, **regressor_kwargs):
         """
-        :param evaluation_information: A container of the relevant information used to
-            form a surrogate from MatCal study data. Supported inputs are
-            :class:`~matcal.core.study_base.StudyResults`,
-            :class:`~matcal.core.study_base.StudyBase`, or a compatible dictionary with
-            ``"input"`` and ``"output"`` entries.          
-        :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        :param evaluation_information: A container of the relevant information used 
+            to form a surrogate from MatCal study data.    
+        :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`,
+            :class:`~matcal.core.study_base.StudyBase`, or dict
 
         :param training_fraction: What fraction of the source data to use as training data. 
             Value should be 0 < training_fraction <= 1. If training_fraction == 1, 
@@ -111,8 +109,10 @@ class SurrogateGenerator:
         :type test_eval_info: :class:`~matcal.core.study_base.StudyResults`
         
         :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
-            Please refer to the sklearn documentation for more information for what can be passed to 
-            the predictors. 
+            Please refer to the scikit-learn documentation for ``"Random Forest"`` and
+            ``"Gaussian Process"`` options, and the SciPy ``RBFInterpolator`` documentation
+            for ``"RBF"`` options.
+        :type regressor_kwargs: dict
         """
         self._interpolation_field = interpolation_field
         self._input_parameter_history = None
@@ -219,8 +219,10 @@ class SurrogateGenerator:
             be provided if training_fraction == 1.0.
         :type test_eval_info: :class:`~matcal.core.study_base.StudyResults`
         
-        :param regressor_kwargs: A keyword selection of parameters to pass to the   
-            Please refer to the sklearn documentation for more information for what can be passed to the predictors. 
+        :param regressor_kwargs: Keyword arguments passed to the selected regressor.
+            Refer to the scikit-learn documentation for ``"Random Forest"`` and
+            ``"Gaussian Process"`` options, and the SciPy ``RBFInterpolator``
+            documentation for ``"RBF"`` options. 
         :type regressor_kwargs: dict
         """
         self._training_fraction  = training_fraction
