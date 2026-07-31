@@ -775,7 +775,7 @@ class AdaptiveSurrogate:
     training. To avoid unnecessarily large ``.joblib`` files, this class does
     not have to retain every trained surrogate object. Instead, the retention
     policy is configurable through
-    :meth:`AdaptiveSurrogateStudyBase.set_surrogate_storage_options`.
+    :meth:`~AdaptiveSurrogateStudyBase.set_surrogate_storage_options`.
 
     Regardless of the surrogate-object retention policy, this class always
     stores:
@@ -979,6 +979,11 @@ class AdaptiveSurrogate:
         check_value_is_bool(enforce_training_data_parameter_range, 
                             "enforce_training_data_parameter_range")
         self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
+        for surrogate in self._surrogates.values():
+            if hasattr(surrogate, "enforce_training_data_parameter_range"):
+                surrogate.enforce_training_data_parameter_range(
+                    enforce_training_data_parameter_range
+                )
 
     def _add_iteration(self, surrogate, nsamples) -> None:
         """
@@ -2187,7 +2192,7 @@ class AdaptiveSurrogate:
         selected test sample.
 
         Matplotlib is imported lazily when this method is called, so importing
-        :mod:`matcal.core.adaptive_surrogates` does not require Matplotlib unless
+        :mod:`~matcal.core.adaptive_surrogates` does not require Matplotlib unless
         plotting is requested.
 
         Axis labels automatically replace underscores with spaces. For example,
@@ -3064,10 +3069,10 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         :meth:`launch` to
         guarantee reproducibility.
 
-        :param seed: Integer seed for the pseudo‑random number generator.
+        :param seed: Non-zero integer seed for the pseudo‑random number generator.
         :type seed: int
         """
-        check_value_is_positive_integer(seed, "seed")
+        check_value_is_nonnegative_integer(seed, "seed")
         self._test_group_random_seed = seed
 
     def _update_work_dir_for_test_sampling(self):
@@ -3283,7 +3288,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         The surrogate (an :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` 
         instance) is periodically saved to
-        disk with :func:`matcal.core.serializer_wrapper.matcal_save`.  The filename
+        disk with :func:`~matcal.core.serializer_wrapper.matcal_save`.  The filename
         must be a non‑empty string that ends with the ``.joblib`` extension.
         The directory
         component of the path is not created automatically; it must already exist
@@ -4177,16 +4182,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                                 **regressor_kwargs):
         """
         Select the regressor used by the internal
-        :class:`matcal.core.surrogates.SurrogateGenerator`.
+        :class:`~matcal.core.surrogates.SurrogateGenerator`.
+        See :meth:`~matcal.core.surrogates.SurrogateGenerator.set_surrogate_details`
+        for more details.
 
-        Supported regressor types are those registered with
-        ``SurrogateGenerator``, including:
-
-        * ``"Gaussian Process"``
-        * ``"Random Forest"``
-        * ``"RBF"``
-
-        Additional keyword arguments are forwarded directly to the underlying
+                Additional keyword arguments are forwarded directly to the underlying
         regressor constructor.
 
         For example, to use a local SciPy RBF interpolator:
@@ -4342,7 +4342,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def set_surrogate_options(self, **kwargs):
         """
         Set keyword options forwarded to
-        :class:`matcal.core.surrogates.SurrogateGenerator`.
+        :class:`~matcal.core.surrogates.SurrogateGenerator`.
 
         These options may include surrogate-generation options such as
         ``decomp_var``, ``surrogate_type``, ``regressor_type``, or
@@ -4451,9 +4451,10 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         :param nmax_loo: Number of highest-error leave-one-out samples retained
             after the K-fold filter. These samples define the Voronoi regions from
-            which new adaptive samples are drawn. If ``nmax_loo='all'``,
-            leave-one-out cross validation is skipped and all samples in the
-            selected high-error folds are used as candidate Voronoi regions.
+            which new adaptive samples are drawn. If nmax_loo='all', leave-one-out
+            cross validation is skipped. Samples in the selected high-error 
+            folds form the candidate pool, from which up to batch_size 
+            candidates are selected.
         :type nmax_loo: int or str
 
         :param cv_scale: Optional scaling applied to native responses before
@@ -5791,6 +5792,7 @@ class VoronoiTessellation:
         The Voronoi tessellation contains two classes of seed points:
 
         * native sample points stored in ``self.points``; and
+        * ghost points used to bound the tessellation.
 
         Only native sample points should be added through this method. After new
         native points are added, all derived tessellation state is rebuilt,

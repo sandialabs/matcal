@@ -71,8 +71,6 @@ SAMPLE_COUNTS_TO_PLOT = (50, 100, 150)
 WORKING_DIRECTORY = os.path.abspath("paper_peaks_pretrained_random_rbf")
 FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
 
-SAMPLE_COUNTS_TO_PLOT = (50, 100, 150)
-
 SAMPLE_COUNTS = tuple(
     sorted(set(range(20, MAX_TRAINING_SAMPLES + 1, 20)) | set(SAMPLE_COUNTS_TO_PLOT))
 )
@@ -187,7 +185,7 @@ validation_results = run_fixed_validation_set(
 # ----------------------------------------
 #
 # The 100-sample surrogate uses the first 100 samples of the same random sample
-# sequence used by the 150- and 200-sample surrogates.
+# sequence used by the 150-sample surrogates.
 
 print(f"Generating {MAX_TRAINING_SAMPLES} nested random training samples.")
 random_samples = make_uniform_random_samples(

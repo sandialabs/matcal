@@ -249,7 +249,8 @@ The main configuration options are:
     Controls how many PCA modes are retained when PCA is active. For example,
     ``decomp_var=0.99`` keeps enough PCA modes to explain 99% of the response
     variance. An integer value can also be supplied to request a fixed number of
-    components.
+    components. This option only affects fields for which PCA is actually used.
+    MatCal skips PCA for fields with 15 or fewer response features.
 
 The generated surrogate can be evaluated using positional parameters, keyword
 parameters, a parameter dictionary, or a batch array. For batch arrays, use
@@ -390,16 +391,11 @@ If the user does not provide a kernel, MatCal uses a default kernel of the form
    k(x, x')
    =
    C \, k_\mathrm{RBF}(x, x')
-   + k_\mathrm{white}(x, x'),
 
 where:
 
-* :math:`C` is a constant kernel;
-* :math:`k_\mathrm{RBF}` is an RBF covariance kernel;
-* :math:`k_\mathrm{white}` is a white-noise kernel.
-
-The white-noise term improves numerical conditioning and allows a small amount
-of apparent noise or mismatch.
+* :math:`C` is a constant kernel and
+* :math:`k_\mathrm{RBF}` is an RBF covariance kernel.
 
 When the predicted response has more than 15 features, MatCal trains the GP
 surrogate on PCA coordinates instead of directly on every response feature. For

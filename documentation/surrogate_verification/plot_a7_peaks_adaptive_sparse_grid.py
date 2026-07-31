@@ -65,7 +65,7 @@ WORKING_DIRECTORY = os.path.abspath("paper_peaks_adaptive_sparse_grid")
 FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
 
 SAMPLE_COUNTS_TO_PLOT = (250, 500, 750)
-MAX_TRAINING_SAMPLES = 800
+MAX_TRAINING_SAMPLES = 750
 CONVERGENCE_PLOT_SAMPLE_LIMIT = None
 
 ###############################################################################
@@ -139,7 +139,7 @@ study.set_test_data(validation_results)
 # ----------------------------------------
 #
 # Sparse-grid adaptive refinement can add samples in batches. 
-# The sparse grid surrogate generally require more samples to 
+# The sparse grid surrogate generally requires more samples to 
 # converge for this type of problem so we allow 750 samples for training.
 
 study.set_max_training_samples(MAX_TRAINING_SAMPLES)
@@ -172,7 +172,7 @@ study.set_sparse_grid_adaptivity_limits(
 # Retain every sparse-grid surrogate for diagnostic plotting.
 # -----------------------------------------------------------
 #
-# The 50, 100, and 150 sample error-field plots require evaluating retained
+# The 250, 500, and 750 sample error-field plots require evaluating retained
 # sparse-grid surrogates near those sample counts. If the sparse-grid adaptive
 # batches do not land exactly on these sample counts, see the note below.
 
@@ -247,7 +247,7 @@ plot_convergence_history(
 # Collect retained surrogates and samples at selected counts.
 # -----------------------------------------------------------
 #
-# Sparse-grid adaptive batches may not land exactly on 50, 100, and 150 samples.
+# Sparse-grid adaptive batches may not land exactly on 250, 500, and 750 samples.
 # The helper below selects the nearest retained sparse-grid surrogate for each
 # requested diagnostic sample count.
 
