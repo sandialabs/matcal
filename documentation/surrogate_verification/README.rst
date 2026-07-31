@@ -3,9 +3,10 @@ Surrogate Verification
 
 These examples verify several surrogate modeling workflows available in MatCal.
 The examples use the two-dimensional Peaks benchmark function from the
-KFCV-Voronoi adaptive sampling paper by :cite:`voronoi_adaptive_surrogates`. 
-This set of examples is meant to demonstrate features and behavior of the 
-surrogates in MatCal. They are not meant to be used as templates for user MatCal files.
+KFCV-Voronoi adaptive sampling paper by :cite:`voronoi_adaptive_surrogates`.
+This set of examples is meant to demonstrate features and behavior of the
+surrogates in MatCal. They are not meant to be used as templates for user
+MatCal files.
 
 The Peaks function is a useful verification problem because most of the domain
 is relatively smooth and low magnitude, while the important response behavior is
@@ -34,39 +35,173 @@ values of ``p`` indicate faster observed convergence.
 Verification Results
 --------------------
 
-The following results were obtained for the Peaks verification examples.
+Smooth function verification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. list-table:: Peaks surrogate verification results
+The following results were obtained for the smooth Peaks verification examples.
+The Peaks function is continuous and mostly smooth over the domain, with
+localized high-gradient behavior that makes it useful for testing whether
+adaptive sampling can discover and refine important local features.
+
+.. list-table:: Smooth Peaks surrogate verification results
    :header-rows: 1
-   :widths: 32 14 18 22 18 18
+   :widths: 34 12 16 18 22 16 18
 
    * - Method
      - Final samples
      - Final RMSE
      - Final max error
+     - Best max error, sample count
      - RMSE rate ``p``
      - Max-error rate ``p``
+   * - Pretrained random-sampling GP
+     - 150
+     - 5.111100e-01
+     - 4.808070e+00
+     - 4.393954e+00 at 140
+     - 0.7237
+     - 0.3678
    * - Pretrained random-sampling RBF
      - 150
      - 5.606465e-01
      - 4.819553e+00
+     - 4.819553e+00 at 150
      - 0.3639
      - 0.1775
+   * - Pretrained random-sampling random forest
+     - 150
+     - 1.000573e+00
+     - 7.446087e+00
+     - 7.334305e+00 at 80
+     - 0.1169
+     - 0.0447
+   * - Adaptive Voronoi GP
+     - 150
+     - 3.016666e-02
+     - 1.588163e-01
+     - 1.588163e-01 at 150
+     - 1.9845
+     - 2.2087
    * - Adaptive Voronoi RBF
      - 150
      - 7.177528e-02
      - 4.102925e-01
+     - 3.519908e-01 at 123
      - 1.4752
      - 1.7587
+   * - Adaptive Voronoi random forest
+     - 150
+     - 5.086865e-01
+     - 3.297064e+00
+     - 3.170707e+00 at 144
+     - 0.2570
+     - 0.3117
    * - Adaptive sparse grid
      - 769
      - 5.580570e-02
      - 3.334068e-01
+     - 3.334068e-01 at 769
      - 0.6893
      - 0.6184
 
-The best maximum-error result for the adaptive Voronoi RBF case occurred before
-the final sample count. In that run, the best maximum absolute error was
+For all three surrogate-regressor families tested with random and adaptive
+sampling, the adaptive sampling methods produced lower final validation errors
+than the corresponding pretrained random-sampling examples. The adaptive
+methods also outperformed all of the random-sampling examples in final maximum
+absolute error. This is expected for the Peaks benchmark because the most
+important approximation difficulty is localized, and adaptive methods can use
+response information to place new samples in high-error regions.
+
+Smooth function discussion
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For the smooth Peaks verification problem, the pretrained random-sampling
+examples provide a baseline for comparing the adaptive methods. Random sampling
+does not use any response information when selecting training points. It has no
+knowledge of where the Peaks function changes rapidly or where the most
+important local features are. As a result, many samples may be spent in regions
+that are easy to approximate, while the localized high-gradient region remains
+under-resolved.
+
+Among the pretrained random-sampling cases, the Gaussian-process and RBF
+surrogates produced similar final maximum errors, with the Gaussian-process
+surrogate giving a somewhat lower final RMSE and faster observed convergence
+rate. The pretrained random-forest surrogate performed worst for this smooth
+two-dimensional interpolation problem. This behavior is consistent with the fact
+that random forests are not smooth interpolants; their predictions are assembled
+from decision-tree ensembles and can be less effective for representing smooth
+localized features than Gaussian-process or RBF surrogates.
+
+The observed convergence rates for the pretrained random-sampling examples were
+
+.. math::
+
+   p_\mathrm{RMSE} \approx 0.72,
+   \qquad
+   p_\mathrm{max} \approx 0.37
+
+for the Gaussian-process surrogate,
+
+.. math::
+
+   p_\mathrm{RMSE} \approx 0.36,
+   \qquad
+   p_\mathrm{max} \approx 0.18
+
+for the RBF surrogate, and
+
+.. math::
+
+   p_\mathrm{RMSE} \approx 0.12,
+   \qquad
+   p_\mathrm{max} \approx 0.04
+
+for the random-forest surrogate.
+
+The adaptive Voronoi methods performed substantially better than the
+pretrained random-sampling methods at the same final sample count of 150. The
+KFCV-Voronoi adaptive sampling method uses cross-validation error to identify
+regions where the surrogate is performing poorly, then uses Voronoi cell
+geometry to place new samples away from existing samples in those important
+regions. Because the Peaks function has localized difficult behavior, this
+sampling strategy can concentrate samples where they are most valuable.
+
+The adaptive Voronoi Gaussian-process surrogate gave the best overall result in
+this verification set. At 150 samples, it reached a validation RMSE of
+
+.. math::
+
+   3.016666 \times 10^{-2}
+
+and a validation maximum absolute error of
+
+.. math::
+
+   1.588163 \times 10^{-1}.
+
+It also had the fastest observed convergence rates:
+
+.. math::
+
+   p_\mathrm{RMSE} \approx 1.98,
+   \qquad
+   p_\mathrm{max} \approx 2.21.
+
+The adaptive Voronoi RBF surrogate also performed well. It reached a final
+validation RMSE of
+
+.. math::
+
+   7.177528 \times 10^{-2}
+
+and a final validation maximum absolute error of
+
+.. math::
+
+   4.102925 \times 10^{-1}
+
+at 150 samples. Its best maximum-error result occurred before the final sample
+count. In that run, the best maximum absolute error was
 
 .. math::
 
@@ -75,60 +210,60 @@ the final sample count. In that run, the best maximum absolute error was
 at 123 samples. This illustrates why the adaptive surrogate object stores both
 the error history and the best retained surrogate.
 
-Discussion
-----------
-
-The pretrained random-sampling RBF surrogate has the weakest convergence in
-this study. This is expected. Random sampling does not use any response
-information when selecting training points. It has no knowledge of where the
-Peaks function changes rapidly or where the most important local features are.
-As a result, many samples may be spent in regions that are easy to approximate,
-while the localized high-gradient region remains under-resolved. This produces
-the slowest observed convergence rates:
+The adaptive Voronoi random-forest surrogate also improved substantially over
+the pretrained random-sampling random-forest surrogate. Its final validation
+RMSE was
 
 .. math::
 
-   p_\mathrm{RMSE} \approx 0.36,
-   \qquad
-   p_\mathrm{max} \approx 0.18.
+   5.086865 \times 10^{-1},
 
-The adaptive sparse-grid surrogate performs substantially better than random
-sampling. Sparse grids use a structured approximation space and adaptive
-refinement, so they are more systematic than purely random sampling. However,
-sparse-grid methods are still constrained by their grid-based structure. They
-tend to perform best when the response is globally smooth or when important
-features can be efficiently represented by the sparse-grid basis. The Peaks
-function has a localized region of strong response variation, so the sparse grid
-must spend samples refining a structured grid representation of a local feature.
-This is less direct than placing samples specifically in the high-error local
-region. The observed sparse-grid convergence rates,
+and its final validation maximum absolute error was
 
 .. math::
 
-   p_\mathrm{RMSE} \approx 0.69,
-   \qquad
-   p_\mathrm{max} \approx 0.62,
+   3.297064.
 
-are better than random sampling but slower than the adaptive Voronoi RBF case.
+These errors are much lower than the corresponding pretrained random-forest
+errors. However, the adaptive Voronoi random-forest surrogate did not match the
+accuracy of the adaptive Voronoi Gaussian-process or RBF surrogates. This is
+consistent with the expected behavior of random forests on a smooth
+interpolation benchmark.
 
-The adaptive Voronoi RBF surrogate performs best for this particular function
-when compared at similar sample counts. This behavior is expected for the Peaks
-benchmark. The KFCV-Voronoi adaptive sampling method uses cross-validation error
-to identify regions where the surrogate is performing poorly, then uses Voronoi
-cell geometry to place new samples away from existing samples in those important
-regions. Because the Peaks function has localized difficult behavior, this
-sampling strategy can concentrate samples where they are most valuable. The
-result is much faster observed convergence:
+The adaptive sparse-grid surrogate also performed substantially better than the
+random-sampling baselines. Sparse grids use a structured approximation space and
+adaptive refinement, so they are more systematic than purely random sampling.
+However, sparse-grid methods are still constrained by their grid-based
+structure. They tend to perform best when the response is globally smooth or
+when important features can be efficiently represented by the sparse-grid basis.
+The Peaks function has a localized region of strong response variation, so the
+sparse grid must spend samples refining a structured grid representation of a
+local feature.
+
+The adaptive sparse-grid surrogate reached a final validation RMSE of
 
 .. math::
 
-   p_\mathrm{RMSE} \approx 1.48,
-   \qquad
-   p_\mathrm{max} \approx 1.76.
+   5.580570 \times 10^{-2}
 
-The adaptive Voronoi RBF method also reaches much lower error than the
-pretrained random-sampling RBF surrogate using the same final sample count of
-150.
+and a final validation maximum absolute error of
+
+.. math::
+
+   3.334068 \times 10^{-1}
+
+using 769 samples. These errors are much lower than the pretrained
+random-sampling errors, but the sparse-grid run required more samples than the
+adaptive Voronoi runs. This is expected for this type of localized feature: the
+Voronoi adaptive sampling methods can place samples directly in high-error
+regions, while the sparse-grid method refines a structured approximation.
+
+Overall, the smooth-function results demonstrate the expected benefit of
+adaptive sampling for this benchmark. All adaptive sampling methods performed
+better than all pretrained random-sampling examples in final maximum absolute
+error. The adaptive Voronoi Gaussian-process and RBF surrogates were especially
+effective because they combined smooth surrogate models with sample placement
+targeted at localized high-error regions.
 
 These results should not be interpreted as a universal ranking of surrogate
 methods. The best surrogate and sampling strategy are highly dependent on the
@@ -147,6 +282,11 @@ In general, users should select a surrogate workflow based on:
 * cost of each model evaluation;
 * whether adaptive sampling is practical;
 * desired accuracy metric, such as RMSE or maximum absolute error.
+
+Discontinuous function verification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Results for discontinuous-function verification examples will be added here.
 
 Example Summary
 ---------------

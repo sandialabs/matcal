@@ -4546,7 +4546,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             data.append(convert_data_to_dictionary(sim_history[nn]))
         return data
     
-     def _perform_adaptive_surrogate_batch_sampling(self):
+    def _perform_adaptive_surrogate_batch_sampling(self):
         """
         Run the Voronoi adaptive sampling loop.
 

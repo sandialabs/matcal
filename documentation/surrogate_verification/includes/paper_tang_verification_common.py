@@ -1,5 +1,6 @@
 """
-Benchmark-specific wrapper for smooth Peaks surrogate verification examples.
+Benchmark-specific wrapper for discontinuous Tang-style surrogate verification
+examples.
 
 Most implementation lives in ``paper_surrogate_verification_common.py``.
 """
@@ -12,10 +13,10 @@ from includes.paper_surrogate_verification_common import (
     VALIDATION_SEED,
     INITIAL_GRID_POINTS_PER_DIMENSION,
     N_INITIAL_SAMPLES,
-    PEAKS_BENCHMARK,
-    peaks_function,
-    peaks_python_model,
-    PaperPeaksInitialGridVoronoiStudy,
+    TANG_BENCHMARK,
+    tang_function,
+    tang_python_model,
+    PaperTangInitialGridVoronoiStudy,
     adaptive_history_arrays,
     collect_adaptive_surrogates_at_sample_counts,
     copy_validation_results_with_qoi_alias,
@@ -42,28 +43,29 @@ from includes.paper_surrogate_verification_common import (
 )
 
 
-BENCHMARK = PEAKS_BENCHMARK
+BENCHMARK = TANG_BENCHMARK
 PARAMETER_NAMES = list(BENCHMARK.parameter_names)
 PARAMETER_BOUNDS = list(BENCHMARK.parameter_bounds)
 
 
 def make_parameters():
     """
-    Create MatCal parameters for the Peaks domain.
+    Create MatCal parameters for the Tang-style benchmark domain.
     """
     return make_parameters_for_benchmark(BENCHMARK)
 
 
 def make_model():
     """
-    Create the MatCal PythonModel for the Peaks function.
+    Create the MatCal PythonModel for the Tang-style benchmark function.
     """
     return make_model_for_benchmark(BENCHMARK)
 
 
 def make_uniform_random_samples(nsamples, seed):
     """
-    Generate independent uniform random samples over the Peaks domain.
+    Generate independent uniform random samples over the Tang-style benchmark
+    domain.
     """
     return make_uniform_random_samples_for_benchmark(
         nsamples,
@@ -80,7 +82,7 @@ def run_parameter_study_for_samples(
     working_directory,
 ):
     """
-    Evaluate the Peaks model at prescribed sample locations.
+    Evaluate the Tang-style model at prescribed sample locations.
     """
     return _run_parameter_study_for_samples(
         parameters,
@@ -101,7 +103,8 @@ def parameter_matrix_from_results(results):
 
 def make_2d_prediction_grid(n_grid=150):
     """
-    Create a two-dimensional prediction grid over the Peaks parameter domain.
+    Create a two-dimensional prediction grid over the Tang-style parameter
+    domain.
     """
     return make_2d_prediction_grid_for_benchmark(n_grid, BENCHMARK)
 
@@ -116,7 +119,7 @@ def plot_convergence_history(
     max_sample_count=None,
 ):
     """
-    Plot Peaks verification convergence history.
+    Plot Tang-style verification convergence history.
     """
     return plot_convergence_history_for_benchmark(
         sample_counts,
@@ -135,12 +138,12 @@ def plot_function_and_surrogate_error_at_counts(
     training_samples_by_count,
     sample_counts_to_plot=(50, 100, 150),
     figure_directory="figures",
-    filename="peaks_function_and_surrogate_error_fields.png",
+    filename="tang_function_and_surrogate_error_fields.png",
     method_name="surrogate",
     n_grid=150,
 ):
     """
-    Plot true Peaks function and absolute surrogate error fields.
+    Plot true Tang-style function and absolute surrogate error fields.
     """
     return plot_function_and_surrogate_error_at_counts_for_benchmark(
         surrogates_by_count,
