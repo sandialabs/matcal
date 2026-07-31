@@ -272,66 +272,6 @@ We use these four examples to highlight three important issues:
    /introduction_examples/sierra_material_point_examples/plot_sierra_material_point_calibration_with_unloading
    /introduction_examples/sierra_material_point_examples/plot_sierra_material_point_calibration_z_model_forms
 
-Surrogate Studies
-=================
-In this set of examples, we show how to build surrogate models
-using MatCal. These models then can be used as replacements for more 
-expensive models in MatCal studies.
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbnails">
-
-.. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to generate a basic surrogate from a MatCal study. This example will cover:">
-
-.. only:: html
-
-  .. image:: /introduction_examples/surrogate_studies/images/thumb/sphx_glr_plot_generate_surrogate_a_standard_thumb.png
-    :alt:
-
-  :ref:`sphx_glr_introduction_examples_surrogate_studies_plot_generate_surrogate_a_standard.py`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Surrogate Generation Example</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="This example demonstrates how to generate a surrogate using a MatCal study that performs adaptive sampling for training the surrogate. This study is a follow-on example to  Surrogate Generation Example and uses the same boundary value problem that from example. The primary difference is that a Matcal adaptive surrogate  study is used for surrogate training.  In this example we use a SparseGridAdaptiveSurrogateStudy to create the surrogate. ">
-
-.. only:: html
-
-  .. image:: /introduction_examples/surrogate_studies/images/thumb/sphx_glr_plot_generate_surrogate_c_adaptive_sparse_grid_thumb.png
-    :alt:
-
-  :ref:`sphx_glr_introduction_examples_surrogate_studies_plot_generate_surrogate_c_adaptive_sparse_grid.py`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Sparse Grid Adaptive Surrogate Example</div>
-    </div>
-
-
-.. thumbnail-parent-div-close
-
-.. raw:: html
-
-    </div>
-
-
-.. toctree::
-   :hidden:
-
-   /introduction_examples/surrogate_studies/plot_generate_surrogate_a_standard
-   /introduction_examples/surrogate_studies/plot_generate_surrogate_c_adaptive_sparse_grid
-
 
 .. only:: html
 

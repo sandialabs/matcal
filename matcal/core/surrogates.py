@@ -638,13 +638,12 @@ def _init_gp_surrogate(n_inputs, **kwargs):
         from sklearn.gaussian_process.kernels import (
             RBF, 
             ConstantKernel, 
-            WhiteKernel
         )
 
         kernel = ConstantKernel(1.0, (1e-6, 1e6)) * RBF(
             length_scale=np.ones(n_inputs),
             length_scale_bounds=(1e-6, 1e4),
-        )+ WhiteKernel(noise_level=1e-8, noise_level_bounds=(1e-12, 1e-3))
+        )
         kwargs["kernel"] = kernel
     if "alpha" not in kwargs:
         kwargs["alpha"] = 1e-8

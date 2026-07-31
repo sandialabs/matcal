@@ -4334,8 +4334,8 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                              f" Use one of the following: {valid_metrics}")
         self._convergence_metric = convergence_metric
 
-    def set_cross_validation_options(self, nsplits=10, nmax_folds=3, nmax_loo=10, cv_scale=1.0,
-                                     cv_metric='sum_abs', group_kfold=False, batch_size=None):
+    def set_cross_validation_options(self, nsplits=10, nmax_folds=3, nmax_loo=1, cv_scale=1.0,
+                                     cv_metric='sum_abs', group_kfold=False, batch_size=1):
         """
         Configure the cross-validation options used to select Voronoi refinement
         regions.
