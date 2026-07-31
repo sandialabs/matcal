@@ -203,8 +203,9 @@ class SurrogateGenerator:
 
         :param regressor_type: The identifier key for what core regressor 
             form to use as the predictor. 
-            Only "Random Forest" and "Gaussian Process" are accepted. Currently, MatCal
-            uses the implementations of these tools from the sklearn library. 
+            Only "Random Forest", "Gaussian Process" and "RBF" are accepted. Currently, MatCal uses the implementations of the "Random Forest" and
+            "Gaussian Process" regressors from the sklearn library. The "RBF" option
+            uses the RBFInterpolator from SciPy.
         :type regressor_type: str
 
         :param test_eval_info: A container of the relevant
@@ -640,13 +641,13 @@ def _init_gp_surrogate(n_inputs, **kwargs):
             ConstantKernel, 
         )
 
-        kernel = ConstantKernel(1.0, (1e-6, 1e6)) * RBF(
-            length_scale=np.ones(n_inputs),
-            length_scale_bounds=(1e-6, 1e4),
+        kernel = ConstantKernel(1.0, (1e-5, 1e5)) * RBF(
+            length_scale=0.1*np.ones(n_inputs),
+            length_scale_bounds=(1e-5, 1e5),
         )
         kwargs["kernel"] = kernel
-    if "alpha" not in kwargs:
-        kwargs["alpha"] = 1e-8
+    #if "alpha" not in kwargs:
+    #    kwargs["alpha"] = 1e-8
     gpr = GaussianProcessRegressor(**kwargs)
     return gpr
 
@@ -1123,40 +1124,7 @@ def _regressor_rmse(regressor, input_values, evals):
         evals,
         _calculate_rmse,
     )
-
-
-def _calculate_nlpd(gpr, input_values, y_true):
-    variance_floor = 1e-12
-
-    mu, std = gpr.predict(input_values, return_std=True)
-
-    y_true = np.asarray(y_true, dtype=float)
-    mu = np.asarray(mu, dtype=float)
-    std = np.asarray(std, dtype=float)
-
-    if mu.shape != y_true.shape and mu.size == y_true.size:
-        mu = mu.reshape(y_true.shape)
-
-    if std.shape != y_true.shape and std.size == y_true.size:
-        std = std.reshape(y_true.shape)
-
-    y_true = y_true.ravel()
-    mu = mu.ravel()
-    std = std.ravel()
-
-    var = std ** 2
-    var = np.maximum(var, variance_floor)
-
-    residuals = y_true - mu
-
-    nlpd_terms = np.log(2 * np.pi * var) + (residuals ** 2) / var
-    return 0.5 * np.mean(nlpd_terms)
-
-
-def _calculate_rmse(regressor, input_values, y_true):
-    y_pred = regressor.predict(input_values)
-    return _root_mean_squared_error(y_true, y_pred)
-   
+ 
     
 def _convert_instances_to_stats(scores):
     score_stats = OrderedDict()
@@ -1703,28 +1671,25 @@ def _root_mean_squared_error(test_values, surrogate_values):
     where :math:`N` is the total number of scalar response values,
     :math:`R_i` are the reference values, and :math:`\\hat{R}_i` are the
     surrogate predictions.
-
-    :param test_values: Reference response values.
-    :type test_values: array-like
-
-    :param surrogate_values: Surrogate-predicted response values.
-    :type surrogate_values: array-like
-
-    :return: Root mean squared error.
-    :rtype: float
     """
-    test_values = np.asarray(test_values, dtype=float)
-    surrogate_values = np.asarray(surrogate_values, dtype=float)
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
 
-    if test_values.shape != surrogate_values.shape and test_values.size == surrogate_values.size:
-        surrogate_values = surrogate_values.reshape(test_values.shape)
-
-    return np.sqrt(np.mean((test_values - surrogate_values) ** 2))
+    return float(np.sqrt(np.mean((test_values - surrogate_values) ** 2)))
 
 
 def _max_error_inf_norm(test_values, surrogate_values):
-    #expects arrays to be sized (n_samples, n_qois)
-    return np.linalg.norm((test_values - surrogate_values).flatten(), ord=np.inf)
+    """
+    Compute the maximum absolute scalar error.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+
+    return float(np.linalg.norm((test_values - surrogate_values).flatten(), ord=np.inf))
 
 
 def _global_r2_score(test_responses, surrogate_values):
@@ -1735,10 +1700,201 @@ def _global_r2_score(test_responses, surrogate_values):
     observations. The score is defined when at least two scalar values are
     available.
     """
-    test_responses = np.asarray(test_responses, dtype=float).ravel()
-    surrogate_values = np.asarray(surrogate_values, dtype=float).ravel()
+    test_responses, surrogate_values = _prepare_metric_arrays(
+        test_responses,
+        surrogate_values,
+    )
+
+    test_responses = test_responses.ravel()
+    surrogate_values = surrogate_values.ravel()
 
     if test_responses.size < 2:
         return np.nan
 
     return r2_score(test_responses, surrogate_values)
+
+def _prepare_metric_arrays(test_values, surrogate_values):
+    """
+    Convert metric inputs to comparable floating-point arrays.
+
+    If the arrays have the same number of scalar values but different shapes,
+    the surrogate values are reshaped to match the test/reference values.
+    """
+    test_values = np.asarray(test_values, dtype=float)
+    surrogate_values = np.asarray(surrogate_values, dtype=float)
+
+    if test_values.shape != surrogate_values.shape:
+        if test_values.size == surrogate_values.size:
+            surrogate_values = surrogate_values.reshape(test_values.shape)
+        else:
+            raise RuntimeError(
+                "Metric arrays have incompatible shapes. "
+                f"Reference shape: {test_values.shape}. "
+                f"Prediction shape: {surrogate_values.shape}."
+            )
+
+    return test_values, surrogate_values
+
+
+def _mean_absolute_error(test_values, surrogate_values):
+    """
+    Compute mean absolute error between reference values and predictions.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+    return float(np.mean(np.abs(test_values - surrogate_values)))
+
+
+def _sum_absolute_error(test_values, surrogate_values):
+    """
+    Compute sum of absolute errors between reference values and predictions.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+    return float(np.sum(np.abs(test_values - surrogate_values)))
+
+
+def _normalized_root_mean_squared_error(test_values, surrogate_values):
+    """
+    Compute normalized root-mean-squared error.
+
+    The normalization is
+
+    .. math::
+
+        \\sqrt{
+        \\frac{
+            \\sum_i (y_i - \\hat{y}_i)^2
+        }{
+            \\sum_i y_i^2
+        }}
+
+    If the reference norm is zero, this falls back to RMSE.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+
+    residual = test_values - surrogate_values
+    denom = np.sum(test_values ** 2)
+
+    if denom <= 0:
+        return _root_mean_squared_error(test_values, surrogate_values)
+
+    return float(np.sqrt(np.sum(residual ** 2) / denom))
+
+
+def _calculate_response_error_metric(test_values, surrogate_values, metric):
+    """
+    Compute a deterministic response-space error/score metric.
+
+    Supported metrics are:
+
+    * ``"rmse"``
+    * ``"mae"`` or ``"abs"``
+    * ``"sum_abs"``
+    * ``"nrmse"``
+    * ``"max_error"``, ``"max_abs_error"``, or ``"linf"``
+    * ``"r2"`` or ``"score"``
+
+    ``"nlpd"`` is intentionally not handled here because NLPD requires
+    predictive variances, not only deterministic predictions.
+    """
+    check_value_is_nonempty_str(metric, "metric")
+    metric = metric.lower().strip()
+
+    if metric == "rmse":
+        return float(_root_mean_squared_error(test_values, surrogate_values))
+
+    if metric in ("mae", "abs", "mean_abs_error"):
+        return _mean_absolute_error(test_values, surrogate_values)
+
+    if metric == "sum_abs":
+        return _sum_absolute_error(test_values, surrogate_values)
+
+    if metric == "nrmse":
+        return _normalized_root_mean_squared_error(test_values, surrogate_values)
+
+    if metric in ("max_error", "max_abs_error", "linf"):
+        return float(_max_error_inf_norm(test_values, surrogate_values))
+
+    if metric in ("r2", "score"):
+        return float(_global_r2_score(test_values, surrogate_values))
+
+    raise ValueError(
+        "Unsupported response error metric. Supported metrics are "
+        "'rmse', 'mae', 'abs', 'mean_abs_error', 'sum_abs', 'nrmse', "
+        "'max_error', 'max_abs_error', 'linf', 'r2', and 'score'. "
+        f"Received '{metric}'."
+    )
+
+
+def _calculate_nlpd(gpr, input_values, y_true):
+    """
+    Calculate Gaussian negative log predictive density.
+
+    The value returned is the mean scalar NLPD over all supplied samples and
+    outputs:
+
+    .. math::
+
+        \\mathrm{NLPD}
+        =
+        \\frac{1}{2}
+        \\operatorname{mean}
+        \\left[
+            \\log(2\\pi\\sigma^2)
+            +
+            \\frac{(y - \\mu)^2}{\\sigma^2}
+        \\right]
+
+    ``gpr`` must support ``predict(..., return_std=True)``.
+    """
+    variance_floor = 1e-12
+
+    mu, std = gpr.predict(input_values, return_std=True)
+
+    y_true = np.asarray(y_true, dtype=float)
+    mu = np.asarray(mu, dtype=float)
+    std = np.asarray(std, dtype=float)
+
+    if mu.shape != y_true.shape:
+        if mu.size == y_true.size:
+            mu = mu.reshape(y_true.shape)
+        else:
+            raise RuntimeError(
+                "Gaussian Process mean prediction shape is incompatible with "
+                "the supplied true values for NLPD calculation. "
+                f"mu shape: {mu.shape}. y_true shape: {y_true.shape}."
+            )
+
+    if std.shape != y_true.shape:
+        if std.size == y_true.size:
+            std = std.reshape(y_true.shape)
+        elif y_true.ndim == 2 and std.size == y_true.shape[0]:
+            std = np.repeat(std.reshape(-1, 1), y_true.shape[1], axis=1)
+        else:
+            raise RuntimeError(
+                "Gaussian Process standard-deviation prediction shape is "
+                "incompatible with the supplied true values for NLPD "
+                "calculation. "
+                f"std shape: {std.shape}. y_true shape: {y_true.shape}."
+            )
+
+    var = std ** 2
+    var = np.maximum(var, variance_floor)
+
+    residuals = y_true - mu
+
+    nlpd_terms = np.log(2.0 * np.pi * var) + (residuals ** 2) / var
+    return float(0.5 * np.mean(nlpd_terms))
+
+
+def _calculate_rmse(regressor, input_values, y_true):
+    y_pred = regressor.predict(input_values)
+    return _root_mean_squared_error(y_true, y_pred)

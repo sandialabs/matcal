@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import os
 import types
 import numpy as np
@@ -7,6 +8,7 @@ from unittest.mock import patch
 from matcal.core.adaptive_surrogates import (
     _assign_points_to_nearest_seed,
     _calculate_native_cv_error,
+    _calculate_surrogate_latent_nlpd,
     _create_ghost_points,
     _evaluate_kfold_cv_splits,
     _filter_points_within_bounds,
@@ -1393,6 +1395,42 @@ class TestGlobalHelperFunctions(MatcalUnitTest):
         with self.assertRaises(ValueError):
             _validate_surrogate_generator_regressor_type("not_a_regressor")
 
+    def test_calculate_native_cv_error_uses_shared_response_metric(self):
+
+        class FakeSurrogate:
+
+            def __call__(self, X, batch_evaluate=False):
+                return {
+                    "response": np.array([[1.0, 2.0]])
+                }
+
+        X_test = np.array([[0.0, 0.0]])
+
+        y_test = [
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([1.0, 2.0]),
+            }
+        ]
+
+        with patch(
+            "matcal.core.adaptive_surrogates._calculate_response_error_metric",
+            return_value=123.0,
+        ) as metric_mock:
+            error = _calculate_native_cv_error(
+                FakeSurrogate(),
+                X_test,
+                y_test,
+                target_field="response",
+                interpolation_field="time",
+                interpolation_values=np.array([0.0, 1.0]),
+                metric="rmse",
+                scale=1.0,
+            )
+
+        self.assertEqual(error, 123.0)
+        metric_mock.assert_called_once()
+
 
 class TestVoronoiPureFunctions(MatcalUnitTest):
 
@@ -2508,6 +2546,100 @@ class TestVoronoiTessellation(MatcalUnitTest):
         with self.assertRaises(ValueError):
             tessellation.raise_if_invalid_region_index(len(tessellation.vor.regions))
 
+
+class TestVoronoiNLPDCV(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_calculate_native_cv_error_returns_stored_latent_nlpd_for_nlpd_metric(self):
+
+        class FakeGPSurrogate:
+
+            def __init__(self):
+                self._latent_scores = OrderedDict()
+                self._latent_scores["test"] = OrderedDict()
+                self._latent_scores["test"]["response"] = {
+                    "score": np.array([0.9, 0.8]),
+                    "rmse": np.array([0.1, 0.2]),
+                    "nlpd": np.array([1.25, 2.75]),
+                }
+
+            def __call__(self, *args, **kwargs):
+                raise RuntimeError(
+                    "Surrogate should not be evaluated in native space for "
+                    "metric='nlpd'."
+                )
+
+        error = _calculate_native_cv_error(
+            FakeGPSurrogate(),
+            X_test=np.array([[0.0, 0.0]]),
+            y_test=[],
+            target_field="response",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            metric="nlpd",
+            scale=1.0,
+        )
+
+        self.assertAlmostEqual(error, 4.0)
+
+    def test_calculate_surrogate_latent_nlpd_returns_nan_error_for_nonfinite_nlpd(self):
+
+        class FakeNonGPSurrogate:
+
+            def __init__(self):
+                self._latent_scores = OrderedDict()
+                self._latent_scores["test"] = OrderedDict()
+                self._latent_scores["test"]["response"] = {
+                    "nlpd": np.array([np.nan]),
+                }
+
+        with self.assertRaises(RuntimeError):
+            _calculate_surrogate_latent_nlpd(FakeNonGPSurrogate())
+
+    def test_voronoi_cv_metric_nlpd_rejects_non_gp_regressor(self):
+        study = VoronoiAdaptiveSurrogateStudy(
+            Parameter("x", 0.0, 1.0),
+            Parameter("y", -1.0, 1.0),
+        )
+
+        study.set_cross_validation_options(
+            nsplits=2,
+            nmax_folds=1,
+            nmax_loo=1,
+            cv_metric="nlpd",
+        )
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_regressor(
+                "Random Forest",
+                n_estimators=5,
+                random_state=123,
+            )
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_regressor(
+                "RBF",
+                neighbors=5,
+            )
+
+    def test_voronoi_cv_metric_nlpd_accepts_default_gaussian_process(self):
+        study = VoronoiAdaptiveSurrogateStudy(
+            Parameter("x", 0.0, 1.0),
+            Parameter("y", -1.0, 1.0),
+        )
+
+        study.set_cross_validation_options(
+            nsplits=2,
+            nmax_folds=1,
+            nmax_loo=1,
+            cv_metric="nlpd",
+        )
+
+        self.assertEqual(study._cv_metric, "nlpd")
+
+
 class AdaptiveSurrogateStudyBaseBehaviorMixin:
     """
     Tests for behavior implemented by AdaptiveSurrogateStudyBase.
@@ -3497,7 +3629,10 @@ class TestVoronoiAdaptiveSurrogateActualFitWithRBF(
         study.set_surrogate_regressor(
             "RBF",
             neighbors=3,
+            kernel="linear",
+            degree=0,
         )
+        
 
 
 class TestVoronoiAdaptiveSurrogateActualFitWithRandomForest(

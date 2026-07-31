@@ -3,7 +3,11 @@ Paper Peaks Verification: Adaptive Voronoi Random Forest Surrogate
 ==================================================================
 
 This example verifies MatCal's KFCV-Voronoi adaptive surrogate workflow on the
-2D Peaks benchmark function using a random forest surrogate.
+2D Peaks benchmark function from :cite:`voronoi_adaptive_surrogates`. 
+It builds a random forest surrogate using the adaptive sampling. This example is 
+part of the verification example set for surrogates. This set of examples is
+meant to demonstrate features and behavior of the surrogates in MatCal. 
+These examples are not meant to be used as templates for user MatCal files.
 
 This example combines:
 

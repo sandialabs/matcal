@@ -21,9 +21,13 @@ from matcal.core.surrogates import (
     _WorstEvaluations,
     _apply_preprocessing_function, 
     _assign_decomp, 
+    _calculate_nlpd,
+    _calculate_response_error_metric,
     _identify_fields_of_interest, 
     _import_parameter_hist, 
     _make_parameter_scaler_set,  
+    _mean_absolute_error,
+    _normalized_root_mean_squared_error,
     _package_parameter_ranges, 
     _parse_evaluation_info, 
     _print_scores,
@@ -35,6 +39,7 @@ from matcal.core.surrogates import (
     _score_recreation,
     _select_model,
     _select_state_data,  
+    _sum_absolute_error,
     _tune_data_decomposition 
 )
 
@@ -757,6 +762,102 @@ class TestSurrogateFunctions(MatcalUnitTest):
 
         self.assertIn("native space score", logged_text)
         self.assertIn("PCA latent space score", logged_text)
+
+    def test_calculate_nlpd_matches_gaussian_formula_with_scalar_std_per_sample(self):
+
+        class FakeGPR:
+
+            def predict(self, input_values, return_std=False):
+                mu = np.array([
+                    [1.0, 2.0],
+                    [3.0, 4.0],
+                ])
+                std = np.array([0.5, 1.0])
+
+                if return_std:
+                    return mu, std
+
+                return mu
+
+        y_true = np.array([
+            [1.5, 1.0],
+            [2.0, 6.0],
+        ])
+
+        mu = np.array([
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ])
+
+        std = np.array([
+            [0.5, 0.5],
+            [1.0, 1.0],
+        ])
+
+        var = std ** 2
+        residual = y_true - mu
+        expected = 0.5 * np.mean(
+            np.log(2.0 * np.pi * var) + residual ** 2 / var
+        )
+
+        actual = _calculate_nlpd(
+            FakeGPR(),
+            input_values=np.zeros((2, 1)),
+            y_true=y_true,
+        )
+
+        self.assertAlmostEqual(actual, expected)
+
+    def test_calculate_response_error_metric_rmse_reuses_shared_metric(self):
+        y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y_pred = np.array([[1.0, 1.0], [5.0, 4.0]])
+
+        expected = np.sqrt(np.mean((y_true - y_pred) ** 2))
+
+        actual = _calculate_response_error_metric(y_true, y_pred, "rmse")
+
+        self.assertAlmostEqual(actual, expected)
+
+
+    def test_calculate_response_error_metric_mae(self):
+        y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y_pred = np.array([[1.0, 1.0], [5.0, 4.0]])
+
+        expected = np.mean(np.abs(y_true - y_pred))
+
+        actual = _calculate_response_error_metric(y_true, y_pred, "mae")
+
+        self.assertAlmostEqual(actual, expected)
+
+
+    def test_calculate_response_error_metric_sum_abs(self):
+        y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y_pred = np.array([[1.0, 1.0], [5.0, 4.0]])
+
+        expected = np.sum(np.abs(y_true - y_pred))
+
+        actual = _calculate_response_error_metric(y_true, y_pred, "sum_abs")
+
+        self.assertAlmostEqual(actual, expected)
+
+
+    def test_calculate_response_error_metric_nrmse(self):
+        y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y_pred = np.array([[1.0, 1.0], [5.0, 4.0]])
+
+        expected = np.sqrt(np.sum((y_true - y_pred) ** 2) / np.sum(y_true ** 2))
+
+        actual = _calculate_response_error_metric(y_true, y_pred, "nrmse")
+
+        self.assertAlmostEqual(actual, expected)
+
+
+    def test_calculate_response_error_metric_rejects_nlpd(self):
+        y_true = np.array([[1.0, 2.0]])
+        y_pred = np.array([[1.0, 2.0]])
+
+        with self.assertRaises(ValueError):
+            _calculate_response_error_metric(y_true, y_pred, "nlpd")
 
 
 class TestSurrogateGenerator(MatcalUnitTest):

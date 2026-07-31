@@ -3,7 +3,10 @@ Paper Peaks Verification: Pretrained Random-Sampling RBF Surrogate
 ==================================================================
 
 This example verifies a pretrained radial basis function (RBF) surrogate on the
-2D Peaks benchmark function used by Kaminsky, Wang, and Pant.
+2D Peaks benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 
+part of the verification example set for surrogates. This set of examples is
+meant to demonstrate features and behavior of the surrogates in MatCal. 
+They are not meant to be used as templates for user MatCal files.
 
 This is a **pretrained** surrogate example:
 

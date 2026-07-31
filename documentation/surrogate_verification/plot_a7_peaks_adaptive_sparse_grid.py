@@ -3,18 +3,19 @@ Paper Peaks Verification: Adaptive Sparse-Grid Surrogate
 ========================================================
 
 This example verifies MatCal's adaptive sparse-grid surrogate workflow on the
-2D Peaks benchmark function.
+2D Peaks benchmark function from :cite:`voronoi_adaptive_surrogates`. This example is 
+part of the verification example set for surrogates. This set of examples is
+meant to demonstrate features and behavior of the surrogates in MatCal. 
+These examples are not meant to be used as templates for user MatCal files.
 
 This example uses :class:`matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy`.
-It does not use MatCal's ``SurrogateGenerator``, PCA, Gaussian processes, RBF
-regressors, or random forests. The sparse-grid surrogate is built through
-PyApprox.
+The sparse-grid surrogate is built through PyApprox.
 
 The example produces two figures.
 
 1. A convergence plot of validation RMSE and validation maximum absolute error
    versus number of training samples. This is the Sphinx-Gallery thumbnail.
-2. Diagnostic plots at 50, 100, and 150 samples showing the true Peaks function
+2. Diagnostic plots at 250, 500, and 750 samples showing the true Peaks function
    and the absolute surrogate error field with training samples overlaid.
 """
 

@@ -12,21 +12,27 @@ from matcal.core.parameter_studies import HaltonStudy
 from matcal.core.qoi_extractor import UserDefinedExtractor
 from matcal.core.state import State
 from matcal.core.study_base import StudyResults
-from matcal.core.utilities import (check_value_is_positive_integer, 
-                                   check_value_is_positive_integer_or_none,
-                                   check_value_is_nonempty_str, 
-                                   check_value_is_array_like_of_reals, 
-                                   check_value_is_positive_real, 
-                                   check_value_is_bool, 
-                                   check_value_is_nonnegative_integer, 
-                                   check_item_is_correct_type)
+from matcal.core.utilities import (
+    check_value_is_positive_integer, 
+    check_value_is_positive_integer_or_none,
+    check_value_is_nonempty_str, 
+    check_value_is_array_like_of_reals, 
+    check_value_is_positive_real, 
+    check_value_is_bool, 
+    check_value_is_nonnegative_integer, 
+    check_item_is_correct_type
+)
 from matcal.core.serializer_wrapper import matcal_load, matcal_save
-from matcal.core.surrogates import (_root_mean_squared_error, 
-                                    _max_error_inf_norm, 
-                                    _process_surrogate_args_call, 
-                                    _check_params_in_range, 
-                                    _convert_param_array_to_dict, 
-                                    _global_r2_score)
+from matcal.core.surrogates import (
+    _calculate_response_error_metric,
+    _check_params_in_range, 
+    _convert_param_array_to_dict, 
+    _global_r2_score,
+    _max_error_inf_norm, 
+    _process_surrogate_args_call, 
+    _root_mean_squared_error, 
+)
+
 
 logger = initialize_matcal_logger(__name__)
 
@@ -3981,6 +3987,66 @@ def _validate_cv_metric(cv_metric):
     return cv_metric
 
 
+def _get_surrogate_regressor_type(surrogate_options):
+    """
+    Return the configured surrogate regressor type.
+
+    SurrogateGenerator defaults to Gaussian Process when no regressor_type is
+    provided.
+    """
+    return surrogate_options.get("regressor_type", "Gaussian Process")
+
+
+def _raise_if_nlpd_cv_requested_for_non_gp(cv_metric, surrogate_options):
+    """
+    NLPD CV ranking is only meaningful for Gaussian Process regressors because
+    it requires predictive standard deviations.
+    """
+    if cv_metric != "nlpd":
+        return
+
+    regressor_type = _get_surrogate_regressor_type(surrogate_options)
+
+    if regressor_type != "Gaussian Process":
+        raise ValueError(
+            "cv_metric='nlpd' is only valid for Gaussian Process surrogates "
+            "because NLPD requires predictive standard deviations. "
+            f"Received regressor_type='{regressor_type}'."
+        )
+
+
+def _calculate_surrogate_latent_nlpd(surrogate):
+    """
+    Return the stored test-set latent-space NLPD for a fitted MatCal surrogate.
+
+    This is used by Voronoi adaptive CV when ``cv_metric='nlpd'``. The NLPD is
+    calculated during surrogate fitting by the underlying Gaussian Process
+    regressors and stored in ``surrogate._latent_scores['test']``.
+    """
+    if not hasattr(surrogate, "_latent_scores"):
+        raise RuntimeError(
+            "Cannot calculate NLPD CV error because the surrogate does not "
+            "provide stored latent-space scores."
+        )
+
+    if "test" not in surrogate._latent_scores:
+        raise RuntimeError(
+            "Cannot calculate NLPD CV error because the surrogate does not "
+            "provide test latent-space scores."
+        )
+
+    nlpd = _get_surrogate_metric(surrogate._latent_scores["test"], "nlpd")
+
+    if nlpd is None or not np.isfinite(nlpd):
+        raise RuntimeError(
+            "The stored NLPD score is not finite. NLPD CV error is only valid "
+            "for Gaussian Process surrogates that provide predictive standard "
+            "deviations."
+        )
+
+    return float(nlpd)
+
+
 def _validate_surrogate_generator_regressor_type(regressor_type):
     """
     Validate a regressor type against the regressors registered with
@@ -4022,6 +4088,8 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """
         super().__init__(*parameters)
 
+        self._surrogate_options = {}
+
         self._num_initial_samples = None
         self._test_eval_info = None
         self.set_number_of_initial_samples()
@@ -4052,7 +4120,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         self._current_surrogate_score = {"score": [], "nlpd": [], "rmse": []}
         self._max_fold_error_indices = None
-        self._surrogate_options = {}
 
         self._random_generator = np.random.default_rng(getattr(self, "_seed", None))
         self._selected_cell_search_grid_points = 51
@@ -4118,7 +4185,6 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         * ``"Gaussian Process"``
         * ``"Random Forest"``
         * ``"RBF"``
-        * ``"RBF Interpolator"``
 
         Additional keyword arguments are forwarded directly to the underlying
         regressor constructor.
@@ -4159,7 +4225,10 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         self._surrogate_options["regressor_type"] = regressor_type
         self._surrogate_options.update(regressor_kwargs)
-
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._cv_metric,
+            self._surrogate_options,
+        )
         self._update_convergence_metric_for_current_surrogate_regressor()
 
     def _update_convergence_metric_for_current_surrogate_regressor(self):
@@ -4312,6 +4381,10 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             )
 
         self._surrogate_options = kwargs
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._cv_metric,
+            self._surrogate_options,
+        )
         self._update_convergence_metric_for_current_surrogate_regressor()
 
     def set_convergence_criteria(self, eps=1e-12, convergence_metric='nlpd'):
@@ -4448,6 +4521,10 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._nmax_loo = _validate_nmax_loo(nmax_loo)
         self._cv_scale = _validate_cv_scale(cv_scale)
         self._cv_metric = _validate_cv_metric(cv_metric)
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._cv_metric,
+            self._surrogate_options,
+        )
 
         check_value_is_bool(group_kfold, "group_kfold")
         self._group_kfold = group_kfold
@@ -6035,16 +6112,53 @@ def _format_parameter_evaluations(model_evals):
 
 
 def _get_surrogate_metric(latent_scores_test, metric):
+    """
+    Aggregate stored latent-space surrogate metrics across fields/modes.
+
+    For ``nlpd``, independent modal/field contributions are summed because
+    negative log predictive densities are additive for independent Gaussian
+    predictive factors.
+
+    For ``score`` and ``rmse``, values are averaged across available
+    fields/modes.
+
+    Non-finite NLPD values indicate that the selected regressor does not provide
+    predictive standard deviations, so the aggregate NLPD is returned as ``nan``.
+    """
     combined_score = []
-    for field_idx, field_name in enumerate(latent_scores_test):
-        if isinstance(latent_scores_test[field_name], (dict, OrderedDict)):
-            combined_score += list(latent_scores_test[field_name][metric])
-    if combined_score == len(combined_score)*[None]:
+
+    for field_name in latent_scores_test:
+        field_scores = latent_scores_test[field_name]
+
+        if not isinstance(field_scores, (dict, OrderedDict)):
+            continue
+
+        if metric not in field_scores:
+            continue
+
+        values = np.atleast_1d(field_scores[metric])
+
+        for value in values:
+            if value is None:
+                combined_score.append(np.nan)
+            else:
+                combined_score.append(float(value))
+
+    if len(combined_score) == 0:
         return np.nan
-    elif metric == 'nlpd':
-        return np.sum(combined_score)
-    else:
-        return np.mean(combined_score)
+
+    combined_score = np.asarray(combined_score, dtype=float)
+
+    if np.all(np.isnan(combined_score)):
+        return np.nan
+
+    if metric == "nlpd":
+        if np.any(~np.isfinite(combined_score)):
+            return np.nan
+        return float(np.sum(combined_score))
+
+    return float(np.nanmean(combined_score))
+
 
 def _extract_native_response_matrix(model_evals, target_field,
                                       interpolation_field=None,
@@ -6259,54 +6373,21 @@ def _calculate_native_cv_error(surrogate, X_test, y_test, target_field,
                                  interpolation_field, interpolation_values,
                                  metric="rmse", scale=1.0):
     """
-    Calculate cross-validation error in native response space.
+    Calculate cross-validation error.
 
-    This replaces the previous latent-score-based adaptive-sampling criterion.
-    The returned error is based on the held-out native response and the
-    surrogate prediction at the same held-out parameter locations.
+    Deterministic response-space metrics are computed by comparing the held-out
+    native response with the surrogate prediction at the same held-out parameter
+    locations.
 
-    For K-fold CV, ``X_test`` and ``y_test`` contain all samples in the held-out
-    fold. For LOOCV, they contain one held-out sample.
-
-    Supported metrics are:
-
-    * ``"rmse"``: root mean squared native response error.
-    * ``"mae"`` or ``"abs"``: mean absolute native response error.
-    * ``"sum_abs"``: sum of absolute native response errors, closest to the
-      paper's stated error form.
-    * ``"nrmse"``: normalized root mean squared native response error.
-    * ``"nlpd"``: accepted for backward compatibility, but evaluated as native
-      RMSE because true NLPD requires predictive variances.
-
-    :param surrogate: Surrogate object returned by ``_fit_surrogate_model``.
-    :type surrogate: object
-
-    :param X_test: Held-out parameter samples.
-    :type X_test: numpy.ndarray
-
-    :param y_test: Held-out model-evaluation dictionaries.
-    :type y_test: list[dict]
-
-    :param target_field: Name of the native response field.
-    :type target_field: str
-
-    :param interpolation_field: Independent-variable field used to align
-        native responses with surrogate outputs.
-    :type interpolation_field: str
-
-    :param interpolation_values: Independent-variable values at which the
-        surrogate response is evaluated.
-    :type interpolation_values: array-like
-
-    :param metric: Physical error metric.
-    :type metric: str
-
-    :param scale: Optional native response scale.
-    :type scale: float, str, numpy.ndarray, or None
-
-    :return: Scalar native cross-validation error.
-    :rtype: float
+    For ``metric='nlpd'``, this returns the stored Gaussian Process
+    latent-space NLPD on the held-out test fold. NLPD requires a GP surrogate
+    because predictive standard deviations are needed.
     """
+    metric = metric.lower().strip()
+
+    if metric == "nlpd":
+        return _calculate_surrogate_latent_nlpd(surrogate)
+
     true_response = _extract_native_response_matrix(
         y_test,
         target_field,
@@ -6334,36 +6415,12 @@ def _calculate_native_cv_error(surrogate, X_test, y_test, target_field,
         scale,
     )
 
-    residual = true_response - predicted_response
-
-    metric = metric.lower().strip()
-
-    if metric == "rmse":
-        return float(np.sqrt(np.mean(residual ** 2)))
-
-    if metric == "nlpd":
-        # Backward-compatible behavior. True native NLPD would require a
-        # native predictive variance. For adaptive region ranking, use native
-        # RMSE rather than latent-space NLPD.
-        return float(np.sqrt(np.mean(residual ** 2)))
-
-    if metric in ("mae", "abs"):
-        return float(np.mean(np.abs(residual)))
-
-    if metric == "sum_abs":
-        return float(np.sum(np.abs(residual)))
-
-    if metric == "nrmse":
-        denom = np.sum(true_response ** 2)
-        if denom <= 0:
-            return float(np.sqrt(np.mean(residual ** 2)))
-        return float(np.sqrt(np.sum(residual ** 2) / denom))
-
-    raise ValueError(
-        "Unsupported native cross-validation metric "
-        f"'{metric}'. Supported metrics are 'rmse', 'mae', 'abs', "
-        "'sum_abs', 'nrmse', and backward-compatible 'nlpd'."
+    return _calculate_response_error_metric(
+        true_response,
+        predicted_response,
+        metric,
     )
+
 
 def _fit_cv_surrogate_and_calculate_native_error(
     train_eval_info,
@@ -6383,6 +6440,14 @@ def _fit_cv_surrogate_and_calculate_native_error(
 
     This helper is shared by K-fold and leave-one-out cross validation.
     """
+
+    metric = metric.lower().strip()
+
+    _raise_if_nlpd_cv_requested_for_non_gp(
+        metric,
+        surrogate_options,
+    )
+
     fold_surrogate = _fit_surrogate_model(
         train_eval_info,
         interpolation_field,
