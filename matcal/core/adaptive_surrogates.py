@@ -2920,10 +2920,11 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def set_max_training_samples(self, max_training_samples=1000):
         """
-        Set the maximum number of training samples you want to be run for 
-        adaptive surrogate generation. If the convergence criteria is not reached, 
+        If the convergence criteria is not reached, 
         the training for the surrogate will stop after max_training_samples has been 
-        reached.
+        reached or exceeded. The adaptive study checks this limit after each adaptive 
+        batch. Therefore, the final number of model evaluations can exceed 
+        ``max_training_samples`` when a batch adds multiple samples. 
         
         :param max_training_samples: desired maximum number of samples
         :type max_training_samples: int
@@ -3035,7 +3036,8 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         2. Calls the parent ``HaltonStudy`` ``launch`` method to generate the
            test samples.
         3. Restores the original working directory.
-        4. Stores the formatted test parameters and responses for later use.
+        4. Returns the generated test-study results, which are formatted by
+        ``_get_test_data``.
 
         :raises RuntimeError: If the test‑sampling launch fails.
         """
@@ -3069,7 +3071,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         :meth:`launch` to
         guarantee reproducibility.
 
-        :param seed: Non-zero integer seed for the pseudo‑random number generator.
+        :param seed: Nonnegative integer seed for the pseudo‑random number generator.
         :type seed: int
         """
         check_value_is_nonnegative_integer(seed, "seed")
@@ -4297,7 +4299,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             locations. If False, all vertices are considered, and those lying outside
             the parameter bounds are clipped back to the convex hull. This is more flexible but
             can be more computationally expensive, especially in high dimensions. 
-        :type finite_onlye: bool
+        :type finite_only: bool
         
         :param iterative_updates: If True, the Voronoi tessellation is recomputed 
             after each new sample is added, promoting a more space-filling design.
@@ -4306,14 +4308,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             clustering. 
         :type iterative_updates: bool
 
-        :param thin: If specified, every nth candidate sample location is selected as a new
-            sample location. This can significantly reduce computational 
-            cost in high-dimensional spaces.
+        :param thin: If specified and ``batch_size > 1``, down-select candidate
+            Voronoi seed locations by keeping every N-th candidate before final batch
+            selection.
         :type thin: int or None
         
-        :param random_selection: If sepecified, this defines the number of candidate sample
-            locations that are randomly selected as new samples. This provides an 
-            alternative way to reduce computational cost in high-dimensional problems. 
+        :param random_selection: If specified and ``batch_size > 1``, randomly
+            down-select this many candidate Voronoi seed locations before final batch
+            selection.
         :type random_selection: int or None
         """
         self._voronoi_type = _validate_voronoi_type(voronoi_type)
@@ -4389,8 +4391,9 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def set_convergence_criteria(self, eps=1e-12, convergence_metric='nlpd'):
         """
-        Convergence is determined by comparing RMSE or NLPD of
-        surrogate between two successive batches.
+        Convergence is determined by comparing the selected surrogate latent-space
+        metric between two successive batches. Supported metrics are ``"rmse"``,
+        ``"nlpd"``, and ``"score"``.
 
         :param convergence_metric: Surrogate latent-space metric used for convergence.
             Supported values are ``"rmse"``, ``"nlpd"``, and ``"score"``.
@@ -4431,10 +4434,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         In that case, all current training samples are treated as candidate Voronoi
         cell seeds.
 
-        Cross-validation and leave-one-out errors are computed in native response
-        space by comparing held-out model responses with surrogate predictions at
-        the same held-out parameter locations. They are not based on latent-space
-        surrogate diagnostics.
+        Cross-validation and leave-one-out errors are computed in native response space
+        for deterministic metrics such as ``"rmse"``, ``"mae"``, ``"sum_abs"``, and
+        ``"nrmse"``. The special metric ``"nlpd"`` is an exception: it uses the
+        Gaussian-process latent-space negative log predictive density stored by the
+        fitted surrogate and is only valid when ``regressor_type="Gaussian Process"``.
 
         :param nsplits: Number of folds used for K-fold cross validation. If
             ``nsplits=0``, K-fold cross validation and leave-one-out cross
@@ -4479,9 +4483,9 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             * ``"sum_abs"``: sum of absolute native response errors. This is
             closest to the error expression used in the KFCV-Voronoi paper.
             * ``"nrmse"``: normalized root mean squared native response error.
-            * ``"nlpd"``: accepted for backward compatibility. Because native
-            NLPD requires predictive variances, this option is evaluated as
-            native RMSE for adaptive region ranking.
+            * ``"nlpd"``: Gaussian-process latent-space negative log predictive density.
+            This requires predictive standard deviations and is only valid for
+            ``regressor_type="Gaussian Process"``.
 
         :type cv_metric: str
 
@@ -5231,7 +5235,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
 class VoronoiTessellation:
     def __init__(self, points, bounds, finite_only):
-        """Initialize the VoronoiBatchSamplingStudy
+        """Initialize the Voronoi tessellation helper.
         
         :param points: Array of points that are the seeds of the Voronoi tessellation
         :type points: nd_array
@@ -5239,6 +5243,11 @@ class VoronoiTessellation:
         :param bounds: Bounds for the parameter space,
             e.g., [(xmin, xmax), (ymin, ymax)] for a 2D space.
         :type bounds: list of tuples
+
+        :param finite_only: If ``True``, only finite Voronoi vertices inside the bounded
+            domain are used. If ``False``, out-of-bound vertices may be clipped to the
+            domain boundary.
+        :type finite_only: bool
         """
         self.points = np.array(points)
         self.ndim = self.points.shape[1]
@@ -5477,18 +5486,21 @@ class VoronoiTessellation:
 
     def replace_unbounded_vertices(self, region, region_index, region_tuple):
         """
-        Replace the infinite vertices in a Voronoi region with new vertices on 
-        the edge of the bounding box.
-        ** vertices that sit outside the bounding region are considered infinite here
+        :param region: Vertex-index list for one Voronoi region. Entries marked ``-2``
+            represent infinite or out-of-bounds vertices that should be replaced by
+            boundary intersections.
+        :type region: list[int]
 
-        :param region: A list of the voronoi regions. Each list contains indices
-        of the Voronoi vertices forming each Voronoi region.
-        :type region: list
-        
-        :param region_index: Region index
+        :param region_index: Index of the Voronoi region being processed.
         :type region_index: int
-        
-        :return: Returns a new list of voronoi regions with infinite vertices replaced.
+
+        :param region_tuple: Pairs mapping original region vertex markers to updated
+            bounded-region markers.
+        :type region_tuple: list[tuple[int, int]]
+
+        :return: Vertex coordinates for the bounded/clipped region, or ``None`` if no
+            valid replacement vertices are available.
+        :rtype: numpy.ndarray or None
         """
         try:
             region_point_index, = np.argwhere(self.vor.point_region == region_index)[0]
@@ -5814,16 +5826,14 @@ class VoronoiTessellation:
             have shape ``(n_points, n_dimensions)``.
         :type points: numpy.ndarray
 
-        :raises TypeError: If ``points`` is not a NumPy array.
+        :raises TypeError or ValueError: If ``points`` cannot be converted to a
+            floating-point NumPy array.
+
         :raises ValueError: If the supplied points do not have the same dimension as
             the existing native sample points.
 
         :ivar points: Updated unique native sample points.
-        :vartype points: numpy.ndarray
-
-        :ivar _ghost_points: Regenerated ghost points corresponding to the current
-            native sample set and parameter bounds.
-        :vartype _ghost_points: numpy.ndarray
+        :vartype points: array-like
 
         :ivar _all_points: Combined native and ghost seed points used to construct
             the Voronoi tessellation.

@@ -1046,8 +1046,8 @@ def collect_adaptive_surrogates_at_sample_counts(
     Collect retained adaptive surrogates nearest to requested sample counts.
 
     This function is intentionally nearest-count based rather than exact-count
-    based. Some adaptive methods, especially sparse-grid adaptive refinement, do
-    not necessarily generate surrogates at exactly 50, 100, and 150 samples.
+    based. Some adaptive methods, especially sparse-grid adaptive refinement, do not
+    necessarily generate surrogates at exactly the requested sample counts.
 
     The returned dictionary is keyed by the requested sample count. Each value
     stores both the requested sample count and the actual retained surrogate

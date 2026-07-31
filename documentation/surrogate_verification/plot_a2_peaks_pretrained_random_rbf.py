@@ -185,7 +185,7 @@ validation_results = run_fixed_validation_set(
 # ----------------------------------------
 #
 # The 100-sample surrogate uses the first 100 samples of the same random sample
-# sequence used by the 150-sample surrogates.
+# sequence used by the 150-sample surrogate.
 
 print(f"Generating {MAX_TRAINING_SAMPLES} nested random training samples.")
 random_samples = make_uniform_random_samples(

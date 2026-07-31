@@ -846,15 +846,18 @@ For example:
        decomp_var=0.99,
    )
 
-Cross-validation errors are computed in native response space, not only in PCA
-latent space. Supported native cross-validation metrics include:
+Cross-validation errors are computed in native response space for deterministic
+metrics such as ``"rmse"``, ``"mae"``, ``"sum_abs"``, and ``"nrmse"``. The
+special ``"nlpd"`` option uses Gaussian-process latent-space uncertainty
+diagnostics instead.
 
 * ``"rmse"``;
 * ``"mae"`` or ``"abs"``;
 * ``"sum_abs"``;
 * ``"nrmse"``;
-* ``"nlpd"`` as a backward-compatible option that is evaluated as native RMSE
-  for adaptive region ranking.
+* ``"nlpd"``: Gaussian-process latent-space negative log predictive density.
+  This option requires ``regressor_type="Gaussian Process"`` because it depends
+  on predictive standard deviations.
 
 The ``"sum_abs"`` option is closest to the KFCV-Voronoi error expression used
 in :cite:`voronoi_adaptive_surrogates`.

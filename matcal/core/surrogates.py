@@ -65,12 +65,11 @@ class SurrogateGenerator:
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
                 regressor_type="Gaussian Process", test_eval_info=None, **regressor_kwargs):
         """
-        :param evaluation_information: A container of the relevant 
-            information to form a surrogate off of 
-            a body of data. This is intended to be based off of the results of a MatCal conducted 
-            sampling study.
-            In addition, previously run surrogates joblib files can be passed to rerun the surrogate
-            generation process with new settings.            
+        :param evaluation_information: A container of the relevant information used to
+            form a surrogate from MatCal study data. Supported inputs are
+            :class:`~matcal.core.study_base.StudyResults`,
+            :class:`~matcal.core.study_base.StudyBase`, or a compatible dictionary with
+            ``"input"`` and ``"output"`` entries.          
         :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`
 
         :param training_fraction: What fraction of the source data to use as training data. 
@@ -196,11 +195,6 @@ class SurrogateGenerator:
             better performance but uses more memory than the monolithic surrogate. 
         :type surrogate_type: str
 
-        :param training_fraction: Fraction of source data used for training. Must satisfy
-            ``0 < training_fraction <= 1``. If equal to ``1.0``, ``test_eval_info`` must
-            be provided.
-        :type training_fraction: float
-
         :param regressor_type: The identifier key for what core regressor 
             form to use as the predictor. 
             Only "Random Forest", "Gaussian Process" and "RBF" are accepted. 
@@ -209,15 +203,25 @@ class SurrogateGenerator:
             uses the RBFInterpolator from SciPy.
         :type regressor_type: str
 
+        :param training_fraction: Fraction of source data used for training. Must satisfy
+            ``0 < training_fraction <= 1``. If equal to ``1.0``, ``test_eval_info`` must
+            be provided.
+        :type training_fraction: float
+
+        :param interpolation_locations: Optional replacement interpolation locations.
+            If provided, updates the interpolation locations used during surrogate
+            generation.
+        :type interpolation_locations: int, array-like, or None
+        
         :param test_eval_info: A container of the relevant
             information to test a surrogate generated
             from a MatCal sampling study. This data is only used and must
             be provided if training_fraction == 1.0.
-        :type test_evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        :type test_eval_info: :class:`~matcal.core.study_base.StudyResults`
         
-        :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
-            Please refer to the sklearn documentation for more information for what can be passed to 
-            the predictors. 
+        :param regressor_kwargs: A keyword selection of parameters to pass to the   
+            Please refer to the sklearn documentation for more information for what can be passed to the predictors. 
+        :type regressor_kwargs: dict
         """
         self._training_fraction  = training_fraction
         self._surrogate_type = surrogate_type
@@ -236,9 +240,11 @@ class SurrogateGenerator:
         Passing fields here will inform the surrogate and the generator that 
         these fields should be evaluated on a base-10 logarithmic scale. Any predictions
         given by the surrogate will be at the original scale. This just adds an 
-        additional scaling/descaling step within it. Note that data that has values
-        less than or equal to zero will need to be scaled or modified by the user 
-        prior to selecting them as an option for log scaling.
+        additional scaling/descaling step within it.
+         
+        The current implementation applies an internal feature-wise offset before the
+        base-10 logarithm so that the minimum fitted value maps to ``log10(1)``.
+        Predictions are transformed back to the original scale before being returned.
 
         :param field_names: a series of field names to train on the log scale
         :type field_names: str
@@ -851,13 +857,12 @@ class MatCalSurrogateBase(ABC):
     def enforce_training_data_parameter_range(self, enforce_training_data_parameter_range=True):
         """
         By default the surrogate will error if called with a parameter set outside of the 
-        parameter ranges used in the training data set. To call the surrogate for parameters 
-        outside of the training data range, call this method with the argument set to False. 
-        Adherence to the training data range can be reactivated by calling this method 
-        with the argument set to True.
+        parameter ranges used in the training data set. To call the surrogate for parameters outside of the training data range, call this method with the argument set to False. Adherence to the training data range can be reactivated by calling this method with the argument set to True.
         
-        :param enforce_training_data_parameter_range: bool flag to ignore training data range.
-        :type enforce_training_data_parameter_range:
+        :param enforce_training_data_parameter_range: If ``True``, reject surrogate
+            calls outside the stored parameter ranges. If ``False``, allow calls outside
+            the stored parameter ranges.
+        :type enforce_training_data_parameter_range: bool
         """
         check_value_is_bool(enforce_training_data_parameter_range, 
                             "enforce_training_data_parameter_range")
@@ -1498,14 +1503,21 @@ def _assign_decomp(decomp_var, reconstruction_error):
 def _process_interpolation_locations(output_history, interpolation_locations, interpolation_field):
     if interpolation_field is None:
         return None
-    elif isinstance(interpolation_locations, (np.ndarray)):
-        return interpolation_locations
-    elif isinstance(interpolation_locations, Integral):
-        return _get_interpolation_field(output_history, interpolation_field, 
-                                 interpolation_locations)
-    else:
-        raise ValueError("The surrogate generator expects an integer or array-like "
-            f"set of values. Received variable of type {type(interpolation_locations)}.")
+
+    if isinstance(interpolation_locations, Integral):
+        return _get_interpolation_field(
+            output_history,
+            interpolation_field,
+            interpolation_locations,
+        )
+
+    try:
+        return np.asarray(interpolation_locations, dtype=float)
+    except Exception:
+        raise ValueError(
+            "The surrogate generator expects an integer or array-like "
+            f"set of values. Received variable of type {type(interpolation_locations)}."
+        )
     
 
 def _get_interpolation_field(output_history, interpolation_field, n_interp):

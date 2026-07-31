@@ -139,8 +139,10 @@ study.set_test_data(validation_results)
 # ----------------------------------------
 #
 # Sparse-grid adaptive refinement can add samples in batches. 
-# The sparse grid surrogate generally requires more samples to 
-# converge for this type of problem so we allow 750 samples for training.
+# The sparse-grid surrogate generally requires more samples to converge for this
+# type of problem, so we set the adaptive stopping threshold to 750 samples. The
+# final number of evaluations can exceed this value because sparse-grid
+# refinement adds samples in batches.
 
 study.set_max_training_samples(MAX_TRAINING_SAMPLES)
 
@@ -253,7 +255,7 @@ plot_convergence_history(
 
 surrogates_by_count = collect_adaptive_surrogates_at_sample_counts(
     study.surrogate,
-    sample_counts_to_collect=(250, 500, 750),
+    sample_counts_to_collect=SAMPLE_COUNTS_TO_PLOT,
 )
 
 training_samples_by_count = collect_training_samples_for_surrogate_count_map(
@@ -269,7 +271,7 @@ training_samples_by_count = collect_training_samples_for_surrogate_count_map(
 plot_function_and_surrogate_error_at_counts(
     surrogates_by_count,
     training_samples_by_count,
-    sample_counts_to_plot=(250, 500, 750),
+    sample_counts_to_plot=SAMPLE_COUNTS_TO_PLOT,
     figure_directory=FIGURE_DIRECTORY,
     filename="peaks_adaptive_sparse_grid_error_fields.png",
     method_name="adaptive sparse grid",

@@ -59,7 +59,6 @@ from includes.paper_peaks_verification_common import (
 # ------------
 
 MAX_TRAINING_SAMPLES = 150
-CONVERGENCE_PLOT_SAMPLE_LIMIT = MAX_TRAINING_SAMPLES
 SAMPLE_COUNTS_TO_PLOT = (50, 100, 150)
 
 WORKING_DIRECTORY = os.path.abspath("paper_peaks_adaptive_voronoi_rbf")

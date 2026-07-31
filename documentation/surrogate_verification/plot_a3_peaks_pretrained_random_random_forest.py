@@ -6,7 +6,7 @@ This example verifies a pretrained random forest surrogate on the 2D Peaks
 benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 
 part of the verification example set for surrogates. This set of examples is
 meant to demonstrate features and behavior of the surrogates in MatCal. 
-They examples are not meant to be used as templates for user MatCal files.
+These examples are not meant to be used as templates for user MatCal files.
 
 This is a **pretrained** surrogate example:
 
