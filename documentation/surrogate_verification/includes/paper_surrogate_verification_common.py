@@ -1,15 +1,5 @@
 """
 Shared utilities for surrogate verification examples.
-
-This module supports both:
-
-* the smooth 2D Peaks benchmark function; and
-* the discontinuous Tang-style benchmark function.
-
-The benchmark-specific wrapper modules
-``paper_peaks_verification_common.py`` and
-``paper_tang_verification_common.py`` can re-export these utilities with
-benchmark-specific defaults.
 """
 import copy
 import os
@@ -27,7 +17,6 @@ from matcal.core.study_base import StudyResults
 # Shared user options
 # =============================================================================
 
-TARGET_FIELD = "y"
 INDEPENDENT_FIELD = "response_location"
 INDEPENDENT_VALUES = np.array([0.0])
 
@@ -39,6 +28,7 @@ VALIDATION_SEED = 12345
 INITIAL_GRID_POINTS_PER_DIMENSION = 4
 N_INITIAL_SAMPLES = INITIAL_GRID_POINTS_PER_DIMENSION**2
 
+TARGET_FIELD = 'y'
 
 # =============================================================================
 # Benchmark definitions
@@ -138,56 +128,6 @@ def peaks_python_model(**parameters):
     }
 
 
-# =============================================================================
-# Discontinuous Tang-style benchmark function
-# =============================================================================
-
-def tang_function(samples):
-    """
-    Tang-style nonlinear benchmark function.
-
-    This is adapted from the function used in
-    ``compare_voronoi_batch_sampling.py``. It is nonlinear and has a flat region
-    in the all-negative quadrant, making it useful for exercising adaptive
-    sampling.
-
-    :param samples: Sample locations with shape ``(n_samples, n_dimensions)``.
-    :type samples: numpy.ndarray
-
-    :return: Function values with shape ``(n_samples,)``.
-    :rtype: numpy.ndarray
-    """
-    samples = np.asarray(samples, dtype=float)
-    samples = np.atleast_2d(samples)
-
-    values = np.zeros(samples.shape[0])
-    for dim_index in range(samples.shape[1]):
-        x = samples[:, dim_index]
-        values += x**4 - 16.0 * x**2 + 5.0 * x
-
-    all_negative = np.all(samples < 0.0, axis=1)
-    values[all_negative] = 0.0
-
-    return 0.5 * values
-
-
-def tang_python_model(**parameters):
-    """
-    MatCal PythonModel wrapper for the scalar Tang-style function.
-    """
-    sample = np.array(
-        [[parameters["x1"], parameters["x2"]]],
-        dtype=float,
-    )
-
-    value = tang_function(sample)[0]
-
-    return {
-        INDEPENDENT_FIELD: INDEPENDENT_VALUES.copy(),
-        TARGET_FIELD: np.array([value], dtype=float),
-    }
-
-
 PEAKS_BENCHMARK = BenchmarkSpec(
     name="smooth Peaks benchmark",
     short_name="peaks",
@@ -196,16 +136,6 @@ PEAKS_BENCHMARK = BenchmarkSpec(
     parameter_names=("x1", "x2"),
     parameter_bounds=((-5.0, 5.0), (-5.0, 5.0)),
     function=peaks_function,
-)
-
-TANG_BENCHMARK = BenchmarkSpec(
-    name="discontinuous Tang-style benchmark",
-    short_name="tang",
-    title_name="Tang",
-    model_name="paper_tang_function_model",
-    parameter_names=("x1", "x2"),
-    parameter_bounds=((-5.0, 5.0), (-5.0, 5.0)),
-    function=tang_function,
 )
 
 
@@ -244,8 +174,6 @@ def make_model_for_benchmark(benchmark):
     """
     if benchmark is PEAKS_BENCHMARK:
         model_function = peaks_python_model
-    elif benchmark is TANG_BENCHMARK:
-        model_function = tang_python_model
     else:
         raise ValueError(
             f"Unsupported benchmark '{benchmark}'. Add a top-level PythonModel "
@@ -570,15 +498,6 @@ class PaperPeaksInitialGridVoronoiStudy(BenchmarkInitialGridVoronoiStudy):
     initial grid.
     """
     benchmark = PEAKS_BENCHMARK
-
-
-class PaperTangInitialGridVoronoiStudy(BenchmarkInitialGridVoronoiStudy):
-    """
-    Voronoi adaptive surrogate study for the Tang-style benchmark with a 4 by 4
-    initial grid.
-    """
-    benchmark = TANG_BENCHMARK
-
 
 # =============================================================================
 # Scoring helpers

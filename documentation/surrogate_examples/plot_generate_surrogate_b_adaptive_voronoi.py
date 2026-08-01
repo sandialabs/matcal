@@ -37,6 +37,24 @@ if is_sandia_cluster():
     my_hifi_model.continue_when_simulation_fails()
     my_hifi_model.set_number_of_cores(12)
 
+#
+# %%
+# We set some common values that will be used 
+# across the surrogate examples as part of this
+# example set. This is to ensure valid comparisons
+# are made between different methods.
+COMMON_TEST_SAMPLE_COUNT = 250
+COMMON_TEST_SEED = 12345
+TRAINING_SEED = 54321
+
+#%%
+# These are demonstration/validation points used for FE-vs-surrogate plots.
+# They are not inserted into the common Halton test set used for scoring.
+VALIDATION_PARAMETER_SETS = [
+    {"H": 10, "T_inf": 600, "T_air": 500},
+    {"H": 20, "T_inf": 815, "T_air": 634},
+]
+
 #%%
 # With the model and parameters created, 
 # we must still define the independent variable
@@ -85,7 +103,7 @@ study.set_cross_validation_options(
 #%%
 # We must also specify how many samples to run for generating test data. 
 # These adaptive surrogates use Halton sampling for test data generation.
-study.set_number_of_test_samples(250)
+study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 
 #%%
 # Next we set a stopping criteria. 
@@ -115,7 +133,6 @@ study.set_number_of_initial_samples(100)
 # prediction with the same or fewer samples.
 study.set_max_training_samples(500)
 
-
 #%%
 # Next, we set the surrogate save options and filename.
 # The adaptive surrogate can retain only selected surrogate model objects to
@@ -141,8 +158,8 @@ else:
 #%%
 # If setting the seed, ensure the test group seed is different than the study
 # seed. If not, the training data will include samples from the test data.
-study.set_seed(54321)
-study.set_test_group_random_seed(12345)
+study.set_seed(TRAINING_SEED)
+study.set_test_group_random_seed(COMMON_TEST_SEED)
 study.set_working_directory("voronoi_adaptive_surrogate", remove_existing=True)
 
 #%%
@@ -173,22 +190,31 @@ print(surrogate.stored_surrogate_scores[best_surrogate_index])
 print("Best retained surrogate R2 score:\n", surrogate.score(best_surrogate_index))
 
 #%%
-# Both the test scores and the training scores indicate the surrogate is well
-# trained and can be used to predict our response.
+# The retained-surrogate test scores and error histories indicate that the
+# surrogate can be used to predict the selected response. The adaptive surrogate
+# also stores the common test parameters and responses used to score each retained
+# candidate surrogate.
 #
-# Now we use the surrogate to make predictions of the model responses.
+# Now we use the retained surrogate to make predictions at two validation
+# parameter sets. These validation points are used only for the FE-versus-surrogate
+# plots and signed-error curves below. They are not manually added to the common
+# Halton test set used to score the adaptive surrogate during training.
 # The order of the parameters is the same order that they were passed into the
 # parameter collection or study, but this can be verified by calling
 # :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.parameter_order`.
 # By default, the surrogate will not allow evaluations outside of the parameter
 # ranges provided in the adaptive surrogate study used for training.
-H = 10
-T_inf = 600
-T_air = 500
+#
+# We evaluate the surrogate and resulting error similar to 
+# as was done in the previous non-adaptive surrogate example
+# so that we can see if the surrogate has a more accurate prediction.
+H = VALIDATION_PARAMETER_SETS[0]["H"]
+T_inf = VALIDATION_PARAMETER_SETS[0]["T_inf"]
+T_air = VALIDATION_PARAMETER_SETS[0]["T_air"]
 
-H2 = 20
-T_inf2 = 815
-T_air2 = 634
+H2 = VALIDATION_PARAMETER_SETS[1]["H"]
+T_inf2 = VALIDATION_PARAMETER_SETS[1]["T_inf"]
+T_air2 = VALIDATION_PARAMETER_SETS[1]["T_air"]
 
 prediction = surrogate(
     [[H, T_inf, T_air], [H2, T_inf2, T_air2]],
@@ -266,10 +292,28 @@ plt.show()
 # The Voronoi adaptive surrogate stores the test-error history. This can be
 # useful to evaluate convergence rate and to assess if better performance is
 # likely with additional training samples.
-print("Best retained surrogate max error:",
-      surrogate.max_error_history[best_surrogate_index])
-print("Training samples for best retained surrogate:",
-      surrogate.sample_count_history[best_surrogate_index])
+print("\n=== Voronoi adaptive surrogate common-test summary ===")
+print(f"Best retained surrogate iteration: {best_surrogate_index}")
+print(
+    "Training samples for best retained surrogate:",
+    surrogate.sample_count_history[best_surrogate_index],
+)
+print(
+    "Common-test RMSE for best retained surrogate:",
+    surrogate.rmse_history[best_surrogate_index],
+)
+print(
+    "Common-test maximum absolute error for best retained surrogate:",
+    surrogate.max_error_history[best_surrogate_index],
+)
+print(
+    "Common-test R2 for best retained surrogate:",
+    surrogate.score(best_surrogate_index),
+)
+
+print("\nVoronoi adaptive full history:")
+print("Training sample counts:")
+print(surrogate.sample_count_history)
 
 print("Final batch max error:", surrogate.max_error_history[-1])
 print("Final batch training samples:", surrogate.sample_count_history[-1])

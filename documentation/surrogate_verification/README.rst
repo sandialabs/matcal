@@ -35,15 +35,12 @@ values of ``p`` indicate faster observed convergence.
 Verification Results
 --------------------
 
-Smooth function verification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The following results were obtained for the Peaks verification examples. The
+Peaks function is continuous and mostly smooth over the domain, with localized
+high-gradient behavior that makes it useful for testing whether adaptive
+sampling can discover and refine important local features.
 
-The following results were obtained for the smooth Peaks verification examples.
-The Peaks function is continuous and mostly smooth over the domain, with
-localized high-gradient behavior that makes it useful for testing whether
-adaptive sampling can discover and refine important local features.
-
-.. list-table:: Smooth Peaks surrogate verification results
+.. list-table:: Peaks surrogate verification results
    :header-rows: 1
    :widths: 34 12 16 18 22 16 18
 
@@ -112,16 +109,15 @@ absolute error. This is expected for the Peaks benchmark because the most
 important approximation difficulty is localized, and adaptive methods can use
 response information to place new samples in high-error regions.
 
-Smooth function discussion
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Discussion
+----------
 
-For the smooth Peaks verification problem, the pretrained random-sampling
-examples provide a baseline for comparing the adaptive methods. Random sampling
-does not use any response information when selecting training points. It has no
-knowledge of where the Peaks function changes rapidly or where the most
-important local features are. As a result, many samples may be spent in regions
-that are easy to approximate, while the localized high-gradient region remains
-under-resolved.
+The pretrained random-sampling examples provide a baseline for comparing the
+adaptive methods. Random sampling does not use any response information when
+selecting training points. It has no knowledge of where the Peaks function
+changes rapidly or where the most important local features are. As a result,
+many samples may be spent in regions that are easy to approximate, while the
+localized high-gradient region remains under-resolved.
 
 Among the pretrained random-sampling cases, the Gaussian-process and RBF
 surrogates produced similar final maximum errors, with the Gaussian-process
@@ -258,12 +254,12 @@ adaptive Voronoi runs. This is expected for this type of localized feature: the
 Voronoi adaptive sampling methods can place samples directly in high-error
 regions, while the sparse-grid method refines a structured approximation.
 
-Overall, the smooth-function results demonstrate the expected benefit of
-adaptive sampling for this benchmark. All adaptive sampling methods performed
-better than all pretrained random-sampling examples in final maximum absolute
-error. The adaptive Voronoi Gaussian-process and RBF surrogates were especially
-effective because they combined smooth surrogate models with sample placement
-targeted at localized high-error regions.
+Overall, the results demonstrate the expected benefit of adaptive sampling for
+this benchmark. All adaptive sampling methods performed better than all
+pretrained random-sampling examples in final maximum absolute error. The
+adaptive Voronoi Gaussian-process and RBF surrogates were especially effective
+because they combined smooth surrogate models with sample placement targeted at
+localized high-error regions.
 
 These results should not be interpreted as a universal ranking of surrogate
 methods. The best surrogate and sampling strategy are highly dependent on the
@@ -282,11 +278,6 @@ In general, users should select a surrogate workflow based on:
 * cost of each model evaluation;
 * whether adaptive sampling is practical;
 * desired accuracy metric, such as RMSE or maximum absolute error.
-
-Discontinuous function verification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Results for discontinuous-function verification examples will be added here.
 
 Example Summary
 ---------------

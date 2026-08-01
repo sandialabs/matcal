@@ -70,6 +70,23 @@ far_field_temperature = mc.Parameter("T_inf", 500, 1000) # K
 air_temperature = mc.Parameter("T_air", 400, 800) # K
 
 #%%
+# We set some common values that will be used 
+# across the surrogate examples as part of this
+# example set. This is to ensure valid comparisons
+# are made between different methods.
+COMMON_TEST_SAMPLE_COUNT = 250
+COMMON_TEST_SEED = 12345
+TRAINING_SEED = 54321
+
+#%%
+# These are demonstration/validation points used for FE-vs-surrogate plots.
+# They are not inserted into the common Halton test set used for scoring.
+VALIDATION_PARAMETER_SETS = [
+    {"H": 10, "T_inf": 600, "T_air": 500},
+    {"H": 20, "T_inf": 815, "T_air": 634},
+]
+
+#%%
 # We then load these parameters into a Latin Hypercube Sensitivity Study. This is the 
 # study that will be used to generate our body of training data for the surrogate. 
 # For more details see :class:`~matcal.dakota.sensitivity_studies.LhsSensitivityStudy`.
@@ -226,9 +243,9 @@ print('Test scores:\n', surrogate.scores['test'])
 # calling :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.parameter_order`.
 # If keyword arguments are used, the keywords must match the parameter names 
 # assigned in the :class:`~matcal.core.parameters.Parameter` object inits.
-H = 10
-T_inf = 600
-T_air = 400
+H = VALIDATION_PARAMETER_SETS[0]["H"]
+T_inf = VALIDATION_PARAMETER_SETS[0]["T_inf"]
+T_air = VALIDATION_PARAMETER_SETS[0]["T_air"]
 
 #%%
 # By default, the surrogates will not allow evaluations outside of the 
@@ -276,9 +293,9 @@ plt.show()
 # Each field in the returned prediction will have a number of rows equal to 
 # the number of passed parameter sets. To evaluate multiple parameter sets, 
 # pass the `batch_evaluate=True` keyword argument
-H2 = 20
-T_inf2 = 815
-T_air2 = 634
+H2 = VALIDATION_PARAMETER_SETS[1]["H"]
+T_inf2 = VALIDATION_PARAMETER_SETS[1]["T_inf"]
+T_air2 = VALIDATION_PARAMETER_SETS[1]["T_air"]
 
 prediction2 = surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]], batch_evaluate=True)
 
@@ -333,8 +350,8 @@ plt.show()
 #%%
 # Similarly, we can plot the surrogate model error. First, 
 # we interpolate the surrogate results to the finite element model 
-# times. Next, we calculate and plot the absolute error 
-# for each prediction.
+# times. Next, we calculate and plot the signed surrogate error,
+# surrogate prediction minus finite element result, for each validation point.
 interp_prediction_top1 = np.interp(fe_data1['time'], prediction2['time'], 
                                      prediction2['TC_top'][0,:])
 interp_prediction_top2 = np.interp(fe_data2['time'], prediction2['time'], 
@@ -383,24 +400,52 @@ loaded_prediction2 = loaded_surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]],
 
 #%%
 # In the follow-on examples, we compare this surrogate to adaptive surrogates. 
-# To do so, we evaluate the surrogate over a Halton sampling of the 
-# parameter space with a given seed. We then compare the maximum average error
-# in the surrogate give 500 non-adaptive training samples to the adaptive surrogates
-# in the other examples.
-test_study = mc.HaltonStudy(conv_heat_transfer_coeff, far_field_temperature, 
-                                        air_temperature)
-test_study.add_evaluation_set(my_hifi_model, my_objective)
-test_study.set_core_limit(250)
-test_study.set_number_of_samples(30)
-test_study.set_seed(12345)
-test_study.set_working_directory("standard_surrogate_test", remove_existing=True)
-test_results = test_study.launch()
+# As a result, we build the common deterministic Halton test set used to score all surrogate
+# examples. The adaptive examples use the same parameter bounds, sample count,
+# and test seed, so the test parameter locations are identical.
+# This test set is used
+# only for scoring the surrogate. It is independent of the two validation
+# parameter sets used above for FE-versus-surrogate plots and signed-error
+# curves.
+common_test_study = mc.HaltonStudy(
+    conv_heat_transfer_coeff,
+    far_field_temperature,
+    air_temperature,
+)
+common_test_study.add_evaluation_set(my_hifi_model, my_objective)
+
+if is_sandia_cluster():
+    common_test_study.set_core_limit(250)
+else:
+    common_test_study.set_core_limit(112)
+
+common_test_study.set_number_of_samples(COMMON_TEST_SAMPLE_COUNT)
+common_test_study.set_seed(COMMON_TEST_SEED)
+common_test_study.set_working_directory("common_surrogate_test", remove_existing=True)
+
+common_test_results = common_test_study.launch()
 
 #%%
-# 
-surrogate_generator.set_surrogate_details(training_fraction=1.0, test_eval_info=test_results)
+# Now we can generate the surrogate and use the common test set 
+# to evaluate the test errors.
+surrogate_generator.set_surrogate_details(
+    training_fraction=1.0,
+    test_eval_info=common_test_results,
+    regressor_type="Gaussian Process",
+    n_restarts_optimizer=20,
+    alpha=1e-5,
+    normalize_y=True,
+)
 surrogate = surrogate_generator.generate("layered_metal_bc_surrogate")
-print(surrogate.max_errors)
+
+print("\n=== Standard LHS surrogate common-test summary ===")
+print(f"Training samples: {study_results.number_of_evaluations}")
+print("Common-test RMSE by field:")
+print(surrogate.rmse_errors["test"])
+print("Common-test maximum absolute error by field:")
+print(surrogate.max_errors["test"])
+print("Common-test R2 by field:")
+print(surrogate.scores["test"])
 
 #%%
 # Lastly, the surrogate can be investigated in an interactive manner using 
