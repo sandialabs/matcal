@@ -243,7 +243,7 @@ plt.show()
 #%%
 # Similarly, we can plot the surrogate model error. First, 
 # we interpolate the surrogate results to the finite element model 
-# times. Next, we calculate and plot the absolute error 
+# times. Next, we calculate and plot the signed error 
 # for each prediction.
 interp_prediction_bot1 = np.interp(fe_data1['time'], prediction['time'], 
                                      prediction['TC_bottom'][0,:])
@@ -326,7 +326,7 @@ plt.show()
 # each candidate surrogate during training. We can use the retained best
 # surrogate to inspect which test samples were hardest to predict.
 # We can use use  
-# :meth:`~matcal.core.adaptive_surrogate.SparseGridAdaptiveSurrogate.plot_worst_N` 
+# :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogate.plot_worst_N` 
 # to plot the worst five test samples. For each test sample, the left column
 # compares the surrogate prediction against the stored test data. The right
 # column shows the signed error, surrogate minus test data.
