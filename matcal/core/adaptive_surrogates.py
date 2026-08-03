@@ -684,8 +684,8 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
 
     Notes
     -----
-    * Parameters are assumed to be in native parameter space.
-    * The native parameter bounds are supplied to PyApprox through the
+    * Parameters are assumed to be in original parameter space.
+    * The parameter bounds are supplied to PyApprox through the
       one-dimensional marginal distributions.
     * basis_type:
         - 'lagrange': global Clenshaw-Curtis Lagrange
@@ -2728,8 +2728,8 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
     handles the additional steps required to evaluate those objects:
 
     * process MatCal-style positional, keyword, dictionary, or batch inputs;
-    * check native parameter bounds;
-    * evaluate the PyApprox sparse-grid surrogate in native parameter space; and
+    * check parameter bounds;
+    * evaluate the PyApprox sparse-grid surrogate in original input parameter space; and
     * package the response with the independent-variable values.
 
     Surrogate-object retention, score histories, test data storage, and
@@ -2753,14 +2753,14 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
             if params_array.shape[0] != len(self._param_names):
                 params_array = params_array.T
 
-        # Range check in native parameter space.
+        # Range check on parameters in original parameter space.
         params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
         _check_params_in_range(
             params_dict, self._bounds.T,
             self._enforce_training_data_parameter_range
         )
 
-        # PyApprox sparse grids are constructed directly on the native
+        # PyApprox sparse grids are constructed directly on the input
         # parameter domain. No parameter transform is performed.
 
         # PyApprox returns (n_qois, nsamples).
@@ -3457,7 +3457,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 logger.info("No more admissible sparse-grid indices. Stopping.")
                 break
 
-            # new_samples are native parameter values with shape
+            # new_samples are in the original input parameter space with shape
             # (nvars, nsamples_new).
             new_vals = self._matcal_evaluate_parameter_sets_batch_adaptive_training(new_samples)
 
@@ -3980,7 +3980,7 @@ def _validate_nmax_loo(nmax_loo):
 
 def _validate_cv_metric(cv_metric):
     """
-    Validate and normalize the native cross-validation error metric.
+    Validate and normalize the original data space cross-validation error metric.
     """
     check_value_is_nonempty_str(cv_metric, "cv_metric")
     cv_metric = cv_metric.lower().strip()
@@ -4419,20 +4419,20 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         1. Split the current training samples into ``nsplits`` folds and build one
         surrogate per held-out fold.
-        2. Compute the native response-space prediction error on each held-out
+        2. Compute the original data response-space prediction error on each held-out
         fold.
-        3. Select the ``nmax_folds`` folds with the largest native
+        3. Select the ``nmax_folds`` folds with the largest original data space
         cross-validation errors.
         4. Optionally perform leave-one-out cross validation only on the samples
         contained in those selected folds.
-        5. Select Voronoi cells associated with the largest leave-one-out native
+        5. Select Voronoi cells associated with the largest leave-one-out original data space
         errors and place new samples at farthest vertices of those cells.
 
         If ``nsplits`` is set to ``0``, the cross-validation filter is disabled.
         In that case, all current training samples are treated as candidate Voronoi
         cell seeds.
 
-        Cross-validation and leave-one-out errors are computed in native response space
+        Cross-validation and leave-one-out errors are computed in original response space
         for deterministic metrics such as ``"rmse"``, ``"mae"``, ``"sum_abs"``, and
         ``"nrmse"``. The special metric ``"nlpd"`` is an exception: it uses the
         Gaussian-process latent-space negative log predictive density stored by the
@@ -4459,7 +4459,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             candidates are selected.
         :type nmax_loo: int or str
 
-        :param cv_scale: Optional scaling applied to native responses before
+        :param cv_scale: Optional scaling applied to original data space responses before
             computing cross-validation errors. Use this to normalize response
             magnitudes when the target response has multiple components or when
             different response locations have substantially different scales.
@@ -4474,14 +4474,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         :type cv_scale: float, array-like, str, or None
 
         :param cv_metric: Cross-validation ranking metric used for both K-fold and
-            leave-one-out ranking. Deterministic metrics are native response-space
+            leave-one-out ranking. Deterministic metrics are the original data response-space
             errors; ``"nlpd"`` is a Gaussian-process latent-space uncertainty metric.
 
-            * ``"rmse"``: root mean squared native response error.
-            * ``"mae"`` or ``"abs"``: mean absolute native response error.
-            * ``"sum_abs"``: sum of absolute native response errors. This is
+            * ``"rmse"``: root mean squared orginal data space response error.
+            * ``"mae"`` or ``"abs"``: mean absolute orginal data space response error.
+            * ``"sum_abs"``: sum of absolute orginal data space response errors. This is
             closest to the error expression used in the KFCV-Voronoi paper.
-            * ``"nrmse"``: normalized root mean squared native response error.
+            * ``"nrmse"``: normalized root mean squared orginal data space response error.
             * ``"nlpd"``: Gaussian-process latent-space negative log predictive density.
             This requires predictive standard deviations and is only valid for
             ``regressor_type="Gaussian Process"``.
@@ -4909,7 +4909,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         belonging to the selected Voronoi cell of the given seed.
 
         Voronoi-cell membership is determined by nearest-seed assignment to the
-        current native training points.
+        training points in the input parameter space.
 
         :param seed_location: Selected sample/seed location.
         :type seed_location: numpy.ndarray
@@ -5393,7 +5393,7 @@ class VoronoiTessellation:
 
     def get_voronoi_vertices(self, identify_outside_vertices=True):
         """
-        Return all valid native Voronoi vertices.
+        Return all valid Voronoi vertices.
 
         Regions belonging to ghost points are skipped.
         """
@@ -5625,7 +5625,7 @@ class VoronoiTessellation:
         The explicit Voronoi-region membership check is intentionally omitted here
         because clipped boundary intersections can be numerically assigned to an
         adjacent or ghost-influenced region even when they are valid for bounding
-        the native cell.
+        the cell.
         """
         if new_vertex is None:
             return False
@@ -5794,15 +5794,15 @@ class VoronoiTessellation:
     
     def add_points(self, points):
         """
-        Add native sample points and rebuild the Voronoi tessellation.
+        Add sample points and rebuild the Voronoi tessellation.
 
         The Voronoi tessellation contains two classes of seed points:
 
-        * native sample points stored in ``self.points``; and
+        * sample points stored in ``self.points``; and
         * ghost points used to bound the tessellation.
 
-        Only native sample points should be added through this method. After new
-        native points are added, all derived tessellation state is rebuilt,
+        Only sample points should be added through this method. After new
+        points are added, all derived tessellation state is rebuilt,
         including ghost points, the combined point array, the SciPy Voronoi object,
         ghost-point bookkeeping, and boundary-region bookkeeping.
 
@@ -5814,9 +5814,9 @@ class VoronoiTessellation:
         samples.
 
         Invalid rows containing ``NaN`` or infinite values are discarded. Duplicate
-        native points are removed before rebuilding the tessellation.
+        points are removed before rebuilding the tessellation.
 
-        :param points: New native sample point or points to add. A single point
+        :param points: New sample point or points to add. A single point
             may be supplied with shape ``(n_dimensions,)``. Multiple points should
             have shape ``(n_points, n_dimensions)``.
         :type points: array-like
@@ -5825,12 +5825,12 @@ class VoronoiTessellation:
             floating-point NumPy array.
 
         :raises ValueError: If the supplied points do not have the same dimension as
-            the existing native sample points.
+            the existing sample points.
 
-        :ivar points: Updated unique native sample points.
+        :ivar points: Updated unique sample points.
         :vartype points: array-like
 
-        :ivar _all_points: Combined native and ghost seed points used to construct
+        :ivar _all_points: Combined and ghost seed points used to construct
             the Voronoi tessellation.
         :vartype _all_points: numpy.ndarray
 
@@ -5851,7 +5851,7 @@ class VoronoiTessellation:
             logger.warning("No finite points were added to the Voronoi tessellation.")
             return
 
-        self._append_unique_native_points(points)
+        self._append_unique_points(points)
         self._rebuild_voronoi_state()
 
     def _prepare_points_to_add(self, points):
@@ -5875,9 +5875,9 @@ class VoronoiTessellation:
         if points.size > 0 and points.shape[1] != self.points.shape[1]:
             raise ValueError("New points have the wrong dimension.")
 
-    def _append_unique_native_points(self, points):
+    def _append_unique_points(self, points):
         """
-        Append native points and remove duplicates.
+        Append points and remove duplicates.
         """
         self.points = np.unique(np.vstack((self.points, points)), axis=0)
 
@@ -5897,9 +5897,9 @@ class VoronoiTessellation:
         self.boundary_regions = self.get_voronoi_region(self.boundary_points)
 
 
-class NativeCrossValidationBase:
+class CrossValidationBase:
     """
-    Shared cross-validation behavior for native response metrics and the special
+    Shared cross-validation behavior for orginal data space response metrics and the special
     Gaussian-process latent-space NLPD metric.
     """
     def __init__(
@@ -5920,7 +5920,7 @@ class NativeCrossValidationBase:
         self.param_names = param_names
         self.surrogate_options = surrogate_options
 
-    def _fit_and_score_native_cv_split(
+    def _fit_and_score_cv_split(
         self,
         train_eval_info,
         test_eval_info,
@@ -5928,7 +5928,7 @@ class NativeCrossValidationBase:
         y_test,
         save_filename="kfold_validation_surrogate.joblib",
     ):
-        return _fit_cv_surrogate_and_calculate_native_error(
+        return _fit_cv_surrogate_and_calculate_original_data_space_error(
             train_eval_info,
             test_eval_info,
             X_test,
@@ -5952,7 +5952,7 @@ class NativeCrossValidationBase:
         )
 
 
-class KFoldCrossValidation(NativeCrossValidationBase):
+class KFoldCrossValidation(CrossValidationBase):
     def __init__(
         self,
         nsplits,
@@ -5993,7 +5993,7 @@ class KFoldCrossValidation(NativeCrossValidationBase):
 
     def evaluate_fold(self, train_index, test_index, X, y, kfold_count):
         logger.info(
-            f"\tEvaluating native '{self.metric}' error for surrogate "
+            f"\tEvaluating original data space '{self.metric}' error for surrogate "
             f"for kfold cross validation set {kfold_count}..."
         )
 
@@ -6004,18 +6004,18 @@ class KFoldCrossValidation(NativeCrossValidationBase):
             y,
         )
 
-        error = self._fit_and_score_native_cv_split(
+        error = self._fit_and_score_cv_split(
             train_eval_info,
             test_eval_info,
             X_test,
             y_test,
         )
 
-        logger.info(f"\t\tnative error = {error}")
+        logger.info(f"\t\tOriginal data space error = {error}")
         return error, test_index
 
 
-class LeaveOneOutCrossValidation(NativeCrossValidationBase):
+class LeaveOneOutCrossValidation(CrossValidationBase):
     def __init__(
         self,
         scale,
@@ -6062,7 +6062,7 @@ class LeaveOneOutCrossValidation(NativeCrossValidationBase):
 
     def evaluate_loo_sample(self, X, y, index):
         logger.info(
-            f"\tEvaluating native '{self.metric}' error for surrogate "
+            f"\tEvaluating original data space '{self.metric}' error for surrogate "
             f"leaving out sample {index}"
         )
 
@@ -6072,7 +6072,7 @@ class LeaveOneOutCrossValidation(NativeCrossValidationBase):
             y,
         )
 
-        error = self._fit_and_score_native_cv_split(
+        error = self._fit_and_score_cv_split(
             train_eval_info,
             test_eval_info,
             X_test,
@@ -6080,7 +6080,7 @@ class LeaveOneOutCrossValidation(NativeCrossValidationBase):
             save_filename="loo_validation_surrogate.joblib",
         )
 
-        logger.info(f"\t\tnative error = {error}")
+        logger.info(f"\t\toriginal data space error = {error}")
         return error, index
 
 
@@ -6168,15 +6168,15 @@ def _get_surrogate_metric(latent_scores_test, metric):
     return float(np.nanmean(combined_score))
 
 
-def _extract_native_response_matrix(model_evals, target_field,
+def _extract_response_matrix(model_evals, target_field,
                                       interpolation_field=None,
                                       interpolation_values=None):
     """
-    Extract native target-response values from a list of model-evaluation
+    Extract target-response values from a list of model-evaluation
     dictionaries.
 
     For deterministic cross-validation metrics, the adaptive-sampling criteria are
-    based on native response error rather than latent-space surrogate diagnostics.
+    based on original data response error rather than latent-space surrogate diagnostics.
     For these metrics the diagnostic error is defined as
     
     .. math::
@@ -6198,7 +6198,7 @@ def _extract_native_response_matrix(model_evals, target_field,
         ``interpolation_field``.
     :type model_evals: list[dict]
 
-    :param target_field: Name of the native response field to compare.
+    :param target_field: Name of the response field to compare.
     :type target_field: str
 
     :param interpolation_field: Name of the independent-variable field used for
@@ -6234,7 +6234,7 @@ def _extract_native_response_matrix(model_evals, target_field,
         if needs_interpolation:
             if interpolation_field is None:
                 raise RuntimeError(
-                    "Cannot interpolate held-out native response because "
+                    "Cannot interpolate held-out response because "
                     "interpolation_field is None."
                 )
 
@@ -6248,7 +6248,7 @@ def _extract_native_response_matrix(model_evals, target_field,
 
             if source_x.size != target_response.size:
                 raise RuntimeError(
-                    "Cannot interpolate held-out native response because the "
+                    "Cannot interpolate held-out response because the "
                     f"independent field '{interpolation_field}' has length "
                     f"{source_x.size}, but target field '{target_field}' has "
                     f"length {target_response.size}."
@@ -6269,13 +6269,13 @@ def _extract_native_response_matrix(model_evals, target_field,
     return np.asarray(responses, dtype=float)
 
 
-def _evaluate_surrogate_native_response(surrogate, X_test, target_field):
+def _evaluate_surrogate_response(surrogate, X_test, target_field):
     """
-    Evaluate a surrogate at held-out parameter samples and return its native
+    Evaluate a surrogate at held-out parameter samples and return its 
     target-field response.
 
     The returned array is normalized to shape ``(n_samples, n_qois)`` so that it
-    can be directly compared with the held-out native model responses.
+    can be directly compared with the held-out model responses.
 
     :param surrogate: Surrogate object returned by ``_fit_surrogate_model``.
     :type surrogate: object
@@ -6284,7 +6284,7 @@ def _evaluate_surrogate_native_response(surrogate, X_test, target_field):
         ``(n_test_samples, n_parameters)``.
     :type X_test: numpy.ndarray
 
-    :param target_field: Name of the native target field.
+    :param target_field: Name of the target field.
     :type target_field: str
 
     :return: Surrogate predictions with shape ``(n_test_samples, n_qois)``.
@@ -6323,7 +6323,7 @@ def _evaluate_surrogate_native_response(surrogate, X_test, target_field):
             predicted_response = predicted_response.T
         else:
             raise RuntimeError(
-                "Could not orient surrogate prediction array for native "
+                "Could not orient surrogate prediction array for "
                 f"cross-validation error. Prediction shape is "
                 f"{predicted_response.shape}; expected one dimension to equal "
                 f"the number of held-out samples, {n_test_samples}."
@@ -6339,9 +6339,9 @@ def _evaluate_surrogate_native_response(surrogate, X_test, target_field):
     return predicted_response
 
 
-def _apply_native_response_scaling(true_response, predicted_response, scale):
+def _apply_response_scaling(true_response, predicted_response, scale):
     """
-    Apply optional scaling to native responses before error calculation.
+    Apply optional scaling to responses before error calculation.
 
     ``scale`` is intended to normalize response magnitudes before computing
     cross-validation errors. If ``scale`` is ``None`` or ``1``, responses are
@@ -6349,10 +6349,10 @@ def _apply_native_response_scaling(true_response, predicted_response, scale):
 
     The legacy string option ``"cbrt"`` is supported for compatibility.
 
-    :param true_response: Held-out native response.
+    :param true_response: Held-out response.
     :type true_response: numpy.ndarray
 
-    :param predicted_response: Surrogate-predicted native response.
+    :param predicted_response: Surrogate-predicted response.
     :type predicted_response: numpy.ndarray
 
     :param scale: Response scaling option.
@@ -6369,25 +6369,25 @@ def _apply_native_response_scaling(true_response, predicted_response, scale):
         if scale_lower == "cbrt":
             return np.cbrt(true_response), np.cbrt(predicted_response)
         raise ValueError(
-            f"Unsupported native response scale option '{scale}'."
+            f"Unsupported response scale option '{scale}'."
         )
 
     scale = np.asarray(scale, dtype=float)
 
     if np.any(scale <= 0):
-        raise ValueError("Physical response scale values must be positive.")
+        raise ValueError("Response scale values must be positive.")
 
     return true_response / scale, predicted_response / scale
 
 
-def _calculate_native_cv_error(surrogate, X_test, y_test, target_field,
+def _calculate_cv_error(surrogate, X_test, y_test, target_field,
                                  interpolation_field, interpolation_values,
                                  metric="rmse", scale=1.0):
     """
     Calculate cross-validation error.
 
-    Deterministic response-space metrics are computed by comparing the held-out
-    native response with the surrogate prediction at the same held-out parameter
+    Deterministic original data response-space metrics are computed by comparing the held-out
+    response with the surrogate prediction at the same held-out parameter
     locations.
 
     For ``metric='nlpd'``, this returns the stored Gaussian Process
@@ -6399,14 +6399,14 @@ def _calculate_native_cv_error(surrogate, X_test, y_test, target_field,
     if metric == "nlpd":
         return _calculate_surrogate_latent_nlpd(surrogate)
 
-    true_response = _extract_native_response_matrix(
+    true_response = _extract_response_matrix(
         y_test,
         target_field,
         interpolation_field,
         interpolation_values,
     )
 
-    predicted_response = _evaluate_surrogate_native_response(
+    predicted_response = _evaluate_surrogate_response(
         surrogate,
         X_test,
         target_field,
@@ -6414,13 +6414,13 @@ def _calculate_native_cv_error(surrogate, X_test, y_test, target_field,
 
     if true_response.shape != predicted_response.shape:
         raise RuntimeError(
-            "Held-out native response and surrogate prediction have "
+            "Held-out response and surrogate prediction have "
             "different shapes during cross-validation error calculation. "
             f"True response shape: {true_response.shape}. "
             f"Predicted response shape: {predicted_response.shape}."
         )
 
-    true_response, predicted_response = _apply_native_response_scaling(
+    true_response, predicted_response = _apply_response_scaling(
         true_response,
         predicted_response,
         scale,
@@ -6433,7 +6433,7 @@ def _calculate_native_cv_error(surrogate, X_test, y_test, target_field,
     )
 
 
-def _fit_cv_surrogate_and_calculate_native_error(
+def _fit_cv_surrogate_and_calculate_original_data_space_error(
     train_eval_info,
     test_eval_info,
     X_test,
@@ -6449,7 +6449,7 @@ def _fit_cv_surrogate_and_calculate_native_error(
     """
     Fit a cross-validation surrogate and calculate the requested CV metric.
 
-    Deterministic metrics are computed in native response space. ``"nlpd"`` uses
+    Deterministic metrics are computed in the original data response space. ``"nlpd"`` uses
     the fitted Gaussian-process latent-space NLPD.
 
     This helper is shared by K-fold and leave-one-out cross validation.
@@ -6473,7 +6473,7 @@ def _fit_cv_surrogate_and_calculate_native_error(
         **surrogate_options,
     )
 
-    return _calculate_native_cv_error(
+    return _calculate_cv_error(
         fold_surrogate,
         X_test,
         y_test,
