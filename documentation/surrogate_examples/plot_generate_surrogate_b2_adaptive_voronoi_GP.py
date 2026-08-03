@@ -93,11 +93,9 @@ study.set_surrogate_options( n_restarts_optimizer=20, alpha=1e-5, normalize_y=Tr
 study.set_cross_validation_options(
     nsplits=10,
     nmax_folds=3,
-    nmax_loo=1,
-    batch_size=1,
-    cv_scale=1.0,
+    nmax_loo=10,
+    batch_size=10,
     cv_metric="sum_abs",
-    group_kfold=False,
 )
 
 #%%

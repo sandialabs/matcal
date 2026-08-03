@@ -4387,7 +4387,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         )
         self._update_convergence_metric_for_current_surrogate_regressor()
 
-    def set_convergence_criteria(self, eps=1e-12, convergence_metric='nlpd'):
+    def set_convergence_criteria(self, eps=1e-12, convergence_metric='score'):
         """
         Convergence is determined by comparing the selected surrogate latent-space
         metric between two successive batches. Supported metrics are ``"rmse"``,

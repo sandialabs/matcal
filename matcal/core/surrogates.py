@@ -566,7 +566,7 @@ class _RBFInterpolatorRegressor(BaseEstimator):
     for large training sets.
     """
 
-    def __init__(self, neighbors=50, **rbf_kwargs):
+    def __init__(self, neighbors=20, **rbf_kwargs):
         self.neighbors = neighbors
         self.rbf_kwargs = rbf_kwargs
         self._rbf = None
@@ -808,7 +808,7 @@ class MatCalSurrogateBase(ABC):
     def rmse_errors(self):
         """
         The test and train root mean squared errors for the surrogate in the
-        given field's native units.
+        given field's original units.
 
         The RMSE is calculated as
 
@@ -870,7 +870,7 @@ class MatCalSurrogateBase(ABC):
                             "enforce_training_data_parameter_range")
         self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
 
-    def _set_native_space_scores(self, rmse_scores, max_scores, r2_scores):
+    def _set_original_data_space_scores(self, rmse_scores, max_scores, r2_scores):
         self._rmse_scores['train'] = rmse_scores[0]
         self._rmse_scores['test'] = rmse_scores[1]
 
@@ -1026,7 +1026,7 @@ def _field_uses_pca(decomposers, field):
 
 
 def _print_scores(latent_train_score, latent_test_score, 
-                  native_train_score, native_test_score, decomposers=None):
+                  data_space_train_score, data_space_test_score, decomposers=None):
     for field in latent_train_score:
         logger.info(f"\nSurrogate scores for {field}: ")
 
@@ -1038,7 +1038,7 @@ def _print_scores(latent_train_score, latent_test_score,
                 f"{latent_train_score[field]['score']}\n"
             )
 
-        score_message += f"\t\tnative space score: {native_train_score[field]}\n"
+        score_message += f"\t\toriginal data space score: {data_space_train_score[field]}\n"
 
         score_message += "\tTest:\n"
 
@@ -1048,7 +1048,7 @@ def _print_scores(latent_train_score, latent_test_score,
                 f"{latent_test_score[field]['score']}\n"
             )
 
-        score_message += f"\t\tnative space score: {native_test_score[field]}\n"
+        score_message += f"\t\toriginal data space score: {data_space_test_score[field]}\n"
 
         logger.info(score_message)
 
@@ -1249,12 +1249,12 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         for field in self._regressors:
             scaled_latent_prediction = self._regressors[field].predict(scaled_params)
             scaled_latent_prediction = scaled_latent_prediction.reshape(scaled_params.shape[0], -1)
-            results[field] = self._transform_data_to_native_space(field, scaled_latent_prediction)
+            results[field] = self._transform_data_to_original_data_space(field, scaled_latent_prediction)
             if not multiple_samples:
                 results[field] = results[field].flatten()
         return results
     
-    def _transform_data_to_native_space(self, field, scaled_latent_data):
+    def _transform_data_to_original_data_space(self, field, scaled_latent_data):
         latent_scaler = self._latent_scalers[field]
         latent_prediction = latent_scaler.inverse_transform(scaled_latent_data)
         scaled_prediction  = self._decomposers[field].inverse_transform(latent_prediction)
@@ -1309,10 +1309,10 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                                     param_scaler, regressors, 
                                     decomposers, data_scalers, latent_scalers, param_ranges) 
 
-        native_space_scores = _get_scores_in_native_data_space(surrogate, test_params, test_data, 
+        original_data_space_scores = _get_scores_in_original_data_space(surrogate, test_params, test_data, 
                                                                train_params, train_data)
-        rmse_scores, max_scores, r2_scores = native_space_scores
-        surrogate._set_native_space_scores(rmse_scores, max_scores, r2_scores)
+        rmse_scores, max_scores, r2_scores = original_data_space_scores
+        surrogate._set_original_data_space_scores(rmse_scores, max_scores, r2_scores)
         if logger_on:
             _print_scores(*latent_scores, *r2_scores, decomposers=decomposers)
         return surrogate
@@ -1369,7 +1369,7 @@ def _check_params_in_range( params_dict, param_ranges, enforce_range=True):
                                 f"{param_ranges[param][1]}.\n{param_values}")
    
 
-def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_params, train_data):
+def _get_scores_in_original_data_space(surrogate, test_params, test_data, train_params, train_data):
     rmse_train_score = _get_field_scores(surrogate, train_params, train_data, 
                                         _root_mean_squared_error)
     max_train_score = _get_field_scores(surrogate, train_params, train_data, 
@@ -1390,7 +1390,7 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
 
 def _get_field_scores(surrogate, params, data, score_function):
     """
-    Compute one native-space score per predicted physical field.
+    Compute one original data space score per predicted field.
 
     The score function is responsible for returning ``nan`` when a metric is not
     defined, such as global R2 with fewer than two scalar comparisons.
