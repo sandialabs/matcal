@@ -58,12 +58,12 @@ Examples
     scores the surrogate on the common Halton test set used by the adaptive
     examples.
 
-``plot_generate_surrogate_b_adaptive_voronoi.py``
+``plot_generate_surrogate_b1_adaptive_voronoi_GP.py``
     Builds a Voronoi adaptive surrogate for ``TC_bottom`` using a Gaussian
     Process backend. The adaptive sampling loop adds training points in regions
     where cross-validation indicates the surrogate needs improvement.
 
-``plot_generate_surrogate_b1_adaptive_voronoi_rbf.py``
+``plot_generate_surrogate_b2_adaptive_voronoi_rbf.py``
     Builds a Voronoi adaptive surrogate for ``TC_bottom`` using an RBF backend
     instead of a Gaussian Process backend. This example is useful when users want
     a deterministic local interpolator without Gaussian-process predictive

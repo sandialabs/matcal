@@ -1,13 +1,13 @@
 """
 Sparse Grid Adaptive Surrogate Example
-==================================
+======================================
 
 This example demonstrates how to generate a surrogate
 using a MatCal study that performs adaptive sampling
 for training the surrogate.
 This study is a follow-on example to 
 :ref:`Surrogate Generation Example`
-and uses the same boundary value problem that from example.
+and uses the same boundary value problem from that example.
 The primary difference is that a Matcal adaptive surrogate 
 study is used for surrogate training. 
 In this example we use a :class:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy`
@@ -330,7 +330,7 @@ plt.show()
 # to plot the worst five test samples. For each test sample, the left column
 # compares the surrogate prediction against the stored test data. The right
 # column shows the signed error, surrogate minus test data.
-fig, axes, worst_test_indices = surrogate.plot_worst_N(
+figs, axes, worst_test_indices = surrogate.plot_worst_N(
     N=5,
     surrogate_index="best",
     metric="max_error",

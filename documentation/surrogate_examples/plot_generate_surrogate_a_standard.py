@@ -239,7 +239,7 @@ print('Test scores:\n', surrogate.scores['test'])
 # keyword argument list for the parameters that we want evaluated.
 # The surrogate will return a dictionary of predictions.  
 # The order of the parameters is the same order that they were 
-# passed into the the parameter collection or study, but this can be verified by 
+# passed into the parameter collection or study, but this can be verified by 
 # calling :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.parameter_order`.
 # If keyword arguments are used, the keywords must match the parameter names 
 # assigned in the :class:`~matcal.core.parameters.Parameter` object inits.
@@ -271,7 +271,7 @@ surrogate.set_parameter_ranges(H=[conv_heat_transfer_coeff.get_lower_bound(),
 # function.
 mc.matcal_save("layered_metal_bc_surrogate.joblib", surrogate)
 #%%
-# With the parameter ranges updated, we can no evaluate 
+# With the parameter ranges updated, we can now evaluate 
 # the surrogate with our desired parameters. 
 # This evaluation includes T_air = 400, which 
 # was the user specified bound for the training data study.

@@ -7,7 +7,7 @@ using a MatCal study that performs adaptive sampling
 for training the surrogate.
 This study is a follow-on example to 
 :ref:`Surrogate Generation Example`
-and uses the same boundary value problem that from example.
+and uses the same boundary value problem from that example.
 The primary difference is that a Matcal adaptive surrogate 
 study is used for surrogate training. 
 In this example we use a :class:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy`

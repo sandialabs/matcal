@@ -40,7 +40,6 @@ from includes.paper_peaks_verification_common import (
     adaptive_history_arrays,
     collect_adaptive_surrogates_at_sample_counts,
     collect_training_samples_for_surrogate_count_map,
-    copy_validation_results_with_qoi_alias,
     make_model,
     make_parameters,
     plot_convergence_history,
@@ -123,12 +122,6 @@ validation_results = run_fixed_validation_set(
     model,
     study.results_synchronizer,
     os.path.join("fixed_validation_set"),
-)
-
-validation_results = copy_validation_results_with_qoi_alias(
-    validation_results,
-    model_name=study._get_model_names()[0],
-    objective_name=study.results_synchronizer.name,
 )
 
 study.set_test_data(validation_results)

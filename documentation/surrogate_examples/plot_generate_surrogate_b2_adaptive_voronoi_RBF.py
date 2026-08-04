@@ -88,20 +88,18 @@ study.add_evaluation_set(my_hifi_model)
 # option controls the number of nearest neighbors used by SciPy's local
 # RBFInterpolator. The value is clipped internally if fewer training samples are
 # available.
-#
-# RBF does not provide Gaussian Process predictive standard deviations, so
-# metrics such as NLPD are not meaningful. We therefore use deterministic
-# cross-validation and convergence metrics below.
 study.set_surrogate_options(
     regressor_type="RBF",
-    neighbors=50,
     smoothing=0.0,
     decomp_var=0.999,
 )
 
 # %%
 # Configure cross-validation used by the Voronoi adaptive sampler. The
-# ``sum_abs`` metric is a deterministic native-response-space error metric.
+# ``sum_abs`` metric is a deterministic original-response-space error metric.
+# RBF does not provide Gaussian Process predictive standard deviations, so
+# metrics such as NLPD are not meaningful. We therefore use deterministic
+# cross-validation and convergence metrics below.
 study.set_cross_validation_options(
     nsplits=10,
     nmax_folds=3,

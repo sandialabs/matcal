@@ -3018,13 +3018,175 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
     def _get_test_data(self):
         results = None
         if self._user_test_data is not None:
-            results = self._user_test_data
+            results = self._update_user_test_data_objective_name_if_needed(
+                self._user_test_data
+            )
         else:
             results = self._run_test_sampling()
         self._test_eval_info = results
         test_params = self._format_params(results)
         test_responses = self._format_output(results)
         return test_params, test_responses
+
+    def _update_user_test_data_objective_name_if_needed(self, study_results):
+        """
+        Rename the user-supplied test-data QoI objective name when unambiguous.
+
+        The adaptive study expects the test-data QoI history to contain a key of the
+        form ``"<model_name>:<required_objective_name>"``. If the supplied test data
+        contains exactly one objective name and it differs from the required
+        objective name, the QoI-history key is renamed at runtime.
+
+        If more than one objective name is present, a RuntimeError is raised because
+        MatCal cannot determine which objective should be used for adaptive-surrogate
+        testing.
+        """
+        required_objective_name = self._get_required_test_data_objective_name()
+        qoi_history = self._get_user_test_data_qoi_history(study_results)
+
+        qoi_keys = list(qoi_history.keys())
+        objective_names = self._get_qoi_history_objective_names(qoi_keys)
+
+        if len(objective_names) == 0:
+            raise RuntimeError(
+                "The supplied adaptive surrogate test data does not contain any "
+                "QoI history entries. It cannot be used for surrogate testing."
+            )
+
+        if len(objective_names) > 1:
+            raise RuntimeError(
+                "The supplied adaptive surrogate test data contains more than one "
+                "objective name in its QoI history. MatCal cannot determine which "
+                "objective should be used for surrogate testing. Objective names "
+                f"found: {sorted(objective_names)}. The required objective name is "
+                f"'{required_objective_name}'."
+            )
+
+        current_objective_name = next(iter(objective_names))
+
+        if current_objective_name == required_objective_name:
+            return
+
+        logger.warning(
+            "The supplied adaptive surrogate test data uses objective name "
+            f"'{current_objective_name}', but this study requires objective name "
+            f"'{required_objective_name}'. Because the supplied test data contains "
+            "exactly one objective name, MatCal is renaming the test-data QoI "
+            "history entry at runtime."
+        )
+
+        self._rename_qoi_history_objective_name(
+            qoi_history,
+            current_objective_name,
+            required_objective_name,
+        )
+
+
+    def _get_required_test_data_objective_name(self):
+        """
+        Return the objective name required by this adaptive surrogate study.
+        """
+        if self._results_synchronizer is None:
+            raise RuntimeError(
+                "The adaptive surrogate study has not created its internal "
+                "SimulationResultsSynchronizer. Call add_evaluation_set before "
+                "launching the study or preparing user test data."
+            )
+
+        return self._results_synchronizer.name
+
+
+    def _get_user_test_data_qoi_history(self, study_results):
+        """
+        Return the QoI history from user-supplied StudyResults.
+        """
+        if not hasattr(study_results, "qoi_history"):
+            raise RuntimeError(
+                "The supplied adaptive surrogate test data does not have a "
+                "qoi_history attribute and cannot be used for surrogate testing."
+            )
+
+        qoi_history = study_results.qoi_history
+
+        if qoi_history is None:
+            raise RuntimeError(
+                "The supplied adaptive surrogate test data has qoi_history=None "
+                "and cannot be used for surrogate testing."
+            )
+
+        return qoi_history
+
+
+    def _get_qoi_history_objective_names(self, qoi_keys):
+        """
+        Extract objective names from QoI-history keys.
+
+        Expected QoI-history keys have the form ``'<model_name>:<objective_name>'``.
+        """
+        objective_names = set()
+
+        for qoi_key in qoi_keys:
+            model_name, objective_name = self._split_qoi_history_key(qoi_key)
+            objective_names.add(objective_name)
+
+        return objective_names
+
+
+    def _split_qoi_history_key(self, qoi_key):
+        """
+        Split a QoI-history key into model and objective names.
+        """
+        if not isinstance(qoi_key, str) or ":" not in qoi_key:
+            raise RuntimeError(
+                "Adaptive surrogate test-data QoI-history keys must have the form "
+                f"'<model_name>:<objective_name>'. Received key '{qoi_key}'."
+            )
+
+        model_name, objective_name = qoi_key.split(":", 1)
+
+        if model_name == "" or objective_name == "":
+            raise RuntimeError(
+                "Adaptive surrogate test-data QoI-history keys must have nonempty "
+                "model and objective names. Received key "
+                f"'{qoi_key}'."
+            )
+
+        return model_name, objective_name
+
+
+    def _rename_qoi_history_objective_name(
+        self,
+        qoi_history,
+        old_objective_name,
+        new_objective_name,
+    ):
+        """
+        Rename the objective-name component of each QoI-history key in place.
+        """
+        original_items = list(qoi_history.items())
+
+        qoi_history.clear()
+
+        for old_key, value in original_items:
+            model_name, objective_name = self._split_qoi_history_key(old_key)
+
+            if objective_name != old_objective_name:
+                raise RuntimeError(
+                    "Unexpected objective name encountered while renaming adaptive "
+                    "surrogate test-data QoI history. Expected objective name "
+                    f"'{old_objective_name}', but found '{objective_name}' in key "
+                    f"'{old_key}'."
+                )
+
+            new_key = f"{model_name}:{new_objective_name}"
+
+            if new_key in qoi_history:
+                raise RuntimeError(
+                    "Renaming adaptive surrogate test-data objective names would "
+                    f"create a duplicate QoI-history key '{new_key}'."
+                )
+
+            qoi_history[new_key] = value
 
     def _run_test_sampling(self):
         """
@@ -4213,7 +4375,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             ``"Random Forest"`` and ``"RBF"`` do not provide predictive
             standard deviations. Therefore, the latent-space ``"nlpd"``
             convergence metric is not meaningful for these regressors. If the
-            study is still using the default ``"nlpd"`` convergence metric, this
+            study is requesting the ``"nlpd"`` convergence metric for these regressors, this
             method switches it to ``"rmse"``.
 
         :param regressor_type: SurrogateGenerator regressor identifier.
@@ -4284,7 +4446,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """Set options pertaining to the voronoi sampling algorithm. Properties
         that can be altered are listed below.
         
-        :param voronoi_type: Defines which Vornoi-based sampling strategy to use.
+        :param voronoi_type: Defines which Voronoi-based sampling strategy to use.
             Supported options are:
                 * 'full': Constructs the full Voronoi tessellation over all points (Default)
                 * 'local': Constructs a local Voronoi tessellation using only nearby
@@ -4292,8 +4454,8 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                     cost in high dimensions.
         :type voronoi_type: str
         
-        :param finite_only: If True, only Vornoi vertices that lie inside the 
-            convex hull defined by the boundary points are consided as candidate sample
+        :param finite_only: If True, only Voronoi vertices that lie inside the 
+            convex hull defined by the boundary points are considered as candidate sample
             locations. If False, all vertices are considered, and those lying outside
             the parameter bounds are clipped back to the convex hull. This is more flexible but
             can be more computationally expensive, especially in high dimensions. 
@@ -4477,11 +4639,11 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             leave-one-out ranking. Deterministic metrics are the original data response-space
             errors; ``"nlpd"`` is a Gaussian-process latent-space uncertainty metric.
 
-            * ``"rmse"``: root mean squared orginal data space response error.
-            * ``"mae"`` or ``"abs"``: mean absolute orginal data space response error.
-            * ``"sum_abs"``: sum of absolute orginal data space response errors. This is
+            * ``"rmse"``: root mean squared original data space response error.
+            * ``"mae"`` or ``"abs"``: mean absolute original data space response error.
+            * ``"sum_abs"``: sum of absolute original data space response errors. This is
             closest to the error expression used in the KFCV-Voronoi paper.
-            * ``"nrmse"``: normalized root mean squared orginal data space response error.
+            * ``"nrmse"``: normalized root mean squared original data space response error.
             * ``"nlpd"``: Gaussian-process latent-space negative log predictive density.
             This requires predictive standard deviations and is only valid for
             ``regressor_type="Gaussian Process"``.
@@ -4725,7 +4887,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             self._voronoi_tessellation.build()
 
         elif self._voronoi_type == 'local':
-            # Make a local voronoi tesselation for each new sample by using knearest neighbors
+            # Make a local voronoi tessellation for each new sample by using knearest neighbors
             # to determine the closest points
             from scipy.spatial import KDTree
             self._all_tree_points = training_params.copy()
@@ -5739,7 +5901,7 @@ class VoronoiTessellation:
             )
 
     def get_region_seed(self, region_index):
-        """Given a region_index, return the seed of the Voronoi tesselation that
+        """Given a region_index, return the seed of the Voronoi tessellation that
         belongs to the region.
 
         :param region_index: Region index.
@@ -5752,8 +5914,8 @@ class VoronoiTessellation:
         return np.atleast_2d(self.vor.points[point_index[0]])
 
     def get_voronoi_region(self, point_array):
-        """Given an array of points, return the region of the Voronoi tesselation that the
-        points belongs to. If a point lies on a ridge or vertice, multiple regions are 
+        """Given an array of points, return the region of the Voronoi tessellation that the
+        points belongs to. If a point lies on a ridge or vertex, multiple regions are 
         returned for that point.
 
         :param point: An array of points to find the region of.
@@ -5761,7 +5923,7 @@ class VoronoiTessellation:
 
         :return: Returns a list of lists, where each sublist contains the Voronoi 
             region(s) that contains the point. A point on a ridge has a sublist with 
-            two regions (for 2D). A point on a vertice has a sublist
+            two regions (for 2D). A point on a vertex has a sublist
             with 3 regions (for 2D)
         """
         point_array = np.atleast_2d(point_array)
@@ -5899,7 +6061,7 @@ class VoronoiTessellation:
 
 class CrossValidationBase:
     """
-    Shared cross-validation behavior for orginal data space response metrics and the special
+    Shared cross-validation behavior for original data space response metrics and the special
     Gaussian-process latent-space NLPD metric.
     """
     def __init__(

@@ -484,7 +484,8 @@ The MatCal regressor type is:
 
    regressor_type="RBF"
 
-By default, MatCal uses a local RBF interpolator with ``neighbors=50``. This
+By default, MatCal uses a local RBF interpolator and limits the number of neighbors
+included in the RBF to 20. This
 means that each prediction uses a nearby subset of training samples rather than
 all training samples. This can reduce prediction cost for large training sets.
 

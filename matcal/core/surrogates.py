@@ -56,7 +56,7 @@ class SurrogateGenerator:
     Principal Component Analysis(PCA) to generate an efficient representation 
     of the data and then trains 
     a predictor in the latent space identified by the PCA. 
-    To preform these calculations sklearn is 
+    To perform these calculations sklearn is 
     leveraged to perform the correct scaling, PCA, and predictor training required. 
     """
 
@@ -98,7 +98,7 @@ class SurrogateGenerator:
             Only "Random Forest", "Gaussian Process" and "RBF" are accepted. Currently, MatCal
             uses the implementations of the random forest and Gaussian Process tools
             from the sklearn library. For "RBF", MatCal uses scipy.interpolate.RBFInterpolator with a default
-            local-neighbor count of 50. This can be changed by passing neighbors=<int>
+            local-neighbor count of 20. This can be changed by passing neighbors=<int>
             through regressor_kwargs.
         :type regressor_type: str
 
@@ -184,7 +184,7 @@ class SurrogateGenerator:
                               training_fraction=.8, interpolation_locations=None, 
                               test_eval_info=None, **regressor_kwargs):
         """
-        This method provides an other avenue to alter the surrogate 
+        This method provides another avenue to alter the surrogate 
         generation parameters after initialization. 
 
         :param surrogate_type: What type of surrogate to run. Details of each are detailed in the 
@@ -961,8 +961,8 @@ def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_too
 
 def _apply_decomposing_and_scaling_to_data(data, data_scaler, decomposer, 
                              latent_scaler):
-    """Transform test data after scalers and decomposition tool have already 
-        been trained on training data."""
+    """Transform data using previously fitted response scaling, 
+    decomposition, and latent-space scaling tools."""
     scaled_data = data_scaler.transform(data)
     latent_data = decomposer.transform(scaled_data)
     latent_data = _ensure_2d_array(latent_data)
@@ -1543,15 +1543,22 @@ def _identify_common_region(output_history, interpolation_field):
     return start,end   
     
 
-def _identify_fields_of_interest(sim_list,  indep_field, user_fields_of_interest):
-    sim_data_fields = sim_list[0].field_names
+def _identify_fields_of_interest(sim_list, indep_field, user_fields_of_interest):
+    sim_data_fields = list(sim_list[0].field_names)
+
     if user_fields_of_interest is not None:
-        fields_of_interest = user_fields_of_interest
-        _check_fields_in_keys_list(fields_of_interest, sim_data_fields, "training data set")
+        fields_of_interest = list(user_fields_of_interest)
+        _check_fields_in_keys_list(
+            fields_of_interest,
+            sim_data_fields,
+            "training data set",
+        )
     else:
-        fields_of_interest = sim_data_fields
+        fields_of_interest = list(sim_data_fields)
+
     if indep_field is not None and indep_field in fields_of_interest:
         fields_of_interest.remove(indep_field)
+
     return fields_of_interest
 
 
