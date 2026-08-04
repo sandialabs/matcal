@@ -12,9 +12,10 @@ Voronoi adaptive example is that this example uses a deterministic RBF
 interpolator as the backend surrogate regressor.
 
 The RBF backend can be useful when users want a local deterministic interpolator
-instead of a Gaussian Process. Because RBF regressors do not provide predictive
-standard deviations, this example uses deterministic response-space and
-latent-space error metrics rather than NLPD-based convergence.
+instead of a Gaussian Process. Because RBF regressors do not 
+provide predictive standard deviations, this
+example uses deterministic original-response-space cross-validation and
+convergence metrics rather than NLPD-based metrics.
 """
 # sphinx_gallery_thumbnail_number = 6
 
@@ -117,17 +118,13 @@ study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 study.set_error_stopping_criteria(max_abs_error_goal=1.5)
 
 #%%
-# To stop when the common-test-set error stagnates between adaptive batches,
+# To stop when the test-set error stagnates between adaptive batches,
 # use
 # :meth:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy.set_convergence_criteria`.
 # For deterministic metrics such as ``"max_error"`` and ``"rmse"``, this
 # convergence check uses original-response-space errors on the stored test set.
 # Here we set ``eps`` very small because we primarily want the adaptive loop to stop
 # based on the requested error goal or maximum training-sample limit.
-study.set_convergence_criteria(
-    eps=1e-12,
-    convergence_metric="max_error",
-)
 study.set_convergence_criteria(
     eps=1e-12,
 )

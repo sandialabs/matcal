@@ -112,7 +112,7 @@ study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 # that sets a stopping criteria based on the test sample error.
 study.set_error_stopping_criteria(max_abs_error_goal=1.5)
 #%%
-# To stop when the common-test-set error stagnates between adaptive batches,
+# To stop when the test-set error stagnates between adaptive batches,
 # use
 # :meth:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy.set_convergence_criteria`.
 # For deterministic metrics such as ``"max_error"`` and ``"rmse"``, this

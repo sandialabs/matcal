@@ -113,7 +113,7 @@ study.set_max_training_samples(500)
 # The adaptive surrogate can retain only selected surrogate model objects to
 # keep the saved ``.joblib`` file small. Score histories and test data are
 # always stored. Here we retain the best surrogate according to the maximum
-# test-sample error, which is also the convergence metric used below.
+# test-sample error, which is also the stopping criterion set above.
 # Different options are available, see 
 # :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy.set_surrogate_storage_options`.
 study.set_surrogate_storage_options(
@@ -300,7 +300,7 @@ print("Final batch training samples:", surrogate.sample_count_history[-1])
 
 #%%
 # Since adaptive surrogates in MatCal also save the 
-# training error history, we can plot the error metrics for the surrogate
+# test-set error history, we can plot the error metrics for the surrogate
 # as a function of model training samples used. This can 
 # be useful to evaluate convergence rate and 
 # to assess if better performance is likely 

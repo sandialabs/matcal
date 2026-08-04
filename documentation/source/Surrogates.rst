@@ -882,6 +882,8 @@ They are separate from ``set_convergence_criteria``, which controls when the
 adaptive loop stops based on the change in a selected metric between successive
 batches.
 
+Supported ``cv_metric`` values include:
+
 * ``"rmse"``;
 * ``"mae"`` or ``"abs"``;
 * ``"sum_abs"``;
