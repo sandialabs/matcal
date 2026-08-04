@@ -65,7 +65,6 @@ FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
 
 SAMPLE_COUNTS_TO_PLOT = (250, 500, 750)
 MAX_TRAINING_SAMPLES = 750
-CONVERGENCE_PLOT_SAMPLE_LIMIT = None
 
 ###############################################################################
 # Check optional dependency.

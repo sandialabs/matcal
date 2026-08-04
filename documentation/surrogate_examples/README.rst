@@ -63,7 +63,7 @@ Examples
     Process backend. The adaptive sampling loop adds training points in regions
     where cross-validation indicates the surrogate needs improvement.
 
-``plot_generate_surrogate_b2_adaptive_voronoi_rbf.py``
+``plot_generate_surrogate_b2_adaptive_voronoi_RBF.py``
     Builds a Voronoi adaptive surrogate for ``TC_bottom`` using an RBF backend
     instead of a Gaussian Process backend. This example is useful when users want
     a deterministic local interpolator without Gaussian-process predictive

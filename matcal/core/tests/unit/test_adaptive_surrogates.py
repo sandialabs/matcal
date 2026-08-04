@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from matcal.core.adaptive_surrogates import (
     _assign_points_to_nearest_seed,
-    _calculate_native_cv_error,
+    _calculate_cv_error,
     _calculate_surrogate_latent_nlpd,
     _create_ghost_points,
     _evaluate_kfold_cv_splits,
@@ -1395,7 +1395,7 @@ class TestGlobalHelperFunctions(MatcalUnitTest):
         with self.assertRaises(ValueError):
             _validate_surrogate_generator_regressor_type("not_a_regressor")
 
-    def test_calculate_native_cv_error_uses_shared_response_metric(self):
+    def test_calculate_cv_error_uses_shared_response_metric(self):
 
         class FakeSurrogate:
 
@@ -1417,7 +1417,7 @@ class TestGlobalHelperFunctions(MatcalUnitTest):
             "matcal.core.adaptive_surrogates._calculate_response_error_metric",
             return_value=123.0,
         ) as metric_mock:
-            error = _calculate_native_cv_error(
+            error = _calculate_cv_error(
                 FakeSurrogate(),
                 X_test,
                 y_test,
@@ -1683,7 +1683,7 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
 
-    def test_calculate_native_cv_error_is_zero_for_exact_fake_surrogate(self):
+    def test_calculate_cv_error_is_zero_for_exact_fake_surrogate(self):
 
         class ExactFakeSurrogate:
 
@@ -1711,7 +1711,7 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
             },
         ]
 
-        error = _calculate_native_cv_error(
+        error = _calculate_cv_error(
             ExactFakeSurrogate(),
             X_test,
             y_test,
@@ -1724,7 +1724,7 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
 
         self.assertAlmostEqual(error, 0.0)
 
-    def test_calculate_native_cv_error_sum_abs(self):
+    def test_calculate_cv_error_sum_abs(self):
 
         class BiasedFakeSurrogate:
 
@@ -1747,7 +1747,7 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
             },
         ]
 
-        error = _calculate_native_cv_error(
+        error = _calculate_cv_error(
             BiasedFakeSurrogate(),
             X_test,
             y_test,
@@ -1862,7 +1862,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
                 return_value=12.5,
             ) as error_mock:
                 error, omitted_index = loocv.evaluate_loo_sample(X, y, 1)
@@ -1925,7 +1925,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
                 return_value=12.5,
             ):
                 loocv.evaluate_loo_sample(X, y, 1)
@@ -1959,7 +1959,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
                 return_value=12.5,
             ):
                 loocv.evaluate_loo_sample(X, y, 1)
@@ -2160,7 +2160,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
                 return_value=4.25,
             ) as error_mock:
                 error, returned_test_index = kfcv.evaluate_fold(
@@ -2252,7 +2252,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
                 return_value=4.25,
             ):
                 kfcv.evaluate_fold(
@@ -2297,7 +2297,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
             return_value=fake_surrogate,
         ) as fit_mock:
             with patch(
-                "matcal.core.adaptive_surrogates._calculate_native_cv_error",
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
                 return_value=4.25,
             ):
                 kfcv.evaluate_fold(
@@ -2552,7 +2552,7 @@ class TestVoronoiNLPDCV(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
 
-    def test_calculate_native_cv_error_returns_stored_latent_nlpd_for_nlpd_metric(self):
+    def test_calculate_cv_error_returns_stored_latent_nlpd_for_nlpd_metric(self):
 
         class FakeGPSurrogate:
 
@@ -2571,7 +2571,7 @@ class TestVoronoiNLPDCV(MatcalUnitTest):
                     "metric='nlpd'."
                 )
 
-        error = _calculate_native_cv_error(
+        error = _calculate_cv_error(
             FakeGPSurrogate(),
             X_test=np.array([[0.0, 0.0]]),
             y_test=[],
@@ -2970,7 +2970,7 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
     def test_set_surrogate_regressor_accepts_random_forest(self):
         study = self._make_two_parameter_study()
 
-        self.assertEqual(study._convergence_metric, "nlpd")
+        self.assertEqual(study._convergence_metric, "score")
 
         study.set_surrogate_regressor(
             "Random Forest",
@@ -2984,15 +2984,12 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
         )
         self.assertEqual(study._surrogate_options["n_estimators"], 7)
         self.assertEqual(study._surrogate_options["random_state"], 123)
-
-        # Random Forest does not provide return_std, so default nlpd should be
-        # switched to rmse.
-        self.assertEqual(study._convergence_metric, "rmse")
+        self.assertEqual(study._convergence_metric, "score")
 
     def test_set_surrogate_regressor_accepts_rbf(self):
         study = self._make_two_parameter_study()
 
-        self.assertEqual(study._convergence_metric, "nlpd")
+        self.assertEqual(study._convergence_metric, "score")
 
         study.set_surrogate_regressor(
             "RBF",
@@ -3001,10 +2998,7 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
 
         self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
         self.assertEqual(study._surrogate_options["neighbors"], 11)
-
-        # RBFInterpolator does not provide return_std, so default nlpd should be
-        # switched to rmse.
-        self.assertEqual(study._convergence_metric, "rmse")
+        self.assertEqual(study._convergence_metric, "score")
 
     def test_set_surrogate_regressor_rejects_unknown_regressor(self):
         study = self._make_two_parameter_study()
@@ -3027,7 +3021,7 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
         )
         self.assertEqual(study._surrogate_options["n_estimators"], 5)
         self.assertEqual(study._surrogate_options["random_state"], 321)
-        self.assertEqual(study._convergence_metric, "rmse")
+        self.assertEqual(study._convergence_metric, "score")
 
     def test_set_surrogate_options_validates_rbf_regressor(self):
         study = self._make_two_parameter_study()
@@ -3039,7 +3033,7 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
 
         self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
         self.assertEqual(study._surrogate_options["neighbors"], 9)
-        self.assertEqual(study._convergence_metric, "rmse")
+        self.assertEqual(study._convergence_metric, "score")
 
     def test_set_surrogate_options_rejects_unknown_regressor(self):
         study = self._make_two_parameter_study()

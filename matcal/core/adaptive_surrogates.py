@@ -963,14 +963,14 @@ class AdaptiveSurrogate:
         Activate or deactivate parameter-range enforcement during surrogate calls.
 
         By default, the surrogate raises an error if it is evaluated at
-        parameter values outside the parameter bounds used to generate the
-        training data. Calling this method with ``False`` permits extrapolative
-        surrogate calls outside the training-data parameter range. Calling it
+        parameter values outside the study parameter bounds. 
+        Calling this method with ``False`` permits extrapolative
+        surrogate calls outside the study parameter range. Calling it
         again with ``True`` restores the default range-checking behavior.
 
         :param enforce_training_data_parameter_range: If ``True``, reject
-            surrogate calls outside the training parameter bounds. If ``False``,
-            allow calls outside the training parameter bounds.
+            surrogate calls outside the study parameter bounds. If ``False``,
+            allow calls outside the study parameter bounds.
         :type enforce_training_data_parameter_range: bool
 
         :raises TypeError: If ``enforce_training_data_parameter_range`` is not
@@ -3065,7 +3065,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         current_objective_name = next(iter(objective_names))
 
         if current_objective_name == required_objective_name:
-            return
+            return study_results 
 
         logger.warning(
             "The supplied adaptive surrogate test data uses objective name "
@@ -3080,7 +3080,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             current_objective_name,
             required_objective_name,
         )
-
+        return study_results
 
     def _get_required_test_data_objective_name(self):
         """

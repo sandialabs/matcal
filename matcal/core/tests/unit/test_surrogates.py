@@ -647,7 +647,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
         regressor = _RBFInterpolatorRegressor()
         regressor.fit(x, y)
 
-        self.assertEqual(regressor._effective_neighbors, 50)
+        self.assertEqual(regressor._effective_neighbors, 20)
 
         prediction = regressor.predict(x[:5])
         self.assertEqual(prediction.shape, (5,))
@@ -715,7 +715,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
             str(call.args[0]) for call in logger_info.call_args_list
         )
 
-        self.assertIn("native space score", logged_text)
+        self.assertIn("original data space score", logged_text)
         self.assertNotIn("latent space score", logged_text)
         self.assertNotIn("PCA latent space score", logged_text)
         
@@ -760,7 +760,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
             str(call.args[0]) for call in logger_info.call_args_list
         )
 
-        self.assertIn("native space score", logged_text)
+        self.assertIn("original data space score", logged_text)
         self.assertIn("PCA latent space score", logged_text)
 
     def test_calculate_nlpd_matches_gaussian_formula_with_scalar_std_per_sample(self):

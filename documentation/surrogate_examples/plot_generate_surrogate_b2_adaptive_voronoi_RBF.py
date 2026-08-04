@@ -84,10 +84,9 @@ study.set_target_field_name("TC_bottom")
 study.add_evaluation_set(my_hifi_model)
 
 # %%
-# Configure the backend surrogate to use RBF interpolation. The ``neighbors``
-# option controls the number of nearest neighbors used by SciPy's local
-# RBFInterpolator. The value is clipped internally if fewer training samples are
-# available.
+# Configure the backend surrogate to use RBF interpolation. 
+# Any SciPy RBFInterpolator kwargs can be passed through to 
+# the interpolator with this method.
 study.set_surrogate_options(
     regressor_type="RBF",
     smoothing=0.0,

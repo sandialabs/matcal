@@ -138,7 +138,7 @@ if is_sandia_cluster():
 else:
     sampling_study.set_core_limit(112)
 sampling_study.set_number_of_samples(500)
-sampling_study.set_seed(12345)
+sampling_study.set_seed(TRAINING_SEED)
 sampling_study.set_working_directory("standard_surrogate_training", remove_existing=True)
 
 #%%
@@ -187,13 +187,11 @@ surrogate = surrogate_generator.generate("layered_metal_bc_surrogate")
 # much below that then the surrogate will likely have poor applicability. 
 #
 # .. warning::
-#    These scores represent how well the surrogates predict the PCA mode amplitudes
-#    not the actual curves. Therefore, adequate test scores may not be a direct 
-#    indication of accuracy for predicting the response in the original space.
-#    If there are too many modes, the score may be low, but the predictions may be 
-#    adequate. If there are too few modes, the score may be high, but the predictions
-#    may be poor.
-#    Always verify surrogate quality as we do below.
+#    MatCal reports both latent-space diagnostics during surrogate generation and original-data-space
+#    metrics on the generated surrogate. The public surrogate.scores, surrogate.rmse_errors, and
+#    surrogate.max_errors properties report original-data-space metrics. 
+#    Users should still verify surrogate quality by comparing predictions 
+#    against independent model evaluations as we do below.
 #
 # Even with relatively high scores, the result will likely be a decent approximation 
 # of the desired response. This can still be useful if the actual models are very expensive
@@ -391,8 +389,8 @@ plt.show()
 # has the worst surrogate prediction late in the time history. This could potentially
 # be improved with more modes and more training samples.
 #
-# If needed, we can load this surrogate again for future use by constructing a 
-# :class:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate`, with the saved filename
+# If needed, we can load this surrogate again for future use with 
+# :func:`~matcal.core.serializer_wrapper.matcal_load`, with the saved filename
 # created during the surrogate's generation. 
 loaded_surrogate = mc.matcal_load("layered_metal_bc_surrogate.joblib")
 loaded_prediction2 = loaded_surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]], 
