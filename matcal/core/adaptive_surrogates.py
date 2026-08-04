@@ -3732,7 +3732,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
 
 def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations, 
-                         test_eval_info, target_field, save_filename='voronoi_surrogate',  
+                         test_eval_info, target_field, save_filename=None,  
                          logger_on=True, **kwargs):
     from matcal.core.surrogates import SurrogateGenerator
     decomp_var=0.99
@@ -3745,7 +3745,8 @@ def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations
     surrogate_generator.set_fields_of_interest(target_field)
     surrogate_generator.set_PCA_details(decomp_var=decomp_var)
     surrogate_generator._logger_on=logger_on
-    save_filename = save_filename.split(".joblib")[0]
+    if save_filename is not None:
+        save_filename = save_filename.split(".joblib")[0]
     return surrogate_generator.generate(save_filename)
         
 
@@ -4922,15 +4923,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             interpolation_locations=self._independent_variable_values, 
             test_eval_info=self._test_eval_info, 
             target_field=self._target_field_name,
-            save_filename=self._surrogate_save_filename,
+            save_filename=None,
             **self._surrogate_options
         )
         self._surrogate._add_iteration(current_surrogate, self._results.number_of_evaluations)
         self._update_surrogate_score(current_surrogate)
         self._nbatch_samples.append(self.results.number_of_evaluations)
         # Persist the AdaptiveSurrogate container, not only the latest PCA surrogate.
-        if self._surrogate_save_filename is not None:
-            matcal_save(self._surrogate_save_filename, self._surrogate)
+        matcal_save(self._surrogate_save_filename, self._surrogate)
         return training_params, training_data
 
     def _create_voronoi_tess_and_choose_new_samples(
@@ -6739,7 +6739,7 @@ def _fit_cv_surrogate_and_calculate_original_data_space_error(
         interpolation_values,
         test_eval_info,
         target_field,
-        save_filename,
+        save_filename=None,
         logger_on=False,
         **surrogate_options,
     )

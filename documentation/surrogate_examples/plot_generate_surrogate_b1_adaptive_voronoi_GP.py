@@ -88,7 +88,12 @@ study = mc.VoronoiAdaptiveSurrogateStudy(conv_heat_transfer_coeff, far_field_tem
 study.set_independent_variable("time", indep_field_vals)
 study.set_target_field_name("TC_bottom")
 study.add_evaluation_set(my_hifi_model)
-study.set_surrogate_options( n_restarts_optimizer=20, alpha=1e-5, normalize_y=True, decomp_var=0.999)
+study.set_surrogate_options(
+    n_restarts_optimizer=3, 
+    alpha=1e-5, 
+    normalize_y=True, 
+    decomp_var=0.999
+)
 
 study.set_cross_validation_options(
     nsplits=10,
@@ -199,8 +204,8 @@ print("Best retained surrogate R2 score:\n", surrogate.score(best_surrogate_inde
 # plots and signed-error curves below. They are not manually added to the common
 # Halton test set used to score the adaptive surrogate during training.
 # The order of the parameters is the same order that they were passed into the
-# parameter collection or study, but this can be verified by calling
-# :meth:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate.parameter_order`.
+# parameter collection or study. For adaptive surrogates, parameter ordering is
+# defined by the study parameter collection.
 # By default, the surrogate will not allow evaluations outside of the parameter
 # ranges provided in the adaptive surrogate study used for training.
 #

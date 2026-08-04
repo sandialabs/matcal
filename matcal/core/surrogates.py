@@ -277,14 +277,17 @@ class SurrogateGenerator:
                 check_value_is_nonempty_str(field, "field_of_interest")
             self._fields_of_interest = fields_of_interest
 
-    def generate(self, save_filename:str, preprocessing_function:Callable=None, 
+    def generate(self, save_filename:str=None, preprocessing_function:Callable=None, 
                  plot_n_worst:int=0)->Callable:
         """
         Generates a surrogate based on the information passed to it upon initialization
 
-        :param save_filename: the base of a filename without any extensions 
-            to be used to record the surrogate. 
-        :type save_filename: str
+        :param save_filename: The base of a filename without any extensions
+            used to save the surrogate. If ``None``, the surrogate is returned
+            but not serialized to disk. A filename is required when
+            ``plot_n_worst > 0`` because the worst-recreation plot uses this
+            filename as its output prefix.
+        :type save_filename: str or None
 
         :param preprocessing_function: an optional function that modifies
             the model data before it is passed to the tools that generate the 
@@ -300,7 +303,13 @@ class SurrogateGenerator:
         :return: a callable surrogate
         :rtype: :class:`~matcal.core.surrogates.MatCalPCASurrogateBase` 
         """
-        check_value_is_nonempty_str(save_filename, "save_filename")
+        if save_filename is not None:
+            check_value_is_nonempty_str(save_filename, "save_filename")
+        elif plot_n_worst > 0:
+            raise ValueError(
+                "save_filename must be provided when plot_n_worst > 0 because "
+                "the worst-recreation plots require an output filename prefix."
+            )
         results = _package_surrogate_generator_input_data(self._eval_info, self._model_name, 
                                                           self._state)
         source_data, params = results
@@ -326,7 +335,8 @@ class SurrogateGenerator:
                                             self._fields_to_log_scale,
                                             self._decomp_tool, self, param_ranges, 
                                             self._logger_on)
-        matcal_save(save_filename+".joblib", new_surrogate)
+        if save_filename is not None:
+            matcal_save(save_filename + ".joblib", new_surrogate)
         self._plot_worst_recreations(new_surrogate, params, source_dict, 
                                      plot_n_worst, save_filename)
         return new_surrogate

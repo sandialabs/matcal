@@ -430,7 +430,7 @@ surrogate_generator.set_surrogate_details(
     training_fraction=1.0,
     test_eval_info=common_test_results,
     regressor_type="Gaussian Process",
-    n_restarts_optimizer=20,
+    n_restarts_optimizer=3,
     alpha=1e-5,
     normalize_y=True,
 )
