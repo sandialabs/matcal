@@ -1423,9 +1423,10 @@ class AdaptiveSurrogate:
         The score history is retained for all batches, even if the corresponding
         surrogate object was discarded by the storage policy.
 
-        :param surrogate_index: Index into the full score history. The default
-            ``-1`` returns the score from the most recent adaptive-training
-            batch.
+        :param surrogate_index: Integer index into the full score history. This method
+            does not accept retained-surrogate selectors such as ``"best"`` or
+            ``"latest"``. To get the score for the best retained surrogate, pass
+            ``surrogate.best_surrogate_iteration_index``.
         :type surrogate_index: int
 
         :return: :math:`R^2` score for the selected batch. Returns ``nan`` when
@@ -1443,7 +1444,30 @@ class AdaptiveSurrogate:
         :rtype: list[int]
         """
         return self._sample_counts
-    
+
+    @property
+    def r2_history(self):
+        """
+        Return the full original-response-space global R2 score history.
+
+        The R2 score is calculated for each adaptive-training batch using the
+        stored test responses and the candidate surrogate predictions in the
+        original response space.
+
+        :return: R2 value for every adaptive-training batch.
+        :rtype: list[float]
+        """
+        return self._r2_scores
+
+    @property
+    def score_history(self):
+        """
+        Return the full original-response-space global R2 score history.
+
+        This is an alias for :attr:`r2_history`.
+        """
+        return self._r2_scores
+
     def __call__(self, *args, surrogate_index="best", batch_evaluate=False,
                  transpose=False, **kwargs):
         """
@@ -4314,8 +4338,14 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def _update_surrogate_score(self, surrogate=None):
         """
-        Store the latent-space scores for the surrogate produced by the current
+        Store latent-space diagnostics for the surrogate produced by the current
         batch.
+
+        Original-response-space RMSE, maximum absolute error, and :math:`R^2`
+        histories are stored by :meth:`AdaptiveSurrogate._add_iteration`. This
+        method stores the internal SurrogateGenerator latent-space diagnostics,
+        primarily for reporting and for the optional Gaussian-process ``"nlpd"``
+        convergence metric.
 
         This must use the current candidate surrogate, not necessarily
         ``current_surrogate``, because the storage policy may choose not to
@@ -4373,10 +4403,13 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         .. note::
 
             ``"Random Forest"`` and ``"RBF"`` do not provide predictive
-            standard deviations. Therefore, the latent-space ``"nlpd"``
-            convergence metric is not meaningful for these regressors. If the
-            study is requesting the ``"nlpd"`` convergence metric for these regressors, this
-            method switches it to ``"rmse"``.
+            standard deviations. Therefore, ``convergence_metric="nlpd"`` is not
+            meaningful for these regressors. If the study is requesting
+            ``"nlpd"`` convergence for one of these regressors, this method
+            switches the convergence metric to ``"rmse"``. The deterministic
+            convergence metrics ``"rmse"``, ``"max_error"``, ``"r2"``, and
+            ``"score"`` are computed in original response space and are valid
+            for all supported Voronoi surrogate backends.
 
         :param regressor_type: SurrogateGenerator regressor identifier.
         :type regressor_type: str
@@ -4395,8 +4428,13 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def _update_convergence_metric_for_current_surrogate_regressor(self):
         """
-        Use RMSE convergence by default for regressors that do not provide
-        predictive uncertainty.
+        Replace ``"nlpd"`` convergence with ``"rmse"`` for regressors that do
+        not provide Gaussian-process predictive uncertainty.
+
+        Deterministic convergence metrics such as ``"rmse"``, ``"max_error"``,
+        ``"r2"``, and ``"score"`` are computed in original response space and
+        are valid for all supported Voronoi surrogate backends. The ``"nlpd"``
+        convergence metric is the only GP-specific latent-space diagnostic.
         """
         regressor_type = self._surrogate_options.get(
             "regressor_type",
@@ -4551,24 +4589,82 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
     def set_convergence_criteria(self, eps=1e-12, convergence_metric='score'):
         """
-        Convergence is determined by comparing the selected surrogate latent-space
-        metric between two successive batches. Supported metrics are ``"rmse"``,
-        ``"nlpd"``, and ``"score"``.
+        Set convergence criteria based on the change in a selected metric between
+        successive adaptive batches.
 
-        :param convergence_metric: Surrogate latent-space metric used for convergence.
-            Supported values are ``"rmse"``, ``"nlpd"``, and ``"score"``.
-        :type convergence_metric: str
+        For deterministic metrics, convergence is evaluated using original
+        response-space common-test metrics stored by the adaptive surrogate:
 
-        :param eps: Absolute tolerance for the change in the selected convergence metric
+        * ``"rmse"``: original-response-space common-test RMSE;
+        * ``"max_error"``: original-response-space common-test maximum absolute error;
+        * ``"r2"`` or ``"score"``: original-response-space common-test global R2.
+
+        The special metric ``"nlpd"`` uses the Gaussian-process latent-space
+        negative log predictive density from the internal SurrogateGenerator and
+        is only valid for ``regressor_type="Gaussian Process"``.
+
+        :param eps: Absolute tolerance for the change in the selected metric
             between successive adaptive batches.
         :type eps: float
+
+        :param convergence_metric: Metric used for convergence. Supported values
+            are ``"rmse"``, ``"max_error"``, ``"r2"``, ``"score"``, and ``"nlpd"``.
+            ``"score"`` is treated as an alias for ``"r2"``.
+        :type convergence_metric: str
         """
         self._eps = eps
-        valid_metrics = ("rmse", "nlpd", "score")
+
+        valid_metrics = ("rmse", "max_error", "r2", "score", "nlpd")
         if convergence_metric not in valid_metrics:
-            raise ValueError(f"Selected metric \"{convergence_metric}\" is not valid."
-                             f" Use one of the following: {valid_metrics}")
+            raise ValueError(
+                f"Selected metric '{convergence_metric}' is not valid. "
+                f"Use one of the following: {valid_metrics}"
+            )
+
+        if convergence_metric == "score":
+            convergence_metric = "r2"
+
         self._convergence_metric = convergence_metric
+
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._convergence_metric,
+            self._surrogate_options,
+        )
+
+    def _get_original_data_space_convergence_history(self, metric):
+        """
+        Return the original-response-space convergence history for a metric.
+        """
+        if metric == "rmse":
+            return self._surrogate.rmse_history
+
+        if metric == "max_error":
+            return self._surrogate.max_error_history
+
+        if metric in ("r2", "score"):
+            return self._surrogate.r2_history
+
+        raise ValueError(
+            f"Metric '{metric}' is not an original-response-space "
+            "adaptive-surrogate convergence metric."
+        )
+
+    def _get_convergence_history_and_description(self):
+        """
+        Return the active convergence history and a text description.
+        """
+        if self._convergence_metric == "nlpd":
+            return (
+                self._current_surrogate_score["nlpd"],
+                "latent-space Gaussian-process NLPD",
+            )
+
+        return (
+            self._get_original_data_space_convergence_history(
+                self._convergence_metric
+            ),
+            f"original-response-space {self._convergence_metric}",
+        )
 
     def set_cross_validation_options(self, nsplits=10, nmax_folds=3, nmax_loo=1, cv_scale=1.0,
                                      cv_metric='sum_abs', group_kfold=False, batch_size=1):
@@ -4784,18 +4880,31 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate)
 
     def _stopping_criterion_met(self, training_batch_number, stop=False):
-        scores = self._current_surrogate_score
-        if training_batch_number > 1:
-            this_score = scores[self._convergence_metric][training_batch_number]
-            last_score = scores[self._convergence_metric][training_batch_number-1]
-            if np.abs(this_score - last_score) <= self._eps:
-                logger.info(f"Surrogate Converged!\n"+
-                             f"Convergence from surrogate '{self._convergence_metric}' score:")
-                logger.info(f"Final score: {this_score}")
-                logger.info(f"Score delta: {np.abs(this_score - last_score)}")
-                logger.info(f"Score delta convergence criteria: {self._eps}\n")
-                
-                stop = True
+        history, metric_description = self._get_convergence_history_and_description()
+
+        if training_batch_number > 1 and len(history) >= 2:
+            this_score = history[-1]
+            last_score = history[-2]
+
+            if np.isfinite(this_score) and np.isfinite(last_score):
+                score_delta = np.abs(this_score - last_score)
+
+                if score_delta <= self._eps:
+                    logger.info(
+                        "Surrogate converged based on change in "
+                        f"{metric_description}."
+                    )
+                    logger.info(f"Final metric value: {this_score}")
+                    logger.info(f"Metric delta: {score_delta}")
+                    logger.info(f"Metric delta convergence criterion: {self._eps}\n")
+                    stop = True
+            else:
+                logger.warning(
+                    "Skipping Voronoi surrogate convergence-delta check because "
+                    f"the selected metric '{self._convergence_metric}' contains "
+                    f"non-finite values: previous={last_score}, current={this_score}."
+                )
+
         return super()._stopping_criterion_met(training_batch_number, stop)
 
     def _run_initial_training_samples(self):

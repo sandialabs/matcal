@@ -152,7 +152,7 @@ Implementation Details
 
 In MatCal's implementation, PCA is used automatically only when the number of
 quantities of interest, or response features, is greater than 15. If the
-response has 15 or fewer features, MatCal skips PCA and uses the native response
+response has 15 or fewer features, MatCal skips PCA and uses the original data response
 features directly. This avoids unnecessary decomposition for small responses.
 
 The scikit-learn implementation of PCA is used by MatCal :cite:`scikit-learn`.
@@ -503,8 +503,8 @@ For example:
    )
 
 When the response has more than 15 features, MatCal applies PCA before training
-the RBF model. For smaller responses, the RBF model predicts the scaled native
-response features directly.
+the RBF model. For smaller responses, the RBF model predicts the scaled original-response-space
+features directly.
 
 Because the RBF implementation does not provide predictive standard deviations,
 uncertainty-based metrics such as negative log predictive density are not
@@ -847,10 +847,40 @@ For example:
        decomp_var=0.99,
    )
 
-Cross-validation errors are computed in native response space for deterministic
-metrics such as ``"rmse"``, ``"mae"``, ``"sum_abs"``, and ``"nrmse"``. The
-special ``"nlpd"`` option uses Gaussian-process latent-space uncertainty
-diagnostics instead.
+``set_convergence_criteria``
+    Configures an optional stopping criterion based on the change in a selected
+    metric between successive adaptive batches.
+
+    For deterministic metrics, the convergence check uses the same
+    original-response-space common-test metrics stored by the adaptive surrogate:
+
+    * ``"rmse"``: root-mean-squared error on the stored test set;
+    * ``"max_error"``: maximum absolute error on the stored test set;
+    * ``"r2"`` or ``"score"``: global :math:`R^2` score on the stored test set.
+
+    For example:
+
+    .. code-block:: python
+
+       study.set_convergence_criteria(
+           eps=1.0e-12,
+           convergence_metric="max_error",
+       )
+
+    The special ``"nlpd"`` convergence metric is different. It uses the
+    Gaussian-process latent-space negative log predictive density stored by the
+    internal :class:`~matcal.core.surrogates.SurrogateGenerator`. This option is
+    only valid when ``regressor_type="Gaussian Process"``.
+
+Cross-validation errors used to select Voronoi refinement regions are computed
+in original data response space for deterministic metrics such as ``"rmse"``,
+``"mae"``, ``"sum_abs"``, and ``"nrmse"``. The special ``"nlpd"`` option uses
+Gaussian-process latent-space uncertainty diagnostics instead.
+
+These cross-validation metrics control where new Voronoi samples are placed.
+They are separate from ``set_convergence_criteria``, which controls when the
+adaptive loop stops based on the change in a selected metric between successive
+batches.
 
 * ``"rmse"``;
 * ``"mae"`` or ``"abs"``;

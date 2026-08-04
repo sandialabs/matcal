@@ -112,12 +112,13 @@ study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 # that sets a stopping criteria based on the test sample error.
 study.set_error_stopping_criteria(max_abs_error_goal=1.5)
 #%%
-# To set stopping criteria on the convergence of test errors 
-# after each iteration, alternatively use 
+# To stop when the common-test-set error stagnates between adaptive batches,
+# use
 # :meth:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy.set_convergence_criteria`.
-# Here we set it arbitrarily small, because we are attempting to 
-# drive the error down in the surrogate 
-# and have a desired max error goal.
+# For deterministic metrics such as ``"max_error"`` and ``"rmse"``, this
+# convergence check uses original-response-space errors on the stored test set.
+# Here we use set ``eps`` very small because we want the adaptive loop to stop
+# based on the requested error goal or maximum training-sample limit.
 study.set_convergence_criteria(eps=1e-12)
 
 # Now we set some basic surrogate training options for the study.

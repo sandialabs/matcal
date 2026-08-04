@@ -169,7 +169,6 @@ print(surrogate.stored_surrogate_scores[best_surrogate_index])
 print("Best retained surrogate R2 score:\n", surrogate.score(best_surrogate_index))
 
 #%%
-#%%
 # The retained-surrogate test scores and error histories indicate that the
 # surrogate can be used to predict the selected response. The adaptive surrogate
 # also stores the common test parameters and responses used to score each retained

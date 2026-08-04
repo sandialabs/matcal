@@ -116,12 +116,20 @@ study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 # common test set.
 study.set_error_stopping_criteria(max_abs_error_goal=1.5)
 
-# %%
-# RBF surrogates do not support NLPD convergence, so we explicitly use RMSE
-# convergence between successive candidate surrogates.
+#%%
+# To stop when the common-test-set error stagnates between adaptive batches,
+# use
+# :meth:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy.set_convergence_criteria`.
+# For deterministic metrics such as ``"max_error"`` and ``"rmse"``, this
+# convergence check uses original-response-space errors on the stored test set.
+# Here we set ``eps`` very small because we primarily want the adaptive loop to stop
+# based on the requested error goal or maximum training-sample limit.
 study.set_convergence_criteria(
     eps=1e-12,
-    convergence_metric="rmse",
+    convergence_metric="max_error",
+)
+study.set_convergence_criteria(
+    eps=1e-12,
 )
 
 # %%

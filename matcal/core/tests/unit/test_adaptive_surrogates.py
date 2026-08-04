@@ -1223,8 +1223,8 @@ class _FakeSurrogate:
     stopping‑criterion method.
     """
     def __init__(self):
-        self._root_mean_squared_errors = []   # filled by the test
-        self._max_errors = []       # filled by the test
+        self._root_mean_squared_errors = []
+        self._max_errors = []
         self._r2_scores = []
 
     @property
@@ -1234,6 +1234,14 @@ class _FakeSurrogate:
     @property
     def max_error_history(self):
         return self._max_errors
+
+    @property
+    def r2_history(self):
+        return self._r2_scores
+
+    @property
+    def score_history(self):
+        return self._r2_scores
 
     def score(self, index=-1):
         return self._r2_scores[index]
@@ -2970,7 +2978,7 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
     def test_set_surrogate_regressor_accepts_random_forest(self):
         study = self._make_two_parameter_study()
 
-        self.assertEqual(study._convergence_metric, "score")
+        self.assertEqual(study._convergence_metric, "r2")
 
         study.set_surrogate_regressor(
             "Random Forest",
@@ -2984,12 +2992,12 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
         )
         self.assertEqual(study._surrogate_options["n_estimators"], 7)
         self.assertEqual(study._surrogate_options["random_state"], 123)
-        self.assertEqual(study._convergence_metric, "score")
+        self.assertEqual(study._convergence_metric, "r2")
 
     def test_set_surrogate_regressor_accepts_rbf(self):
         study = self._make_two_parameter_study()
 
-        self.assertEqual(study._convergence_metric, "score")
+        self.assertEqual(study._convergence_metric, "r2")
 
         study.set_surrogate_regressor(
             "RBF",
@@ -2998,7 +3006,7 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
 
         self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
         self.assertEqual(study._surrogate_options["neighbors"], 11)
-        self.assertEqual(study._convergence_metric, "score")
+        self.assertEqual(study._convergence_metric, "r2")
 
     def test_set_surrogate_regressor_rejects_unknown_regressor(self):
         study = self._make_two_parameter_study()
@@ -3021,7 +3029,7 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
         )
         self.assertEqual(study._surrogate_options["n_estimators"], 5)
         self.assertEqual(study._surrogate_options["random_state"], 321)
-        self.assertEqual(study._convergence_metric, "score")
+        self.assertEqual(study._convergence_metric, "r2")
 
     def test_set_surrogate_options_validates_rbf_regressor(self):
         study = self._make_two_parameter_study()
@@ -3033,13 +3041,202 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
 
         self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
         self.assertEqual(study._surrogate_options["neighbors"], 9)
-        self.assertEqual(study._convergence_metric, "score")
+        self.assertEqual(study._convergence_metric, "r2")
 
     def test_set_surrogate_options_rejects_unknown_regressor(self):
         study = self._make_two_parameter_study()
 
         with self.assertRaises(ValueError):
             study.set_surrogate_options(regressor_type="bad_regressor")
+
+    def test_set_convergence_criteria_accepts_original_response_space_metrics(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="rmse",
+        )
+        self.assertEqual(study._eps, 1.0e-8)
+        self.assertEqual(study._convergence_metric, "rmse")
+
+        study.set_convergence_criteria(
+            eps=1.0e-7,
+            convergence_metric="max_error",
+        )
+        self.assertEqual(study._eps, 1.0e-7)
+        self.assertEqual(study._convergence_metric, "max_error")
+
+        study.set_convergence_criteria(
+            eps=1.0e-6,
+            convergence_metric="r2",
+        )
+        self.assertEqual(study._eps, 1.0e-6)
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_convergence_criteria_treats_score_as_r2_alias(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="score",
+        )
+
+        # If your implementation keeps "score" internally, change this expected
+        # value to "score".
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_convergence_criteria_accepts_nlpd_for_default_gp(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="nlpd",
+        )
+
+        self.assertEqual(study._convergence_metric, "nlpd")
+
+    def test_set_convergence_criteria_rejects_invalid_metric(self):
+        study = self._make_two_parameter_study()
+
+        with self.assertRaises(ValueError):
+            study.set_convergence_criteria(
+                eps=1.0e-8,
+                convergence_metric="not_a_metric",
+            )
+
+    def _make_voronoi_study_for_stopping_test(self):
+        study = self._make_two_parameter_study()
+        study._surrogate = _FakeSurrogate()
+        study._results = _FakeResults(n_evals=10)
+        study._max_training_samples = 1000
+        study.set_error_stopping_criteria(
+            rmse_goal=1.0e-300,
+            max_abs_error_goal=1.0e-300,
+        )
+        return study
+
+    def test_voronoi_convergence_uses_original_response_space_rmse_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="rmse",
+        )
+
+        study._surrogate._root_mean_squared_errors = [1.0, 1.03]
+        study._surrogate._max_errors = [10.0, 20.0]
+        study._surrogate._r2_scores = [0.1, 0.2]
+
+        # Latent-space diagnostics should not control deterministic RMSE
+        # convergence after the refactor.
+        study._current_surrogate_score = {
+            "score": [0.0, 0.0],
+            "rmse": [100.0, 200.0],
+            "nlpd": [np.nan, np.nan],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_voronoi_convergence_uses_original_response_space_max_error_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="max_error",
+        )
+
+        study._surrogate._root_mean_squared_errors = [1.0, 2.0]
+        study._surrogate._max_errors = [10.0, 10.03]
+        study._surrogate._r2_scores = [0.1, 0.2]
+
+        study._current_surrogate_score = {
+            "score": [0.0, 0.0],
+            "rmse": [100.0, 200.0],
+            "nlpd": [np.nan, np.nan],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_voronoi_convergence_uses_original_response_space_r2_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="r2",
+        )
+
+        study._surrogate._root_mean_squared_errors = [1.0, 2.0]
+        study._surrogate._max_errors = [10.0, 20.0]
+        study._surrogate._r2_scores = [0.80, 0.83]
+
+        study._current_surrogate_score = {
+            "score": [0.0, 0.0],
+            "rmse": [100.0, 200.0],
+            "nlpd": [np.nan, np.nan],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_voronoi_nlpd_convergence_uses_latent_nlpd_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="nlpd",
+        )
+
+        # Original-response-space histories do not stagnate.
+        study._surrogate._root_mean_squared_errors = [1.0, 2.0]
+        study._surrogate._max_errors = [10.0, 20.0]
+        study._surrogate._r2_scores = [0.1, 0.2]
+
+        # NLPD does stagnate, so convergence should be triggered.
+        study._current_surrogate_score = {
+            "score": [0.0, 0.5],
+            "rmse": [1.0, 2.0],
+            "nlpd": [3.0, 3.03],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_nlpd_convergence_switches_to_rmse_for_random_forest(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="nlpd",
+        )
+
+        study.set_surrogate_regressor(
+            "Random Forest",
+            n_estimators=5,
+            random_state=123,
+        )
+
+        self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_nlpd_convergence_switches_to_rmse_for_rbf(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="nlpd",
+        )
+
+        study.set_surrogate_regressor(
+            "RBF",
+            neighbors=5,
+        )
+
+        self.assertEqual(study._convergence_metric, "rmse")
 
 
 class TestSparseGridAdaptiveSurrogateStudy(
