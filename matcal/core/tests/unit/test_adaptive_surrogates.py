@@ -14,6 +14,8 @@ from matcal.core.adaptive_surrogates import (
     _filter_points_within_bounds,
     _find_matching_row_index,
     _finite_vertex_indices,
+    _fit_cv_surrogate_and_calculate_original_data_space_error,
+    _fit_surrogate_model,
     _get_parameter_bounds, 
     _make_bounded_nd_grid,
     _make_group_kfold_splits,
@@ -1439,6 +1441,83 @@ class TestGlobalHelperFunctions(MatcalUnitTest):
         self.assertEqual(error, 123.0)
         metric_mock.assert_called_once()
 
+    def test_fit_surrogate_model_with_none_save_filename_calls_generate_with_none(self):
+        fake_surrogate = object()
+
+        with patch("matcal.core.surrogates.SurrogateGenerator") as generator_class:
+            generator = generator_class.return_value
+            generator.generate.return_value = fake_surrogate
+
+            result = _fit_surrogate_model(
+                eval_info=object(),
+                interpolation_field="x",
+                interpolation_locations=np.array([0.0, 1.0]),
+                test_eval_info=object(),
+                target_field="response",
+                save_filename=None,
+                logger_on=False,
+                regressor_type="RBF",
+                neighbors=3,
+            )
+
+        self.assertIs(result, fake_surrogate)
+        generator.generate.assert_called_once_with(None)
+
+    def test_fit_surrogate_model_strips_joblib_suffix_when_filename_is_supplied(self):
+        fake_surrogate = object()
+
+        with patch("matcal.core.surrogates.SurrogateGenerator") as generator_class:
+            generator = generator_class.return_value
+            generator.generate.return_value = fake_surrogate
+
+            result = _fit_surrogate_model(
+                eval_info=object(),
+                interpolation_field="x",
+                interpolation_locations=np.array([0.0, 1.0]),
+                test_eval_info=object(),
+                target_field="response",
+                save_filename="candidate_surrogate.joblib",
+                logger_on=False,
+                regressor_type="RBF",
+                neighbors=3,
+            )
+
+        self.assertIs(result, fake_surrogate)
+        generator.generate.assert_called_once_with("candidate_surrogate")
+
+    def test_cv_helper_fits_temporary_surrogate_without_save_filename(self):
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=7.5,
+            ) as error_mock:
+                error = _fit_cv_surrogate_and_calculate_original_data_space_error(
+                    train_eval_info=object(),
+                    test_eval_info=object(),
+                    X_test=np.array([[0.0, 0.0]]),
+                    y_test=[{"x": np.array([0.0]), "response": np.array([1.0])}],
+                    interpolation_field="x",
+                    interpolation_values=np.array([0.0]),
+                    target_field="response",
+                    surrogate_options={"regressor_type": "RBF", "neighbors": 3},
+                    metric="rmse",
+                    scale=1.0,
+                    save_filename="this_should_not_be_used.joblib",
+                )
+
+        self.assertEqual(error, 7.5)
+
+        fit_mock.assert_called_once()
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
+
+        error_mock.assert_called_once()
+        self.assertIs(error_mock.call_args[0][0], fake_surrogate)
+
 
 class TestVoronoiPureFunctions(MatcalUnitTest):
 
@@ -1890,6 +1969,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         self.assert_close_arrays(error_args[5], np.array([0.0, 1.0]))
         self.assertEqual(error_args[6], "sum_abs")
         self.assertEqual(error_args[7], 1.0)
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
 
     def test_perform_loocv_returns_error_and_original_sample_index(self):
         loocv = self._make_loocv()
@@ -1943,6 +2023,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
         self.assertEqual(fit_kwargs["regressor_type"], "Random Forest")
         self.assertEqual(fit_kwargs["n_estimators"], 4)
         self.assertEqual(fit_kwargs["random_state"], 456)
+        self.assertIsNone(fit_kwargs["save_filename"])
 
     def test_evaluate_loo_sample_forwards_rbf_surrogate_options(self):
         X, y = self._make_training_arrays()
@@ -1976,6 +2057,7 @@ class TestLeaveOneOutCrossValidation(MatcalUnitTest):
 
         self.assertEqual(fit_kwargs["regressor_type"], "RBF")
         self.assertEqual(fit_kwargs["neighbors"], 5)
+        self.assertIsNone(fit_kwargs["save_filename"])
 
 
 class TestKFoldCrossValidation(MatcalUnitTest):
@@ -2194,6 +2276,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assert_close_arrays(error_args[5], np.array([0.0, 1.0]))
         self.assertEqual(error_args[6], "rmse")
         self.assertEqual(error_args[7], 1.0)
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
 
     def test_evaluate_cv_splits_returns_fold_dictionary(self):
         X, y = self._make_training_arrays()
@@ -2276,6 +2359,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         self.assertEqual(fit_kwargs["regressor_type"], "Random Forest")
         self.assertEqual(fit_kwargs["n_estimators"], 3)
         self.assertEqual(fit_kwargs["random_state"], 123)
+        self.assertIsNone(fit_kwargs["save_filename"])
 
     def test_evaluate_fold_forwards_rbf_surrogate_options(self):
         X, y = self._make_training_arrays()
@@ -2320,6 +2404,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
         self.assertEqual(fit_kwargs["regressor_type"], "RBF")
         self.assertEqual(fit_kwargs["neighbors"], 7)
+        self.assertIsNone(fit_kwargs["save_filename"])
 
 
 class TestVoronoiTessellation(MatcalUnitTest):
@@ -3237,6 +3322,67 @@ class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
         )
 
         self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_voronoi_train_current_results_does_not_save_candidate_surrogate(self):
+        study = self._make_two_parameter_study()
+
+        study._independent_variable = "x"
+        study._independent_variable_values = np.array([0.0, 1.0])
+        study._target_field_name = "response"
+        study._test_eval_info = object()
+        study._surrogate_options = {}
+        study._surrogate_save_filename = "adaptive_container.joblib"
+        study._results = _FakeResults(n_evals=5)
+
+        study._format_params = lambda results: np.zeros((5, 2))
+        study._format_output_for_surrogate_gen = lambda results: []
+
+        class FakeAdaptiveSurrogateContainer:
+            def __init__(self):
+                self.added_surrogate = None
+                self.added_nsamples = None
+
+            def _add_iteration(self, surrogate, nsamples):
+                self.added_surrogate = surrogate
+                self.added_nsamples = nsamples
+
+        fake_container = FakeAdaptiveSurrogateContainer()
+        study._surrogate = fake_container
+
+        fake_candidate_surrogate = types.SimpleNamespace(
+            _latent_scores={
+                "test": {
+                    "response": {
+                        "score": np.array([0.95]),
+                        "rmse": np.array([0.01]),
+                        "nlpd": np.array([1.25]),
+                    }
+                }
+            }
+        )
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_candidate_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates.matcal_save",
+            ) as save_mock:
+                training_params, training_data = study._train_surrogate_with_current_results()
+
+        fit_mock.assert_called_once()
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
+
+        self.assertIs(fake_container.added_surrogate, fake_candidate_surrogate)
+        self.assertEqual(fake_container.added_nsamples, 5)
+
+        save_mock.assert_called_once_with(
+            "adaptive_container.joblib",
+            fake_container,
+        )
+
+        self.assert_close_arrays(training_params, np.zeros((5, 2)))
+        self.assertEqual(training_data, [])
 
 
 class TestSparseGridAdaptiveSurrogateStudy(

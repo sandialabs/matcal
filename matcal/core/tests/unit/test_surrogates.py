@@ -818,7 +818,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
 
         self.assertAlmostEqual(actual, expected)
 
-
     def test_calculate_response_error_metric_mae(self):
         y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
         y_pred = np.array([[1.0, 1.0], [5.0, 4.0]])
@@ -828,7 +827,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
         actual = _calculate_response_error_metric(y_true, y_pred, "mae")
 
         self.assertAlmostEqual(actual, expected)
-
 
     def test_calculate_response_error_metric_sum_abs(self):
         y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
@@ -1176,6 +1174,81 @@ class TestSurrogateGenerator(MatcalUnitTest):
                 self.assertIsInstance(mode_regressor, _RBFInterpolatorRegressor)
                 self.assertEqual(mode_regressor._effective_neighbors, 25)
 
+    def test_generate_with_none_save_filename_does_not_serialize_surrogate(self):
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0, 1, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=30,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0, 1, 5),
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Multiple Regressors",
+            regressor_type="RBF",
+            neighbors=5,
+        )
+
+        with patch("matcal.core.surrogates.matcal_save") as save_mock:
+            surrogate = sur_gen.generate(None)
+
+        self.assertIsNotNone(surrogate)
+        save_mock.assert_not_called()
+
+    def test_generate_with_save_filename_serializes_surrogate(self):
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0, 1, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=30,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0, 1, 5),
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Multiple Regressors",
+            regressor_type="RBF",
+            neighbors=5,
+        )
+
+        with patch("matcal.core.surrogates.matcal_save") as save_mock:
+            surrogate = sur_gen.generate("saved_test_surrogate")
+
+        self.assertIsNotNone(surrogate)
+        save_mock.assert_called_once()
+        self.assertEqual(save_mock.call_args[0][0], "saved_test_surrogate.joblib")
+        
+    def test_generate_with_none_save_filename_and_plot_worst_raises(self):
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0, 1, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=30,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0, 1, 5),
+        )
+
+        with self.assertRaises(ValueError):
+            sur_gen.generate(None, plot_n_worst=1)
 
 class TestProcessSurrogateArgsCall(MatcalUnitTest):
 
