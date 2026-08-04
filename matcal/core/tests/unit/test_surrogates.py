@@ -14,26 +14,38 @@ from matcal.core.study_base import StudyResults
 from matcal.core.surrogates import (
     _DoNothingDataTransformer,
     _MatCalLogScaler, 
+    MatCalMonolithicPCASurrogate,
     _ReconstructionDecomposition, 
     _RBFInterpolatorRegressor,
     SurrogateGenerator, 
     _VarianceDecomposition, 
     _WorstEvaluations,
     _apply_preprocessing_function, 
+    _apply_regressor_metric,
     _assign_decomp, 
     _calculate_nlpd,
+    _calculate_performance_metrics,
     _calculate_response_error_metric,
+    _check_fields_in_keys_list,
+    _convert_param_array_to_dict,
+    _decompose_with_pca,
+    _ensure_2d_array,
+    _field_uses_pca,
+    _get_n_points,
     _identify_fields_of_interest, 
     _import_parameter_hist, 
     _make_parameter_scaler_set,  
     _mean_absolute_error,
+    _modal_regressor,
     _normalized_root_mean_squared_error,
     _package_parameter_ranges, 
     _parse_evaluation_info, 
+    _prepare_metric_arrays,
     _print_scores,
     _process_data_for_surrogate, 
     _process_interpolation_locations, 
     _process_surrogate_args_call,
+    _record_variance_behaviors,
     _root_mean_squared_error,
     _scale_data_for_surrogate,
     _score_recreation,
@@ -45,6 +57,7 @@ from matcal.core.surrogates import (
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.utilities_for_tests import _generate_singe_model_single_state_mock_eval_hist
+
 
 def _setup_initial_surrogate_generator(n_samples, p_names, p_low, p_high, 
                                        indep_var, test_function, interp_locations=200, training_fraction=0.8,
@@ -838,7 +851,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
 
         self.assertAlmostEqual(actual, expected)
 
-
     def test_calculate_response_error_metric_nrmse(self):
         y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
         y_pred = np.array([[1.0, 1.0], [5.0, 4.0]])
@@ -849,7 +861,6 @@ class TestSurrogateFunctions(MatcalUnitTest):
 
         self.assertAlmostEqual(actual, expected)
 
-
     def test_calculate_response_error_metric_rejects_nlpd(self):
         y_true = np.array([[1.0, 2.0]])
         y_pred = np.array([[1.0, 2.0]])
@@ -857,6 +868,481 @@ class TestSurrogateFunctions(MatcalUnitTest):
         with self.assertRaises(ValueError):
             _calculate_response_error_metric(y_true, y_pred, "nlpd")
 
+    def test_check_fields_in_keys_list_raises_for_missing_field(self):
+        with self.assertRaises(KeyError):
+            _check_fields_in_keys_list(
+                ["missing"],
+                ["present"],
+                "test data set",
+            )
+
+    def test_select_state_data_raises_when_multiple_states_and_none_requested(self):
+        class FakeDataCollection:
+            state_names = ["state_a", "state_b"]
+
+            def __getitem__(self, key):
+                return key
+
+        with self.assertRaises(ValueError):
+            _select_state_data(None, FakeDataCollection())
+
+    def test_parse_evaluation_info_rejects_invalid_type(self):
+        with self.assertRaises(TypeError):
+            _parse_evaluation_info(object(), None)
+
+    def test_get_n_points_uses_field_length_when_no_interpolation_locations(self):
+        n_points = _get_n_points(
+            interpolation_locations=None,
+            training_data_list=[{"response": np.arange(7)}],
+            field="response",
+        )
+
+        self.assertEqual(n_points, 7)
+
+    def test_process_interpolation_locations_returns_none_without_interpolation_field(self):
+        value = _process_interpolation_locations(
+            output_history=None,
+            interpolation_locations=10,
+            interpolation_field=None,
+        )
+
+        self.assertIsNone(value)
+
+    def test_process_interpolation_locations_rejects_non_array_like(self):
+        class BadInterpolationLocations:
+            pass
+
+        with self.assertRaises(ValueError):
+            _process_interpolation_locations(
+                output_history=None,
+                interpolation_locations=BadInterpolationLocations(),
+                interpolation_field="x",
+            )
+
+    def test_ensure_2d_array_converts_non_numpy_input(self):
+        result = _ensure_2d_array([1.0, 2.0, 3.0])
+
+        expected = np.array([[1.0], [2.0], [3.0]])
+        self.assert_close_arrays(result, expected)
+
+    def test_convert_param_array_to_dict_returns_dict_input_unchanged(self):
+        params = OrderedDict()
+        params["a"] = np.array([1.0])
+        params["b"] = np.array([2.0])
+
+        result = _convert_param_array_to_dict(params, ["a", "b"])
+
+        self.assertIs(result, params)
+
+    def test_prepare_metric_arrays_rejects_incompatible_shapes(self):
+        reference = np.array([[1.0, 2.0], [3.0, 4.0]])
+        prediction = np.array([1.0, 2.0, 3.0])
+
+        with self.assertRaises(RuntimeError):
+            _prepare_metric_arrays(reference, prediction)
+
+    def test_normalized_rmse_falls_back_to_rmse_for_zero_reference_norm(self):
+        reference = np.zeros((2, 2))
+        prediction = np.ones((2, 2))
+
+        expected = _root_mean_squared_error(reference, prediction)
+        actual = _normalized_root_mean_squared_error(reference, prediction)
+
+        self.assertAlmostEqual(actual, expected)
+
+    def test_prepare_metric_arrays_rejects_same_size_different_shape(self):
+        reference = np.array([[1.0, 2.0], [3.0, 4.0]])
+        prediction = np.array([1.0, 2.0, 3.0, 4.0])
+
+        with self.assertRaises(RuntimeError):
+            _prepare_metric_arrays(reference, prediction)
+
+    def test_prepare_metric_arrays_accepts_matching_shapes(self):
+        reference = np.array([[1.0, 2.0], [3.0, 4.0]])
+        prediction = np.array([[1.0, 2.0], [3.0, 4.0]])
+
+        ref_out, pred_out = _prepare_metric_arrays(reference, prediction)
+
+        self.assert_close_arrays(ref_out, reference)
+        self.assert_close_arrays(pred_out, prediction)
+
+    def test_calculate_response_error_metric_max_error(self):
+        y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y_pred = np.array([[1.0, -1.0], [10.0, 4.0]])
+
+        actual = _calculate_response_error_metric(y_true, y_pred, "max_error")
+
+        self.assertAlmostEqual(actual, 7.0)
+
+    def test_calculate_response_error_metric_r2_and_score(self):
+        y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
+        y_pred = y_true.copy()
+
+        self.assertAlmostEqual(
+            _calculate_response_error_metric(y_true, y_pred, "r2"),
+            1.0,
+        )
+        self.assertAlmostEqual(
+            _calculate_response_error_metric(y_true, y_pred, "score"),
+            1.0,
+        )
+
+    def test_calculate_performance_metrics_uses_none_score_for_one_sample(self):
+        class FakeRegressor:
+            def score(self, input_values, output_values):
+                raise RuntimeError("score should not be called for one sample")
+
+            def predict(self, input_values, return_std=False):
+                if return_std:
+                    raise RuntimeError("No predictive standard deviation")
+                return np.zeros((1, 2))
+
+        metrics = _calculate_performance_metrics(
+            FakeRegressor(),
+            param=np.array([[0.0]]),
+            data=np.array([[1.0, 2.0]]),
+        )
+
+        self.assertIsNone(metrics[0])
+        self.assertTrue(np.isnan(metrics[1]))
+        self.assertAlmostEqual(metrics[2], np.sqrt((1.0**2 + 2.0**2) / 2.0))
+
+    def test_apply_regressor_metric_non_modal_regressor_path(self):
+        class FakeRegressor:
+            pass
+
+        def metric_func(regressor, input_values, y_true):
+            return 12.5
+
+        value = _apply_regressor_metric(
+            FakeRegressor(),
+            input_values=np.array([[0.0]]),
+            evals=np.array([[1.0]]),
+            metric_func=metric_func,
+        )
+
+        self.assertEqual(value, 12.5)
+
+    def test_modal_regressor_fit_rejects_inconsistent_input_size(self):
+        regressor = _modal_regressor(
+            regressor_type="RBF",
+            n_inputs=2,
+            regressor_kwargs={"neighbors": 2},
+        )
+
+        with self.assertRaises(ValueError):
+            regressor.fit(
+                input_values=np.zeros((3, 1)),
+                mode_values=np.zeros((3, 1)),
+            )
+
+    def test_decompose_with_pca_logs_non_real_option(self):
+        rng = np.random.default_rng(123)
+        data = rng.normal(size=(20, 5))
+
+        transformed, pca = _decompose_with_pca(
+            data,
+            var_tol="mle",
+            logger_on=True,
+        )
+
+        self.assertEqual(transformed.shape[0], data.shape[0])
+        self.assertTrue(hasattr(pca, "n_components_"))
+
+    def test_tune_data_decomposition_logs_max_modes_reached(self):
+        rng = np.random.default_rng(123)
+        source_data = rng.normal(size=(8, 20))
+
+        data_scaler, decomposer, scaled_latent_data, latent_scaler = (
+            _tune_data_decomposition(
+                source_data,
+                make_log_scale=False,
+                reconstruction_error_tol=1.0e-300,
+                max_modes=1,
+                logger_on=False,
+            )
+        )
+
+        self.assertIsNotNone(data_scaler)
+        self.assertIsNotNone(decomposer)
+        self.assertIsNotNone(latent_scaler)
+        self.assertEqual(scaled_latent_data.shape[0], source_data.shape[0])
+
+    def test_record_variance_behaviors_saves_plot(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        class FakeDecomposer:
+            explained_variance_ratio_ = np.array([0.8, 0.15, 0.05])
+
+        with patch("matplotlib.pyplot.savefig") as savefig_mock:
+            _record_variance_behaviors(
+                FakeDecomposer(),
+                filename_base="variance_test",
+                field_name="response",
+            )
+
+        savefig_mock.assert_called_once()
+        self.assertEqual(
+            savefig_mock.call_args[0][0],
+            "variance_test_response_pca_variance.png",
+        )
+
+        plt.close("all")
+
+    def test_rbf_interpolator_rejects_non_2d_input_values(self):
+        regressor = _RBFInterpolatorRegressor()
+
+        with self.assertRaises(ValueError):
+            regressor.fit(
+                input_values=np.array([0.0, 1.0, 2.0]),
+                output_values=np.array([0.0, 1.0, 2.0]),
+            )
+
+    def test_rbf_interpolator_accepts_neighbors_none(self):
+        x = np.array([
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ])
+        y = x[:, 0] + x[:, 1]
+
+        regressor = _RBFInterpolatorRegressor(
+            neighbors=None,
+            kernel="linear",
+            degree=0,
+        )
+
+        regressor.fit(x, y)
+
+        self.assertIsNone(regressor._effective_neighbors)
+
+    def test_rbf_interpolator_rejects_nonpositive_neighbors(self):
+        x = np.array([
+            [0.0, 0.0],
+            [1.0, 0.0],
+        ])
+        y = np.array([0.0, 1.0])
+
+        regressor = _RBFInterpolatorRegressor(neighbors=0)
+
+        with self.assertRaises(ValueError):
+            regressor.fit(x, y)
+
+    def test_rbf_interpolator_predict_before_fit_raises(self):
+        regressor = _RBFInterpolatorRegressor()
+
+        with self.assertRaises(RuntimeError):
+            regressor.predict(np.array([[0.0, 0.0]]))
+
+    def test_rbf_interpolator_score_reshapes_column_output(self):
+        x = np.array([
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ])
+        y = x[:, 0] + x[:, 1]
+
+        regressor = _RBFInterpolatorRegressor(
+            neighbors=4,
+            kernel="linear",
+            degree=0,
+        )
+        regressor.fit(x, y)
+
+        score = regressor.score(x, y.reshape(-1, 1))
+
+        self.assertGreater(score, 0.99)
+
+    def test_format_ax_set_wraps_single_axes(self):
+        sur_gen = SurrogateGenerator(
+            {"input": {}, "output": {}},
+            training_fraction=0.8,
+        )
+
+        ax = object()
+        formatted = sur_gen._format_ax_set(1, ax)
+
+        self.assertEqual(formatted, [ax])
+
+    def test_plot_set_without_prediction_locations(self):
+        class FakeAxes:
+            def __init__(self):
+                self.plot_calls = []
+                self.xlabel = None
+                self.ylabel = None
+                self.title = None
+                self.legend_called = False
+
+            def plot(self, *args, **kwargs):
+                self.plot_calls.append((args, kwargs))
+
+            def set_xlabel(self, value):
+                self.xlabel = value
+
+            def set_ylabel(self, value):
+                self.ylabel = value
+
+            def set_title(self, value):
+                self.title = value
+
+            def legend(self):
+                self.legend_called = True
+
+        class FakeSurrogate:
+            prediction_locations = None
+            independent_field = None
+
+        sur_gen = SurrogateGenerator(
+            {"input": {}, "output": {}},
+            training_fraction=0.8,
+        )
+
+        axes = FakeAxes()
+
+        source_data = {
+            "response": np.array([[1.0, 2.0, 3.0]])
+        }
+        surrogate_prediction = {
+            "response": np.array([[1.1, 1.9, 3.2]])
+        }
+
+        sur_gen._plot_set(
+            FakeSurrogate(),
+            source_data,
+            surrogate_prediction,
+            axes,
+            "response",
+            0,
+        )
+
+        self.assertEqual(len(axes.plot_calls), 2)
+        self.assertIsNone(axes.xlabel)
+        self.assertEqual(axes.ylabel, "response")
+        self.assertIn("response eval index0", axes.title)
+        self.assertTrue(axes.legend_called)
+
+    def test_get_worst_recreations_returns_requested_number(self):
+        sur_gen = SurrogateGenerator(
+            {"input": {}, "output": {}},
+            training_fraction=0.8,
+        )
+
+        source_data = {
+            "response": np.array([
+                [1.0, 2.0],
+                [3.0, 4.0],
+                [5.0, 6.0],
+            ])
+        }
+
+        surrogate_prediction = {
+            "response": np.array([
+                [1.0, 2.0],
+                [10.0, 10.0],
+                [5.1, 6.1],
+            ])
+        }
+
+        worst = sur_gen._get_worst_recreations(
+            source_data,
+            n_worst=2,
+            n_eval=3,
+            sur_predict=surrogate_prediction,
+        )
+
+        self.assertEqual(len(worst), 2)
+
+    def test_parameter_scaler_set_inverse_transform_as_array(self):
+        params = OrderedDict()
+        params["a"] = np.array([0.0, 1.0, 2.0])
+        params["b"] = np.array([-1.0, 0.0, 1.0])
+
+        scaler_set = _make_parameter_scaler_set(params, fields_to_log_scale=["a", "b"])
+
+        scaled = scaler_set.transform_as_array(params.copy())
+        recovered = scaler_set.inverse_transform_as_array(scaled.copy())
+
+        expected = np.column_stack((params["a"], params["b"]))
+        self.assert_close_arrays(recovered, expected)
+
+    def test_calculate_nlpd_reshapes_mean_prediction(self):
+        class FakeGPR:
+            def predict(self, input_values, return_std=False):
+                mu = np.array([1.0, 2.0, 3.0, 4.0])
+                std = np.array([1.0, 2.0])
+                return mu, std
+
+        y_true = np.array([
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ])
+
+        value = _calculate_nlpd(
+            FakeGPR(),
+            input_values=np.zeros((2, 1)),
+            y_true=y_true,
+        )
+
+        self.assertTrue(np.isfinite(value))
+
+    def test_calculate_nlpd_reshapes_std_prediction(self):
+        class FakeGPR:
+            def predict(self, input_values, return_std=False):
+                mu = np.array([
+                    [1.0, 2.0],
+                    [3.0, 4.0],
+                ])
+                std = np.array([1.0, 1.0, 2.0, 2.0])
+                return mu, std
+
+        y_true = np.array([
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ])
+
+        value = _calculate_nlpd(
+            FakeGPR(),
+            input_values=np.zeros((2, 1)),
+            y_true=y_true,
+        )
+
+        self.assertTrue(np.isfinite(value))
+
+    def test_calculate_nlpd_rejects_incompatible_mean_shape(self):
+        class FakeGPR:
+            def predict(self, input_values, return_std=False):
+                mu = np.array([1.0, 2.0, 3.0])
+                std = np.ones((2, 2))
+                return mu, std
+
+        y_true = np.ones((2, 2))
+
+        with self.assertRaises(RuntimeError):
+            _calculate_nlpd(
+                FakeGPR(),
+                input_values=np.zeros((2, 1)),
+                y_true=y_true,
+            )
+
+    def test_calculate_nlpd_rejects_incompatible_std_shape(self):
+        class FakeGPR:
+            def predict(self, input_values, return_std=False):
+                mu = np.ones((2, 2))
+                std = np.array([1.0, 2.0, 3.0])
+                return mu, std
+
+        y_true = np.ones((2, 2))
+
+        with self.assertRaises(RuntimeError):
+            _calculate_nlpd(
+                FakeGPR(),
+                input_values=np.zeros((2, 1)),
+                y_true=y_true,
+            )
 
 class TestSurrogateGenerator(MatcalUnitTest):
 
@@ -1230,7 +1716,7 @@ class TestSurrogateGenerator(MatcalUnitTest):
         self.assertIsNotNone(surrogate)
         save_mock.assert_called_once()
         self.assertEqual(save_mock.call_args[0][0], "saved_test_surrogate.joblib")
-        
+
     def test_generate_with_none_save_filename_and_plot_worst_raises(self):
         def test_function(m, b, n_features=None):
             x = np.linspace(0, 1, 5)
@@ -1249,6 +1735,224 @@ class TestSurrogateGenerator(MatcalUnitTest):
 
         with self.assertRaises(ValueError):
             sur_gen.generate(None, plot_n_worst=1)
+
+    def test_set_model_and_state_sets_values(self):
+        sur_gen = SurrogateGenerator(
+            {"input": {}, "output": {}},
+            training_fraction=0.8,
+        )
+
+        sur_gen.set_model_and_state(model_name="model_a", state="state_a")
+
+        self.assertEqual(sur_gen._model_name, "model_a")
+        self.assertEqual(sur_gen._state, "state_a")
+
+    def test_set_surrogate_details_updates_test_eval_info_when_provided(self):
+        sur_gen = SurrogateGenerator(
+            {"input": {}, "output": {}},
+            training_fraction=0.8,
+        )
+
+        test_eval_info = object()
+
+        sur_gen.set_surrogate_details(
+            training_fraction=1.0,
+            test_eval_info=test_eval_info,
+        )
+
+        self.assertIs(sur_gen._test_eval_info, test_eval_info)
+
+    def test_set_fields_to_log_scale_sets_fields(self):
+        sur_gen = SurrogateGenerator(
+            {"input": {}, "output": {}},
+            training_fraction=0.8,
+        )
+
+        sur_gen.set_fields_to_log_scale("a", "b")
+
+        self.assertEqual(sur_gen._fields_to_log_scale, ("a", "b"))
+
+    def test_training_fraction_one_without_test_eval_info_raises(self):
+        with self.assertRaises(ValueError):
+            SurrogateGenerator(
+                {"input": {}, "output": {}},
+                training_fraction=1.0,
+            )
+
+    def test_generated_surrogate_public_properties_are_covered(self):
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0.0, 1.0, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=40,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0.0, 1.0, 5),
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Multiple Regressors",
+            regressor_type="RBF",
+            neighbors=5,
+            kernel="linear",
+            degree=0,
+        )
+
+        surrogate = sur_gen.generate(None)
+
+        self.assertEqual(surrogate.parameter_order, ["m", "b"])
+        self.assertEqual(surrogate.independent_field, "x")
+        self.assert_close_arrays(
+            surrogate.prediction_locations,
+            np.linspace(0.0, 1.0, 5),
+        )
+        self.assertIn("test", surrogate.max_errors)
+        self.assertIn("test", surrogate.rmse_errors)
+
+    def test_generate_monolithic_pca_surrogate(self):
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0.0, 1.0, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=40,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0.0, 1.0, 5),
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Monolithic Regressor",
+            regressor_type="RBF",
+            neighbors=5,
+            kernel="linear",
+            degree=0,
+        )
+
+        surrogate = sur_gen.generate(None)
+
+        self.assertIsNotNone(surrogate)
+        self.assertIsInstance(surrogate, MatCalMonolithicPCASurrogate)
+
+    def test_generate_with_plot_n_worst_covers_plot_path(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0.0, 1.0, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=30,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0.0, 1.0, 5),
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Multiple Regressors",
+            regressor_type="RBF",
+            neighbors=5,
+            kernel="linear",
+            degree=0,
+        )
+
+        with patch("matcal.core.surrogates.matcal_save"):
+            with patch("matplotlib.pyplot.savefig") as savefig_mock:
+                surrogate = sur_gen.generate(
+                    "plot_worst_surrogate",
+                    plot_n_worst=2,
+                )
+
+        self.assertIsNotNone(surrogate)
+        savefig_mock.assert_called_once()
+
+        plt.close("all")
+
+    def test_generate_with_none_save_filename_does_not_serialize_surrogate(self):
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0.0, 1.0, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=30,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0.0, 1.0, 5),
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Multiple Regressors",
+            regressor_type="RBF",
+            neighbors=5,
+            kernel="linear",
+            degree=0,
+        )
+
+        with patch("matcal.core.surrogates.matcal_save") as save_mock:
+            surrogate = sur_gen.generate(None)
+
+        self.assertIsNotNone(surrogate)
+        save_mock.assert_not_called()
+
+    def test_generate_with_save_filename_serializes_surrogate(self):
+        def test_function(m, b, n_features=None):
+            x = np.linspace(0.0, 1.0, 5)
+            y = m * x + b
+            return {"x": x, "y": y}
+
+        sur_gen = _setup_initial_surrogate_generator(
+            n_samples=30,
+            p_names=["m", "b"],
+            p_low=[0.0, -1.0],
+            p_high=[1.0, 1.0],
+            indep_var="x",
+            test_function=test_function,
+            interp_locations=np.linspace(0.0, 1.0, 5),
+        )
+
+        sur_gen.set_surrogate_details(
+            surrogate_type="PCA Multiple Regressors",
+            regressor_type="RBF",
+            neighbors=5,
+            kernel="linear",
+            degree=0,
+        )
+
+        with patch("matcal.core.surrogates.matcal_save") as save_mock:
+            surrogate = sur_gen.generate("saved_test_surrogate")
+
+        self.assertIsNotNone(surrogate)
+        save_mock.assert_called_once()
+        self.assertEqual(save_mock.call_args[0][0], "saved_test_surrogate.joblib")
+
+    def test_generate_with_none_save_filename_and_plot_worst_raises(self):
+        sur_gen = SurrogateGenerator(
+            {"input": {}, "output": {}},
+            training_fraction=0.8,
+        )
+
+        with self.assertRaises(ValueError):
+            sur_gen.generate(None, plot_n_worst=1)
+
 
 class TestProcessSurrogateArgsCall(MatcalUnitTest):
 

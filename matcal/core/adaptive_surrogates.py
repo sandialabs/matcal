@@ -297,7 +297,7 @@ def _validate_error_statistic(error_statistic):
     if error_statistic is None:
         return None
 
-    check_value_is_nonempty_str(error_statistic, "error_statistic")
+    check_value_is_nonempty_str(error_statistic, "error_statistic", 1)
     error_statistic = error_statistic.lower().strip()
 
     valid_error_statistics = ("mean", "median", "max")

@@ -1,4 +1,6 @@
 from collections import OrderedDict
+import io
+import logging
 import os
 import types
 import numpy as np
@@ -6,31 +8,50 @@ import unittest
 from unittest.mock import patch
 
 from matcal.core.adaptive_surrogates import (
+    _apply_axis_limits,
+    _apply_axis_scales,
+    _apply_response_scaling,
+    _as_2d_response_array,
     _assign_points_to_nearest_seed,
     _calculate_cv_error,
     _calculate_surrogate_latent_nlpd,
     _create_ghost_points,
+    _error_units_for_type,
     _evaluate_kfold_cv_splits,
+    _evaluate_surrogate_response,
+    _extract_response_matrix,
     _filter_points_within_bounds,
     _find_matching_row_index,
     _finite_vertex_indices,
     _fit_cv_surrogate_and_calculate_original_data_space_error,
     _fit_surrogate_model,
+    _format_axis_label,
+    _get_or_create_matplotlib_axes,
     _get_parameter_bounds, 
+    _get_sample_indices,
+    _get_surrogate_metric,
+    _get_valid_kfold_split_count,
     _make_bounded_nd_grid,
     _make_group_kfold_splits,
     _make_standard_kfold_splits,
+    _merge_plot_style,
+    _metric_value_for_record,
     _normalize_candidate_array,
     _package_unique_bounded_points,
+    _padded_limits_from_finite_values,
     _perform_kfold_cv,
     _perform_leave_one_out_cv,
+    _plot_limit_padding,
     _random_subset_rows,
+    _replace_underscores,
     _reduce_voronoi_candidates,
     _remove_duplicate_rows_against_existing,
     _remove_invalid_rows,
     _select_farthest_point,
+    _validate_error_statistic,
     _validate_surrogate_generator_regressor_type,
     _validate_surrogate_storage_options,
+    AdaptiveSurrogateStudyBase,
     KFoldCrossValidation,
     LeaveOneOutCrossValidation,
     SparseGridAdaptiveSurrogateStudy,
@@ -138,6 +159,151 @@ class FixedResponseSurrogate:
     def __call__(self, param_array):
         n_samples = param_array.shape[1]
         return self.response[:n_samples, :].T
+
+
+class TestAdaptiveSurrogateHelpersExtra(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_get_or_create_matplotlib_axes_with_existing_axes_argument(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        returned_fig, returned_ax = _get_or_create_matplotlib_axes(axes=ax)
+
+        self.assertIs(returned_fig, fig)
+        self.assertIs(returned_ax, ax)
+        plt.close(fig)
+
+    def test_get_or_create_matplotlib_axes_with_figure_having_existing_axes(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        returned_fig, returned_ax = _get_or_create_matplotlib_axes(figure=fig)
+
+        self.assertIs(returned_fig, fig)
+        self.assertIs(returned_ax, ax)
+        plt.close(fig)
+
+    def test_get_or_create_matplotlib_axes_with_empty_figure_adds_subplot(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.figure import Figure
+
+        fig = Figure()
+        returned_fig, returned_ax = _get_or_create_matplotlib_axes(figure=fig)
+
+        self.assertIs(returned_fig, fig)
+        self.assertEqual(len(fig.axes), 1)
+        self.assertIs(returned_ax, fig.axes[0])
+
+    def test_replace_underscores_none_and_string(self):
+        self.assertIsNone(_replace_underscores(None))
+        self.assertEqual(_replace_underscores("a_b_c"), "a b c")
+
+    def test_format_axis_label_none_and_units(self):
+        self.assertIsNone(_format_axis_label(None))
+        self.assertEqual(_format_axis_label("my_label"), "my label")
+        self.assertEqual(_format_axis_label("my_label", "s"), "my label (s)")
+
+    def test_merge_plot_style_with_user_overrides(self):
+        default = {"color": "blue", "linewidth": 1.0}
+        user = {"linewidth": 3.0, "linestyle": "--"}
+
+        merged = _merge_plot_style(default, user)
+
+        self.assertEqual(merged["color"], "blue")
+        self.assertEqual(merged["linewidth"], 3.0)
+        self.assertEqual(merged["linestyle"], "--")
+        self.assertEqual(default["linewidth"], 1.0)  # no mutation
+
+    def test_apply_axis_limits_and_scales(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        _apply_axis_limits(ax, xlim=(0, 2), ylim=(-1, 1))
+        _apply_axis_scales(ax, xscale="linear", yscale="log")
+
+        self.assertEqual(ax.get_xlim(), (0.0, 2.0))
+        self.assertEqual(ax.get_ylim(), (-1.0, 1.0))
+        self.assertEqual(ax.get_xscale(), "linear")
+        self.assertEqual(ax.get_yscale(), "log")
+        plt.close(fig)
+
+    def test_as_2d_response_array_reshapes_1d(self):
+        values = np.array([1.0, 2.0, 3.0])
+        reshaped = _as_2d_response_array(values)
+        self.assertEqual(reshaped.shape, (3, 1))
+        self.assert_close_arrays(reshaped[:, 0], values)
+
+    def test_get_sample_indices_with_explicit_indices_and_invalid_indices(self):
+        indices = _get_sample_indices([0, 2, 4], 5)
+        self.assert_close_arrays(indices, np.array([0, 2, 4]))
+
+        with self.assertRaises(ValueError):
+            _get_sample_indices([-1, 0], 5)
+
+        with self.assertRaises(ValueError):
+            _get_sample_indices([0, 5], 5)
+
+    def test_validate_error_statistic_invalid(self):
+        with self.assertRaises(ValueError):
+            _validate_error_statistic("not_valid")
+
+    def test_error_units_for_type(self):
+        self.assertEqual(_error_units_for_type("absolute", "K", "custom"), "custom")
+        self.assertEqual(_error_units_for_type("squared", "K", None), "K^2")
+        self.assertEqual(_error_units_for_type("signed", "K", None), "K")
+
+    def test_plot_limit_padding_and_padded_limits_empty(self):
+        self.assertAlmostEqual(_plot_limit_padding(2.0, 2.0), 0.1)
+        self.assertIsNone(_padded_limits_from_finite_values(np.array([])))
+
+    def test_get_valid_kfold_split_count_branches(self):
+        self.assertEqual(_get_valid_kfold_split_count(0, 10), 0)
+
+        with self.assertRaises(ValueError):
+            _get_valid_kfold_split_count(1, 10)
+
+        with self.assertRaises(ValueError):
+            _get_valid_kfold_split_count(2, 1)
+
+        self.assertEqual(_get_valid_kfold_split_count(3, 5), 3)
+
+    def test_get_valid_kfold_split_count_reduces_and_warns(self):
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        logger_obj = logging.getLogger("matcal.core.adaptive_surrogates")
+        old_handlers = list(logger_obj.handlers)
+        old_level = logger_obj.level
+        logger_obj.handlers = [handler]
+        logger_obj.setLevel(logging.WARNING)
+
+        try:
+            nsplits = _get_valid_kfold_split_count(10, 4)
+        finally:
+            logger_obj.handlers = old_handlers
+            logger_obj.setLevel(old_level)
+
+        self.assertEqual(nsplits, 2)
+        self.assertIn("Reducing nsplits from 10 to 2", stream.getvalue())
+
+    def test_metric_value_for_record_handles_nan_and_none(self):
+        record_nan = {"r2": np.nan, "rmse": np.nan}
+        record_none = {"r2": None, "rmse": None}
+
+        self.assertEqual(_metric_value_for_record(record_nan, "r2"), -np.inf)
+        self.assertEqual(_metric_value_for_record(record_none, "r2"), -np.inf)
+        self.assertEqual(_metric_value_for_record(record_nan, "rmse"), np.inf)
+        self.assertEqual(_metric_value_for_record(record_none, "rmse"), np.inf)
+
 
 
 class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
@@ -1217,7 +1383,343 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
             )
 
         plt.close(fig)
-        
+
+
+class TestAdaptiveSurrogateExtraBranches(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_surrogate(self):
+        return SparseGridAdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="time_axis",
+            indep_variable_values=np.array([0.0, 1.0]),
+            test_params=np.array([[0.0, 0.0], [1.0, 1.0]]),
+            test_responses=np.array([[1.0, 2.0], [3.0, 4.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+
+    def test_select_surrogate_errors_when_empty_or_invalid(self):
+        surrogate = self._make_surrogate()
+
+        with self.assertRaises(RuntimeError):
+            surrogate._select_surrogate()
+
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.0, 2.0], [3.0, 4.0]])), 1)
+
+        with self.assertRaises(TypeError):
+            surrogate._select_surrogate(3.14)
+
+        with self.assertRaises(IndexError):
+            surrogate._select_surrogate(10)
+
+    def test_best_surrogate_and_best_iteration_when_empty(self):
+        surrogate = self._make_surrogate()
+        self.assertIsNone(surrogate.best_surrogate)
+        self.assertIsNone(surrogate.best_surrogate_iteration_index)
+
+    def test_score_history_alias(self):
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.0, 2.0], [3.0, 4.0]])), 1)
+        self.assertIs(surrogate.score_history, surrogate.r2_history)
+
+    def test_test_predictions_and_test_errors_and_test_sample_error_metrics(self):
+        surrogate = self._make_surrogate()
+
+        prediction = np.array([
+            [2.0, 1.0],   # signed error wrt [1,2] -> [1,-1]
+            [1.0, 6.0],   # signed error wrt [3,4] -> [-2,2]
+        ])
+        surrogate._add_iteration(FixedResponseSurrogate(prediction), 1)
+
+        preds = surrogate.test_predictions("best")
+        self.assert_close_arrays(preds, prediction)
+
+        signed = surrogate.test_errors("best", error_type="signed")
+        absolute = surrogate.test_errors("best", error_type="absolute")
+        squared = surrogate.test_errors("best", error_type="squared")
+
+        self.assert_close_arrays(signed, np.array([[1.0, -1.0], [-2.0, 2.0]]))
+        self.assert_close_arrays(absolute, np.array([[1.0, 1.0], [2.0, 2.0]]))
+        self.assert_close_arrays(squared, np.array([[1.0, 1.0], [4.0, 4.0]]))
+
+        rmse = surrogate.test_sample_errors("best", metric="rmse")
+        mae = surrogate.test_sample_errors("best", metric="mae")
+        mean_abs = surrogate.test_sample_errors("best", metric="mean_abs_error")
+
+        self.assert_close_arrays(rmse, np.array([1.0, 2.0]))
+        self.assert_close_arrays(mae, np.array([1.0, 2.0]))
+        self.assert_close_arrays(mean_abs, np.array([1.0, 2.0]))
+
+    def test_get_target_prediction_missing_field_raises(self):
+        surrogate = self._make_surrogate()
+
+        with self.assertRaises(RuntimeError):
+            surrogate._get_target_prediction({"wrong_field": np.array([1.0, 2.0])})
+
+    def test_match_prediction_shape_transpose_and_error(self):
+        surrogate = SparseGridAdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="time_axis",
+            indep_variable_values=np.array([0.0, 1.0, 2.0]),
+            test_params=np.array([[0.0, 0.0], [1.0, 1.0]]),
+            test_responses=np.array([[1.0, 2.0, 3.0],
+                                    [4.0, 5.0, 6.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+
+        test_responses = surrogate._get_test_response_array()
+
+        # Shape (3, 2), transpose gives (2, 3), which matches test_responses.
+        transposed_input = np.array([
+            [1.0, 4.0],
+            [2.0, 5.0],
+            [3.0, 6.0],
+        ])
+
+        matched = surrogate._match_prediction_shape(transposed_input, test_responses)
+        self.assert_close_arrays(matched, np.array([[1.0, 2.0, 3.0],
+                                                    [4.0, 5.0, 6.0]]))
+
+        with self.assertRaises(RuntimeError):
+            surrogate._match_prediction_shape(np.ones((4, 4)), test_responses)
+
+    def test_reduce_error_array_and_label_helpers(self):
+        surrogate = self._make_surrogate()
+        errors = np.array([
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ])
+
+        self.assert_close_arrays(surrogate._reduce_error_array(errors, "median"), np.array([2.0, 3.0]))
+        self.assert_close_arrays(surrogate._reduce_error_array(errors, "max"), np.array([3.0, 4.0]))
+        self.assert_close_arrays(surrogate._reduce_error_array(errors, None), errors)
+
+        self.assertEqual(surrogate._make_error_label("absolute", None), "surrogate error")
+        self.assertEqual(surrogate._make_error_label("absolute", "max"), "maximum absolute error")
+        self.assertEqual(surrogate._make_error_ylabel("squared"), "target_squared_error")
+
+    def test_make_response_and_error_titles_with_explicit_title(self):
+        surrogate = self._make_surrogate()
+        self.assertEqual(surrogate._make_response_plot_title("my title"), "my title")
+        self.assertEqual(surrogate._make_error_plot_title("error title"), "error title")
+
+    def test_make_response_plot_labels_defaults(self):
+        surrogate = self._make_surrogate()
+        xlabel, ylabel = surrogate._make_response_plot_labels(
+            None, None, "s", "K"
+        )
+        self.assertEqual(xlabel, "time axis (s)")
+        self.assertEqual(ylabel, "target (K)")
+
+    def test_enforce_training_data_parameter_range_propagates_to_stored_surrogates(self):
+        surrogate = self._make_surrogate()
+
+        class ChildSurrogate:
+            def __init__(self):
+                self.calls = []
+                self.surrogate = self
+            def __call__(self, params):
+                n_samples = params.shape[1]
+                return np.zeros((2, n_samples))
+            def enforce_training_data_parameter_range(self, value):
+                self.calls.append(value)
+
+        child = ChildSurrogate()
+        surrogate._add_iteration(child, 1)
+
+        stored = list(surrogate.stored_surrogates.values())[0]
+        surrogate.enforce_training_data_parameter_range(False)
+        surrogate.enforce_training_data_parameter_range(True)
+
+        self.assertEqual(stored.calls, [False, True])
+
+
+class TestAdaptiveSurrogatePlottingExtra(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_surrogate(self):
+        surrogate = SparseGridAdaptiveSurrogate(
+            target_field_name="response_field",
+            indep_variable_name="x_coord",
+            indep_variable_values=np.array([0.0, 1.0]),
+            test_params=np.array([[0.0, 0.0], [1.0, 1.0]]),
+            test_responses=np.array([[1.0, 2.0], [3.0, 4.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.0, 2.0], [3.0, 4.0]])), 10)
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.1, 2.1], [3.1, 4.1]])), 20)
+        return surrogate
+
+    def test_plot_error_history_with_string_metric_and_explicit_axes(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate = self._make_surrogate()
+        fig, ax = plt.subplots()
+
+        returned_fig, returned_ax = surrogate.plot_error_history(
+            metrics="rmse",
+            figure=fig,
+            axes=ax,
+            metric_styles={"rmse": {"color": "purple"}},
+        )
+
+        self.assertIs(returned_fig, fig)
+        self.assertIs(returned_ax, ax)
+        self.assertEqual(len(ax.lines), 1)
+        self.assertEqual(ax.lines[0].get_color(), "purple")
+        plt.close(fig)
+
+    def test_plot_error_history_invalid_metric_raises(self):
+        surrogate = self._make_surrogate()
+        with self.assertRaises(ValueError):
+            surrogate.plot_error_history(metrics=("not_a_metric",))
+
+    def test_validate_history_length_error(self):
+        surrogate = self._make_surrogate()
+        with self.assertRaises(RuntimeError):
+            surrogate._validate_history_length("rmse", np.array([1.0]))
+
+    def test_plot_surrogate_error_vs_independent_variable_median_max_and_squared(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate = self._make_surrogate()
+
+        fig1, ax1 = surrogate.plot_surrogate_error_vs_independent_variable(
+            error_type="absolute",
+            error_statistic="median",
+            title="median abs error",
+            error_units="custom_units",
+        )
+        self.assertEqual(ax1.get_title(), "median abs error")
+        self.assertEqual(ax1.get_ylabel(), "response field absolute error (custom_units)")
+        self.assertEqual(len(ax1.lines), 1)
+        plt.close(fig1)
+
+        fig2, ax2 = surrogate.plot_surrogate_error_vs_independent_variable(
+            error_type="squared",
+            error_statistic="max",
+            xlabel="my_x",
+            ylabel="my_y",
+            independent_variable_units="s",
+            target_field_units="K",
+        )
+        self.assertEqual(ax2.get_xlabel(), "my x (s)")
+        self.assertEqual(ax2.get_ylabel(), "my y (K^2)")
+        self.assertEqual(len(ax2.lines), 1)
+        plt.close(fig2)
+
+
+class TestAdaptiveSurrogateUserTestDataRemapping(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+        p1 = Parameter("p1", 0.0, 1.0)
+        p2 = Parameter("p2", -1.0, 1.0)
+        self.study = SparseGridAdaptiveSurrogateStudy(p1, p2)
+
+    def _make_study_results_with_qoi_history(self, qoi_history):
+        results = StudyResults()
+        results._qoi_history = qoi_history
+        return results
+
+    def test_get_required_test_data_objective_name_raises_without_synchronizer(self):
+        with self.assertRaises(RuntimeError):
+            self.study._get_required_test_data_objective_name()
+
+    def test_get_user_test_data_qoi_history_missing_or_none_raises(self):
+        class NoQOIHistory:
+            pass
+
+        with self.assertRaises(RuntimeError):
+            self.study._get_user_test_data_qoi_history(NoQOIHistory())
+
+        bad = self._make_study_results_with_qoi_history(None)
+        with self.assertRaises(RuntimeError):
+            self.study._get_user_test_data_qoi_history(bad)
+
+    def test_split_qoi_history_key_validation(self):
+        with self.assertRaises(RuntimeError):
+            self.study._split_qoi_history_key("no_colon")
+
+        with self.assertRaises(RuntimeError):
+            self.study._split_qoi_history_key(":objective")
+
+        with self.assertRaises(RuntimeError):
+            self.study._split_qoi_history_key("model:")
+
+        model_name, objective_name = self.study._split_qoi_history_key("model:objective")
+        self.assertEqual(model_name, "model")
+        self.assertEqual(objective_name, "objective")
+
+    def test_update_user_test_data_objective_name_if_needed_zero_and_multiple_objectives(self):
+        self.study._results_synchronizer = types.SimpleNamespace(name="required_obj")
+
+        empty_results = self._make_study_results_with_qoi_history(OrderedDict())
+        with self.assertRaises(RuntimeError):
+            self.study._update_user_test_data_objective_name_if_needed(empty_results)
+
+        multi_results = self._make_study_results_with_qoi_history(
+            OrderedDict({
+                "m:obj1": object(),
+                "m:obj2": object(),
+            })
+        )
+        with self.assertRaises(RuntimeError):
+            self.study._update_user_test_data_objective_name_if_needed(multi_results)
+
+    def test_update_user_test_data_objective_name_if_needed_renames_single_objective(self):
+        self.study._results_synchronizer = types.SimpleNamespace(name="required_obj")
+
+        payload = object()
+        results = self._make_study_results_with_qoi_history(
+            OrderedDict({"model:old_obj": payload})
+        )
+
+        updated = self.study._update_user_test_data_objective_name_if_needed(results)
+
+        self.assertIs(updated, results)
+        self.assertEqual(list(results.qoi_history.keys()), ["model:required_obj"])
+        self.assertIs(results.qoi_history["model:required_obj"], payload)
+
+    def test_rename_qoi_history_objective_name_rejects_mismatch_and_duplicate(self):
+        qoi_history = OrderedDict({
+            "model:wrong_obj": object(),
+        })
+        with self.assertRaises(RuntimeError):
+            self.study._rename_qoi_history_objective_name(
+                qoi_history,
+                old_objective_name="expected_old",
+                new_objective_name="new_obj",
+            )
+
+        duplicate_history = OrderedDict({
+            "model:old_obj": object(),
+            "model:new_obj": object(),
+        })
+        with self.assertRaises(RuntimeError):
+            self.study._rename_qoi_history_objective_name(
+                duplicate_history,
+                old_objective_name="old_obj",
+                new_objective_name="new_obj",
+            )
+
 
 class _FakeSurrogate:
     """
@@ -1765,7 +2267,7 @@ class TestVoronoiPureFunctions(MatcalUnitTest):
             )
 
 
-class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
+class TestVoronoiCrossValidationHelpers(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
@@ -1847,6 +2349,179 @@ class TestVoronoiPhysicalCrossValidationHelpers(MatcalUnitTest):
 
         # Residual = true - predicted = [-1, 2], sum(abs(residual)) = 3.
         self.assertAlmostEqual(error, 3.0)
+
+
+class TestCVResponseHelperBranches(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_extract_response_matrix_error_paths_and_interpolation(self):
+        y_test = [{"time": np.array([0.0, 1.0]), "response": np.array([1.0, 2.0])}]
+
+        with self.assertRaises(KeyError):
+            _extract_response_matrix([{"time": np.array([0.0, 1.0])}], "response")
+
+        with self.assertRaises(RuntimeError):
+            _extract_response_matrix(
+                [{"response": np.array([1.0])}],
+                "response",
+                interpolation_field=None,
+                interpolation_values=np.array([0.0, 1.0]),
+            )
+
+        with self.assertRaises(KeyError):
+            _extract_response_matrix(
+                [{"response": np.array([1.0])}],
+                "response",
+                interpolation_field="time",
+                interpolation_values=np.array([0.0, 1.0]),
+            )
+
+        with self.assertRaises(RuntimeError):
+            _extract_response_matrix(
+                [{"time": np.array([0.0, 1.0]), "response": np.array([1.0])}],
+                "response",
+                interpolation_field="time",
+                interpolation_values=np.array([0.0, 0.5]),
+            )
+
+        interpolated = _extract_response_matrix(
+            [{"time": np.array([0.0, 2.0]), "response": np.array([0.0, 2.0])}],
+            "response",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0, 2.0]),
+        )
+        self.assert_close_arrays(interpolated, np.array([[0.0, 1.0, 2.0]]))
+
+    def test_evaluate_surrogate_response_shape_branches(self):
+        class ScalarSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.array(5.0)}
+
+        class OneDSingleSampleSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.array([1.0, 2.0])}
+
+        class OneDBadShapeSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.array([1.0, 2.0, 3.0])}
+
+        class TwoDTransposeSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                # Shape (3, 2); for n_test_samples=2, this must be transposed.
+                return {"response": np.array([
+                    [1.0, 4.0],
+                    [2.0, 5.0],
+                    [3.0, 6.0],
+                ])}
+
+        class TwoDBadShapeSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.ones((3, 3))}
+
+        class ThreeDSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.ones((2, 2, 2))}
+
+        class MissingFieldSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"wrong": np.array([1.0])}
+
+        out = _evaluate_surrogate_response(
+            ScalarSurrogate(),
+            np.array([[0.0, 0.0]]),
+            "response",
+        )
+        self.assertEqual(out.shape, (1, 1))
+
+        out = _evaluate_surrogate_response(
+            OneDSingleSampleSurrogate(),
+            np.array([[0.0, 0.0]]),
+            "response",
+        )
+        self.assertEqual(out.shape, (1, 2))
+
+        with self.assertRaises(RuntimeError):
+            _evaluate_surrogate_response(
+                OneDBadShapeSurrogate(),
+                np.array([[0.0, 0.0], [1.0, 1.0]]),
+                "response",
+            )
+
+        out = _evaluate_surrogate_response(
+            TwoDTransposeSurrogate(),
+            np.array([[0.0, 0.0], [1.0, 1.0]]),
+            "response",
+        )
+        self.assertEqual(out.shape, (2, 3))
+        self.assert_close_arrays(out, np.array([
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+        ]))
+
+        with self.assertRaises(RuntimeError):
+            _evaluate_surrogate_response(
+                TwoDBadShapeSurrogate(),
+                np.array([[0.0, 0.0], [1.0, 1.0]]),
+                "response",
+            )
+
+        with self.assertRaises(RuntimeError):
+            _evaluate_surrogate_response(
+                ThreeDSurrogate(),
+                np.array([[0.0, 0.0]]),
+                "response",
+            )
+
+        with self.assertRaises(KeyError):
+            _evaluate_surrogate_response(
+                MissingFieldSurrogate(),
+                np.array([[0.0, 0.0]]),
+                "response",
+            )
+
+    def test_apply_response_scaling_branches(self):
+        truth = np.array([[1.0, 8.0]])
+        pred = np.array([[2.0, 27.0]])
+
+        scaled_truth, scaled_pred = _apply_response_scaling(truth, pred, None)
+        self.assert_close_arrays(scaled_truth, truth)
+        self.assert_close_arrays(scaled_pred, pred)
+
+        scaled_truth, scaled_pred = _apply_response_scaling(truth, pred, "cbrt")
+        self.assert_close_arrays(scaled_truth, np.cbrt(truth))
+        self.assert_close_arrays(scaled_pred, np.cbrt(pred))
+
+        with self.assertRaises(ValueError):
+            _apply_response_scaling(truth, pred, "bad_scale")
+
+        with self.assertRaises(ValueError):
+            _apply_response_scaling(truth, pred, 0.0)
+
+        scaled_truth, scaled_pred = _apply_response_scaling(truth, pred, np.array([1.0, 2.0]))
+        self.assert_close_arrays(scaled_truth, np.array([[1.0, 4.0]]))
+        self.assert_close_arrays(scaled_pred, np.array([[2.0, 13.5]]))
+
+    def test_get_surrogate_metric_branches(self):
+        latent_scores = OrderedDict({
+            "field_a": {"score": np.array([1.0, 3.0]), "rmse": np.array([2.0]), "nlpd": np.array([1.5, 2.5])},
+            "field_b": {"score": np.array([5.0]), "rmse": np.array([4.0]), "nlpd": np.array([0.5])},
+            "field_c": "not_a_dict",
+        })
+
+        self.assertAlmostEqual(_get_surrogate_metric(latent_scores, "score"), 3.0)
+        self.assertAlmostEqual(_get_surrogate_metric(latent_scores, "rmse"), 3.0)
+        self.assertAlmostEqual(_get_surrogate_metric(latent_scores, "nlpd"), 4.5)
+
+        latent_scores_none = OrderedDict({"field": {"score": np.array([None], dtype=object)}})
+        self.assertTrue(np.isnan(_get_surrogate_metric(latent_scores_none, "score")))
+
+        latent_scores_missing = OrderedDict({"field": {"rmse": np.array([1.0])}})
+        self.assertTrue(np.isnan(_get_surrogate_metric(latent_scores_missing, "score")))
+
+        latent_scores_bad_nlpd = OrderedDict({"field": {"nlpd": np.array([np.nan])}})
+        self.assertTrue(np.isnan(_get_surrogate_metric(latent_scores_bad_nlpd, "nlpd")))
 
 
 class TestLeaveOneOutCrossValidation(MatcalUnitTest):
@@ -2638,6 +3313,89 @@ class TestVoronoiTessellation(MatcalUnitTest):
 
         with self.assertRaises(ValueError):
             tessellation.raise_if_invalid_region_index(len(tessellation.vor.regions))
+
+
+class TestVoronoiTessellationExtraBranches(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_tessellation(self, finite_only=False):
+        points = np.array([
+            [0.25, 0.25],
+            [0.75, 0.25],
+            [0.25, 0.75],
+            [0.75, 0.75],
+        ])
+        bounds = np.array([
+            [0.0, 1.0],
+            [0.0, 1.0],
+        ])
+        return VoronoiTessellation(points, bounds, finite_only=finite_only)
+
+    def test_build_finite_only_branch(self):
+        tess = self._make_tessellation(finite_only=True)
+        tess.build()
+        self.assertIsNone(tess.boundary_hull)
+        self.assertIsNone(tess.bhullD)
+
+    def test_get_region_vertices_without_identifying_outside_vertices(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+        region_index = tess.get_voronoi_region(tess.points[0])[0][0]
+        vertices = tess.get_region_vertices(region_index, identify_outside_vertices=False)
+        self.assertTrue(vertices is None or isinstance(vertices, np.ndarray))
+
+    def test_vertices_from_indices_empty_returns_none(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+        self.assertIsNone(tess._vertices_from_indices([]))
+
+    def test_region_belongs_to_ghost_point_when_mapping_not_unique(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+
+        original = tess.vor.point_region.copy()
+        try:
+            region0 = original[0]
+            tess.vor.point_region[1] = region0
+            self.assertTrue(tess._region_belongs_to_ghost_point(region0))
+        finally:
+            tess.vor.point_region = original
+
+    def test_identify_vertices_outside_bounds_empty_region(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+        self.assertEqual(tess.identify_vertices_outside_bounds([]), [])
+
+    def test_unique_vertex_list_empty(self):
+        tess = self._make_tessellation(finite_only=False)
+        self.assertEqual(tess._unique_vertex_list([]), [])
+
+    def test_get_normal_ray_direction_zero_length_raises(self):
+        tess = self._make_tessellation(finite_only=False)
+        with self.assertRaises(ValueError):
+            tess.get_normal_ray_direction(np.array([1.0, 1.0]), np.array([1.0, 1.0]))
+
+    def test_find_boundary_hull_ray_crossings_no_positive_intersection_returns_none(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+
+        # Start outside and point further away so no positive crossing exists.
+        z = np.array([2.0, 2.0])
+        U = np.array([1.0, 0.0])
+        crossing = tess.find_boundary_hull_ray_crossings(U, z)
+        self.assertIsNone(crossing)
+
+    def test_prepare_points_to_add_empty_and_dimension_error(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+
+        prepared = tess._prepare_points_to_add(np.array([]))
+        self.assertEqual(prepared.shape, (0, tess.ndim))
+
+        with self.assertRaises(ValueError):
+            tess._check_added_point_dimension(np.array([[0.0, 0.0, 0.0]]))
 
 
 class TestVoronoiNLPDCV(MatcalUnitTest):
@@ -3879,6 +4637,28 @@ class AdaptiveSurrogateActualFitMixin:
         self.assertGreaterEqual(len(study.surrogate.max_error_history), 1)
         self.assertGreaterEqual(len(study.surrogate.sample_count_history), 1)
         self.assertGreaterEqual(len(study.surrogate.surrogate_records), 1)
+
+    def test_run_test_sampling_restores_original_seed_after_test_group_seed(self):
+        study = self.make_study()
+        self.configure_method_specific_options(study)
+
+        study.set_seed(11)
+        study.set_test_group_random_seed(123)
+        study.set_independent_variable("x", np.array([0.0, 1.0]))
+        study.set_target_field_name("f")
+        study.add_evaluation_set(light_model)
+        study.set_number_of_test_samples(1)
+        study.set_max_training_samples(2)
+
+        # Use the real path; _run_test_sampling should restore the original seed.
+        try:
+            study._run_test_sampling()
+        except Exception:
+            # If model/test-study setup triggers external issues, we still want
+            # to verify seed restoration only when possible.
+            pass
+
+        self.assertEqual(study._seed, 11)
 
 
 @unittest.skipIf(

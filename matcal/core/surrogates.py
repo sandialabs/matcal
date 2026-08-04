@@ -1031,9 +1031,6 @@ def _field_uses_pca(decomposers, field):
     so the so-called latent-space scores are really scaled response-space
     regressor scores and should not be reported as PCA latent-space scores.
     """
-    if decomposers is None:
-        return True
-
     return not isinstance(decomposers[field], _DoNothingDataTransformer)
 
 
@@ -1688,7 +1685,7 @@ def _root_mean_squared_error(test_values, surrogate_values):
     surrogate predictions.
 
     The arrays are expected to represent responses with shape
-    ``(n_samples, n_qois)`` or any shape that can be compared element-wise.
+    ``(n_samples, n_qois)``.
 
     The RMSE is calculated as
 
@@ -1751,21 +1748,19 @@ def _prepare_metric_arrays(test_values, surrogate_values):
     """
     Convert metric inputs to comparable floating-point arrays.
 
-    If the arrays have the same number of scalar values but different shapes,
-    the surrogate values are reshaped to match the test/reference values.
+    Metric arrays must have identical shape. Shape normalization should be
+    performed by the caller, where sample and QoI orientation are known.
+    This avoids silently comparing incorrectly oriented response arrays.
     """
     test_values = np.asarray(test_values, dtype=float)
     surrogate_values = np.asarray(surrogate_values, dtype=float)
 
     if test_values.shape != surrogate_values.shape:
-        if test_values.size == surrogate_values.size:
-            surrogate_values = surrogate_values.reshape(test_values.shape)
-        else:
-            raise RuntimeError(
-                "Metric arrays have incompatible shapes. "
-                f"Reference shape: {test_values.shape}. "
-                f"Prediction shape: {surrogate_values.shape}."
-            )
+        raise RuntimeError(
+            "Metric arrays have incompatible shapes. "
+            f"Reference shape: {test_values.shape}. "
+            f"Prediction shape: {surrogate_values.shape}."
+        )
 
     return test_values, surrogate_values
 
