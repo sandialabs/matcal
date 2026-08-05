@@ -261,7 +261,8 @@ class FiniteDifference:
         self._relative_step_size = relative_step_size
         self._step_sizes = []
         for x in self._center_point:
-          dx = np.abs(x)*relative_step_size
+#         dx = np.abs(x)*relative_step_size
+          dx = relative_step_size * max(abs(x), 1.0)
           if dx < epsilon: 
             dx = epsilon
           self._step_sizes.append(dx)
@@ -272,12 +273,17 @@ class FiniteDifference:
         self._hessian_coefficients = None
         self._hessian_indices      = None
 
-    def set_function_values(self,ys): 
+    def Xset_function_values(self,ys): 
         self._function_values = ys
         ndim = np.squeeze(ys).ndim
         self._function_shape = None
         if ndim > 1: 
           self._function_shape = ys[0].shape
+
+    def set_function_values(self, ys): 
+        ys = np.asarray(ys)
+        self._function_values = ys
+        self._function_shape = ys.shape[1:] if ys.ndim > 1 else None
 
     def gradient(self): 
         shape = [self._number_of_variables]
@@ -391,7 +397,8 @@ _small = 1e-12
 
 
 def _estimate_parameter_covariance(residuals, sensitivities, noise_variance,
-                                   method="svd_inverse",
+#                                  method="svd_inverse",
+                                   method="svd_pinv",
                                    rcond=1e-10,
                                    regularization=0.0,
                                    project_to_psd=False,
@@ -426,7 +433,9 @@ def _get_residual_covariance(residuals):
 def _solve_for_parameter_covariance(output_covariance, 
                                     residual_sensitivities, 
                                     noise_variance=0.0,
-                                    method="svd_inverse",
+#                                   method="svd_inverse",
+#                                   method="svd_pinv",
+                                    method="least_squares",
                                     rcond=1e-10,
                                     regularization=0.0,
                                     project_to_psd=False,
@@ -535,7 +544,8 @@ def _solve_for_parameter_covariance(output_covariance,
 
 def _solve_for_parameter_covariance_svd_subspace(shifted_output_covariance,
                                                  residual_sensitivities,
-                                                 method="svd_inverse",
+#                                                method="svd_inverse",
+                                                 method="svd_pinv",
                                                  rcond=1e-10):
     """
     Original embedded-Laplace eigenspace estimator, with either direct inverse
@@ -784,9 +794,14 @@ def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise_va
     Sigma_y = _pushed_forward_variances(variances,correlation_coefficients,residual_sensitivities)
     Sigma_y = Sigma_y + noise_variance*np.eye(Sigma_y.shape[0])
     
+    print(f"{Sigma_y}")
     sign, logdet =  np.linalg.slogdet(Sigma_y)
+    print(f"{sign=}")
+    print(f"{logdet=}")
     logdetSigma_y = sign*logdet
-    invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
+    diagSig_y = np.diag(Sig_y)
+    invSig= np.diag(1.0/diagSig_y)
+#   invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
     mse = np.einsum("ki,ij,kj",residuals,invSigma,residuals) 
     n_repeats = residuals.shape[0]
     logp = -0.5*( logdetSigma_y + mse/n_repeats)
@@ -891,7 +906,8 @@ class _LaplaceStudyBase(ParameterStudy):
             self._setup_finite_difference()
 
     def set_initial_covariance_estimator(self,
-                                         method="svd_inverse",
+#                                        method="svd_inverse",
+                                         method="svd_pinv",
                                          rcond=1e-10,
                                          regularization=0.0,
                                          project_to_psd=False,
@@ -1051,7 +1067,7 @@ class LaplaceStudy(_LaplaceStudyBase):
         check_value_is_nonnegative_real(noise_estimate, "noise_estimate")
         self._noise_variance=noise_estimate**2
 
-    def set_calibrate_covariance(self, calibrate_covaraince=True):
+    def set_calibrate_covariance(self, calibrate_covariance=True):
         """
         By default, the laplace study will attempt to improve the 
         covariance through a calibraiton. Optionally, turn this off or back on.
@@ -1059,7 +1075,7 @@ class LaplaceStudy(_LaplaceStudyBase):
         :param calibrate_covariance: flag to turn the covariance calibration process off or on
         :type calibrate_covariance: bool
         """
-        self._calibrate_covariance = calibrate_covaraince
+        self._calibrate_covariance = calibrate_covariance
 
     def update_laplace_estimate(self, noise_estimate):
         """Update the laplace study covariance estimate after with an 
@@ -1115,10 +1131,13 @@ class LaplaceStudy(_LaplaceStudyBase):
     def _calculate_residual_sensitivities(self, total_eval_residuals):
         self._finite_difference.set_function_values(total_eval_residuals)
         residual_sensitivities = np.atleast_3d(self._gradient())
+        np.save("AA.npy",residual_sensititivities)
+## HERE
         # grab first one from repeats, this is the most populated and since this is 
         # the derivative of the residuals where the third index is the repeat #, 
         # the first one is good enough for derivative of the model w.r.t. the parameters. 
         residual_sensitivities = residual_sensitivities.T[0, :, :]
+        np.save("A.npy",residual_sensititivities)
         return residual_sensitivities
 
     def _calculate_covariance(self, center_resids, residual_sensitivities):
