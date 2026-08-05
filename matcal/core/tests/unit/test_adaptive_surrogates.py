@@ -4751,7 +4751,6 @@ class TestVoronoiAdaptiveSurrogateActualFitWithRBF(
         )
         
 
-
 class TestVoronoiAdaptiveSurrogateActualFitWithRandomForest(
     AdaptiveSurrogateActualFitMixin,
     MatcalUnitTest,

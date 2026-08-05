@@ -13,14 +13,15 @@ from matcal.core.qoi_extractor import UserDefinedExtractor
 from matcal.core.state import State
 from matcal.core.study_base import StudyResults
 from matcal.core.utilities import (
+    check_item_is_correct_type,
+    check_value_is_array_like_of_reals, 
+    check_value_is_bool, 
+    check_value_is_nonempty_str, 
+    check_value_is_nonnegative_integer, 
+    check_value_is_nonnegative_real,
     check_value_is_positive_integer, 
     check_value_is_positive_integer_or_none,
-    check_value_is_nonempty_str, 
-    check_value_is_array_like_of_reals, 
     check_value_is_positive_real, 
-    check_value_is_bool, 
-    check_value_is_nonnegative_integer, 
-    check_item_is_correct_type
 )
 from matcal.core.serializer_wrapper import matcal_load, matcal_save
 from matcal.core.surrogates import (
@@ -404,7 +405,7 @@ def _make_group_kfold_splits(X, y, groups, kfold_splits):
 
     from sklearn.model_selection import GroupKFold
 
-    splitter = GroupKFold(kfold_splits=kfold_splits)
+    splitter = GroupKFold(n_splits=kfold_splits)
     return splitter.split(X, y, groups)
 
 
@@ -4614,6 +4615,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             ``"score"`` is treated as an alias for ``"r2"``.
         :type convergence_metric: str
         """
+        check_value_is_nonnegative_real(eps, "eps")
         self._eps = eps
 
         valid_metrics = ("rmse", "max_error", "r2", "score", "nlpd")
@@ -4676,7 +4678,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         cv_scale=1.0,
         cv_metric="sum_abs",
         group_kfold=False,
-        batch_size=1,
+        batch_size=None,
     ):
         """
         Configure the cross-validation options used to select Voronoi refinement
