@@ -75,9 +75,9 @@ RANDOM_FOREST_SURROGATE_OPTIONS = {
 }
 
 KFCV_OPTIONS = {
-    "nsplits": 10,
-    "nmax_folds": 3,
-    "nmax_loo": 1,
+    "kfold_splits": 10,
+    "kfold_regions_for_loo": 3,
+    "loo_seed_candidate_count": 1,
     "batch_size": 1,
     "cv_scale": 1.0,
     "cv_metric": "sum_abs",

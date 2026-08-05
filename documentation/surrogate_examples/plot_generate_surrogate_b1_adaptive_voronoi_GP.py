@@ -96,10 +96,10 @@ study.set_surrogate_options(
 )
 
 study.set_cross_validation_options(
-    nsplits=10,
-    nmax_folds=3,
-    nmax_loo=10,
-    batch_size=10,
+    kfold_splits=10,
+    kfold_regions_for_loo=3,
+    loo_seed_candidate_count=20,
+    batch_size=20,
     cv_metric="sum_abs",
 )
 

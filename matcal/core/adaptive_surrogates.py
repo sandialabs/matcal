@@ -352,48 +352,48 @@ def _validate_cv_scale(cv_scale):
     return float(scale) if scale.ndim == 0 else scale
 
 
-def _get_valid_kfold_split_count(nsplits, n_samples):
+def _get_valid_kfold_split_count(kfold_splits, n_samples):
     """
     Return a valid number of K-fold splits for the current sample count.
 
     If the requested split count is larger than the sample count, it is reduced
     to a valid value and a warning is emitted.
     """
-    check_value_is_nonnegative_integer(nsplits, "nsplits")
+    check_value_is_nonnegative_integer(kfold_splits, "kfold_splits")
 
-    if nsplits == 0:
+    if kfold_splits == 0:
         return 0
 
-    if nsplits == 1:
-        raise ValueError("nsplits must be 0 to disable K-fold CV or at least 2.")
+    if kfold_splits == 1:
+        raise ValueError("kfold_splits must be 0 to disable K-fold CV or at least 2.")
 
 
     if n_samples < 2:
         raise ValueError("At least two samples are required for K-fold CV.")
 
-    if nsplits <= n_samples:
-        return int(nsplits)
+    if kfold_splits <= n_samples:
+        return int(kfold_splits)
 
-    new_nsplits = min(max(2, n_samples // 2), n_samples)
-    logger.warning(f"Reducing nsplits from {nsplits} to {new_nsplits}.")
-    return int(new_nsplits)
+    new_kfold_splits = min(max(2, n_samples // 2), n_samples)
+    logger.warning(f"Reducing kfold_splits from {kfold_splits} to {new_kfold_splits}.")
+    return int(new_kfold_splits)
 
 
-def _make_standard_kfold_splits(X, nsplits, random_seed=None):
+def _make_standard_kfold_splits(X, kfold_splits, random_seed=None):
     """
     Make reproducible shuffled K-fold splits.
     """
     from sklearn.model_selection import KFold
 
     splitter = KFold(
-        n_splits=nsplits,
+        n_splits=kfold_splits,
         shuffle=True,
         random_state=random_seed,
     )
     return splitter.split(X)
 
 
-def _make_group_kfold_splits(X, y, groups, nsplits):
+def _make_group_kfold_splits(X, y, groups, kfold_splits):
     """
     Make group-aware K-fold splits.
     """
@@ -404,14 +404,14 @@ def _make_group_kfold_splits(X, y, groups, nsplits):
 
     from sklearn.model_selection import GroupKFold
 
-    splitter = GroupKFold(n_splits=nsplits)
+    splitter = GroupKFold(kfold_splits=kfold_splits)
     return splitter.split(X, y, groups)
 
 
 def _make_kfold_cv_splits(
     X,
     y,
-    nsplits,
+    kfold_splits,
     group_kfold=False,
     groups=None,
     random_seed=None,
@@ -420,9 +420,9 @@ def _make_kfold_cv_splits(
     Make either standard or grouped K-fold splits.
     """
     if group_kfold:
-        return _make_group_kfold_splits(X, y, groups, nsplits)
+        return _make_group_kfold_splits(X, y, groups, kfold_splits)
 
-    return _make_standard_kfold_splits(X, nsplits, random_seed)
+    return _make_standard_kfold_splits(X, kfold_splits, random_seed)
 
 
 def _evaluate_kfold_cv_splits(kfold_runner, X, y, splits):
@@ -450,7 +450,7 @@ def _perform_kfold_cv(kfold_runner, X, y, groups=None):
     splits = _make_kfold_cv_splits(
         X,
         y,
-        kfold_runner.nsplits,
+        kfold_runner.kfold_splits,
         group_kfold=kfold_runner.group_kfold,
         groups=groups,
         random_seed=kfold_runner.random_seed,
@@ -4151,18 +4151,18 @@ def _validate_optional_positive_integer(value, name):
     return int(value)
 
 
-def _validate_nmax_loo(nmax_loo):
+def _validate_loo_seed_candidate_count(loo_seed_candidate_count):
     """
     Validate the number of LOO-ranked candidates retained after KFCV filtering.
     """
-    if isinstance(nmax_loo, str):
-        nmax_loo = nmax_loo.lower().strip()
-        if nmax_loo == "all":
-            return nmax_loo
-        raise ValueError("If nmax_loo is a string, it must be 'all'.")
+    if isinstance(loo_seed_candidate_count, str):
+        loo_seed_candidate_count = loo_seed_candidate_count.lower().strip()
+        if loo_seed_candidate_count == "skip_loo":
+            return loo_seed_candidate_count
+        raise ValueError("If loo_seed_candidate_count is a string, it must be 'skip_loo'.")
 
-    check_value_is_positive_integer(nmax_loo, "nmax_loo")
-    return int(nmax_loo)
+    check_value_is_positive_integer(loo_seed_candidate_count, "loo_seed_candidate_count", 1)
+    return int(loo_seed_candidate_count)
 
 
 def _validate_cv_metric(cv_metric):
@@ -4295,9 +4295,9 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._random_selection = None
         self.set_voronoi_sampling_options()
 
-        self._nsplits = None
-        self._nmax_folds = None
-        self._nmax_loo = None
+        self._kfold_splits = None
+        self._kfold_regions_for_loo = None
+        self._loo_seed_candidate_count = None
         self._batch_size = None
         self._cv_scale = None
         self._cv_metric = None
@@ -4456,17 +4456,18 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         Set the number of new Voronoi sample locations requested per batch.
 
         If ``batch_size`` is ``None``, the legacy behavior is preserved by using
-        ``nmax_loo`` when it is an integer. If ``nmax_loo='all'``, the default
+        ``loo_seed_candidate_count`` when it is an integer. If ``loo_seed_candidate_count='skip_loo'``, the default
         batch size is one.
 
         :param batch_size: Number of new Voronoi sample locations requested per adaptive
-            batch. If ``None``, defaults to ``nmax_loo`` when ``nmax_loo`` is an integer,
-            or to one when ``nmax_loo='all'``.
+            batch. If ``None``, defaults to ``loo_seed_candidate_count`` 
+            when ``loo_seed_candidate_count`` is an integer, or to 
+            one when ``_loo_seed_candidate_count='skip_loo'``.
         :type batch_size: int or None
         """
         if batch_size is None:
-            if isinstance(self._nmax_loo, (int, np.integer)):
-                self._batch_size = int(self._nmax_loo)
+            if isinstance(self._loo_seed_candidate_count, (int, np.integer)):
+                self._batch_size = int(self._loo_seed_candidate_count)
             else:
                 self._batch_size = 1
             return
@@ -4667,8 +4668,16 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             f"original-response-space {self._convergence_metric}",
         )
 
-    def set_cross_validation_options(self, nsplits=10, nmax_folds=3, nmax_loo=1, cv_scale=1.0,
-                                     cv_metric='sum_abs', group_kfold=False, batch_size=1):
+    def set_cross_validation_options(
+        self,
+        kfold_splits=10,
+        kfold_regions_for_loo=1,
+        loo_seed_candidate_count=1,
+        cv_scale=1.0,
+        cv_metric="sum_abs",
+        group_kfold=False,
+        batch_size=1,
+    ):
         """
         Configure the cross-validation options used to select Voronoi refinement
         regions.
@@ -4676,18 +4685,18 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         The Voronoi adaptive sampler can use a two-stage error filter modeled after
         the KFCV-Voronoi procedure:
 
-        1. Split the current training samples into ``nsplits`` folds and build one
+        1. Split the current training samples into ``kfold_splits`` folds and build one
         surrogate per held-out fold.
         2. Compute the original data response-space prediction error on each held-out
         fold.
-        3. Select the ``nmax_folds`` folds with the largest original data space
+        3. Select the ``kfold_regions_for_loo`` folds with the largest original data space
         cross-validation errors.
         4. Optionally perform leave-one-out cross validation only on the samples
         contained in those selected folds.
         5. Select Voronoi cells associated with the largest leave-one-out original data space
         errors and place new samples at farthest vertices of those cells.
 
-        If ``nsplits`` is set to ``0``, the cross-validation filter is disabled.
+        If ``kfold_splits`` is set to ``0``, the cross-validation filter is disabled.
         In that case, all current training samples are treated as candidate Voronoi
         cell seeds.
 
@@ -4697,26 +4706,26 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         Gaussian-process latent-space negative log predictive density stored by the
         fitted surrogate and is only valid when ``regressor_type="Gaussian Process"``.
 
-        :param nsplits: Number of folds used for K-fold cross validation. If
-            ``nsplits=0``, K-fold cross validation and leave-one-out cross
+        :param kfold_splits: Number of folds used for K-fold cross validation. If
+            ``kfold_splits=0``, K-fold cross validation and leave-one-out cross
             validation are skipped and candidate Voronoi regions are drawn from all
-            current training samples. If ``nsplits`` is larger than the current
+            current training samples. If ``kfold_splits`` is larger than the current
             number of training samples, it is reduced internally.
-        :type nsplits: int
+        :type kfold_splits: int
 
-        :param nmax_folds: Number of highest-error K-folds retained for possible
+        :param kfold_regions_for_loo: Number of highest-error K-folds retained for possible
             refinement. Samples contained in these folds define the candidate
             regions for leave-one-out cross validation. This corresponds to the
             number of K-fold groups selected by the global KFCV filter.
-        :type nmax_folds: int
+        :type kfold_regions_for_loo: int
 
-        :param nmax_loo: Number of highest-error leave-one-out samples retained
+        :param loo_seed_candidate_count: Number of highest-error leave-one-out samples retained
             after the K-fold filter. These samples define the Voronoi regions from
-            which new adaptive samples are drawn. If nmax_loo='all', leave-one-out
+            which new adaptive samples are drawn. If loo_seed_candidate_count='skip_loo', leave-one-out
             cross validation is skipped. Samples in the selected high-error 
             folds form the candidate pool, from which up to batch_size 
             candidates are selected.
-        :type nmax_loo: int or str
+        :type loo_seed_candidate_count: int or str
 
         :param cv_scale: Optional scaling applied to original data space responses before
             computing cross-validation errors. Use this to normalize response
@@ -4756,32 +4765,34 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         :type group_kfold: bool
 
         :param batch_size: Number of Voronoi-selected sample locations requested per
-            adaptive batch. If ``None``, the batch size defaults to ``nmax_loo`` when
-            ``nmax_loo`` is an integer, or to one when ``nmax_loo='all'``.
+            adaptive batch. If ``None``, the batch size defaults to ``loo_seed_candidate_count`` when
+            ``loo_seed_candidate_count`` is an integer, or to one when ``loo_seed_candidate_count='skip_loo'``.
         :type batch_size: int or None
         
         :raises TypeError: If input types are invalid.
-        :raises ValueError: If numeric options are out of range, if ``nmax_loo`` is
-            a string other than ``"all"``, or if ``cv_metric`` is unsupported.
+        :raises ValueError: If numeric options are out of range, if ``loo_seed_candidate_count`` is
+            a string other than ``"skip_loo"``, or if ``cv_metric`` is unsupported.
 
         :notes:
-            * ``nmax_folds`` controls how many high-error K-fold groups pass the
+            * ``kfold_regions_for_loo`` controls how many high-error K-fold groups pass the
             global KFCV filter.
-            * ``nmax_loo`` controls how many individual high-error samples are used
+            * ``loo_seed_candidate_count`` controls how many individual high-error samples are used
             after the optional leave-one-out refinement step.
             * The actual number of new samples added in a batch may be smaller than
-            ``nmax_loo`` if some Voronoi regions produce invalid, duplicate, or
+            ``loo_seed_candidate_count`` if some Voronoi regions produce invalid, duplicate, or
             out-of-bounds candidate points.
             * For behavior closest to the paper, use ``cv_metric="sum_abs"``.
             For fold-size-independent ranking, use ``cv_metric="rmse"``.
         """
-        check_value_is_nonnegative_integer(nsplits, "nsplits")
-        self._nsplits = int(nsplits)
+        check_value_is_nonnegative_integer(kfold_splits, "kfold_splits")
+        self._kfold_splits = int(kfold_splits)
 
-        check_value_is_positive_integer(nmax_folds, "nmax_folds")
-        self._nmax_folds = int(nmax_folds)
+        check_value_is_positive_integer(kfold_regions_for_loo, "kfold_regions_for_loo")
+        self._kfold_regions_for_loo = int(kfold_regions_for_loo)
 
-        self._nmax_loo = _validate_nmax_loo(nmax_loo)
+        self._loo_seed_candidate_count = _validate_loo_seed_candidate_count(
+        loo_seed_candidate_count
+)
         self._cv_scale = _validate_cv_scale(cv_scale)
         self._cv_metric = _validate_cv_metric(cv_metric)
         _raise_if_nlpd_cv_requested_for_non_gp(
@@ -4970,13 +4981,13 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """
         Return candidate sample locations from KFCV/LOO or from all samples.
         """
-        if self._nsplits <= 0:
+        if self._kfold_splits <= 0:
             return training_params
 
         self._perform_kfold_cross_validation(training_params, training_data)
         self._find_kfold_max_errors()
 
-        if self._nmax_loo == "all":
+        if self._loo_seed_candidate_count == "skip_loo":
             candidates = training_params[self._max_fold_error_indices]
             return _random_subset_rows(
                 candidates, 
@@ -5358,12 +5369,12 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """
         logger.info("Performing kfold cross-validation")
 
-        nsplits = _get_valid_kfold_split_count(
-            self._nsplits,
+        kfold_splits = _get_valid_kfold_split_count(
+            self._kfold_splits,
             training_params.shape[0],
         )
-        kfcv = self._make_kfold_cross_validation_runner(nsplits)
-        groups = self._make_kfold_groups(training_params, nsplits)
+        kfcv = self._make_kfold_cross_validation_runner(kfold_splits)
+        groups = self._make_kfold_groups(training_params, kfold_splits)
 
         self._kf = _perform_kfold_cv(
             kfcv,
@@ -5372,12 +5383,12 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             groups,
         )
 
-    def _make_kfold_cross_validation_runner(self, nsplits):
+    def _make_kfold_cross_validation_runner(self, kfold_splits):
         """
         Construct the K-fold cross-validation helper object.
         """
         return KFoldCrossValidation(
-            nsplits,
+            kfold_splits,
             self._group_kfold,
             self._independent_variable,
             self._independent_variable_values,
@@ -5389,7 +5400,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             random_seed=getattr(self, "_seed", None),
         )
 
-    def _make_kfold_groups(self, training_params, nsplits):
+    def _make_kfold_groups(self, training_params, kfold_splits):
         """
         Build grouping labels for GroupKFold, or return None for standard KFold.
         """
@@ -5399,7 +5410,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         from sklearn.cluster import KMeans
 
         return KMeans(
-            n_clusters=nsplits,
+            n_clusters=kfold_splits,
             random_state=getattr(self, "_seed", 42),
         ).fit_predict(training_params)
 
@@ -5458,17 +5469,17 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         """
         Return the configured number of LOO-ranked candidates to retain.
         """
-        if self._nmax_loo == "all":
+        if self._loo_seed_candidate_count == "skip_loo":
             return len(self._loo_errors)
 
-        return min(int(self._nmax_loo), len(self._loo_errors))
+        return min(int(self._loo_seed_candidate_count), len(self._loo_errors))
 
     def _get_ordered_loo_candidate_indices(self):
         """
         Return candidate training-sample indices ordered from largest LOO error
         to smallest LOO error.
 
-        The number returned is limited by ``nmax_loo`` unless ``nmax_loo='all'``.
+        The number returned is limited by ``loo_seed_candidate_count`` unless ``loo_seed_candidate_count='skip_loo'``.
         """
         nkeep = self._get_number_of_loo_errors_to_keep()
         sorted_items = _sorted_error_items(self._loo_errors)
@@ -5477,7 +5488,7 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     
     def _find_indices_of_n_largest_kf_errors(self):
         sorted_items = _sorted_error_items(self._kf)
-        top_n_items = sorted_items[:self._nmax_folds]
+        top_n_items = sorted_items[:self._kfold_regions_for_loo]
         return {
             key: sample_indices
             for key, _, sample_indices in top_n_items
@@ -6226,7 +6237,7 @@ class CrossValidationBase:
 class KFoldCrossValidation(CrossValidationBase):
     def __init__(
         self,
-        nsplits,
+        kfold_splits,
         group_kfold,
         interpolation_field,
         interpolation_values,
@@ -6246,7 +6257,7 @@ class KFoldCrossValidation(CrossValidationBase):
             param_names,
             surrogate_options,
         )
-        self.nsplits = nsplits
+        self.kfold_splits = kfold_splits
         self.group_kfold = group_kfold
         self.random_seed = random_seed
 

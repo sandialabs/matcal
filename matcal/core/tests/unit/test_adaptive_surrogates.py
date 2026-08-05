@@ -287,13 +287,13 @@ class TestAdaptiveSurrogateHelpersExtra(MatcalUnitTest):
         logger_obj.setLevel(logging.WARNING)
 
         try:
-            nsplits = _get_valid_kfold_split_count(10, 4)
+            kfold_splits = _get_valid_kfold_split_count(10, 4)
         finally:
             logger_obj.handlers = old_handlers
             logger_obj.setLevel(old_level)
 
-        self.assertEqual(nsplits, 2)
-        self.assertIn("Reducing nsplits from 10 to 2", stream.getvalue())
+        self.assertEqual(kfold_splits, 2)
+        self.assertIn("Reducing kfold_splits from 10 to 2", stream.getvalue())
 
     def test_metric_value_for_record_handles_nan_and_none(self):
         record_nan = {"r2": np.nan, "rmse": np.nan}
@@ -2740,9 +2740,9 @@ class TestKFoldCrossValidation(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
 
-    def _make_kfold_cv(self, nsplits=2, group_kfold=False, random_seed=123):
+    def _make_kfold_cv(self, kfold_splits=2, group_kfold=False, random_seed=123):
         return KFoldCrossValidation(
-            nsplits=nsplits,
+            kfold_splits=kfold_splits,
             group_kfold=group_kfold,
             interpolation_field="time",
             interpolation_values=np.array([0.0, 1.0]),
@@ -2807,12 +2807,12 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         X, _ = self._make_training_arrays()
 
         kfcv_a = self._make_kfold_cv(
-            nsplits=2,
+            kfold_splits=2,
             group_kfold=False,
             random_seed=42,
         )
         kfcv_b = self._make_kfold_cv(
-            nsplits=2,
+            kfold_splits=2,
             group_kfold=False,
             random_seed=42,
         )
@@ -2820,14 +2820,14 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         splits_a = list(
             _make_standard_kfold_splits(
                 X,
-                kfcv_a.nsplits,
+                kfcv_a.kfold_splits,
                 kfcv_a.random_seed,
             )
         )
         splits_b = list(
             _make_standard_kfold_splits(
                 X,
-                kfcv_b.nsplits,
+                kfcv_b.kfold_splits,
                 kfcv_b.random_seed,
             )
         )
@@ -2841,7 +2841,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
     def test_make_group_kfold_splits_requires_groups(self):
         X, y = self._make_training_arrays()
-        kfcv = self._make_kfold_cv(nsplits=2, group_kfold=True)
+        kfcv = self._make_kfold_cv(kfold_splits=2, group_kfold=True)
 
         with self.assertRaises(RuntimeError):
             list(
@@ -2849,13 +2849,13 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                     X,
                     y,
                     groups=None,
-                    nsplits=kfcv.nsplits,
+                    kfold_splits=kfcv.kfold_splits,
                 )
             )
 
     def test_make_group_kfold_splits_uses_group_labels(self):
         X, y = self._make_training_arrays()
-        kfcv = self._make_kfold_cv(nsplits=2, group_kfold=True)
+        kfcv = self._make_kfold_cv(kfold_splits=2, group_kfold=True)
 
         groups = np.array([0, 0, 1, 1])
 
@@ -2864,7 +2864,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
                 X,
                 y,
                 groups,
-                kfcv.nsplits,
+                kfcv.kfold_splits,
             )
         )
         self.assertEqual(len(splits), 2)
@@ -2875,7 +2875,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
     def test_extract_fold_info_partitions_training_and_test_data(self):
         X, y = self._make_training_arrays()
-        kfcv = self._make_kfold_cv(nsplits=2)
+        kfcv = self._make_kfold_cv(kfold_splits=2)
 
         train_index = np.array([0, 2])
         test_index = np.array([1, 3])
@@ -2914,7 +2914,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
     def test_evaluate_fold_uses_native_cv_error_function(self):
         X, y = self._make_training_arrays()
-        kfcv = self._make_kfold_cv(nsplits=2)
+        kfcv = self._make_kfold_cv(kfold_splits=2)
 
         train_index = np.array([0, 2])
         test_index = np.array([1, 3])
@@ -2955,7 +2955,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
     def test_evaluate_cv_splits_returns_fold_dictionary(self):
         X, y = self._make_training_arrays()
-        kfcv = self._make_kfold_cv(nsplits=2)
+        kfcv = self._make_kfold_cv(kfold_splits=2)
 
         splits = [
             (np.array([0, 1]), np.array([2, 3])),
@@ -2976,7 +2976,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
 
     def test_perform_kfold_cv_uses_global_split_and_evaluation_helpers(self):
         X, y = self._make_training_arrays()
-        kfcv = self._make_kfold_cv(nsplits=2)
+        kfcv = self._make_kfold_cv(kfold_splits=2)
 
         def fake_evaluate_fold(train_index, test_index, X_arg, y_arg, kfold_count):
             return float(kfold_count), test_index
@@ -2993,7 +2993,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         X, y = self._make_training_arrays()
 
         kfcv = KFoldCrossValidation(
-            nsplits=2,
+            kfold_splits=2,
             group_kfold=False,
             interpolation_field="time",
             interpolation_values=np.array([0.0, 1.0]),
@@ -3040,7 +3040,7 @@ class TestKFoldCrossValidation(MatcalUnitTest):
         X, y = self._make_training_arrays()
 
         kfcv = KFoldCrossValidation(
-            nsplits=2,
+            kfold_splits=2,
             group_kfold=False,
             interpolation_field="time",
             interpolation_values=np.array([0.0, 1.0]),
@@ -3456,9 +3456,9 @@ class TestVoronoiNLPDCV(MatcalUnitTest):
         )
 
         study.set_cross_validation_options(
-            nsplits=2,
-            nmax_folds=1,
-            nmax_loo=1,
+            kfold_splits=2,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count=1,
             cv_metric="nlpd",
         )
 
@@ -3482,9 +3482,9 @@ class TestVoronoiNLPDCV(MatcalUnitTest):
         )
 
         study.set_cross_validation_options(
-            nsplits=2,
-            nmax_folds=1,
-            nmax_loo=1,
+            kfold_splits=2,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count=1,
             cv_metric="nlpd",
         )
 
@@ -4697,9 +4697,9 @@ class TestVoronoiAdaptiveSurrogateActualFit(
     def configure_method_specific_options(self, study):
         study.set_number_of_initial_samples(4)
         study.set_cross_validation_options(
-            nsplits=0,
-            nmax_folds=1,
-            nmax_loo="all",
+            kfold_splits=0,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count="skip_loo",
             cv_metric="sum_abs",
             batch_size=1,
         )
@@ -4727,9 +4727,9 @@ class TestVoronoiAdaptiveSurrogateActualFitWithRBF(
     def configure_method_specific_options(self, study):
         study.set_number_of_initial_samples(4)
         study.set_cross_validation_options(
-            nsplits=0,
-            nmax_folds=1,
-            nmax_loo="all",
+            kfold_splits=0,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count="skip_loo",
             cv_metric="sum_abs",
             batch_size=1,
         )
@@ -4765,9 +4765,9 @@ class TestVoronoiAdaptiveSurrogateActualFitWithRandomForest(
     def configure_method_specific_options(self, study):
         study.set_number_of_initial_samples(4)
         study.set_cross_validation_options(
-            nsplits=0,
-            nmax_folds=1,
-            nmax_loo="all",
+            kfold_splits=0,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count="skip_loo",
             cv_metric="sum_abs",
             batch_size=1,
         )

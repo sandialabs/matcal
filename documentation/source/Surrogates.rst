@@ -815,9 +815,9 @@ Important user-facing options include:
 
     Useful options include:
 
-    * ``nsplits``: number of K-fold splits;
-    * ``nmax_folds``: number of highest-error folds retained;
-    * ``nmax_loo``: number of leave-one-out candidates retained, or ``"all"``;
+    * ``kfold_splits``: number of K-fold splits;
+    * ``kfold_regions_for_loo``: number of highest-error folds retained;
+    * ``loo_seed_candidate_count``: number of leave-one-out candidates retained, or ``"skip_loo"``;
     * ``cv_metric``: response-space error metric;
     * ``batch_size``: number of new samples requested per adaptive batch.
 
