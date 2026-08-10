@@ -310,6 +310,8 @@ class SurrogateGenerator:
                 "save_filename must be provided when plot_n_worst > 0 because "
                 "the worst-recreation plots require an output filename prefix."
             )
+        self._normalize_test_evaluation_information_names()
+
         results = _package_surrogate_generator_input_data(self._eval_info, self._model_name, 
                                                           self._state)
         source_data, params = results
@@ -344,7 +346,33 @@ class SurrogateGenerator:
     def _check_test_evaluation_information_provided(self):
         if self._training_fraction == 1.0 and self._test_eval_info is None:
             raise ValueError("Test evaluations must be provided when training_fraction = 1.0.")
-        
+
+    def _normalize_test_evaluation_information_names(self):
+        """
+        Normalize supplied test-evaluation information to match training data names.
+
+        This is primarily needed when training and test StudyResults were generated
+        by equivalent model objects that received different runtime-generated names.
+        """
+        if self._test_eval_info is None:
+            return
+
+        required_model_name = _get_model_name_from_evaluation_information(
+            self._eval_info,
+            self._model_name,
+        )
+
+        if required_model_name is None:
+            return
+
+        self._test_eval_info = _normalize_evaluation_information_names(
+            self._test_eval_info,
+            required_model_name=required_model_name,
+            required_objective_name=None,
+            data_set_name="surrogate test_eval_info",
+            logger_on=self._logger_on,
+        )
+
     def _plot_worst_recreations(self, surrogate, parameters, source_data, n_worst, save_filename):
         if n_worst < 1:
             return
@@ -494,6 +522,370 @@ def _parse_evaluation_info(eval_info, model_name):
         raise TypeError(f"Surrogate Generator can not process data of type {type(eval_info)}")
 
     return input_hist, output_hist
+
+
+def _get_results_like_from_evaluation_information(eval_info):
+    """
+    Return a StudyResults-like object from supported evaluation information.
+
+    This intentionally accepts StudyResults-like objects by attribute rather than
+    by strict type so the name-normalization helpers can be unit tested with
+    lightweight objects.
+    """
+    if eval_info is None:
+        return None
+
+    if hasattr(eval_info, "simulation_history") or hasattr(eval_info, "qoi_history"):
+        return eval_info
+
+    if hasattr(eval_info, "results"):
+        return eval_info.results
+
+    return None
+
+
+def _get_model_name_from_evaluation_information(eval_info, model_name=None):
+    """
+    Determine the model name that should be used for surrogate data extraction.
+
+    If ``model_name`` is supplied, it is returned directly. If not supplied and
+    the evaluation information contains exactly one model, that model name is
+    returned. If the model name cannot be determined unambiguously, ``None`` is
+    returned and no automatic test-data model-name normalization is attempted.
+    """
+    if model_name is not None:
+        return model_name
+
+    results = _get_results_like_from_evaluation_information(eval_info)
+
+    if results is None or not hasattr(results, "simulation_history"):
+        return None
+
+    simulation_history = results.simulation_history
+
+    if simulation_history is None:
+        return None
+
+    model_names = list(simulation_history.keys())
+
+    if len(model_names) == 1:
+        return model_names[0]
+
+    return None
+
+
+def _split_qoi_history_key(qoi_key):
+    """
+    Split a QoI-history key into model and objective names.
+
+    Expected keys have the form ``'<model_name>:<objective_name>'``.
+    """
+    if not isinstance(qoi_key, str) or ":" not in qoi_key:
+        raise RuntimeError(
+            "Surrogate test-data QoI-history keys must have the form "
+            f"'<model_name>:<objective_name>'. Received key '{qoi_key}'."
+        )
+
+    model_name, objective_name = qoi_key.split(":", 1)
+
+    if model_name == "" or objective_name == "":
+        raise RuntimeError(
+            "Surrogate test-data QoI-history keys must have nonempty model "
+            f"and objective names. Received key '{qoi_key}'."
+        )
+
+    return model_name, objective_name
+
+
+def _get_qoi_history_model_and_objective_names(qoi_history):
+    """
+    Extract model and objective names from QoI-history keys.
+    """
+    model_names = set()
+    objective_names = set()
+
+    for qoi_key in qoi_history.keys():
+        model_name, objective_name = _split_qoi_history_key(qoi_key)
+        model_names.add(model_name)
+        objective_names.add(objective_name)
+
+    return model_names, objective_names
+
+
+def _rename_mapping_key(mapping, old_key, new_key):
+    """
+    Rename one key in a mutable mapping while preserving its value.
+    """
+    if new_key in mapping:
+        raise RuntimeError(
+            f"Renaming surrogate test-data key '{old_key}' to '{new_key}' "
+            "would create a duplicate key."
+        )
+
+    mapping[new_key] = mapping.pop(old_key)
+
+
+def _normalize_single_key_mapping_name(
+    mapping,
+    required_name,
+    entry_kind,
+    data_set_name,
+    logger_on=True,
+):
+    """
+    Rename a one-entry mapping key to ``required_name`` when unambiguous.
+
+    If the required key already exists, no change is made. If the required key is
+    absent and exactly one key is present, that key is renamed. If the required
+    key is absent and multiple keys are present, an error is raised.
+    """
+    if mapping is None:
+        return
+
+    names = list(mapping.keys())
+
+    if required_name in names:
+        return
+
+    if len(names) == 0:
+        raise RuntimeError(
+            f"The supplied {data_set_name} does not contain any {entry_kind} "
+            "entries and cannot be used for surrogate testing."
+        )
+
+    if len(names) > 1:
+        raise RuntimeError(
+            f"The supplied {data_set_name} contains more than one {entry_kind} "
+            f"name. MatCal cannot determine which {entry_kind} should be used "
+            f"for surrogate testing. {entry_kind.capitalize()} names found: "
+            f"{names}. The required {entry_kind} name is '{required_name}'."
+        )
+
+    current_name = names[0]
+
+    if logger_on:
+        logger.warning(
+            f"The supplied {data_set_name} uses {entry_kind} name "
+            f"'{current_name}', but the surrogate requires {entry_kind} name "
+            f"'{required_name}'. Because the supplied data contains exactly one "
+            f"{entry_kind} name, MatCal is renaming the {data_set_name} "
+            f"{entry_kind} entry at runtime."
+        )
+
+    _rename_mapping_key(mapping, current_name, required_name)
+
+
+def _rename_qoi_history_keys(
+    qoi_history,
+    old_model_name,
+    old_objective_name,
+    new_model_name,
+    new_objective_name,
+):
+    """
+    Rename model/objective components of QoI-history keys in place.
+    """
+    original_items = list(qoi_history.items())
+
+    qoi_history.clear()
+
+    for old_key, value in original_items:
+        model_name, objective_name = _split_qoi_history_key(old_key)
+
+        if model_name != old_model_name:
+            raise RuntimeError(
+                "Unexpected model name encountered while renaming surrogate "
+                "test-data QoI history. Expected model name "
+                f"'{old_model_name}', but found '{model_name}' in key "
+                f"'{old_key}'."
+            )
+
+        if objective_name != old_objective_name:
+            raise RuntimeError(
+                "Unexpected objective name encountered while renaming surrogate "
+                "test-data QoI history. Expected objective name "
+                f"'{old_objective_name}', but found '{objective_name}' in key "
+                f"'{old_key}'."
+            )
+
+        new_key = f"{new_model_name}:{new_objective_name}"
+
+        if new_key in qoi_history:
+            raise RuntimeError(
+                "Renaming surrogate test-data QoI history would create a "
+                f"duplicate QoI-history key '{new_key}'."
+            )
+
+        qoi_history[new_key] = value
+
+
+def _normalize_qoi_history_names(
+    qoi_history,
+    required_model_name=None,
+    required_objective_name=None,
+    data_set_name="test data",
+    logger_on=True,
+):
+    """
+    Normalize model/objective names in a QoI-history mapping.
+
+    If ``required_model_name`` is supplied and the QoI history contains exactly
+    one model name, that model name is renamed when needed. If multiple model
+    names are present and the required model name is not already the only model
+    name, an error is raised.
+
+    If ``required_objective_name`` is supplied, the QoI history must contain
+    exactly one objective name. If that one objective name differs from the
+    required objective name, it is renamed and a warning is logged. If more than
+    one objective name is present, an error is raised.
+    """
+    if qoi_history is None:
+        if required_objective_name is None:
+            return
+
+        raise RuntimeError(
+            f"The supplied {data_set_name} does not contain a QoI history and "
+            "cannot be used for adaptive surrogate testing."
+        )
+
+    if len(qoi_history) == 0:
+        if required_objective_name is None:
+            return
+
+        raise RuntimeError(
+            f"The supplied {data_set_name} does not contain any QoI-history "
+            "entries and cannot be used for adaptive surrogate testing."
+        )
+
+    model_names, objective_names = _get_qoi_history_model_and_objective_names(
+        qoi_history
+    )
+
+    if required_model_name is not None:
+        if len(model_names) > 1:
+            raise RuntimeError(
+                f"The supplied {data_set_name} contains more than one model "
+                "name in its QoI history. MatCal cannot determine which model "
+                "should be used for surrogate testing. Model names found: "
+                f"{sorted(model_names)}. The required model name is "
+                f"'{required_model_name}'."
+            )
+
+        current_model_name = next(iter(model_names))
+    else:
+        current_model_name = next(iter(model_names))
+
+    if required_objective_name is not None:
+        if len(objective_names) > 1:
+            raise RuntimeError(
+                f"The supplied {data_set_name} contains more than one "
+                "objective name in its QoI history. MatCal cannot determine "
+                "which objective should be used for surrogate testing. "
+                f"Objective names found: {sorted(objective_names)}. The "
+                f"required objective name is '{required_objective_name}'."
+            )
+
+        current_objective_name = next(iter(objective_names))
+    else:
+        current_objective_name = next(iter(objective_names))
+
+    new_model_name = (
+        required_model_name
+        if required_model_name is not None
+        else current_model_name
+    )
+    new_objective_name = (
+        required_objective_name
+        if required_objective_name is not None
+        else current_objective_name
+    )
+
+    model_name_matches = current_model_name == new_model_name
+    objective_name_matches = current_objective_name == new_objective_name
+
+    if model_name_matches and objective_name_matches:
+        return
+
+    if not model_name_matches and logger_on:
+        logger.warning(
+            f"The supplied {data_set_name} uses QoI-history model name "
+            f"'{current_model_name}', but the surrogate requires model name "
+            f"'{new_model_name}'. Because the supplied data contains exactly "
+            "one QoI-history model name, MatCal is renaming the QoI-history "
+            "key at runtime."
+        )
+
+    if not objective_name_matches and logger_on:
+        logger.warning(
+            f"The supplied {data_set_name} uses objective name "
+            f"'{current_objective_name}', but the surrogate requires objective "
+            f"name '{new_objective_name}'. Because the supplied data contains "
+            "exactly one objective name, MatCal is renaming the QoI-history "
+            "key at runtime."
+        )
+
+    _rename_qoi_history_keys(
+        qoi_history,
+        current_model_name,
+        current_objective_name,
+        new_model_name,
+        new_objective_name,
+    )
+
+
+def _normalize_evaluation_information_names(
+    eval_info,
+    required_model_name=None,
+    required_objective_name=None,
+    data_set_name="test data",
+    logger_on=True,
+):
+    """
+    Normalize model/objective names in StudyResults-like evaluation information.
+
+    This is used to make externally supplied test data compatible with surrogate
+    generation and adaptive surrogate studies when the test data were generated
+    with equivalent model/objective objects that have different runtime names.
+
+    The normalization is intentionally conservative:
+
+    * simulation-history model names are renamed only when the supplied data has
+      exactly one model name and the required model name is missing;
+    * QoI-history model names are renamed only when exactly one QoI-history model
+      name is present;
+    * if ``required_objective_name`` is supplied, the QoI history must contain
+      exactly one objective name; otherwise an error is raised;
+    * every runtime rename logs a warning.
+    """
+    results = _get_results_like_from_evaluation_information(eval_info)
+
+    if results is None:
+        return eval_info
+
+    if required_model_name is not None and hasattr(results, "simulation_history"):
+        _normalize_single_key_mapping_name(
+            results.simulation_history,
+            required_model_name,
+            "model",
+            data_set_name,
+            logger_on=logger_on,
+        )
+
+    if hasattr(results, "qoi_history"):
+        _normalize_qoi_history_names(
+            results.qoi_history,
+            required_model_name=required_model_name,
+            required_objective_name=required_objective_name,
+            data_set_name=data_set_name,
+            logger_on=logger_on,
+        )
+    elif required_objective_name is not None:
+        raise RuntimeError(
+            f"The supplied {data_set_name} does not have a qoi_history "
+            "attribute and cannot be used for adaptive surrogate testing."
+        )
+
+    return eval_info
 
 
 def _apply_preprocessing_function(preprocessing_function, training_data_history):

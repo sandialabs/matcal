@@ -28,14 +28,7 @@ air_temperature = mc.Parameter("T_air", 400, 800) # K
 my_hifi_model = mc.UserDefinedSierraModel('aria', "aria_model/metal_foam_layers.i", 
                                           "aria_model/test_block.g", "aria_model/include")
 my_hifi_model.set_results_filename("results/results.csv")
-my_hifi_model.set_number_of_cores(2)
-from site_matcal.sandia.tests.utilities import MATCAL_WCID
-from site_matcal.sandia.computing_platforms import is_sandia_cluster
-
-if is_sandia_cluster():
-    my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
-    my_hifi_model.continue_when_simulation_fails()
-    my_hifi_model.set_number_of_cores(12)
+my_hifi_model.set_number_of_cores(1)
 
 #%%
 # We set some common values that will be used 
@@ -90,7 +83,21 @@ study.add_evaluation_set(my_hifi_model)
 #%%
 # We must also specify how many samples to run for generating test data. 
 # These adaptive surrogates use Halton sampling for test data generation.
+from pathlib import Path
+
+COMMON_TEST_RESULTS_FILE = Path("common_surrogate_test") / "final_results.joblib"
+
 study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
+
+if COMMON_TEST_RESULTS_FILE.exists():
+    print(f"Using existing common surrogate test data: {COMMON_TEST_RESULTS_FILE}")
+    study.set_test_data(str(COMMON_TEST_RESULTS_FILE))
+else:
+    print(
+        "Common surrogate test data was not found. "
+        "The adaptive study will generate its own Halton test set using "
+        f"{COMMON_TEST_SAMPLE_COUNT} samples and seed {COMMON_TEST_SEED}."
+    )
 
 #%%
 # Next we set a stopping criteria. 
@@ -99,14 +106,14 @@ study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 # We do so with the 
 # :meth:`~matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy.set_error_stopping_criteria`
 # that sets a stopping criteria based on the test sample error.
-study.set_error_stopping_criteria(max_abs_error_goal=1.5)
+study.set_error_stopping_criteria(max_abs_error_goal=3)
 #%%
 # Now, we set the max number of training samples to
 # the same number of samples that were 
-# used for the non-adaptive surrogate.
+# used for the other adaptive surrogate examples.
 # In theory, adaptivity should improve the 
 # prediction with the same or fewer samples.
-study.set_max_training_samples(500)
+study.set_max_training_samples(300)
 
 #%%
 # Next, we set the surrogate save options and filename.
@@ -125,10 +132,11 @@ study.set_surrogate_save_filename("layered_metal_bc_SG_adaptive_surrogate.joblib
 #%%
 # Finally, set the standard study options 
 # like seeds, core use and working directory.
-if is_sandia_cluster():
-    study.set_core_limit(250)
-else:
-    study.set_core_limit(112)
+from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform
+platform = get_sandia_computing_platform()
+cores_per_node = platform.get_processors_per_node()
+study.set_core_limit(cores_per_node)
+
 study.set_test_group_random_seed(COMMON_TEST_SEED)
 study.set_seed(TRAINING_SEED)
 study.set_working_directory("sparse_grid_surrogate", remove_existing=True)
@@ -204,7 +212,7 @@ param_study = mc.ParameterStudy(conv_heat_transfer_coeff, far_field_temperature,
 my_objective = mc.SimulationResultsSynchronizer('time', indep_field_vals,
                                                  "TC_top", "TC_bottom")
 param_study.add_evaluation_set(my_hifi_model, my_objective)
-param_study.set_core_limit(16)
+param_study.set_core_limit(cores_per_node)
 param_study.add_parameter_evaluation(H=H, T_inf=T_inf, T_air=T_air)
 param_study.add_parameter_evaluation(H=H2, T_inf=T_inf2, T_air=T_air2)
 results = param_study.launch()
@@ -306,19 +314,13 @@ print("Final batch training samples:", surrogate.sample_count_history[-1])
 # to assess if better performance is likely 
 # with additional training samples.
 fig, ax = surrogate.plot_error_history(
-    metrics="max_error",
+    metrics=("rmse", "max_error"),
     error_units="K",
-    metric_styles={
-        "max_error": {
-            "color": "tab:red",
-            "linestyle": "None",
-            "marker": "o",
-        },
-    },
-    ylabel="max_test_sample_error",
-    title="Surrogate error convergence",
+    ylabel="common_test_error",
+    title="Sparse Grid Adaptive Surrogate Error Convergence",
 )
 plt.show()
+
 
 #%%
 # The adaptive surrogate stores the test parameters and responses used to score
@@ -341,6 +343,71 @@ print("Worst test sample indices:", worst_test_indices)
 plt.show()
 
 #%%
-# We can see in the convergence plot whether the error has stagnated 
-# and the worst-test-sample plots show where the remaining 
+# We can see in the worst-test-sample plots where the remaining 
 # surrogate error is concentrated.
+
+# %%
+# Finally, we can visualize the adaptive training samples in parameter space.
+parameter_names = ["H", "T_inf", "T_air"]
+
+training_parameters = np.column_stack([
+    study_results.parameter_history[name]
+    for name in parameter_names
+])
+
+cumulative_sample_counts = np.asarray(surrogate.sample_count_history, dtype=int)
+n_training_samples = training_parameters.shape[0]
+
+cumulative_sample_counts = cumulative_sample_counts[
+    cumulative_sample_counts <= n_training_samples
+]
+
+if cumulative_sample_counts.size == 0 or cumulative_sample_counts[-1] < n_training_samples:
+    cumulative_sample_counts = np.append(cumulative_sample_counts, n_training_samples)
+
+batch_ids = np.zeros(n_training_samples, dtype=int)
+start_index = 0
+for batch_index, stop_index in enumerate(cumulative_sample_counts):
+    batch_ids[start_index:stop_index] = batch_index
+    start_index = stop_index
+
+from matplotlib.colors import BoundaryNorm
+from matplotlib.cm import ScalarMappable
+
+fig = plt.figure(constrained_layout=True)
+ax = fig.add_subplot(111, projection="3d")
+
+n_batches = int(batch_ids.max()) + 1
+cmap = plt.get_cmap("viridis", n_batches)
+bounds = np.arange(-0.5, n_batches + 0.5, 1)
+norm = BoundaryNorm(bounds, cmap.N)
+
+scatter = ax.scatter(
+    training_parameters[:, 0],
+    training_parameters[:, 1],
+    training_parameters[:, 2],
+    c=batch_ids,
+    cmap=cmap,
+    norm=norm,
+    s=45,
+    edgecolor="black",
+    linewidth=0.35,
+    alpha=0.9,
+)
+
+ax.set_xlabel("H")
+ax.set_ylabel(r"$T_\infty$")
+ax.set_zlabel(r"$T_\mathrm{air}$")
+ax.set_title("Sparse Grid adaptive training samples by batch")
+
+colorbar = fig.colorbar(
+    ScalarMappable(norm=norm, cmap=cmap),
+    ax=ax,
+    pad=0.1,
+    shrink=0.75,
+)
+colorbar.set_label("adaptive batch")
+colorbar.set_ticks(np.arange(n_batches))
+colorbar.set_ticklabels(["initial"] + [str(i) for i in range(1, n_batches)])
+
+plt.show()

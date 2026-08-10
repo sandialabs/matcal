@@ -30,6 +30,7 @@ from matcal.core.surrogates import (
     _convert_param_array_to_dict, 
     _global_r2_score,
     _max_error_inf_norm, 
+    _normalize_evaluation_information_names,
     _process_surrogate_args_call, 
     _root_mean_squared_error, 
 )
@@ -3043,74 +3044,37 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
     def _get_test_data(self):
         results = None
         if self._user_test_data is not None:
-            results = self._update_user_test_data_objective_name_if_needed(
+            results = self._prepare_user_test_data_for_adaptive_study(
                 self._user_test_data
             )
         else:
             results = self._run_test_sampling()
+
         self._test_eval_info = results
         test_params = self._format_params(results)
         test_responses = self._format_output(results)
         return test_params, test_responses
 
-    def _update_user_test_data_objective_name_if_needed(self, study_results):
+    def _prepare_user_test_data_for_adaptive_study(self, study_results):
         """
-        Rename the user-supplied test-data QoI objective name when unambiguous.
+        Normalize user-supplied test-data names for this adaptive surrogate study.
 
-        The adaptive study expects the test-data QoI history to contain a key of the
-        form ``"<model_name>:<required_objective_name>"``. If the supplied test data
-        contains exactly one objective name and it differs from the required
-        objective name, the QoI-history key is renamed at runtime.
-
-        If more than one objective name is present, a RuntimeError is raised because
-        MatCal cannot determine which objective should be used for adaptive-surrogate
-        testing.
+        Adaptive surrogate studies support one model and one internally generated
+        SimulationResultsSynchronizer objective. User-supplied test data may have
+        equivalent data stored under different runtime-generated model/objective
+        names. When the supplied test data are unambiguous, rename those entries at
+        runtime so the rest of the adaptive surrogate workflow can use the standard
+        study model/objective names.
         """
-        required_objective_name = self._get_required_test_data_objective_name()
-        qoi_history = self._get_user_test_data_qoi_history(study_results)
+        model_names = self._get_model_names()
 
-        qoi_keys = list(qoi_history.keys())
-        objective_names = self._get_qoi_history_objective_names(qoi_keys)
-
-        if len(objective_names) == 0:
+        if len(model_names) != 1:
             raise RuntimeError(
-                "The supplied adaptive surrogate test data does not contain any "
-                "QoI history entries. It cannot be used for surrogate testing."
+                f"{self.__class__.__name__} requires exactly one model for "
+                "adaptive surrogate testing. Model names found in the current "
+                f"study are {model_names}."
             )
 
-        if len(objective_names) > 1:
-            raise RuntimeError(
-                "The supplied adaptive surrogate test data contains more than one "
-                "objective name in its QoI history. MatCal cannot determine which "
-                "objective should be used for surrogate testing. Objective names "
-                f"found: {sorted(objective_names)}. The required objective name is "
-                f"'{required_objective_name}'."
-            )
-
-        current_objective_name = next(iter(objective_names))
-
-        if current_objective_name == required_objective_name:
-            return study_results 
-
-        logger.warning(
-            "The supplied adaptive surrogate test data uses objective name "
-            f"'{current_objective_name}', but this study requires objective name "
-            f"'{required_objective_name}'. Because the supplied test data contains "
-            "exactly one objective name, MatCal is renaming the test-data QoI "
-            "history entry at runtime."
-        )
-
-        self._rename_qoi_history_objective_name(
-            qoi_history,
-            current_objective_name,
-            required_objective_name,
-        )
-        return study_results
-
-    def _get_required_test_data_objective_name(self):
-        """
-        Return the objective name required by this adaptive surrogate study.
-        """
         if self._results_synchronizer is None:
             raise RuntimeError(
                 "The adaptive surrogate study has not created its internal "
@@ -3118,100 +3082,13 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
                 "launching the study or preparing user test data."
             )
 
-        return self._results_synchronizer.name
-
-
-    def _get_user_test_data_qoi_history(self, study_results):
-        """
-        Return the QoI history from user-supplied StudyResults.
-        """
-        if not hasattr(study_results, "qoi_history"):
-            raise RuntimeError(
-                "The supplied adaptive surrogate test data does not have a "
-                "qoi_history attribute and cannot be used for surrogate testing."
-            )
-
-        qoi_history = study_results.qoi_history
-
-        if qoi_history is None:
-            raise RuntimeError(
-                "The supplied adaptive surrogate test data has qoi_history=None "
-                "and cannot be used for surrogate testing."
-            )
-
-        return qoi_history
-
-
-    def _get_qoi_history_objective_names(self, qoi_keys):
-        """
-        Extract objective names from QoI-history keys.
-
-        Expected QoI-history keys have the form ``'<model_name>:<objective_name>'``.
-        """
-        objective_names = set()
-
-        for qoi_key in qoi_keys:
-            model_name, objective_name = self._split_qoi_history_key(qoi_key)
-            objective_names.add(objective_name)
-
-        return objective_names
-
-
-    def _split_qoi_history_key(self, qoi_key):
-        """
-        Split a QoI-history key into model and objective names.
-        """
-        if not isinstance(qoi_key, str) or ":" not in qoi_key:
-            raise RuntimeError(
-                "Adaptive surrogate test-data QoI-history keys must have the form "
-                f"'<model_name>:<objective_name>'. Received key '{qoi_key}'."
-            )
-
-        model_name, objective_name = qoi_key.split(":", 1)
-
-        if model_name == "" or objective_name == "":
-            raise RuntimeError(
-                "Adaptive surrogate test-data QoI-history keys must have nonempty "
-                "model and objective names. Received key "
-                f"'{qoi_key}'."
-            )
-
-        return model_name, objective_name
-
-
-    def _rename_qoi_history_objective_name(
-        self,
-        qoi_history,
-        old_objective_name,
-        new_objective_name,
-    ):
-        """
-        Rename the objective-name component of each QoI-history key in place.
-        """
-        original_items = list(qoi_history.items())
-
-        qoi_history.clear()
-
-        for old_key, value in original_items:
-            model_name, objective_name = self._split_qoi_history_key(old_key)
-
-            if objective_name != old_objective_name:
-                raise RuntimeError(
-                    "Unexpected objective name encountered while renaming adaptive "
-                    "surrogate test-data QoI history. Expected objective name "
-                    f"'{old_objective_name}', but found '{objective_name}' in key "
-                    f"'{old_key}'."
-                )
-
-            new_key = f"{model_name}:{new_objective_name}"
-
-            if new_key in qoi_history:
-                raise RuntimeError(
-                    "Renaming adaptive surrogate test-data objective names would "
-                    f"create a duplicate QoI-history key '{new_key}'."
-                )
-
-            qoi_history[new_key] = value
+        return _normalize_evaluation_information_names(
+            study_results,
+            required_model_name=model_names[0],
+            required_objective_name=self._results_synchronizer.name,
+            data_set_name="adaptive surrogate test data",
+            logger_on=True,
+        )
 
     def _run_test_sampling(self):
         """

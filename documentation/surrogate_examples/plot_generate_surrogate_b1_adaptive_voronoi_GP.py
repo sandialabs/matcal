@@ -17,7 +17,7 @@ We re-create the model and parameters from
 :ref:`Surrogate Generation Example`
 that are needed to perform the study.
 """
-# sphinx_gallery_thumbnail_number = 6
+# sphinx_gallery_thumbnail_number = 2
 import matcal as mc
 import numpy as np
 
@@ -28,16 +28,8 @@ air_temperature = mc.Parameter("T_air", 400, 800) # K
 my_hifi_model = mc.UserDefinedSierraModel('aria', "aria_model/metal_foam_layers.i", 
                                           "aria_model/test_block.g", "aria_model/include")
 my_hifi_model.set_results_filename("results/results.csv")
-my_hifi_model.set_number_of_cores(2)
-from site_matcal.sandia.tests.utilities import MATCAL_WCID
-from site_matcal.sandia.computing_platforms import is_sandia_cluster
+my_hifi_model.set_number_of_cores(1)
 
-if is_sandia_cluster():
-    my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
-    my_hifi_model.continue_when_simulation_fails()
-    my_hifi_model.set_number_of_cores(12)
-
-#
 # %%
 # We set some common values that will be used 
 # across the surrogate examples as part of this
@@ -88,34 +80,65 @@ study = mc.VoronoiAdaptiveSurrogateStudy(conv_heat_transfer_coeff, far_field_tem
 study.set_independent_variable("time", indep_field_vals)
 study.set_target_field_name("TC_bottom")
 study.add_evaluation_set(my_hifi_model)
+
+#%%
+# For surrogate options, we set them to the same that 
+# were used in the non-adaptive case. 
+from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel
+
+kernel = (
+    ConstantKernel(1.0, (1e-3, 1e3))
+    * Matern(
+        length_scale=[1.0, 1.0, 1.0],
+        length_scale_bounds=(1e-3, 1e3),
+        nu=2.5
+    )
+    + WhiteKernel(noise_level=1e-3, noise_level_bounds=(1e-10, 1e1))
+)
+
 study.set_surrogate_options(
-    n_restarts_optimizer=3, 
-    alpha=1e-5, 
-    normalize_y=True, 
+    n_restarts_optimizer=5, 
+    normalize_y=True,
+    kernel=kernel,
+    random_state=0,
     decomp_var=0.999
 )
 
 study.set_cross_validation_options(
     kfold_splits=10,
     kfold_regions_for_loo=3,
-    loo_seed_candidate_count=20,
-    batch_size=20,
+    loo_seed_candidate_count=3,
+    batch_size=3,
     cv_metric="sum_abs",
 )
 
 #%%
 # We must also specify how many samples to run for generating test data. 
 # These adaptive surrogates use Halton sampling for test data generation.
+from pathlib import Path
+
+COMMON_TEST_RESULTS_FILE = Path("common_surrogate_test") / "final_results.joblib"
+
 study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 
+if COMMON_TEST_RESULTS_FILE.exists():
+    print(f"Using existing common surrogate test data: {COMMON_TEST_RESULTS_FILE}")
+    study.set_test_data(str(COMMON_TEST_RESULTS_FILE))
+else:
+    print(
+        "Common surrogate test data was not found. "
+        "The adaptive study will generate its own Halton test set using "
+        f"{COMMON_TEST_SAMPLE_COUNT} samples and seed {COMMON_TEST_SEED}."
+    )
 #%%
 # Next we set a stopping criteria. 
 # We are hoping to increase the accuracy of the 
-# surrogate to be within 1.5 K or less for all time for all test cases. 
+# surrogate to be within 3 K or less for all time for all test cases. 
 # We do so with the 
 # :meth:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy.set_error_stopping_criteria`
 # that sets a stopping criteria based on the test sample error.
-study.set_error_stopping_criteria(max_abs_error_goal=1.5)
+study.set_error_stopping_criteria(max_abs_error_goal=3)
+
 #%%
 # To stop when the test-set error stagnates between adaptive batches,
 # use
@@ -126,16 +149,17 @@ study.set_error_stopping_criteria(max_abs_error_goal=1.5)
 # based on the requested error goal or maximum training-sample limit.
 study.set_convergence_criteria(eps=1e-12)
 
+#%%
 # Now we set some basic surrogate training options for the study.
 # First, we set the number of training samples for the initial surrogate. 
 study.set_number_of_initial_samples(100)
 #%%
 # Next, we set the max number of training samples to
-# the same number of samples that were 
+# the a lower number of samples than were 
 # used for the non-adaptive surrogate.
 # In theory, adaptivity should improve the 
 # prediction with the same or fewer samples.
-study.set_max_training_samples(500)
+study.set_max_training_samples(300)
 
 #%%
 # Next, we set the surrogate save options and filename.
@@ -154,10 +178,10 @@ study.set_surrogate_save_filename("layered_metal_bc_voronoi_adaptive_surrogate.j
 #%%
 # Finally, we set the standard study options like seeds, core use, and working
 # directory.
-if is_sandia_cluster():
-    study.set_core_limit(250)
-else:
-    study.set_core_limit(112)
+from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform
+platform = get_sandia_computing_platform()
+cores_per_node = platform.get_processors_per_node()
+study.set_core_limit(cores_per_node)
 
 #%%
 # If setting the seed, ensure the test group seed is different than the study
@@ -179,7 +203,7 @@ study_results = study.launch()
 surrogate = study.surrogate
 
 #%%
-# The `study_results` variable is a :class:`~matcal.core.study_base.StudyResults`
+# The ``study_results`` variable is a :class:`~matcal.core.study_base.StudyResults`
 # object with the training results stored in it.
 #
 # While the surrogate is being trained, the adaptive surrogate stores the
@@ -231,7 +255,7 @@ param_study = mc.ParameterStudy(conv_heat_transfer_coeff, far_field_temperature,
 my_objective = mc.SimulationResultsSynchronizer('time', indep_field_vals,
                                                  "TC_top", "TC_bottom")
 param_study.add_evaluation_set(my_hifi_model, my_objective)
-param_study.set_core_limit(16)
+param_study.set_core_limit(cores_per_node)
 param_study.add_parameter_evaluation(H=H, T_inf=T_inf, T_air=T_air)
 param_study.add_parameter_evaluation(H=H2, T_inf=T_inf2, T_air=T_air2)
 results = param_study.launch()
@@ -315,27 +339,16 @@ print(
     surrogate.score(best_surrogate_index),
 )
 
-print("\nVoronoi adaptive full history:")
-print("Training sample counts:")
-print(surrogate.sample_count_history)
-
 print("Final batch max error:", surrogate.max_error_history[-1])
 print("Final batch training samples:", surrogate.sample_count_history[-1])
 
-#%%
-# Plot the error metric as a function of the number of model training samples.
+# %%
+# Plot the adaptive error history as a function of the number of model training samples.
 fig, ax = surrogate.plot_error_history(
-    metrics="max_error",
+    metrics=("rmse", "max_error"),
     error_units="K",
-    metric_styles={
-        "max_error": {
-            "color": "tab:red",
-            "linestyle": "None",
-            "marker": "o",
-        },
-    },
-    ylabel="max_test_sample_error",
-    title="Surrogate error convergence",
+    ylabel="common_test_error",
+    title="Voronoi Adaptive GP Surrogate Error Convergence",
 )
 plt.show()
 
@@ -430,44 +443,3 @@ colorbar.set_ticklabels(["initial"] + [str(i) for i in range(1, n_batches)])
 
 plt.show()
 
-#%%
-# Optional: plot pairwise projections of the same batch-colored training points.
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), constrained_layout=True)
-
-projection_pairs = [
-    (0, 1, "H", r"$T_\infty$"),
-    (0, 2, "H", r"$T_\mathrm{air}$"),
-    (1, 2, r"$T_\infty$", r"$T_\mathrm{air}$"),
-]
-
-for ax, (i, j, xlabel, ylabel) in zip(axes, projection_pairs):
-    sc = ax.scatter(
-        training_parameters[:, i],
-        training_parameters[:, j],
-        c=batch_ids,
-        cmap=cmap,
-        norm=norm,
-        s=40,
-        edgecolor="black",
-        linewidth=0.3,
-        alpha=0.9,
-    )
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.grid(True)
-    ax.set_title(f"{xlabel} vs. {ylabel}")
-
-colorbar = fig.colorbar(
-    ScalarMappable(norm=norm, cmap=cmap),
-    ax=axes,
-    shrink=0.9,
-)
-colorbar.set_label("adaptive batch")
-colorbar.set_ticks(np.arange(n_batches))
-colorbar.set_ticklabels(["initial"] + [str(i) for i in range(1, n_batches)])
-
-fig.suptitle("Voronoi adaptive training samples by batch")
-plt.show()
-
-
-#%%

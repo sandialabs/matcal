@@ -2,6 +2,7 @@ from collections import OrderedDict
 import numpy as np
 from scipy.stats import qmc
 from sklearn.discriminant_analysis import StandardScaler
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -1344,6 +1345,7 @@ class TestSurrogateFunctions(MatcalUnitTest):
                 y_true=y_true,
             )
 
+
 class TestSurrogateGenerator(MatcalUnitTest):
 
     def setUp(self):
@@ -1952,6 +1954,46 @@ class TestSurrogateGenerator(MatcalUnitTest):
 
         with self.assertRaises(ValueError):
             sur_gen.generate(None, plot_n_worst=1)
+
+    def _make_results_like(self, 
+        simulation_model_names=("old_model",),
+        qoi_keys=("old_model:old_objective",),
+    ):
+        simulation_history = OrderedDict()
+        for model_name in simulation_model_names:
+            simulation_history[model_name] = SimpleNamespace(state_names=["state"])
+
+        qoi_history = OrderedDict()
+        for qoi_key in qoi_keys:
+            qoi_history[qoi_key] = SimpleNamespace()
+
+        return SimpleNamespace(
+            simulation_history=simulation_history,
+            qoi_history=qoi_history,
+        )
+
+    def test_surrogate_generator_normalizes_test_eval_info_model_name(self):
+        train_results = self._make_results_like(
+            simulation_model_names=("training_model",),
+            qoi_keys=("training_model:training_objective",),
+        )
+        test_results = self._make_results_like(
+            simulation_model_names=("test_model",),
+            qoi_keys=("test_model:test_objective",),
+        )
+
+        generator = SurrogateGenerator.__new__(SurrogateGenerator)
+        generator._eval_info = train_results
+        generator._test_eval_info = test_results
+        generator._model_name = None
+        generator._logger_on = False
+
+        generator._normalize_test_evaluation_information_names()
+
+        assert list(test_results.simulation_history.keys()) == ["training_model"]
+        assert list(test_results.qoi_history.keys()) == [
+            "training_model:test_objective"
+        ]
 
 
 class TestProcessSurrogateArgsCall(MatcalUnitTest):

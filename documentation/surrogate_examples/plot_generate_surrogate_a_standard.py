@@ -117,13 +117,7 @@ my_objective = mc.SimulationResultsSynchronizer('time', indep_field_vals,
 my_hifi_model = mc.UserDefinedSierraModel('aria', "aria_model/metal_foam_layers.i", 
                                           "aria_model/test_block.g", "aria_model/include")
 my_hifi_model.set_results_filename("results/results.csv")
-my_hifi_model.set_number_of_cores(2)
-from site_matcal.sandia.tests.utilities import MATCAL_WCID
-from site_matcal.sandia.computing_platforms import is_sandia_cluster
-if is_sandia_cluster():
-    my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
-    my_hifi_model.continue_when_simulation_fails()
-    my_hifi_model.set_number_of_cores(12)
+my_hifi_model.set_number_of_cores(1)
 
 #%%
 # Now we have all of our necessary components for a LHS study. We pass our 
@@ -133,10 +127,10 @@ if is_sandia_cluster():
 # and runs in a reasonable amount of time. Depending on the complexity of your problem, 
 # a larger sample set may be required (1000-10000). 
 sampling_study.add_evaluation_set(my_hifi_model, my_objective)
-if is_sandia_cluster():
-    sampling_study.set_core_limit(250)
-else:
-    sampling_study.set_core_limit(112)
+from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform
+platform = get_sandia_computing_platform()
+cores_per_node = platform.get_processors_per_node()
+sampling_study.set_core_limit(cores_per_node)
 sampling_study.set_number_of_samples(500)
 sampling_study.set_seed(TRAINING_SEED)
 sampling_study.set_working_directory("standard_surrogate_training", remove_existing=True)
@@ -161,12 +155,24 @@ study_results = sampling_study.launch()
 # a filename we would like to save our surrogate to. 
 # The method then returns the surrogate, and saves a copy of it to 
 # the filename we passed with a ".joblib" file extension. 
+from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel
+
+kernel = (
+    ConstantKernel(1.0, (1e-3, 1e3))
+    * Matern(
+        length_scale=[1.0, 1.0, 1.0],
+        length_scale_bounds=(1e-3, 1e3),
+        nu=2.5
+    )
+    + WhiteKernel(noise_level=1e-3, noise_level_bounds=(1e-10, 1e1))
+)
+
 surrogate_generator = mc.SurrogateGenerator(sampling_study, interpolation_field='time',
                                             regressor_type="Gaussian Process", 
-                                            n_restarts_optimizer=20, 
-                                            alpha=1e-5, 
-                                            normalize_y=True)
-surrogate_generator.set_PCA_details(decomp_var=4)
+                                            n_restarts_optimizer=5, 
+                                            normalize_y=True, kernel=kernel,
+                                            random_state=0)
+surrogate_generator.set_PCA_details(decomp_var=0.999)
 surrogate = surrogate_generator.generate("layered_metal_bc_surrogate")
 
 #%%
@@ -306,7 +312,7 @@ prediction2 = surrogate([[H, T_inf, T_air], [H2, T_inf2, T_air2]], batch_evaluat
 param_study = mc.ParameterStudy(conv_heat_transfer_coeff, far_field_temperature,
                                  air_temperature)
 param_study.add_evaluation_set(my_hifi_model, my_objective)
-param_study.set_core_limit(16)
+param_study.set_core_limit(cores_per_node)
 param_study.add_parameter_evaluation(H=H, T_inf=T_inf, T_air=T_air)
 param_study.add_parameter_evaluation(H=H2, T_inf=T_inf2, T_air=T_air2)
 results = param_study.launch()
@@ -411,11 +417,7 @@ common_test_study = mc.HaltonStudy(
     air_temperature,
 )
 common_test_study.add_evaluation_set(my_hifi_model, my_objective)
-
-if is_sandia_cluster():
-    common_test_study.set_core_limit(250)
-else:
-    common_test_study.set_core_limit(112)
+common_test_study.set_core_limit(cores_per_node)
 
 common_test_study.set_number_of_samples(COMMON_TEST_SAMPLE_COUNT)
 common_test_study.set_seed(COMMON_TEST_SEED)
@@ -425,14 +427,11 @@ common_test_results = common_test_study.launch()
 
 #%%
 # Now we can generate the surrogate and use the common test set 
-# to evaluate the test errors.
+# to evaluate the test errors. 
 surrogate_generator.set_surrogate_details(
     training_fraction=1.0,
     test_eval_info=common_test_results,
     regressor_type="Gaussian Process",
-    n_restarts_optimizer=3,
-    alpha=1e-5,
-    normalize_y=True,
 )
 surrogate = surrogate_generator.generate("layered_metal_bc_surrogate")
 

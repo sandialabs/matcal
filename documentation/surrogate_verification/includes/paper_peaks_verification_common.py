@@ -18,7 +18,6 @@ from includes.paper_surrogate_verification_common import (
     PaperPeaksInitialGridVoronoiStudy,
     adaptive_history_arrays,
     collect_adaptive_surrogates_at_sample_counts,
-    copy_validation_results_with_qoi_alias,
     estimate_power_law_convergence_rate,
     fit_power_law_convergence,
     get_field_score,

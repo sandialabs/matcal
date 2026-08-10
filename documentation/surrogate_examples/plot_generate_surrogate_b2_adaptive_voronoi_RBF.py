@@ -17,7 +17,7 @@ provide predictive standard deviations, this
 example uses deterministic original-response-space cross-validation and
 convergence metrics rather than NLPD-based metrics.
 """
-# sphinx_gallery_thumbnail_number = 6
+# sphinx_gallery_thumbnail_number = 2
 
 import matcal as mc
 import numpy as np
@@ -37,15 +37,7 @@ my_hifi_model = mc.UserDefinedSierraModel(
     "aria_model/include",
 )
 my_hifi_model.set_results_filename("results/results.csv")
-my_hifi_model.set_number_of_cores(2)
-
-from site_matcal.sandia.tests.utilities import MATCAL_WCID
-from site_matcal.sandia.computing_platforms import is_sandia_cluster
-
-if is_sandia_cluster():
-    my_hifi_model.run_in_queue(MATCAL_WCID, 0.25)
-    my_hifi_model.continue_when_simulation_fails()
-    my_hifi_model.set_number_of_cores(12)
+my_hifi_model.set_number_of_cores(1)
 
 # %%
 # Common settings used across the surrogate examples. Keeping these values the
@@ -90,7 +82,6 @@ study.add_evaluation_set(my_hifi_model)
 # the interpolator with this method.
 study.set_surrogate_options(
     regressor_type="RBF",
-    smoothing=0.0,
     decomp_var=0.999,
 )
 
@@ -103,19 +94,32 @@ study.set_surrogate_options(
 study.set_cross_validation_options(
     kfold_splits=10,
     kfold_regions_for_loo=3,
-    loo_seed_candidate_count=20,
-    batch_size=20,
+    loo_seed_candidate_count=3,
+    batch_size=3,
     cv_metric="sum_abs",
 )
 
 # %%
 # Use the same deterministic common Halton test set as the other examples.
+from pathlib import Path
+
+COMMON_TEST_RESULTS_FILE = Path("common_surrogate_test") / "final_results.joblib"
+
 study.set_number_of_test_samples(COMMON_TEST_SAMPLE_COUNT)
 
+if COMMON_TEST_RESULTS_FILE.exists():
+    print(f"Using existing common surrogate test data: {COMMON_TEST_RESULTS_FILE}")
+    study.set_test_data(str(COMMON_TEST_RESULTS_FILE))
+else:
+    print(
+        "Common surrogate test data was not found. "
+        "The adaptive study will generate its own Halton test set using "
+        f"{COMMON_TEST_SAMPLE_COUNT} samples and seed {COMMON_TEST_SEED}."
+    )
 # %%
 # Set stopping criteria. The maximum absolute error goal is evaluated on the
 # common test set.
-study.set_error_stopping_criteria(max_abs_error_goal=1.5)
+study.set_error_stopping_criteria(max_abs_error_goal=3)
 
 #%%
 # To stop when the test-set error stagnates between adaptive batches,
@@ -133,7 +137,7 @@ study.set_convergence_criteria(
 # Use the same initial and maximum sample counts as the Gaussian Process
 # Voronoi adaptive example for direct comparison.
 study.set_number_of_initial_samples(100)
-study.set_max_training_samples(500)
+study.set_max_training_samples(300)
 
 # %%
 # Retain the best surrogate object according to maximum absolute test error.
@@ -148,10 +152,10 @@ study.set_surrogate_save_filename(
 
 # %%
 # Set standard study options.
-if is_sandia_cluster():
-    study.set_core_limit(250)
-else:
-    study.set_core_limit(112)
+from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform
+platform = get_sandia_computing_platform()
+cores_per_node = platform.get_processors_per_node()
+study.set_core_limit(cores_per_node)
 
 # %%
 # Use different seeds for training and testing so the adaptive training samples
@@ -210,7 +214,7 @@ my_objective = mc.SimulationResultsSynchronizer(
     "TC_bottom",
 )
 param_study.add_evaluation_set(my_hifi_model, my_objective)
-param_study.set_core_limit(16)
+param_study.set_core_limit(cores_per_node)
 param_study.add_parameter_evaluation(H=H, T_inf=T_inf, T_air=T_air)
 param_study.add_parameter_evaluation(H=H2, T_inf=T_inf2, T_air=T_air2)
 results = param_study.launch()

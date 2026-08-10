@@ -10,10 +10,12 @@ and interrogating a surrogate.
 Example problem
 ---------------
 
-The examples use a simple thermal boundary-value problem motivated by a
+The examples use a simple 2D thermal boundary-value problem motivated by a
 foam/metal layered component exposed to a high-temperature environment. A foam
 layer separates two steel layers. The top steel layer is heated by a far-field
-radiative source and by convection from hot surrounding gas. The uncertain model
+radiative source and by convection from hot surrounding gas.
+The steel layers are 1 cm thick and the foam layer is 1.5 cms thick. 
+They are all 2.5 cms wide. The uncertain model
 inputs are:
 
 * convective heat-transfer coefficient, ``H``;
@@ -21,33 +23,18 @@ inputs are:
 * surrounding air temperature, ``T_air``.
 
 The surrogate models predict thermocouple temperature histories in the layered
-component. The examples use a common deterministic Halton test set so that the
+component. The ``TC_top`` thermocouple is at the junction between the 
+foam and steel near the top and the ``TC_bottom`` thermocouple 
+is at the lower foam/steel junction. 
+The examples use a common deterministic Halton test set so that the
 standard and adaptive surrogate approaches can be compared quantitatively.
 
-A schematic of the boundary-value problem is shown below.
+A schematic of the boundary value problem is shown below.
 
-.. math::
-
-   \begin{array}{c}
-   \text{Hot gas and radiative environment} \\[2mm]
-   T_{\mathrm{air}},\; H,\; T_{\infty} \\[1mm]
-   \Downarrow \; q_{\mathrm{conv}} = H\left(T_{\mathrm{air}} - T_s\right),
-   \qquad
-   q_{\mathrm{rad}} \propto T_{\infty}^{4} - T_s^{4}
-   \\[3mm]
-   \boxed{
-   \begin{array}{c}
-   \text{top steel layer} \\
-   \hline
-   \text{foam insulation layer} \\
-   \hline
-   \text{bottom steel layer}
-   \end{array}}
-   \\[3mm]
-   \begin{array}{cc}
-   T_{\mathrm{TC,top}}(t) & T_{\mathrm{TC,bottom}}(t)
-   \end{array}
-   \end{array}
+.. image:: boundary_value_problem.png
+   :alt: Schematic of the layered material boundary value problem
+   :align: center
+   :width: 600px
 
 Examples
 --------
