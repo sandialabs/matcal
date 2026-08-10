@@ -51,7 +51,6 @@ from matcal.core.adaptive_surrogates import (
     _validate_error_statistic,
     _validate_surrogate_generator_regressor_type,
     _validate_surrogate_storage_options,
-    AdaptiveSurrogateStudyBase,
     KFoldCrossValidation,
     LeaveOneOutCrossValidation,
     SparseGridAdaptiveSurrogateStudy,
@@ -59,7 +58,6 @@ from matcal.core.adaptive_surrogates import (
     VoronoiAdaptiveSurrogateStudy,
     VoronoiTessellation,    
 )
-
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.models import PythonModel
@@ -1626,7 +1624,7 @@ class TestAdaptiveSurrogatePlottingExtra(MatcalUnitTest):
         plt.close(fig2)
 
 
-class TestAdaptiveSurrogateUserTestDataRemapping(MatcalUnitTest):
+class TestAdaptiveSurrogateUserTestDataNameNormalization(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
@@ -1634,10 +1632,181 @@ class TestAdaptiveSurrogateUserTestDataRemapping(MatcalUnitTest):
         p2 = Parameter("p2", -1.0, 1.0)
         self.study = SparseGridAdaptiveSurrogateStudy(p1, p2)
 
-    def _make_study_results_with_qoi_history(self, qoi_history):
-        results = StudyResults()
-        results._qoi_history = qoi_history
-        return results
+    def _make_results_like_for_name_normalization(
+        self,
+        simulation_model_names=("old_model",),
+        qoi_keys=("old_model:old_objective",),
+    ):
+        simulation_history = OrderedDict()
+        for model_name in simulation_model_names:
+            simulation_history[model_name] = types.SimpleNamespace(
+                state_names=["state"]
+            )
+
+        qoi_history = OrderedDict()
+        for qoi_key in qoi_keys:
+            qoi_history[qoi_key] = object()
+
+        return types.SimpleNamespace(
+            simulation_history=simulation_history,
+            qoi_history=qoi_history,
+        )
+
+    def _configure_required_names(self, model_name="required_model",
+                                  objective_name="required_objective"):
+        self.study._get_model_names = lambda: [model_name]
+        self.study._results_synchronizer = types.SimpleNamespace(
+            name=objective_name
+        )
+
+    def test_prepare_user_test_data_raises_without_results_synchronizer(self):
+        self.study._get_model_names = lambda: ["required_model"]
+        self.study._results_synchronizer = None
+
+        results = self._make_results_like_for_name_normalization()
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_raises_for_multiple_current_study_models(self):
+        self.study._get_model_names = lambda: ["model_a", "model_b"]
+        self.study._results_synchronizer = types.SimpleNamespace(
+            name="required_objective"
+        )
+
+        results = self._make_results_like_for_name_normalization()
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_renames_single_model_and_objective(self):
+        self._configure_required_names(
+            model_name="required_model",
+            objective_name="required_objective",
+        )
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("old_model",),
+            qoi_keys=("old_model:old_objective",),
+        )
+
+        with patch("matcal.core.surrogates.logger.warning") as warning_mock:
+            returned = self.study._prepare_user_test_data_for_adaptive_study(
+                results
+            )
+
+        self.assertIs(returned, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+
+        self.assertGreaterEqual(warning_mock.call_count, 2)
+        warning_text = "\n".join(
+            str(call.args[0]) for call in warning_mock.call_args_list
+        )
+        self.assertIn("old_model", warning_text)
+        self.assertIn("required_model", warning_text)
+        self.assertIn("old_objective", warning_text)
+        self.assertIn("required_objective", warning_text)
+
+    def test_prepare_user_test_data_noops_when_names_match(self):
+        self._configure_required_names(
+            model_name="required_model",
+            objective_name="required_objective",
+        )
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=("required_model:required_objective",),
+        )
+
+        with patch("matcal.core.surrogates.logger.warning") as warning_mock:
+            returned = self.study._prepare_user_test_data_for_adaptive_study(
+                results
+            )
+
+        self.assertIs(returned, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+        warning_mock.assert_not_called()
+
+    def test_prepare_user_test_data_errors_for_multiple_test_simulation_models(self):
+        self._configure_required_names()
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("model_a", "model_b"),
+            qoi_keys=("model_a:old_objective",),
+        )
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_errors_for_multiple_qoi_model_names(self):
+        self._configure_required_names()
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=("model_a:old_objective", "model_b:old_objective"),
+        )
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_errors_for_multiple_qoi_objective_names(self):
+        self._configure_required_names()
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=(
+                "required_model:objective_a",
+                "required_model:objective_b",
+            ),
+        )
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_get_test_data_normalizes_user_test_data_before_formatting(self):
+        self._configure_required_names(
+            model_name="required_model",
+            objective_name="required_objective",
+        )
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("old_model",),
+            qoi_keys=("old_model:old_objective",),
+        )
+
+        self.study._user_test_data = results
+        self.study._test_eval_info = None
+
+        self.study._format_params = lambda formatted_results: np.array([[1.0, 2.0]])
+        self.study._format_output = lambda formatted_results: np.array([[3.0, 4.0]])
+
+        test_params, test_responses = self.study._get_test_data()
+
+        self.assertIs(self.study._test_eval_info, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+        self.assert_close_arrays(test_params, np.array([[1.0, 2.0]]))
+        self.assert_close_arrays(test_responses, np.array([[3.0, 4.0]]))
 
 
 class _FakeSurrogate:

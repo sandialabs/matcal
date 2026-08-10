@@ -127,11 +127,7 @@ study.set_error_stopping_criteria(max_abs_error_goal=3)
 # :meth:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy.set_convergence_criteria`.
 # For deterministic metrics such as ``"max_error"`` and ``"rmse"``, this
 # convergence check uses original-response-space errors on the stored test set.
-# Here we set ``eps`` very small because we primarily want the adaptive loop to stop
-# based on the requested error goal or maximum training-sample limit.
-study.set_convergence_criteria(
-    eps=1e-12,
-)
+study.set_convergence_criteria(eps=0.05, convergence_metric='max_error')
 
 # %%
 # Use the same initial and maximum sample counts as the Gaussian Process
@@ -152,9 +148,13 @@ study.set_surrogate_save_filename(
 
 # %%
 # Set standard study options.
-from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform
-platform = get_sandia_computing_platform()
-cores_per_node = platform.get_processors_per_node()
+from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform, is_sandia_cluster
+if is_sandia_cluster():
+    platform = get_sandia_computing_platform()
+    cores_per_node = platform.get_processors_per_node()
+else:
+    cores_per_node = 50
+
 study.set_core_limit(cores_per_node)
 
 # %%

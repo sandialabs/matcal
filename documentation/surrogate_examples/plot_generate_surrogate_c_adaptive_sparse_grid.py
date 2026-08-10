@@ -132,9 +132,12 @@ study.set_surrogate_save_filename("layered_metal_bc_SG_adaptive_surrogate.joblib
 #%%
 # Finally, set the standard study options 
 # like seeds, core use and working directory.
-from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform
-platform = get_sandia_computing_platform()
-cores_per_node = platform.get_processors_per_node()
+from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform, is_sandia_cluster
+if is_sandia_cluster():
+    platform = get_sandia_computing_platform()
+    cores_per_node = platform.get_processors_per_node()
+else:
+    cores_per_node = 50
 study.set_core_limit(cores_per_node)
 
 study.set_test_group_random_seed(COMMON_TEST_SEED)

@@ -127,9 +127,13 @@ my_hifi_model.set_number_of_cores(1)
 # and runs in a reasonable amount of time. Depending on the complexity of your problem, 
 # a larger sample set may be required (1000-10000). 
 sampling_study.add_evaluation_set(my_hifi_model, my_objective)
-from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform
-platform = get_sandia_computing_platform()
-cores_per_node = platform.get_processors_per_node()
+from site_matcal.sandia.computing_platforms import  get_sandia_computing_platform, is_sandia_cluster
+if is_sandia_cluster():
+    platform = get_sandia_computing_platform()
+    cores_per_node = platform.get_processors_per_node()
+else:
+    cores_per_node = 50
+
 sampling_study.set_core_limit(cores_per_node)
 sampling_study.set_number_of_samples(500)
 sampling_study.set_seed(TRAINING_SEED)

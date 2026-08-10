@@ -675,48 +675,407 @@ def _normalize_single_key_mapping_name(
     _rename_mapping_key(mapping, current_name, required_name)
 
 
-def _rename_qoi_history_keys(
+def _qoi_history_is_optional(required_objective_name):
+    """
+    Return True when missing QoI history can be ignored.
+
+    SurrogateGenerator only needs simulation-history model-name normalization.
+    It does not require QoI history, so missing/empty QoI history is acceptable
+    when no required objective name is supplied.
+    """
+    return required_objective_name is None
+
+
+def _raise_missing_qoi_history_error(data_set_name):
+    raise RuntimeError(
+        f"The supplied {data_set_name} does not contain a QoI history and "
+        "cannot be used for adaptive surrogate testing."
+    )
+
+
+def _raise_empty_qoi_history_error(data_set_name):
+    raise RuntimeError(
+        f"The supplied {data_set_name} does not contain any QoI-history "
+        "entries and cannot be used for adaptive surrogate testing."
+    )
+
+
+def _qoi_history_has_required_content(
     qoi_history,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Validate whether a QoI-history mapping must be processed.
+
+    Returns False when there is no required objective name and the QoI history is
+    absent or empty, because this is acceptable for non-adaptive surrogate
+    normalization.
+    """
+    if qoi_history is None:
+        if _qoi_history_is_optional(required_objective_name):
+            return False
+        _raise_missing_qoi_history_error(data_set_name)
+
+    if len(qoi_history) == 0:
+        if _qoi_history_is_optional(required_objective_name):
+            return False
+        _raise_empty_qoi_history_error(data_set_name)
+
+    return True
+
+
+def _raise_multiple_qoi_model_names_error(
+    model_names,
+    required_model_name,
+    data_set_name,
+):
+    raise RuntimeError(
+        f"The supplied {data_set_name} contains more than one model "
+        "name in its QoI history. MatCal cannot determine which model "
+        "should be used for surrogate testing. Model names found: "
+        f"{sorted(model_names)}. The required model name is "
+        f"'{required_model_name}'."
+    )
+
+
+def _raise_multiple_qoi_objective_names_error(
+    objective_names,
+    required_objective_name,
+    data_set_name,
+):
+    raise RuntimeError(
+        f"The supplied {data_set_name} contains more than one "
+        "objective name in its QoI history. MatCal cannot determine "
+        "which objective should be used for surrogate testing. "
+        f"Objective names found: {sorted(objective_names)}. The "
+        f"required objective name is '{required_objective_name}'."
+    )
+
+
+def _require_single_qoi_model_name(model_names, required_model_name, data_set_name):
+    """
+    Return the only QoI-history model name when model-name normalization is requested.
+    """
+    if required_model_name is None:
+        return None
+
+    if len(model_names) > 1:
+        _raise_multiple_qoi_model_names_error(
+            model_names,
+            required_model_name,
+            data_set_name,
+        )
+
+    return next(iter(model_names))
+
+
+def _require_single_qoi_objective_name(
+    objective_names,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Return the only QoI-history objective name when objective-name normalization is requested.
+    """
+    if required_objective_name is None:
+        return None
+
+    if len(objective_names) > 1:
+        _raise_multiple_qoi_objective_names_error(
+            objective_names,
+            required_objective_name,
+            data_set_name,
+        )
+
+    return next(iter(objective_names))
+
+
+def _required_name_was_supplied(required_name):
+    return required_name is not None
+
+
+def _name_change_required(current_name, required_name):
+    """
+    Return True if a supplied required name differs from the current name.
+    """
+    if not _required_name_was_supplied(required_name):
+        return False
+
+    return current_name != required_name
+
+
+def _get_qoi_model_name_change(
+    model_names,
+    required_model_name,
+    data_set_name,
+):
+    """
+    Return ``(old_model_name, new_model_name, model_changed)``.
+    """
+    current_model_name = _require_single_qoi_model_name(
+        model_names,
+        required_model_name,
+        data_set_name,
+    )
+
+    if not _required_name_was_supplied(required_model_name):
+        return None, None, False
+
+    return (
+        current_model_name,
+        required_model_name,
+        _name_change_required(current_model_name, required_model_name),
+    )
+
+
+def _get_qoi_objective_name_change(
+    objective_names,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Return ``(old_objective_name, new_objective_name, objective_changed)``.
+    """
+    current_objective_name = _require_single_qoi_objective_name(
+        objective_names,
+        required_objective_name,
+        data_set_name,
+    )
+
+    if not _required_name_was_supplied(required_objective_name):
+        return None, None, False
+
+    return (
+        current_objective_name,
+        required_objective_name,
+        _name_change_required(current_objective_name, required_objective_name),
+    )
+
+
+def _get_qoi_history_name_changes(
+    qoi_history,
+    required_model_name,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Determine required model/objective renames for a QoI-history mapping.
+
+    Returns:
+        old_model_name, old_objective_name, new_model_name, new_objective_name,
+        model_changed, objective_changed
+    """
+    model_names, objective_names = _get_qoi_history_model_and_objective_names(
+        qoi_history
+    )
+
+    old_model_name, new_model_name, model_changed = _get_qoi_model_name_change(
+        model_names,
+        required_model_name,
+        data_set_name,
+    )
+
+    old_objective_name, new_objective_name, objective_changed = (
+        _get_qoi_objective_name_change(
+            objective_names,
+            required_objective_name,
+            data_set_name,
+        )
+    )
+
+    return (
+        old_model_name,
+        old_objective_name,
+        new_model_name,
+        new_objective_name,
+        model_changed,
+        objective_changed,
+    )
+
+
+def _qoi_history_name_changes_required(model_changed, objective_changed):
+    """
+    Return True if any QoI-history key component must be renamed.
+    """
+    return model_changed or objective_changed
+
+
+def _log_qoi_model_name_change(
+    old_model_name,
+    new_model_name,
+    data_set_name,
+):
+    logger.warning(
+        f"The supplied {data_set_name} uses QoI-history model name "
+        f"'{old_model_name}', but the surrogate requires model name "
+        f"'{new_model_name}'. Because the supplied data contains exactly "
+        "one QoI-history model name, MatCal is renaming the QoI-history "
+        "key at runtime."
+    )
+
+
+def _log_qoi_objective_name_change(
+    old_objective_name,
+    new_objective_name,
+    data_set_name,
+):
+    logger.warning(
+        f"The supplied {data_set_name} uses objective name "
+        f"'{old_objective_name}', but the surrogate requires objective "
+        f"name '{new_objective_name}'. Because the supplied data contains "
+        "exactly one objective name, MatCal is renaming the QoI-history "
+        "key at runtime."
+    )
+
+
+def _log_qoi_history_name_changes(
     old_model_name,
     old_objective_name,
     new_model_name,
     new_objective_name,
+    model_changed,
+    objective_changed,
+    data_set_name,
+    logger_on=True,
+):
+    """
+    Log warnings for requested QoI-history key renames.
+    """
+    if not logger_on:
+        return
+
+    if model_changed:
+        _log_qoi_model_name_change(
+            old_model_name,
+            new_model_name,
+            data_set_name,
+        )
+
+    if objective_changed:
+        _log_qoi_objective_name_change(
+            old_objective_name,
+            new_objective_name,
+            data_set_name,
+        )
+
+
+def _validate_qoi_key_component(
+    actual_name,
+    expected_name,
+    component_name,
+    old_key,
+):
+    """
+    Validate one old QoI-history key component against an expected name.
+
+    ``expected_name=None`` means any actual name is accepted.
+    """
+    if expected_name is None:
+        return
+
+    if actual_name == expected_name:
+        return
+
+    raise RuntimeError(
+        f"Unexpected {component_name} name encountered while renaming "
+        "surrogate test-data QoI history. Expected {component_name} name "
+        f"'{expected_name}', but found '{actual_name}' in key '{old_key}'."
+    )
+
+
+def _select_qoi_key_component_name(actual_name, new_name):
+    """
+    Return the renamed QoI-history key component, or preserve the original.
+    """
+    if new_name is None:
+        return actual_name
+
+    return new_name
+
+
+def _make_updated_qoi_history_key(
+    old_key,
+    old_model_name=None,
+    old_objective_name=None,
+    new_model_name=None,
+    new_objective_name=None,
+):
+    """
+    Build the updated QoI-history key for one existing key.
+    """
+    model_name, objective_name = _split_qoi_history_key(old_key)
+
+    _validate_qoi_key_component(
+        model_name,
+        old_model_name,
+        "model",
+        old_key,
+    )
+    _validate_qoi_key_component(
+        objective_name,
+        old_objective_name,
+        "objective",
+        old_key,
+    )
+
+    final_model_name = _select_qoi_key_component_name(
+        model_name,
+        new_model_name,
+    )
+    final_objective_name = _select_qoi_key_component_name(
+        objective_name,
+        new_objective_name,
+    )
+
+    return f"{final_model_name}:{final_objective_name}"
+
+
+def _insert_renamed_qoi_history_item(qoi_history, new_key, value):
+    """
+    Insert a renamed QoI-history item, rejecting duplicate keys.
+    """
+    if new_key in qoi_history:
+        raise RuntimeError(
+            "Renaming surrogate test-data QoI history would create a "
+            f"duplicate QoI-history key '{new_key}'."
+        )
+
+    qoi_history[new_key] = value
+
+
+def _rename_qoi_history_keys(
+    qoi_history,
+    old_model_name=None,
+    old_objective_name=None,
+    new_model_name=None,
+    new_objective_name=None,
 ):
     """
     Rename model/objective components of QoI-history keys in place.
+
+    Any component with ``None`` is treated as a wildcard/preserve operation:
+
+    * ``old_model_name=None``: accept any existing model name.
+    * ``old_objective_name=None``: accept any existing objective name.
+    * ``new_model_name=None``: preserve each key's existing model name.
+    * ``new_objective_name=None``: preserve each key's existing objective name.
+
+    This supports the SurrogateGenerator use case where only the model-name
+    component needs to be renamed while multiple objective names may be present.
     """
     original_items = list(qoi_history.items())
-
     qoi_history.clear()
 
     for old_key, value in original_items:
-        model_name, objective_name = _split_qoi_history_key(old_key)
-
-        if model_name != old_model_name:
-            raise RuntimeError(
-                "Unexpected model name encountered while renaming surrogate "
-                "test-data QoI history. Expected model name "
-                f"'{old_model_name}', but found '{model_name}' in key "
-                f"'{old_key}'."
-            )
-
-        if objective_name != old_objective_name:
-            raise RuntimeError(
-                "Unexpected objective name encountered while renaming surrogate "
-                "test-data QoI history. Expected objective name "
-                f"'{old_objective_name}', but found '{objective_name}' in key "
-                f"'{old_key}'."
-            )
-
-        new_key = f"{new_model_name}:{new_objective_name}"
-
-        if new_key in qoi_history:
-            raise RuntimeError(
-                "Renaming surrogate test-data QoI history would create a "
-                f"duplicate QoI-history key '{new_key}'."
-            )
-
-        qoi_history[new_key] = value
+        new_key = _make_updated_qoi_history_key(
+            old_key,
+            old_model_name=old_model_name,
+            old_objective_name=old_objective_name,
+            new_model_name=new_model_name,
+            new_objective_name=new_objective_name,
+        )
+        _insert_renamed_qoi_history_item(qoi_history, new_key, value)
 
 
 def _normalize_qoi_history_names(
@@ -729,107 +1088,62 @@ def _normalize_qoi_history_names(
     """
     Normalize model/objective names in a QoI-history mapping.
 
-    If ``required_model_name`` is supplied and the QoI history contains exactly
-    one model name, that model name is renamed when needed. If multiple model
-    names are present and the required model name is not already the only model
-    name, an error is raised.
+    If ``required_model_name`` is supplied, the QoI history must contain exactly
+    one model name. If the single model name differs from the required model
+    name, it is renamed.
 
     If ``required_objective_name`` is supplied, the QoI history must contain
-    exactly one objective name. If that one objective name differs from the
-    required objective name, it is renamed and a warning is logged. If more than
-    one objective name is present, an error is raised.
+    exactly one objective name. If the single objective name differs from the
+    required objective name, it is renamed.
+
+    If ``required_objective_name`` is ``None``, objective names are preserved.
+    This permits SurrogateGenerator to normalize test-data model names while
+    preserving multiple objective names.
     """
-    if qoi_history is None:
-        if required_objective_name is None:
-            return
-
-        raise RuntimeError(
-            f"The supplied {data_set_name} does not contain a QoI history and "
-            "cannot be used for adaptive surrogate testing."
-        )
-
-    if len(qoi_history) == 0:
-        if required_objective_name is None:
-            return
-
-        raise RuntimeError(
-            f"The supplied {data_set_name} does not contain any QoI-history "
-            "entries and cannot be used for adaptive surrogate testing."
-        )
-
-    model_names, objective_names = _get_qoi_history_model_and_objective_names(
-        qoi_history
-    )
-
-    if required_model_name is not None:
-        if len(model_names) > 1:
-            raise RuntimeError(
-                f"The supplied {data_set_name} contains more than one model "
-                "name in its QoI history. MatCal cannot determine which model "
-                "should be used for surrogate testing. Model names found: "
-                f"{sorted(model_names)}. The required model name is "
-                f"'{required_model_name}'."
-            )
-
-        current_model_name = next(iter(model_names))
-    else:
-        current_model_name = next(iter(model_names))
-
-    if required_objective_name is not None:
-        if len(objective_names) > 1:
-            raise RuntimeError(
-                f"The supplied {data_set_name} contains more than one "
-                "objective name in its QoI history. MatCal cannot determine "
-                "which objective should be used for surrogate testing. "
-                f"Objective names found: {sorted(objective_names)}. The "
-                f"required objective name is '{required_objective_name}'."
-            )
-
-        current_objective_name = next(iter(objective_names))
-    else:
-        current_objective_name = next(iter(objective_names))
-
-    new_model_name = (
-        required_model_name
-        if required_model_name is not None
-        else current_model_name
-    )
-    new_objective_name = (
-        required_objective_name
-        if required_objective_name is not None
-        else current_objective_name
-    )
-
-    model_name_matches = current_model_name == new_model_name
-    objective_name_matches = current_objective_name == new_objective_name
-
-    if model_name_matches and objective_name_matches:
+    if not _qoi_history_has_required_content(
+        qoi_history,
+        required_objective_name,
+        data_set_name,
+    ):
         return
 
-    if not model_name_matches and logger_on:
-        logger.warning(
-            f"The supplied {data_set_name} uses QoI-history model name "
-            f"'{current_model_name}', but the surrogate requires model name "
-            f"'{new_model_name}'. Because the supplied data contains exactly "
-            "one QoI-history model name, MatCal is renaming the QoI-history "
-            "key at runtime."
-        )
+    (
+        old_model_name,
+        old_objective_name,
+        new_model_name,
+        new_objective_name,
+        model_changed,
+        objective_changed,
+    ) = _get_qoi_history_name_changes(
+        qoi_history,
+        required_model_name,
+        required_objective_name,
+        data_set_name,
+    )
 
-    if not objective_name_matches and logger_on:
-        logger.warning(
-            f"The supplied {data_set_name} uses objective name "
-            f"'{current_objective_name}', but the surrogate requires objective "
-            f"name '{new_objective_name}'. Because the supplied data contains "
-            "exactly one objective name, MatCal is renaming the QoI-history "
-            "key at runtime."
-        )
+    if not _qoi_history_name_changes_required(
+        model_changed,
+        objective_changed,
+    ):
+        return
+
+    _log_qoi_history_name_changes(
+        old_model_name,
+        old_objective_name,
+        new_model_name,
+        new_objective_name,
+        model_changed,
+        objective_changed,
+        data_set_name,
+        logger_on=logger_on,
+    )
 
     _rename_qoi_history_keys(
         qoi_history,
-        current_model_name,
-        current_objective_name,
-        new_model_name,
-        new_objective_name,
+        old_model_name=old_model_name,
+        old_objective_name=old_objective_name,
+        new_model_name=new_model_name,
+        new_objective_name=new_objective_name,
     )
 
 

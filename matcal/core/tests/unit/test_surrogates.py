@@ -2,7 +2,7 @@ from collections import OrderedDict
 import numpy as np
 from scipy.stats import qmc
 from sklearn.discriminant_analysis import StandardScaler
-from types import SimpleNamespace
+import types
 from unittest.mock import patch
 
 
@@ -32,12 +32,14 @@ from matcal.core.surrogates import (
     _decompose_with_pca,
     _ensure_2d_array,
     _field_uses_pca,
+    _get_model_name_from_evaluation_information,
     _get_n_points,
     _identify_fields_of_interest, 
     _import_parameter_hist, 
     _make_parameter_scaler_set,  
     _mean_absolute_error,
     _modal_regressor,
+    _normalize_evaluation_information_names,
     _normalized_root_mean_squared_error,
     _package_parameter_ranges, 
     _parse_evaluation_info, 
@@ -52,6 +54,7 @@ from matcal.core.surrogates import (
     _score_recreation,
     _select_model,
     _select_state_data,  
+    _split_qoi_history_key,
     _sum_absolute_error,
     _tune_data_decomposition 
 )
@@ -128,6 +131,270 @@ def _make_test_sets_uniform(low, high, log_indices=[]):
             cur_set.append(new_value)
         test_sets.append(cur_set)
     return test_sets
+
+
+def _make_results_like_for_name_normalization(
+    simulation_model_names=("old_model",),
+    qoi_keys=("old_model:old_objective",),
+):
+    simulation_history = OrderedDict()
+    for model_name in simulation_model_names:
+        simulation_history[model_name] = types.SimpleNamespace(
+            state_names=["state"]
+        )
+
+    qoi_history = OrderedDict()
+    for qoi_key in qoi_keys:
+        qoi_history[qoi_key] = object()
+
+    return types.SimpleNamespace(
+        simulation_history=simulation_history,
+        qoi_history=qoi_history,
+    )
+
+
+class TestSurrogateEvaluationInformationNameNormalization(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_split_qoi_history_key(self):
+        model_name, objective_name = _split_qoi_history_key("model:objective")
+
+        self.assertEqual(model_name, "model")
+        self.assertEqual(objective_name, "objective")
+
+    def test_split_qoi_history_key_rejects_invalid_keys(self):
+        with self.assertRaises(RuntimeError):
+            _split_qoi_history_key("no_colon")
+
+        with self.assertRaises(RuntimeError):
+            _split_qoi_history_key(":objective")
+
+        with self.assertRaises(RuntimeError):
+            _split_qoi_history_key("model:")
+
+    def test_get_model_name_from_evaluation_information_uses_explicit_model_name(self):
+        eval_info = _make_results_like_for_name_normalization(
+            simulation_model_names=("model_a", "model_b"),
+            qoi_keys=("model_a:objective",),
+        )
+
+        model_name = _get_model_name_from_evaluation_information(
+            eval_info,
+            model_name="explicit_model",
+        )
+
+        self.assertEqual(model_name, "explicit_model")
+
+    def test_get_model_name_from_evaluation_information_finds_single_model(self):
+        eval_info = _make_results_like_for_name_normalization(
+            simulation_model_names=("only_model",),
+            qoi_keys=("only_model:objective",),
+        )
+
+        model_name = _get_model_name_from_evaluation_information(
+            eval_info,
+            model_name=None,
+        )
+
+        self.assertEqual(model_name, "only_model")
+
+    def test_get_model_name_from_evaluation_information_returns_none_for_multiple_models(self):
+        eval_info = _make_results_like_for_name_normalization(
+            simulation_model_names=("model_a", "model_b"),
+            qoi_keys=("model_a:objective",),
+        )
+
+        model_name = _get_model_name_from_evaluation_information(
+            eval_info,
+            model_name=None,
+        )
+
+        self.assertIsNone(model_name)
+
+    def test_normalize_evaluation_information_renames_single_model_and_qoi_names(self):
+        results = _make_results_like_for_name_normalization(
+            simulation_model_names=("old_model",),
+            qoi_keys=("old_model:old_objective",),
+        )
+
+        with patch("matcal.core.surrogates.logger.warning") as warning_mock:
+            returned = _normalize_evaluation_information_names(
+                results,
+                required_model_name="required_model",
+                required_objective_name="required_objective",
+                data_set_name="unit-test data",
+                logger_on=True,
+            )
+
+        self.assertIs(returned, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+
+        self.assertGreaterEqual(warning_mock.call_count, 2)
+        warning_text = "\n".join(
+            str(call.args[0]) for call in warning_mock.call_args_list
+        )
+        self.assertIn("old_model", warning_text)
+        self.assertIn("required_model", warning_text)
+        self.assertIn("old_objective", warning_text)
+        self.assertIn("required_objective", warning_text)
+
+    def test_normalize_evaluation_information_noops_when_names_match(self):
+        results = _make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=("required_model:required_objective",),
+        )
+
+        with patch("matcal.core.surrogates.logger.warning") as warning_mock:
+            returned = _normalize_evaluation_information_names(
+                results,
+                required_model_name="required_model",
+                required_objective_name="required_objective",
+                data_set_name="unit-test data",
+                logger_on=True,
+            )
+
+        self.assertIs(returned, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+        warning_mock.assert_not_called()
+
+    def test_normalize_evaluation_information_errors_for_multiple_simulation_models(self):
+        results = _make_results_like_for_name_normalization(
+            simulation_model_names=("model_a", "model_b"),
+            qoi_keys=("model_a:objective",),
+        )
+
+        with self.assertRaises(RuntimeError):
+            _normalize_evaluation_information_names(
+                results,
+                required_model_name="required_model",
+                required_objective_name=None,
+                data_set_name="unit-test data",
+                logger_on=False,
+            )
+
+    def test_normalize_evaluation_information_errors_for_multiple_qoi_models(self):
+        results = _make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=("model_a:objective", "model_b:objective"),
+        )
+
+        with self.assertRaises(RuntimeError):
+            _normalize_evaluation_information_names(
+                results,
+                required_model_name="required_model",
+                required_objective_name="required_objective",
+                data_set_name="unit-test data",
+                logger_on=False,
+            )
+
+    def test_normalize_evaluation_information_errors_for_multiple_qoi_objectives(self):
+        results = _make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=("required_model:objective_a", "required_model:objective_b"),
+        )
+
+        with self.assertRaises(RuntimeError):
+            _normalize_evaluation_information_names(
+                results,
+                required_model_name="required_model",
+                required_objective_name="required_objective",
+                data_set_name="unit-test data",
+                logger_on=False,
+            )
+
+    def test_normalize_evaluation_information_allows_multiple_objectives_when_no_required_objective(self):
+        results = _make_results_like_for_name_normalization(
+            simulation_model_names=("old_model",),
+            qoi_keys=("old_model:objective_a", "old_model:objective_b"),
+        )
+
+        returned = _normalize_evaluation_information_names(
+            results,
+            required_model_name="required_model",
+            required_objective_name=None,
+            data_set_name="unit-test data",
+            logger_on=False,
+        )
+
+        self.assertIs(returned, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            set(results.qoi_history.keys()),
+            {
+                "required_model:objective_a",
+                "required_model:objective_b",
+            },
+        )
+
+    def test_surrogate_generator_normalizes_test_eval_info_model_name(self):
+        train_results = _make_results_like_for_name_normalization(
+            simulation_model_names=("training_model",),
+            qoi_keys=("training_model:training_objective",),
+        )
+        test_results = _make_results_like_for_name_normalization(
+            simulation_model_names=("test_model",),
+            qoi_keys=("test_model:test_objective",),
+        )
+
+        generator = SurrogateGenerator.__new__(SurrogateGenerator)
+        generator._eval_info = train_results
+        generator._test_eval_info = test_results
+        generator._model_name = None
+        generator._logger_on = True
+
+        with patch("matcal.core.surrogates.logger.warning") as warning_mock:
+            generator._normalize_test_evaluation_information_names()
+
+        self.assertEqual(
+            list(test_results.simulation_history.keys()),
+            ["training_model"],
+        )
+        self.assertEqual(
+            list(test_results.qoi_history.keys()),
+            ["training_model:test_objective"],
+        )
+
+        self.assertGreaterEqual(warning_mock.call_count, 1)
+        warning_text = "\n".join(
+            str(call.args[0]) for call in warning_mock.call_args_list
+        )
+        self.assertIn("test_model", warning_text)
+        self.assertIn("training_model", warning_text)
+
+    def test_surrogate_generator_test_eval_info_normalization_noops_without_test_eval_info(self):
+        train_results = _make_results_like_for_name_normalization(
+            simulation_model_names=("training_model",),
+            qoi_keys=("training_model:training_objective",),
+        )
+
+        generator = SurrogateGenerator.__new__(SurrogateGenerator)
+        generator._eval_info = train_results
+        generator._test_eval_info = None
+        generator._model_name = None
+        generator._logger_on = True
+
+        generator._normalize_test_evaluation_information_names()
+
+        self.assertIsNone(generator._test_eval_info)
 
 
 class TestSurrogateFunctions(MatcalUnitTest):
@@ -1954,46 +2221,6 @@ class TestSurrogateGenerator(MatcalUnitTest):
 
         with self.assertRaises(ValueError):
             sur_gen.generate(None, plot_n_worst=1)
-
-    def _make_results_like(self, 
-        simulation_model_names=("old_model",),
-        qoi_keys=("old_model:old_objective",),
-    ):
-        simulation_history = OrderedDict()
-        for model_name in simulation_model_names:
-            simulation_history[model_name] = SimpleNamespace(state_names=["state"])
-
-        qoi_history = OrderedDict()
-        for qoi_key in qoi_keys:
-            qoi_history[qoi_key] = SimpleNamespace()
-
-        return SimpleNamespace(
-            simulation_history=simulation_history,
-            qoi_history=qoi_history,
-        )
-
-    def test_surrogate_generator_normalizes_test_eval_info_model_name(self):
-        train_results = self._make_results_like(
-            simulation_model_names=("training_model",),
-            qoi_keys=("training_model:training_objective",),
-        )
-        test_results = self._make_results_like(
-            simulation_model_names=("test_model",),
-            qoi_keys=("test_model:test_objective",),
-        )
-
-        generator = SurrogateGenerator.__new__(SurrogateGenerator)
-        generator._eval_info = train_results
-        generator._test_eval_info = test_results
-        generator._model_name = None
-        generator._logger_on = False
-
-        generator._normalize_test_evaluation_information_names()
-
-        assert list(test_results.simulation_history.keys()) == ["training_model"]
-        assert list(test_results.qoi_history.keys()) == [
-            "training_model:test_objective"
-        ]
 
 
 class TestProcessSurrogateArgsCall(MatcalUnitTest):
