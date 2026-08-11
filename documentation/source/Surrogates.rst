@@ -1077,8 +1077,385 @@ Use a sparse-grid adaptive surrogate when:
 * the user wants an adaptive method that does not rely on Gaussian-process
   regression.
 
+Surrogate Verification
+======================
+
+These examples verify several surrogate modeling workflows available in MatCal.
+The examples use the two-dimensional Peaks benchmark function from the
+KFCV-Voronoi adaptive sampling paper by :cite:`voronoi_adaptive_surrogates`.
+This set of examples is meant to demonstrate features and behavior of the
+surrogates in MatCal. They are not meant to be used as templates for user
+MatCal files.
+
+The Peaks function is a useful verification problem because most of the domain
+is relatively smooth and low magnitude, while the important response behavior is
+localized near a small region of the parameter space. This makes it a good test
+for whether a sampling method can discover and refine important local features.
+
+The verification examples include several surrogate workflows:
+
+* pretrained Gaussian-process, RBF, and random-forest surrogates built from
+  nested random samples;
+* adaptive Voronoi Gaussian-process, RBF, and random-forest surrogates;
+* an adaptive sparse-grid surrogate.
+
+Each example reports validation RMSE, validation maximum absolute error, and an
+empirical convergence rate. The convergence rate is estimated by fitting the
+power law
+
+.. math::
+
+   E(N) \approx C N^{-p},
+
+where ``E`` is the validation error, ``N`` is the number of training samples,
+``C`` is a fitted constant, and ``p`` is the observed convergence rate. Larger
+values of ``p`` indicate faster observed convergence.
+
+
 .. include:: surrogate_verification/index.rst
    :start-after: :orphan:
 
+Verification Results
+--------------------
+
+The following results were obtained for the Peaks verification examples. The
+Peaks function is continuous and mostly smooth over the domain, with localized
+high-gradient behavior that makes it useful for testing whether adaptive
+sampling can discover and refine important local features.
+
+.. list-table:: Peaks surrogate verification results
+   :header-rows: 1
+   :widths: 34 12 16 18 22 16 18
+
+   * - Method
+     - Final samples
+     - Final RMSE
+     - Final max error
+     - Best max error, sample count
+     - RMSE rate ``p``
+     - Max-error rate ``p``
+   * - Pretrained random-sampling GP
+     - 150
+     - 5.111100e-01
+     - 4.808070e+00
+     - 4.393954e+00 at 140
+     - 0.7237
+     - 0.3678
+   * - Pretrained random-sampling RBF
+     - 150
+     - 5.606465e-01
+     - 4.819553e+00
+     - 4.819553e+00 at 150
+     - 0.3639
+     - 0.1775
+   * - Pretrained random-sampling random forest
+     - 150
+     - 1.000573e+00
+     - 7.446087e+00
+     - 7.334305e+00 at 80
+     - 0.1169
+     - 0.0447
+   * - Adaptive Voronoi GP
+     - 150
+     - 3.016666e-02
+     - 1.588163e-01
+     - 1.588163e-01 at 150
+     - 1.9866
+     - 2.2107
+   * - Adaptive Voronoi RBF
+     - 150
+     - 7.177528e-02
+     - 4.102925e-01
+     - 3.519908e-01 at 123
+     - 1.4752
+     - 1.7587
+   * - Adaptive Voronoi random forest
+     - 150
+     - 5.086865e-01
+     - 3.297064e+00
+     - 3.170707e+00 at 144
+     - 0.2570
+     - 0.3117
+   * - Adaptive sparse grid
+     - 769
+     - 5.580570e-02
+     - 3.334068e-01
+     - 3.334068e-01 at 769
+     - 0.6893
+     - 0.6184
+
+For all three surrogate-regressor families tested with random and adaptive
+sampling, the adaptive sampling methods produced lower final validation errors
+than the corresponding pretrained random-sampling examples. The adaptive
+methods also outperformed all of the random-sampling examples in final maximum
+absolute error. This is expected for the Peaks benchmark because the most
+important approximation difficulty is localized, and adaptive methods can use
+response information to place new samples in high-error regions.
+
+Discussion
+----------
+
+The pretrained random-sampling examples provide a baseline for comparing the
+adaptive methods. They have no knowledge of where the Peaks function
+changes rapidly or where the most important local features are. As a result,
+many samples may be spent in regions that are easy to approximate, while the
+localized high-gradient region remains under-resolved.
+
+Among the pretrained random-sampling cases, the Gaussian-process and RBF
+surrogates produced similar final maximum errors, with the Gaussian-process
+surrogate giving a somewhat lower final RMSE and faster observed convergence
+rate. The pretrained random-forest surrogate performed worst for this smooth
+two-dimensional interpolation problem. This behavior is consistent with the fact
+that random forests are not smooth interpolants; their predictions are assembled
+from decision-tree ensembles and can be less effective for representing smooth
+localized features than Gaussian-process or RBF surrogates.
+
+The adaptive Voronoi methods performed substantially better than the
+pretrained random-sampling methods at the same final sample count of 150. The
+KFCV-Voronoi adaptive sampling method uses cross-validation error to identify
+regions where the surrogate is performing poorly, then uses Voronoi cell
+geometry to place new samples away from existing samples in those important
+regions. Because the Peaks function has localized difficult behavior, this
+sampling strategy can concentrate samples where they are most valuable.
+The adaptive Voronoi Gaussian-process surrogate gave the best overall result in
+this verification set. The adaptive Voronoi RBF surrogate also performed well. 
+
+The adaptive Voronoi random-forest surrogate also improved substantially over
+the pretrained random-sampling random-forest surrogate. 
+Its errors are much lower than the corresponding pretrained random-forest
+errors. However, the adaptive Voronoi random-forest surrogate did not match the
+accuracy of the adaptive Voronoi Gaussian-process or RBF surrogates. This is
+consistent with the expected behavior of random forests on a smooth
+interpolation benchmark.
+
+The adaptive sparse-grid surrogate also performed substantially better than the
+random-sampling baselines. Sparse grids use a structured approximation space and
+adaptive refinement, so they are more systematic than purely random sampling.
+However, sparse-grid methods are still constrained by their grid-based
+structure. They tend to perform best when the response is globally smooth or
+when important features can be efficiently represented by the sparse-grid basis.
+The Peaks function has a localized region of strong response variation, so the
+sparse grid must spend samples refining a structured grid representation of a
+local feature. Its best prediction errors were much lower than the pretrained
+random-sampling errors, but the sparse-grid run required more samples than the
+adaptive Voronoi runs. This is expected for this type of localized feature: the
+Voronoi adaptive sampling methods can place samples directly in high-error
+regions, while the sparse-grid method refines a structured approximation.
+
+Overall, the results demonstrate the expected benefit of adaptive sampling for
+this benchmark. All adaptive sampling methods performed better than all
+pretrained random-sampling examples in final maximum absolute error. The
+adaptive Voronoi Gaussian-process and RBF surrogates were especially effective
+because they combined smooth surrogate models with sample placement targeted at
+localized high-error regions.
+
+These results should not be interpreted as a universal ranking of surrogate
+methods. The best surrogate and sampling strategy are highly dependent on the
+function being approximated. A sparse-grid surrogate may be very effective for a
+smooth response with distributed global variation. A random or space-filling
+pretrained design may be adequate when the response is simple or when adaptive
+sampling is not possible. Voronoi adaptive sampling is particularly attractive
+when important response features are localized and expensive model evaluations
+should be concentrated in high-error regions. 
+
+In general, users should select a surrogate workflow based on:
+
+* expected smoothness of the response;
+* whether important behavior is localized or distributed;
+* number of input parameters;
+* cost of each model evaluation;
+* whether adaptive sampling is practical;
+* desired accuracy metric, such as RMSE or maximum absolute error.
+
+Sometimes, the answers to these questions are unknown, so it may be
+useful to start with a random sampling method. If the behavior of interest
+is not well predicted with the surrogates, it may be beneficial to
+change to adaptive surrogates. Adaptive Voronoi surrogates
+are useful for low-dimensional problems, roughly five input parameters or fewer,
+and sparse-grid surrogates can perform well for problems with on the order
+of 12 inputs.
+
+Surrogate Studies
+=================
+
+These are user-facing examples for building surrogate models with MatCal.
+They are intended to be copied, modified, and used as templates for users'
+own studies. Each example is self-contained and shows the complete workflow
+from defining parameters and a high-fidelity model through training, testing,
+and interrogating a surrogate.
+
+Example problem
+---------------
+
+The examples use a simple 2D thermal boundary-value problem motivated by a
+foam/metal layered component exposed to a high-temperature environment. A foam
+layer separates two steel layers. The top steel layer is heated by a far-field
+radiative source and by convection from hot surrounding gas.
+The steel layers are 1 cm thick and the foam layer is 1.5 cms thick. 
+They are all 2.5 cms wide. The uncertain model
+inputs are:
+
+* convective heat-transfer coefficient, ``H``;
+* far-field source temperature, ``T_inf``; and
+* surrounding air temperature, ``T_air``.
+
+The surrogate models predict thermocouple temperature histories in the layered
+component. The ``TC_top`` thermocouple is at the junction between the 
+foam and steel near the top and the ``TC_bottom`` thermocouple 
+is at the lower foam/steel junction. 
+The examples use a common deterministic Halton test set so that the
+standard and adaptive surrogate approaches can be compared quantitatively.
+
+A schematic of the boundary value problem is shown below.
+
+.. figure:: figures/thermal_example_boundary_value_problem.png
+   :scale: 40%
+   :align: center
+
+   Schematic of the layered material boundary value problem. 
+
+
 .. include:: surrogate_examples/index.rst
    :start-after: :orphan:
+
+Common-test results
+-------------------
+The examples were evaluated using a common deterministic Halton test set with
+250 test samples to allow for a meaningful quantitative comparison among
+the different surrogate methods. The standard LHS surrogate predicts both ``TC_top`` and
+``TC_bottom``. The adaptive examples were configured as single-response
+surrogates for ``TC_bottom`` only, so no corresponding adaptive ``TC_top``
+results are available from these runs.
+
+The table below reports the available common-test metrics. The ``TC_bottom`` row
+for the standard LHS surrogate is included because the corresponding ``TC_top``
+result is also available. The adaptive rows are reported for their configured
+single target response, ``TC_bottom``.
+
+.. list-table:: Common-test surrogate verification results
+   :header-rows: 1
+   :widths: 34 12 14 14 16 18 14
+
+   * - Method
+     - Field
+     - Best iteration
+     - Training samples
+     - RMSE
+     - Max absolute error
+     - R2
+   * - Standard LHS GP
+     - TC_bottom
+     - --
+     - 500
+     - 2.496285e+00
+     - 3.021072e+01
+     - 0.999693
+   * - Adaptive Voronoi GP
+     - TC_bottom
+     - 6
+     - 118
+     - 1.425428e+00
+     - 1.423049e+01
+     - 0.999900
+   * - Adaptive Voronoi RBF
+     - TC_bottom
+     - 18
+     - 154
+     - 2.205570e+00
+     - 1.315047e+01
+     - 0.999761
+   * - Adaptive sparse grid
+     - TC_bottom
+     - 21
+     - 233
+     - 4.383081e-01
+     - 2.574094e+00
+     - 0.999991
+
+Results discussion
+------------------
+
+The common-test results show that all surrogate approaches produced high global
+``R2`` values, but the maximum absolute error provides a more discriminating
+measure of performance for this transient thermal response. This is important
+because a surrogate can have an excellent global ``R2`` while still producing
+localized errors that may matter for engineering use.
+
+The standard LHS Gaussian-process surrogate provides the baseline. It was trained
+with 500 Latin-hypercube samples and predicts both thermocouple responses. On
+the common test set, the ``TC_top`` response had a lower RMSE and lower maximum
+absolute error than ``TC_bottom``. The ``TC_bottom`` response was more difficult
+for the standard surrogate, with a maximum absolute error of about 30 K. This is
+consistent with the example motivation for choosing ``TC_bottom`` as the target
+field in the adaptive surrogate studies.
+
+The adaptive Voronoi Gaussian-process surrogate improved the ``TC_bottom``
+prediction while using substantially fewer training samples than the standard
+LHS surrogate. Its best retained surrogate used 118 training samples and reduced
+the ``TC_bottom`` RMSE from about 2.50 K for the standard LHS surrogate to about
+1.43 K. It also reduced the maximum absolute error from about 30.2 K to about
+14.2 K. This demonstrates the benefit of using response information to place new
+training samples in regions where the surrogate error is high.
+
+The adaptive Voronoi RBF surrogate also improved the ``TC_bottom`` maximum
+absolute error relative to the standard LHS surrogate. Its best retained
+surrogate used 154 training samples and produced a maximum absolute error of
+about 13.2 K, slightly lower than the adaptive Voronoi GP result. Its RMSE,
+however, was higher than the adaptive Voronoi GP RMSE. This indicates that the
+RBF surrogate reduced the worst localized error somewhat better in this run, but
+the GP surrogate gave a better average error over the full common test set.
+
+The adaptive sparse-grid surrogate gave the best ``TC_bottom`` result in this
+verification set. Its best retained surrogate used 233 training samples and
+achieved an RMSE of about 0.44 K and a maximum absolute error of about 2.57 K.
+This was the only reported method to reduce the common-test maximum absolute
+error below the 3 K target used in the adaptive examples. For this problem, the
+sparse-grid approximation appears to be very effective for the smooth thermal
+response over the three-dimensional parameter space.
+
+These results should not be interpreted as a universal ranking of surrogate
+methods. The best method depends on the response smoothness, dimensionality,
+available training budget, and the error metric of interest. For this example:
+
+* the standard LHS surrogate is straightforward and predicts both thermocouple
+  responses, but required 500 training samples and had the largest
+  ``TC_bottom`` maximum error;
+* the adaptive Voronoi GP surrogate gave a strong reduction in ``TC_bottom``
+  error with the fewest adaptive training samples;
+* the adaptive Voronoi RBF surrogate gave the lowest maximum error among the
+  Voronoi runs, but not the lowest RMSE;
+* the adaptive sparse-grid surrogate gave the best overall ``TC_bottom`` error
+  metrics, but required more training samples than the Voronoi adaptive GP and
+  RBF runs.
+
+The adaptive examples train one target response at a time. Therefore, a direct
+method-by-method comparison of both ``TC_top`` and ``TC_bottom`` would require
+running separate adaptive studies for ``TC_top`` using the same settings and
+common test set. The current results are best interpreted as a comparison between
+a two-output standard LHS surrogate and several single-output adaptive
+surrogates targeted at the more difficult ``TC_bottom`` response.
+
+
+Template usage
+--------------
+
+To use these examples as templates for a new study:
+
+#. Replace the ``Parameter`` definitions with the uncertain inputs for the new
+   model.
+#. Replace the SIERRA/Aria model definition with the user's high-fidelity model.
+#. Update the independent variable and prediction locations, such as time,
+   displacement, or spatial position.
+#. Update the target response fields, such as temperature, force, stress, or
+   displacement.
+#. Choose a surrogate training strategy:
+   
+   * standard LHS sampling for a straightforward baseline;
+   * Voronoi adaptive sampling for response-driven point placement;
+   * sparse-grid adaptivity for smooth responses; or
+   * Voronoi adaptive sampling with an RBF backend for deterministic local
+     interpolation.
+
+#. Keep the common-test-set pattern if comparing multiple surrogate approaches.
+   The test set should be independent of the validation points used for plotting
+   example error curves.
