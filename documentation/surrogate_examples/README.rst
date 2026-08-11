@@ -31,8 +31,9 @@ standard and adaptive surrogate approaches can be compared quantitatively.
 
 A schematic of the boundary value problem is shown below.
 
-.. figure:: figures/evaluationstructure.png
-    :scale: 35 %
+.. figure:: figures/thermal_example_boundary_value_problem.png
+   :scale: 40%
+   :align: center
 
     Schematic of the layered material boundary value problem. 
 
