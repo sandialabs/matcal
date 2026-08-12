@@ -37,6 +37,7 @@ from matcal.core.surrogates import (
     _identify_fields_of_interest, 
     _import_parameter_hist, 
     _make_parameter_scaler_set,  
+    _match_single_column_and_1d_metric_arrays,
     _mean_absolute_error,
     _modal_regressor,
     _normalize_evaluation_information_names,
@@ -1611,6 +1612,23 @@ class TestSurrogateFunctions(MatcalUnitTest):
                 input_values=np.zeros((2, 1)),
                 y_true=y_true,
             )
+
+    def test_prepare_metric_arrays_accepts_column_reference_and_1d_prediction(self):
+        reference = np.array([[1.0], [2.0], [3.0]])
+        prediction = np.array([1.0, 2.0, 4.0])
+
+        ref_out, pred_out = _prepare_metric_arrays(reference, prediction)
+
+        self.assertEqual(ref_out.shape, (3, 1))
+        self.assertEqual(pred_out.shape, (3, 1))
+        self.assert_close_arrays(pred_out, np.array([[1.0], [2.0], [4.0]]))
+
+    def test_prepare_metric_arrays_rejects_row_vector_and_1d_vector(self):
+        reference = np.array([[1.0, 2.0, 3.0]])
+        prediction = np.array([1.0, 2.0, 3.0])
+
+        with self.assertRaises(RuntimeError):
+            _prepare_metric_arrays(reference, prediction)
 
 
 class TestSurrogateGenerator(MatcalUnitTest):

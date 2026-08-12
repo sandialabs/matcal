@@ -2450,16 +2450,27 @@ def _global_r2_score(test_responses, surrogate_values):
 
     return r2_score(test_responses, surrogate_values)
 
+
 def _prepare_metric_arrays(test_values, surrogate_values):
     """
     Convert metric inputs to comparable floating-point arrays.
 
-    Metric arrays must have identical shape. Shape normalization should be
-    performed by the caller, where sample and QoI orientation are known.
-    This avoids silently comparing incorrectly oriented response arrays.
+    Metric arrays must have identical shape, except that a one-dimensional array
+    with shape ``(n_samples,)`` is treated as equivalent to a singleton-column
+    array with shape ``(n_samples, 1)``. This accommodates common single-output
+    regressor prediction conventions without allowing arbitrary reshaping based
+    only on total array size.
+
+    Shape normalization beyond this singleton-column case should be performed by
+    the caller, where sample and QoI orientation are known.
     """
     test_values = np.asarray(test_values, dtype=float)
     surrogate_values = np.asarray(surrogate_values, dtype=float)
+
+    test_values, surrogate_values = _match_single_column_and_1d_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
 
     if test_values.shape != surrogate_values.shape:
         raise RuntimeError(
@@ -2467,6 +2478,41 @@ def _prepare_metric_arrays(test_values, surrogate_values):
             f"Reference shape: {test_values.shape}. "
             f"Prediction shape: {surrogate_values.shape}."
         )
+
+    return test_values, surrogate_values
+
+
+def _match_single_column_and_1d_metric_arrays(test_values, surrogate_values):
+    """
+    Match the safe singleton-column/1D metric-array convention.
+
+    Some regressors return a single-output prediction with shape ``(n_samples,)``
+    even when the reference data are stored as ``(n_samples, 1)``. These two
+    shapes are semantically equivalent for scalar-output, per-sample metrics.
+
+    This helper intentionally does not perform arbitrary reshaping based only on
+    total array size.
+    """
+    if test_values.shape == surrogate_values.shape:
+        return test_values, surrogate_values
+
+    if (
+        test_values.ndim == 2
+        and test_values.shape[1] == 1
+        and surrogate_values.ndim == 1
+        and surrogate_values.shape[0] == test_values.shape[0]
+    ):
+        surrogate_values = surrogate_values.reshape(test_values.shape)
+        return test_values, surrogate_values
+
+    if (
+        surrogate_values.ndim == 2
+        and surrogate_values.shape[1] == 1
+        and test_values.ndim == 1
+        and test_values.shape[0] == surrogate_values.shape[0]
+    ):
+        test_values = test_values.reshape(surrogate_values.shape)
+        return test_values, surrogate_values
 
     return test_values, surrogate_values
 
