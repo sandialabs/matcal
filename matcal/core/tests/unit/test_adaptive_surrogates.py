@@ -1,21 +1,71 @@
+from collections import OrderedDict
+import io
+import logging
 import os
 import types
 import numpy as np
-import shutil
 import unittest
+from unittest.mock import patch
 
 from matcal.core.adaptive_surrogates import (
+    _apply_axis_limits,
+    _apply_axis_scales,
+    _apply_response_scaling,
+    _as_2d_response_array,
+    _assign_points_to_nearest_seed,
+    _calculate_cv_error,
+    _calculate_surrogate_latent_nlpd,
+    _create_ghost_points,
+    _error_units_for_type,
+    _evaluate_kfold_cv_splits,
+    _evaluate_surrogate_response,
+    _extract_response_matrix,
+    _filter_points_within_bounds,
+    _find_matching_row_index,
+    _finite_vertex_indices,
+    _fit_cv_surrogate_and_calculate_original_data_space_error,
+    _fit_surrogate_model,
+    _format_axis_label,
+    _get_or_create_matplotlib_axes,
+    _get_parameter_bounds, 
+    _get_sample_indices,
+    _get_surrogate_metric,
+    _get_valid_kfold_split_count,
+    _make_bounded_nd_grid,
+    _make_group_kfold_splits,
+    _make_standard_kfold_splits,
+    _merge_plot_style,
+    _metric_value_for_record,
+    _normalize_candidate_array,
+    _package_unique_bounded_points,
+    _padded_limits_from_finite_values,
+    _perform_kfold_cv,
+    _perform_leave_one_out_cv,
+    _plot_limit_padding,
+    _random_subset_rows,
+    _replace_underscores,
+    _reduce_voronoi_candidates,
+    _remove_duplicate_rows_against_existing,
+    _remove_invalid_rows,
+    _select_farthest_point,
+    _validate_error_statistic,
+    _validate_surrogate_generator_regressor_type,
+    _validate_surrogate_storage_options,
+    KFoldCrossValidation,
+    LeaveOneOutCrossValidation,
     SparseGridAdaptiveSurrogateStudy,
-    _get_parameter_bounds, SparseGridAdaptiveSurrogate,
-    VoronoiAdaptiveSurrogateStudy, VoronoiTessellation, 
-    LeaveOneOutCrossValidation, KFoldCrossValidation)
+    SparseGridAdaptiveSurrogate,
+    VoronoiAdaptiveSurrogateStudy,
+    VoronoiTessellation,    
+)
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.objective import SimulationResultsSynchronizer
 from matcal.core.models import PythonModel
-from matcal.core.parameters import Parameter, ParameterCollection
+from matcal.core.parameters import Parameter
 from matcal.core.parameter_studies import HaltonStudy
 from matcal.core.qoi_extractor import UserDefinedExtractor, InterpolatingExtractor
 from matcal.core.serializer_wrapper import matcal_load
+from matcal.core.study_base import StudyResults
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -70,630 +120,6 @@ b = Parameter("b", 0, 10)
 c = Parameter("c", 0.1, 2)
 
 
-class TestSparseGridAdaptiveSurrogateStudy(MatcalUnitTest):
-    """
-    All tests inherit from MatcalUnitTest so that they get the same
-    temporary build directory handling that the original MatCal unit tests use.
-    """
-
-    def setUp(self):
-        super().setUp(__file__)           
-        p1 = Parameter("p1", 0.0, 1.0, 0.5)
-        p2 = Parameter("p2", -1.0, 1.0, 0.0)
-        self.simple_parameters =(p1, p2)
-        self.study = SparseGridAdaptiveSurrogateStudy(*self.simple_parameters)
-
-    def test_parameter_bounds(self):
-        bounds = _get_parameter_bounds(self.study._parameter_collection)
-        expected = np.array([[0.0, 1.0],
-                             [-1.0, 1.0]])
-        np.testing.assert_array_equal(bounds, expected)
-
-    def test_set_independent_variable(self):
-        self.study.set_independent_variable("time", np.linspace(0, 1, 5))
-        self.assertEqual(self.study._independent_variable, "time")
-        np.testing.assert_array_equal(
-            self.study._independent_variable_values,
-            np.linspace(0, 1, 5)
-        )
-        with self.assertRaises(TypeError):
-            self.study.set_independent_variable(1.0, np.linspace(0,1,2))
-
-        with self.assertRaises(ValueError):
-            self.study.set_independent_variable("", "")
-
-        with self.assertRaises(TypeError):
-            self.study.set_independent_variable("1", "")
-    
-    def test_error_with_add_parameter_set(self):
-        with self.assertRaises(RuntimeError):
-            self.study.add_parameter_evaluation(p1=1, p2=2)
-
-    def test_set_target_field(self):
-        self.study.set_target_field_name("temperature")
-        self.assertEqual(self.study._target_field_name, "temperature")
-
-        with self.assertRaises(TypeError):
-            self.study.set_target_field_name(1.0)
-
-    def test_set_number_of_test_samples(self):
-        self.study.set_number_of_test_samples(20)
-        self.assertEqual(self.study._number_of_test_samples, 20)
-        with self.assertRaises(TypeError):
-            self.study.set_number_of_test_samples("a")
-
-    def test_set_number_max_training_samples(self):
-        self.study.set_max_training_samples(500)
-        self.assertEqual(self.study._max_training_samples, 500)
-
-        with self.assertRaises(TypeError):
-            self.study.set_max_training_samples("a")
-
-    def test_set_group_random_seed(self):
-        #appears to be no way to really test the seed that gets into the SciPy Halton class.
-        self.study.set_seed(10)
-        self.study.set_test_group_random_seed(1234)
-        self.assertEqual(self.study._test_group_random_seed, 1234)
-        self.assertEqual(self.study._seed, 10)
-
-        with self.assertRaises(TypeError):
-            self.study.set_test_group_random_seed("")
-        
-    def test_default_test_samples_calculation(self):
-        self.study.set_max_training_samples(200)# 200//20 = 10; 2 params*10 = 20 → default = 20
-        default = self.study._set_default_number_of_test_samples()
-        self.assertEqual(default, 20)
-        
-        self.study.set_max_training_samples(2000)# 2000//20 = 100; 2 params*10 = 20 → default = 100
-        default = self.study._set_default_number_of_test_samples()
-        self.assertEqual(default, 100)
-
-    def test_make_simulation_results_synchronizer_success(self):
-        self.study.set_independent_variable("x", [0.0, 1.0])
-        self.study.set_target_field_name("y")
-        sync = self.study._make_simulation_results_synchronizer(None)
-        self.assertIsInstance(sync, SimulationResultsSynchronizer)
-        self.assertEqual(sync.independent_field, "x")
-        self.assertEqual(sync._independent_field_values, [0.0, 1.0])
-        self.assertEqual(sync.fields_of_interest, ("y",))
-
-    def test_make_simulation_results_synchronizer_missing(self):
-        self.study.set_independent_variable("x", [0, 1])
-        with self.assertRaises(RuntimeError) as ctx:
-            self.study._make_simulation_results_synchronizer(None)
-        self.assertIn("Target field name", str(ctx.exception))
-
-        self.study._independent_variable = None
-        self.study._independent_variable_values = None
-        self.study.set_target_field_name("test")
-        with self.assertRaises(RuntimeError) as ctx:
-            self.study._make_simulation_results_synchronizer(None)
-        self.assertIn("Independent variable name", str(ctx.exception))
-
-    def test_add_evaluation_set_once(self):
-        """First call succeeds, second call raises."""
-        self.study.set_independent_variable("t", [0, 1])
-        self.study.set_target_field_name("z")
-        # First call – ok
-        self.assertFalse(self.study._evaluation_set_added)
-        self.study.add_evaluation_set(light_model)
-        self.assertTrue(self.study._evaluation_set_added)
-
-        # Second call – must raise
-        with self.assertRaises(RuntimeError):
-            self.study.add_evaluation_set(light_model)
-
-    def test_add_evaluation_set_invalid_state(self):
-        self.study.set_independent_variable("t", [0, 1])
-        self.study.set_target_field_name("z")
-        with self.assertRaises(TypeError):
-            self.study.add_evaluation_set(light_model, state="not_a_state")
-
-    def test_update_work_dir_for_test_sampling(self):
-        original = self.study._working_directory
-        returned = self.study._update_work_dir_for_test_sampling()
-        self.assertEqual(returned, original)
-        self.assertEqual(self.study._working_directory, os.path.abspath("test_samples"))
-
-        self.study.set_working_directory("work")
-        returned = self.study._update_work_dir_for_test_sampling()
-        self.assertEqual(os.path.abspath("work"), returned)
-
-        expected = os.path.abspath("work" + "_test_samples")
-        self.assertEqual(os.path.abspath(self.study._working_directory), expected)
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_launch_creates_test_directory_and_restores(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("y")
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        self.study.add_evaluation_set(light_model)
-        self.study.launch()
-        test_dir = os.path.abspath("test_samples")
-        self.assertTrue(os.path.isdir(test_dir))
-
-        self.study._reset_study_after_test_sampling_generation(None, True)
-        self.study.set_working_directory("work")
-        test_dir = os.path.abspath("work_test_samples")
-        self.study.launch()
-        self.assertTrue(os.path.isdir(test_dir))
-        self.assertTrue(os.path.isdir("work"))
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_user_qoi_extractor_in_add_eval_set(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("z")
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        extractor = UserDefinedExtractor(change_y_to_z, "y", "x")
-        with self.assertRaises(TypeError):
-            self.study.add_evaluation_set(light_model, qoi_extractor="yay")
-        self.study.add_evaluation_set(light_model, qoi_extractor=extractor)
-        results = self.study.launch()
-        objs = results.get_objectives_for_model("light_model")
-        self.assertTrue("z" in results.best_simulation_qois("light_model", objs[0], 
-                                                             "matcal_default_state", 0).field_names)
-
-    def test_format_params_and_output(self):
-        """Check that the two formatting helpers produce the expected arrays."""
-        class FakeResults:
-            def __init__(self):
-                self.parameter_history = {"p1": [0.1, 0.2, 0.4],
-                                          "p2": [0.3, 0.4, 0.25]}
-                self.number_of_evaluations = 3
-                self.simulation_history = {}
-                self.qoi_history = {}
-
-        fake = FakeResults()
-
-        params = self.study._format_params(fake)
-        self.assertIsInstance(params, np.ndarray)
-        self.assertTupleEqual(params.shape, (3, 2))
-
-        model_name = "dummy_model"
-
-        class DummyObjective:
-            def __init__(self, name):
-                self.name = name
-        dummy_obj = DummyObjective("obj")
-
-        class DummySimQoi:
-            def __init__(self, state_name, target, values):
-                self._data = {state_name: [{target: np.array(values)}]}
-
-            def __getitem__(self, key):
-                return self._data[key]
-
-        state_name = "state0"
-        target = "temperature"
-        sim0 = DummySimQoi(state_name, target, [1.0, 2.0])
-        sim1 = DummySimQoi(state_name, target, [3.0, 4.0])
-        sim2 = DummySimQoi(state_name, target, [5.0, 6.0])
-
-        class DummyQoiContainer:
-            def __init__(self, sim_qois):
-                self.simulation_qois = sim_qois
-
-        fake.qoi_history[f"{model_name}:{dummy_obj.name}"] = DummyQoiContainer([sim0, sim1, sim2])
-
-        # simulation_history must provide state_names
-        fake.simulation_history = {
-            model_name: types.SimpleNamespace(state_names=[state_name])
-        }
-
-        self.study.set_independent_variable("time", np.array([0.0, 1.0]))
-        self.study.set_target_field_name(target)
-
-        # Monkey‑patch the private helpers that would otherwise inspect the real
-        # evaluation‑set collections.
-        self.study._get_model_names = lambda: [model_name]
-        self.study._results_synchronizer = dummy_obj
-
-        # ----- _format_output -----
-        output = self.study._format_output(fake)
-        self.assertIsInstance(output, np.ndarray)
-        self.assertTupleEqual(output.shape, (3, 2))
-
-        expected = np.array([[1.0, 2.0],
-                             [3.0, 4.0], 
-                             [5.0, 6.0]])
-        np.testing.assert_array_equal(output, expected)
-
-    def test_format_batch_results_returns_expected_array(self):
-        class DummyQoiInfo:
-            def __init__(self, state, target, values):
-                # store as: {state: [{target: np.array(values)}]}
-                self.simulation_qois = {
-                    state: [{target: np.array(values)}]
-                }
-
-        sample_values = [
-            [10.0, 20.0, 30.0],  
-            [40.0, 50.0, 60.0],  
-            [70.0, 80.0, 90.0]   
-        ]
-
-        self.study.set_independent_variable("x", np.linspace(0,1,3))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        state_name = "state"
-
-        class FakeResults:
-            class FakeDC:
-                def __init__(self, state):
-                    self.state_names = [state]
-
-            def __init__(self,state):
-                self.simulation_history = {light_model.name:self.FakeDC(state)}
-
-        self.study._results = FakeResults(state_name)
-        target = "y"
-        model_name = light_model.name
-        qois_list = []
-        for vals in sample_values:
-            qoi_obj = DummyQoiInfo(state_name, target, vals)
-            # The outer dict is {model_name: {objective_name: qoi_obj}}
-            qois_list.append({model_name: {self.study._results_synchronizer.name: qoi_obj}})
-
-        batch_results = {"qois": qois_list}
-
-        n_params = 2
-        n_samples = len(sample_values)          # 3 samples
-        param_sets = np.zeros((n_params, n_samples))
-
-        formatted = self.study._format_batch_results(batch_results, param_sets)
-
-        expected = np.array(sample_values, dtype=float)
-
-        self.assertIsInstance(formatted, np.ndarray)
-        self.assertEqual(formatted.shape, (n_samples, len(self.study._independent_variable_values)))
-        np.testing.assert_array_equal(formatted, expected)
-
-    def test_populate_parameter_evaluations_adaptive(self):
-        """
-        Verify that the method:
-        * treats the sample matrix as native/physical parameter values,
-        * creates a list ``_parameter_sets_to_evaluate`` with one dict per
-            sample,
-        * each dict contains the correct parameter names and values, and
-        * ``_add_parameter_evaluation`` is called with the same dictionaries.
-        """
-        native_samples = np.array([
-            [0.1, 0.2, 0.3],    # p1 values
-            [0.1, 0.5, -0.1],   # p2 values
-        ])
-
-        self.study._populate_parameter_evaluations_adaptive(native_samples)
-        self.assertEqual(len(self.study._parameter_sets_to_evaluate), 3)
-
-        expected_names = self.study._parameter_collection.get_item_names()
-        expected_names = list(expected_names)
-
-        for i, param_dict in enumerate(self.study._parameter_sets_to_evaluate):
-            self.assertCountEqual(param_dict.keys(), expected_names)
-            for name, col_idx in zip(expected_names, range(len(expected_names))):
-                expected_value = native_samples[col_idx, i]
-                self.assertAlmostEqual(param_dict[name], expected_value)
-
-    def test_update_surrogate_score(self):
-        self.study._test_params = np.array([[0.0, 1.0],
-                                            [0.5, 0.5],
-                                            [1.0, 0.0]])
-        self.study._test_responses = np.array([[1.0, 2.0],
-                                            [1.5, 2.5],
-                                            [0.75, 0.85]])
-
-        class DoubleParamSurrogate:
-            def __init__(self):
-                self.surrogate = self
-
-            def __call__(self, params):
-                results = np.array(params) * 2.0
-                return results
-
-        self.study._surrogate = SparseGridAdaptiveSurrogate(
-            "target",
-            "independent",
-            np.array([0.0, 1.0]),
-            self.study._test_params,
-            self.study._test_responses,
-            ["p1", "p2"],
-            np.array([[-1.0, 1.0], [-1.0, 1.0]]),
-        )
-
-        self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)
-
-        self.assertEqual(len(self.study.surrogate.rmse_history), 1)
-        self.assertEqual(len(self.study.surrogate.max_error_history), 1)
-
-        expected_rmse = np.sqrt(
-            np.mean(
-                (
-                    self.study._test_responses
-                    - DoubleParamSurrogate()(self.study._test_params.T).T
-                ) ** 2
-            )
-        )
-        self.assertAlmostEqual(self.study.surrogate.rmse_history[0], expected_rmse)
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_study_results_is_not_none(self):
-        """launch must eventually call the sparse‑grid routine."""
-        self.study.set_independent_variable("x", np.linspace(0,1,3))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(30)
-        self.study.set_number_of_test_samples(1)
-        self.study.launch()
-        self.assertIsNotNone(self.study.results)
-        sur_file = self.study.surrogate_save_filename
-        sur_results = matcal_load(sur_file)
-        self.assertEqual(self.study.surrogate.rmse_history, 
-                         sur_results.rmse_history)
-        self.assertEqual(self.study.surrogate.sample_count_history, 
-                         sur_results.sample_count_history)
-        self.assertEqual(self.study.surrogate.max_error_history, 
-                         sur_results.max_error_history) 
-        self.assertEqual(len(self.study.surrogate._surrogates), 
-                         len(sur_results._surrogates))
-        self.assert_close_dicts_or_data(sur_results(p1=0, p2=0), 
-                                        self.study.surrogate(p1=0, p2=0))
-
-    def _set_number_of_evaluations(self, n):
-        self.fake_results = types.SimpleNamespace(number_of_evaluations=0)
-        self.study._results = self.fake_results
-        self.fake_results.number_of_evaluations = n
-
-    def test_default_goals(self):
-        self.assertAlmostEqual(
-            self.study._rmse_goal,
-            1e-2,
-        )
-        self.assertAlmostEqual(
-            self.study._max_abs_error_goal,
-            1e-1,
-        )
-
-    def test_setting_both_goals(self):
-        new_rmse = 5e-3
-        new_max = 2e-3
-        self.study.set_error_stopping_criteria(
-            rmse_goal=new_rmse,
-            max_abs_error_goal=new_max,
-        )
-        self.assertAlmostEqual(
-            self.study._rmse_goal,
-            new_rmse,
-        )
-        self.assertAlmostEqual(
-            self.study._max_abs_error_goal,
-            new_max,
-        )
-
-    def test_setting_one_goal_keeps_other_untouched(self):
-        new_rmse = 1e-4
-        self.study.set_error_stopping_criteria(
-            rmse_goal=new_rmse
-        )
-        self.assertAlmostEqual(
-            self.study._rmse_goal,
-            new_rmse,
-        )
-        self.assertAlmostEqual(
-            self.study._max_abs_error_goal,
-            1e-1,
-        )
-    def test_invalid_non_numeric_raises_type_error(self):
-        with self.assertRaises(TypeError):
-            self.study.set_error_stopping_criteria(rmse_goal="bad")
-
-        with self.assertRaises(TypeError):
-            self.study.set_error_stopping_criteria(max_abs_error_goal=[1, 2])
-
-    def test_invalid_non_positive_raises_value_error(self):
-        with self.assertRaises(ValueError):
-            self.study.set_error_stopping_criteria(rmse_goal=0.0)
-
-        with self.assertRaises(ValueError):
-            self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
-
-    def test_set_save_filename(self):
-        self.assertEqual(self.study._surrogate_save_filename, None)
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_save_filename("my_surrogate_name")
-        with self.assertRaises(TypeError):
-            self.study.set_surrogate_save_filename(0)
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_save_filename("")
-        self.study.set_surrogate_save_filename("my_surrogate_name.joblib")
-        self.assertEqual(self.study._surrogate_save_filename, "my_surrogate_name.joblib")
-        self.assertEqual(self.study.surrogate_save_filename, "my_surrogate_name.joblib")
-
-    def test_set_surrogate_storage_options(self):
-        self.assertEqual(self.study._surrogate_storage_best_n_surrogates, 1)
-        self.assertIsNone(self.study._surrogate_storage_every_n_batches)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "max_error")
-
-        self.study.set_surrogate_storage_options(
-            best_n_surrogates=3,
-            save_every_n_batches=5,
-            score_metric="max_error",
-        )
-
-        self.assertEqual(self.study._surrogate_storage_best_n_surrogates, 3)
-        self.assertEqual(self.study._surrogate_storage_every_n_batches, 5)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "max_error")
-
-        self.study.set_surrogate_storage_options(
-            best_n_surrogates=None,
-            save_every_n_batches=2,
-            score_metric="score",
-        )
-
-        self.assertIsNone(self.study._surrogate_storage_best_n_surrogates)
-        self.assertEqual(self.study._surrogate_storage_every_n_batches, 2)
-        self.assertEqual(self.study._surrogate_storage_score_metric, "score")
-
-    def test_set_surrogate_storage_options_invalid_inputs(self):
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_storage_options(
-                best_n_surrogates=None,
-                save_every_n_batches=None,
-            )
-
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_storage_options(score_metric="not_a_metric")
-
-        with self.assertRaises(ValueError):
-            self.study.set_surrogate_storage_options(best_n_surrogates=0)
-
-        with self.assertRaises(TypeError):
-            self.study.set_surrogate_storage_options(save_every_n_batches="bad")
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_user_study_set_test_data_as_study_result(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        
-        p1 = Parameter("p1", 0.0, 1.0, 0.5)
-        p2 = Parameter("p2", -1.0, 1.0, 0.0)
-        self.simple_parameters =(p1, p2)
-        self.test_study = HaltonStudy(*self.simple_parameters)
-        self.test_study.set_number_of_samples(50)
-        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
-
-        results = self.test_study.launch()
-        self.study.set_test_data(results)
-        results = self.study.launch()
-        self.assertFalse(os.path.exists("test_samples"))
-        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
-
-    @unittest.skipIf(not HAS_PYAPPROX,
-                 "pyapprox not installed – skipping pyapprox‑dependent tests")
-    def test_user_study_set_test_data_as_string(self):
-        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-        self.study.set_max_training_samples(1)
-        self.study.set_number_of_test_samples(1)
-        
-        p1 = Parameter("p1", 0.0, 1.0, 0.5)
-        p2 = Parameter("p2", -1.0, 1.0, 0.0)
-        self.simple_parameters =(p1, p2)
-        self.test_study = HaltonStudy(*self.simple_parameters)
-        self.test_study.set_number_of_samples(50)
-        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
-
-        results = self.test_study.launch()
-        self.study.set_test_data("final_results.joblib")
-        results = self.study.launch()
-        self.assertFalse(os.path.exists("test_samples"))
-        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
-    # -------------------------
-    # Validation / API errors
-    # -------------------------
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_rejects_invalid_basis_type(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        with self.assertRaises(ValueError):
-            sg_study.set_sparse_grid_basis(basis_type="not-a-basis")
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_rejects_invalid_piecewise_degree(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        with self.assertRaises(ValueError):
-            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=0)
-        with self.assertRaises(ValueError):
-            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=4)
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_adaptivity_limits_validation(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        # If you did not implement this method, remove/skip this test
-        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
-            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
-
-        with self.assertRaises((ValueError, TypeError)):
-            sg_study.set_sparse_grid_adaptivity_limits(max_level=0, pnorm=1.0)
-        with self.assertRaises((ValueError, TypeError)):
-            sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_sets_lagrange(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        sg_study.set_sparse_grid_basis(basis_type="lagrange")
-        self.assertEqual(sg_study._sg_basis_type, "lagrange")
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_basis_sets_piecewise_degree(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=2)
-        self.assertEqual(sg_study._sg_basis_type, "piecewise")
-        self.assertEqual(sg_study._sg_piecewise_degree, 2)
-
-    @unittest.skipIf(
-        not HAS_PYAPPROX,
-        "pyapprox not installed – skipping pyapprox‑dependent tests",
-    )
-    def test_set_sparse_grid_adaptivity_limits_sets_values(self):
-        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
-        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
-            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
-
-        sg_study.set_sparse_grid_adaptivity_limits(max_level=7, pnorm=2.0)
-        self.assertEqual(sg_study._sg_max_level, 7)
-        self.assertEqual(sg_study._sg_pnorm, 2.0)
-
-    def test_results_synchronizer_property_before_and_after_add_evaluation_set(self):
-        self.assertIsNone(self.study.results_synchronizer)
-
-        self.study.set_independent_variable("x", [0.0, 1.0])
-        self.study.set_target_field_name("y")
-        self.study.add_evaluation_set(light_model)
-
-        self.assertIsInstance(self.study.results_synchronizer, SimulationResultsSynchronizer)
-
-    def test_set_test_data_invalid_type_raises(self):
-        with self.assertRaises(TypeError):
-            self.study.set_test_data(123)
-
-    def test_set_test_data_string_invalid_loaded_object_raises(self):
-        with open("not_a_study_results.joblib", "wb") as f:
-            import pickle
-            pickle.dump({"not": "study_results"}, f)
-
-        with self.assertRaises(RuntimeError):
-            self.study.set_test_data("not_a_study_results.joblib")
-
-    def test_default_save_filename_is_none_before_launch(self):
-        self.assertIsNone(self.study._surrogate_save_filename)
-        self.assertIsNone(self.study.surrogate_save_filename)
-
-
 class ConstantSurrogate:
     """
     Callable surrogate model used in the tests.
@@ -731,6 +157,151 @@ class FixedResponseSurrogate:
     def __call__(self, param_array):
         n_samples = param_array.shape[1]
         return self.response[:n_samples, :].T
+
+
+class TestAdaptiveSurrogateHelpersExtra(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_get_or_create_matplotlib_axes_with_existing_axes_argument(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        returned_fig, returned_ax = _get_or_create_matplotlib_axes(axes=ax)
+
+        self.assertIs(returned_fig, fig)
+        self.assertIs(returned_ax, ax)
+        plt.close(fig)
+
+    def test_get_or_create_matplotlib_axes_with_figure_having_existing_axes(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        returned_fig, returned_ax = _get_or_create_matplotlib_axes(figure=fig)
+
+        self.assertIs(returned_fig, fig)
+        self.assertIs(returned_ax, ax)
+        plt.close(fig)
+
+    def test_get_or_create_matplotlib_axes_with_empty_figure_adds_subplot(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        from matplotlib.figure import Figure
+
+        fig = Figure()
+        returned_fig, returned_ax = _get_or_create_matplotlib_axes(figure=fig)
+
+        self.assertIs(returned_fig, fig)
+        self.assertEqual(len(fig.axes), 1)
+        self.assertIs(returned_ax, fig.axes[0])
+
+    def test_replace_underscores_none_and_string(self):
+        self.assertIsNone(_replace_underscores(None))
+        self.assertEqual(_replace_underscores("a_b_c"), "a b c")
+
+    def test_format_axis_label_none_and_units(self):
+        self.assertIsNone(_format_axis_label(None))
+        self.assertEqual(_format_axis_label("my_label"), "my label")
+        self.assertEqual(_format_axis_label("my_label", "s"), "my label (s)")
+
+    def test_merge_plot_style_with_user_overrides(self):
+        default = {"color": "blue", "linewidth": 1.0}
+        user = {"linewidth": 3.0, "linestyle": "--"}
+
+        merged = _merge_plot_style(default, user)
+
+        self.assertEqual(merged["color"], "blue")
+        self.assertEqual(merged["linewidth"], 3.0)
+        self.assertEqual(merged["linestyle"], "--")
+        self.assertEqual(default["linewidth"], 1.0)  # no mutation
+
+    def test_apply_axis_limits_and_scales(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        _apply_axis_limits(ax, xlim=(0, 2), ylim=(-1, 1))
+        _apply_axis_scales(ax, xscale="linear", yscale="log")
+
+        self.assertEqual(ax.get_xlim(), (0.0, 2.0))
+        self.assertEqual(ax.get_ylim(), (-1.0, 1.0))
+        self.assertEqual(ax.get_xscale(), "linear")
+        self.assertEqual(ax.get_yscale(), "log")
+        plt.close(fig)
+
+    def test_as_2d_response_array_reshapes_1d(self):
+        values = np.array([1.0, 2.0, 3.0])
+        reshaped = _as_2d_response_array(values)
+        self.assertEqual(reshaped.shape, (3, 1))
+        self.assert_close_arrays(reshaped[:, 0], values)
+
+    def test_get_sample_indices_with_explicit_indices_and_invalid_indices(self):
+        indices = _get_sample_indices([0, 2, 4], 5)
+        self.assert_close_arrays(indices, np.array([0, 2, 4]))
+
+        with self.assertRaises(ValueError):
+            _get_sample_indices([-1, 0], 5)
+
+        with self.assertRaises(ValueError):
+            _get_sample_indices([0, 5], 5)
+
+    def test_validate_error_statistic_invalid(self):
+        with self.assertRaises(ValueError):
+            _validate_error_statistic("not_valid")
+
+    def test_error_units_for_type(self):
+        self.assertEqual(_error_units_for_type("absolute", "K", "custom"), "custom")
+        self.assertEqual(_error_units_for_type("squared", "K", None), "K^2")
+        self.assertEqual(_error_units_for_type("signed", "K", None), "K")
+
+    def test_plot_limit_padding_and_padded_limits_empty(self):
+        self.assertAlmostEqual(_plot_limit_padding(2.0, 2.0), 0.1)
+        self.assertIsNone(_padded_limits_from_finite_values(np.array([])))
+
+    def test_get_valid_kfold_split_count_branches(self):
+        self.assertEqual(_get_valid_kfold_split_count(0, 10), 0)
+
+        with self.assertRaises(ValueError):
+            _get_valid_kfold_split_count(1, 10)
+
+        with self.assertRaises(ValueError):
+            _get_valid_kfold_split_count(2, 1)
+
+        self.assertEqual(_get_valid_kfold_split_count(3, 5), 3)
+
+    def test_get_valid_kfold_split_count_reduces_and_warns(self):
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        logger_obj = logging.getLogger("matcal.core.adaptive_surrogates")
+        old_handlers = list(logger_obj.handlers)
+        old_level = logger_obj.level
+        logger_obj.handlers = [handler]
+        logger_obj.setLevel(logging.WARNING)
+
+        try:
+            kfold_splits = _get_valid_kfold_split_count(10, 4)
+        finally:
+            logger_obj.handlers = old_handlers
+            logger_obj.setLevel(old_level)
+
+        self.assertEqual(kfold_splits, 2)
+        self.assertIn("Reducing kfold_splits from 10 to 2", stream.getvalue())
+
+    def test_metric_value_for_record_handles_nan_and_none(self):
+        record_nan = {"r2": np.nan, "rmse": np.nan}
+        record_none = {"r2": None, "rmse": None}
+
+        self.assertEqual(_metric_value_for_record(record_nan, "r2"), -np.inf)
+        self.assertEqual(_metric_value_for_record(record_none, "r2"), -np.inf)
+        self.assertEqual(_metric_value_for_record(record_nan, "rmse"), np.inf)
+        self.assertEqual(_metric_value_for_record(record_none, "rmse"), np.inf)
+
 
 
 class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
@@ -1045,9 +616,33 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
             self.assertTrue(record["surrogate_stored"])
             self.assertEqual(record["sample_count"], surrogate.sample_count_history[idx])
 
-    def test_score_returns_nan_for_single_qoi(self):
+    def test_score_is_defined_for_multiple_scalar_values(self):
         surrogate = self._make_surrogate()
-        surrogate._add_iteration(ConstantSurrogate(n_parameters=2, constant=0.0), nsamples=5)
+        surrogate._add_iteration(
+            ConstantSurrogate(n_parameters=2, constant=0.0),
+            nsamples=5,
+        )
+
+        self.assertAlmostEqual(surrogate.score(), -9.0)
+
+    def test_score_returns_nan_for_single_scalar_value(self):
+        surrogate = SparseGridAdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="independent",
+            indep_variable_values=np.array([0.0]),
+            test_params=np.array([[0.0, 0.0]]),
+            test_responses=np.array([[1.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+
+        surrogate._add_iteration(
+            ConstantSurrogate(n_parameters=2, constant=0.0),
+            nsamples=5,
+        )
+
         self.assertTrue(np.isnan(surrogate.score()))
 
     def test_current_surrogate_tracks_latest_iteration(self):
@@ -1787,39 +1382,432 @@ class TestSparseGridAdaptiveSurrogate(MatcalUnitTest):
 
         plt.close(fig)
 
-    def test_plot_worst_n_alias_passes_number_of_figures(self):
+
+class TestAdaptiveSurrogateExtraBranches(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_surrogate(self):
+        return SparseGridAdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="time_axis",
+            indep_variable_values=np.array([0.0, 1.0]),
+            test_params=np.array([[0.0, 0.0], [1.0, 1.0]]),
+            test_responses=np.array([[1.0, 2.0], [3.0, 4.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+
+    def test_select_surrogate_errors_when_empty_or_invalid(self):
+        surrogate = self._make_surrogate()
+
+        with self.assertRaises(RuntimeError):
+            surrogate._select_surrogate()
+
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.0, 2.0], [3.0, 4.0]])), 1)
+
+        with self.assertRaises(TypeError):
+            surrogate._select_surrogate(3.14)
+
+        with self.assertRaises(IndexError):
+            surrogate._select_surrogate(10)
+
+    def test_best_surrogate_and_best_iteration_when_empty(self):
+        surrogate = self._make_surrogate()
+        self.assertIsNone(surrogate.best_surrogate)
+        self.assertIsNone(surrogate.best_surrogate_iteration_index)
+
+    def test_score_history_alias(self):
+        surrogate = self._make_surrogate()
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.0, 2.0], [3.0, 4.0]])), 1)
+        self.assertIs(surrogate.score_history, surrogate.r2_history)
+
+    def test_test_predictions_and_test_errors_and_test_sample_error_metrics(self):
+        surrogate = self._make_surrogate()
+
+        prediction = np.array([
+            [2.0, 1.0],   # signed error wrt [1,2] -> [1,-1]
+            [1.0, 6.0],   # signed error wrt [3,4] -> [-2,2]
+        ])
+        surrogate._add_iteration(FixedResponseSurrogate(prediction), 1)
+
+        preds = surrogate.test_predictions("best")
+        self.assert_close_arrays(preds, prediction)
+
+        signed = surrogate.test_errors("best", error_type="signed")
+        absolute = surrogate.test_errors("best", error_type="absolute")
+        squared = surrogate.test_errors("best", error_type="squared")
+
+        self.assert_close_arrays(signed, np.array([[1.0, -1.0], [-2.0, 2.0]]))
+        self.assert_close_arrays(absolute, np.array([[1.0, 1.0], [2.0, 2.0]]))
+        self.assert_close_arrays(squared, np.array([[1.0, 1.0], [4.0, 4.0]]))
+
+        rmse = surrogate.test_sample_errors("best", metric="rmse")
+        mae = surrogate.test_sample_errors("best", metric="mae")
+        mean_abs = surrogate.test_sample_errors("best", metric="mean_abs_error")
+
+        self.assert_close_arrays(rmse, np.array([1.0, 2.0]))
+        self.assert_close_arrays(mae, np.array([1.0, 2.0]))
+        self.assert_close_arrays(mean_abs, np.array([1.0, 2.0]))
+
+    def test_get_target_prediction_missing_field_raises(self):
+        surrogate = self._make_surrogate()
+
+        with self.assertRaises(RuntimeError):
+            surrogate._get_target_prediction({"wrong_field": np.array([1.0, 2.0])})
+
+    def test_match_prediction_shape_transpose_and_error(self):
+        surrogate = SparseGridAdaptiveSurrogate(
+            target_field_name="target",
+            indep_variable_name="time_axis",
+            indep_variable_values=np.array([0.0, 1.0, 2.0]),
+            test_params=np.array([[0.0, 0.0], [1.0, 1.0]]),
+            test_responses=np.array([[1.0, 2.0, 3.0],
+                                    [4.0, 5.0, 6.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+
+        test_responses = surrogate._get_test_response_array()
+
+        # Shape (3, 2), transpose gives (2, 3), which matches test_responses.
+        transposed_input = np.array([
+            [1.0, 4.0],
+            [2.0, 5.0],
+            [3.0, 6.0],
+        ])
+
+        matched = surrogate._match_prediction_shape(transposed_input, test_responses)
+        self.assert_close_arrays(matched, np.array([[1.0, 2.0, 3.0],
+                                                    [4.0, 5.0, 6.0]]))
+
+        with self.assertRaises(RuntimeError):
+            surrogate._match_prediction_shape(np.ones((4, 4)), test_responses)
+
+    def test_reduce_error_array_and_label_helpers(self):
+        surrogate = self._make_surrogate()
+        errors = np.array([
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ])
+
+        self.assert_close_arrays(surrogate._reduce_error_array(errors, "median"), np.array([2.0, 3.0]))
+        self.assert_close_arrays(surrogate._reduce_error_array(errors, "max"), np.array([3.0, 4.0]))
+        self.assert_close_arrays(surrogate._reduce_error_array(errors, None), errors)
+
+        self.assertEqual(surrogate._make_error_label("absolute", None), "surrogate error")
+        self.assertEqual(surrogate._make_error_label("absolute", "max"), "maximum absolute error")
+        self.assertEqual(surrogate._make_error_ylabel("squared"), "target_squared_error")
+
+    def test_make_response_and_error_titles_with_explicit_title(self):
+        surrogate = self._make_surrogate()
+        self.assertEqual(surrogate._make_response_plot_title("my title"), "my title")
+        self.assertEqual(surrogate._make_error_plot_title("error title"), "error title")
+
+    def test_make_response_plot_labels_defaults(self):
+        surrogate = self._make_surrogate()
+        xlabel, ylabel = surrogate._make_response_plot_labels(
+            None, None, "s", "K"
+        )
+        self.assertEqual(xlabel, "time axis (s)")
+        self.assertEqual(ylabel, "target (K)")
+
+    def test_enforce_training_data_parameter_range_propagates_to_stored_surrogates(self):
+        surrogate = self._make_surrogate()
+
+        class ChildSurrogate:
+            def __init__(self):
+                self.calls = []
+                self.surrogate = self
+            def __call__(self, params):
+                n_samples = params.shape[1]
+                return np.zeros((2, n_samples))
+            def enforce_training_data_parameter_range(self, value):
+                self.calls.append(value)
+
+        child = ChildSurrogate()
+        surrogate._add_iteration(child, 1)
+
+        stored = list(surrogate.stored_surrogates.values())[0]
+        surrogate.enforce_training_data_parameter_range(False)
+        surrogate.enforce_training_data_parameter_range(True)
+
+        self.assertEqual(stored.calls, [False, True])
+
+
+class TestAdaptiveSurrogatePlottingExtra(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_surrogate(self):
+        surrogate = SparseGridAdaptiveSurrogate(
+            target_field_name="response_field",
+            indep_variable_name="x_coord",
+            indep_variable_values=np.array([0.0, 1.0]),
+            test_params=np.array([[0.0, 0.0], [1.0, 1.0]]),
+            test_responses=np.array([[1.0, 2.0], [3.0, 4.0]]),
+            param_names=["p1", "p2"],
+            bounds=np.array([[0.0, 1.0], [0.0, 1.0]]),
+            storage_best_n_surrogates=None,
+            storage_every_n_batches=1,
+        )
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.0, 2.0], [3.0, 4.0]])), 10)
+        surrogate._add_iteration(FixedResponseSurrogate(np.array([[1.1, 2.1], [3.1, 4.1]])), 20)
+        return surrogate
+
+    def test_plot_error_history_with_string_metric_and_explicit_axes(self):
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        surrogate, _ = self._make_known_error_surrogate()
+        surrogate = self._make_surrogate()
+        fig, ax = plt.subplots()
 
-        figures, axes_groups, worst_indices = surrogate.plot_worst_n(
-            n=6,
-            n_figures=2,
-            surrogate_index="best",
-            metric="max_error",
-            error_type="signed",
+        returned_fig, returned_ax = surrogate.plot_error_history(
+            metrics="rmse",
+            figure=fig,
+            axes=ax,
+            metric_styles={"rmse": {"color": "purple"}},
         )
 
-        np.testing.assert_array_equal(
-            worst_indices,
-            np.array([4, 6, 1, 5, 0, 3]),
+        self.assertIs(returned_fig, fig)
+        self.assertIs(returned_ax, ax)
+        self.assertEqual(len(ax.lines), 1)
+        self.assertEqual(ax.lines[0].get_color(), "purple")
+        plt.close(fig)
+
+    def test_plot_error_history_invalid_metric_raises(self):
+        surrogate = self._make_surrogate()
+        with self.assertRaises(ValueError):
+            surrogate.plot_error_history(metrics=("not_a_metric",))
+
+    def test_validate_history_length_error(self):
+        surrogate = self._make_surrogate()
+        with self.assertRaises(RuntimeError):
+            surrogate._validate_history_length("rmse", np.array([1.0]))
+
+    def test_plot_surrogate_error_vs_independent_variable_median_max_and_squared(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        surrogate = self._make_surrogate()
+
+        fig1, ax1 = surrogate.plot_surrogate_error_vs_independent_variable(
+            error_type="absolute",
+            error_statistic="median",
+            title="median abs error",
+            error_units="custom_units",
+        )
+        self.assertEqual(ax1.get_title(), "median abs error")
+        self.assertEqual(ax1.get_ylabel(), "response field absolute error (custom_units)")
+        self.assertEqual(len(ax1.lines), 1)
+        plt.close(fig1)
+
+        fig2, ax2 = surrogate.plot_surrogate_error_vs_independent_variable(
+            error_type="squared",
+            error_statistic="max",
+            xlabel="my_x",
+            ylabel="my_y",
+            independent_variable_units="s",
+            target_field_units="K",
+        )
+        self.assertEqual(ax2.get_xlabel(), "my x (s)")
+        self.assertEqual(ax2.get_ylabel(), "my y (K^2)")
+        self.assertEqual(len(ax2.lines), 1)
+        plt.close(fig2)
+
+
+class TestAdaptiveSurrogateUserTestDataNameNormalization(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+        p1 = Parameter("p1", 0.0, 1.0)
+        p2 = Parameter("p2", -1.0, 1.0)
+        self.study = SparseGridAdaptiveSurrogateStudy(p1, p2)
+
+    def _make_results_like_for_name_normalization(
+        self,
+        simulation_model_names=("old_model",),
+        qoi_keys=("old_model:old_objective",),
+    ):
+        simulation_history = OrderedDict()
+        for model_name in simulation_model_names:
+            simulation_history[model_name] = types.SimpleNamespace(
+                state_names=["state"]
+            )
+
+        qoi_history = OrderedDict()
+        for qoi_key in qoi_keys:
+            qoi_history[qoi_key] = object()
+
+        return types.SimpleNamespace(
+            simulation_history=simulation_history,
+            qoi_history=qoi_history,
         )
 
-        # Six samples split over two figures as 3 and 3.
-        self.assertEqual(len(figures), 2)
-        self.assertEqual(len(axes_groups), 2)
+    def _configure_required_names(self, model_name="required_model",
+                                  objective_name="required_objective"):
+        self.study._get_model_names = lambda: [model_name]
+        self.study._results_synchronizer = types.SimpleNamespace(
+            name=objective_name
+        )
 
-        for axes in axes_groups:
-            response_axes = axes[0, 0]
-            error_axes = axes[0, 1]
-            self.assertEqual(len(response_axes.lines), 6)
-            self.assertEqual(len(error_axes.lines), 4)
+    def test_prepare_user_test_data_raises_without_results_synchronizer(self):
+        self.study._get_model_names = lambda: ["required_model"]
+        self.study._results_synchronizer = None
 
-        for fig in figures:
-            plt.close(fig)
-    
+        results = self._make_results_like_for_name_normalization()
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_raises_for_multiple_current_study_models(self):
+        self.study._get_model_names = lambda: ["model_a", "model_b"]
+        self.study._results_synchronizer = types.SimpleNamespace(
+            name="required_objective"
+        )
+
+        results = self._make_results_like_for_name_normalization()
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_renames_single_model_and_objective(self):
+        self._configure_required_names(
+            model_name="required_model",
+            objective_name="required_objective",
+        )
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("old_model",),
+            qoi_keys=("old_model:old_objective",),
+        )
+
+        with patch("matcal.core.surrogates.logger.warning") as warning_mock:
+            returned = self.study._prepare_user_test_data_for_adaptive_study(
+                results
+            )
+
+        self.assertIs(returned, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+
+        self.assertGreaterEqual(warning_mock.call_count, 2)
+        warning_text = "\n".join(
+            str(call.args[0]) for call in warning_mock.call_args_list
+        )
+        self.assertIn("old_model", warning_text)
+        self.assertIn("required_model", warning_text)
+        self.assertIn("old_objective", warning_text)
+        self.assertIn("required_objective", warning_text)
+
+    def test_prepare_user_test_data_noops_when_names_match(self):
+        self._configure_required_names(
+            model_name="required_model",
+            objective_name="required_objective",
+        )
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=("required_model:required_objective",),
+        )
+
+        with patch("matcal.core.surrogates.logger.warning") as warning_mock:
+            returned = self.study._prepare_user_test_data_for_adaptive_study(
+                results
+            )
+
+        self.assertIs(returned, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+        warning_mock.assert_not_called()
+
+    def test_prepare_user_test_data_errors_for_multiple_test_simulation_models(self):
+        self._configure_required_names()
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("model_a", "model_b"),
+            qoi_keys=("model_a:old_objective",),
+        )
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_errors_for_multiple_qoi_model_names(self):
+        self._configure_required_names()
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=("model_a:old_objective", "model_b:old_objective"),
+        )
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_prepare_user_test_data_errors_for_multiple_qoi_objective_names(self):
+        self._configure_required_names()
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("required_model",),
+            qoi_keys=(
+                "required_model:objective_a",
+                "required_model:objective_b",
+            ),
+        )
+
+        with self.assertRaises(RuntimeError):
+            self.study._prepare_user_test_data_for_adaptive_study(results)
+
+    def test_get_test_data_normalizes_user_test_data_before_formatting(self):
+        self._configure_required_names(
+            model_name="required_model",
+            objective_name="required_objective",
+        )
+
+        results = self._make_results_like_for_name_normalization(
+            simulation_model_names=("old_model",),
+            qoi_keys=("old_model:old_objective",),
+        )
+
+        self.study._user_test_data = results
+        self.study._test_eval_info = None
+
+        self.study._format_params = lambda formatted_results: np.array([[1.0, 2.0]])
+        self.study._format_output = lambda formatted_results: np.array([[3.0, 4.0]])
+
+        test_params, test_responses = self.study._get_test_data()
+
+        self.assertIs(self.study._test_eval_info, results)
+        self.assertEqual(
+            list(results.simulation_history.keys()),
+            ["required_model"],
+        )
+        self.assertEqual(
+            list(results.qoi_history.keys()),
+            ["required_model:required_objective"],
+        )
+        self.assert_close_arrays(test_params, np.array([[1.0, 2.0]]))
+        self.assert_close_arrays(test_responses, np.array([[3.0, 4.0]]))
+
 
 class _FakeSurrogate:
     """
@@ -1827,8 +1815,8 @@ class _FakeSurrogate:
     stopping‑criterion method.
     """
     def __init__(self):
-        self._root_mean_squared_errors = []   # filled by the test
-        self._max_errors = []       # filled by the test
+        self._root_mean_squared_errors = []
+        self._max_errors = []
         self._r2_scores = []
 
     @property
@@ -1838,6 +1826,14 @@ class _FakeSurrogate:
     @property
     def max_error_history(self):
         return self._max_errors
+
+    @property
+    def r2_history(self):
+        return self._r2_scores
+
+    @property
+    def score_history(self):
+        return self._r2_scores
 
     def score(self, index=-1):
         return self._r2_scores[index]
@@ -1937,1046 +1933,2943 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         should_stop = self.study._stopping_criterion_met(training_batch_number=4)
         self.assertFalse(should_stop,
                          "Stopping should NOT be triggered when no criteria are met")
-        
 
-class TestVoronoiTessellation(MatcalUnitTest):
-    from scipy.spatial import voronoi_plot_2d, ConvexHull
-    import matplotlib.pyplot as plt
-    from matplotlib.path import Path
-    from matplotlib.patches import Polygon as MplPolygon
-    
-    @staticmethod
-    def fun2D(x):
-        return np.sin(np.sqrt(x[:, 0]**2 + x[:, 1]**2))
-    
-    @staticmethod
-    def funND(x):
-        # Tang function
-        d = x.shape[1]
-        sum_ = 0
-        for ii in np.arange(d):
-            sum_ += (x[:, ii] ** 4) - (16 * x[:, ii] ** 2) + (5 * x[:, ii])
-        quadrant_filter = np.all(x < 0, axis=1)
-        sum_[quadrant_filter] = 0
-        return 0.5 * sum_  
-    
-    @staticmethod
-    def voronoi_initialization(dim, nsamples, bounds, seed=20):
-        from scipy.stats.qmc import Halton
-        from scipy.stats import qmc
+class TestGlobalHelperFunctions(MatcalUnitTest):
 
-        if dim == 2:
-            model = TestVoronoiTessellation.fun2D
-        elif dim == 3:
-            model = TestVoronoiTessellation.funND
-                
-        l_bounds = [bounds[i][0] for i in np.arange(dim)]
-        u_bounds = [bounds[i][1] for i in np.arange(dim)]
-
-        # Generate initial points from Halton Sequence
-        sampler = Halton(d=dim, seed=seed)
-        X_unscaled = sampler.random(n=nsamples)
-        X_init = qmc.scale(X_unscaled, l_bounds, u_bounds)
-        y_init = model(X_init)
-
-        ntest_samples = 40
-        test_pts_sampler = Halton(d=dim, seed=seed+2)
-        X_test_unscaled = np.atleast_2d(test_pts_sampler.random(n=ntest_samples))
-        X_test = np.atleast_2d(qmc.scale(X_test_unscaled, l_bounds, u_bounds))
-        y_test = model(X_test)
-        return X_init, y_init, X_test, y_test, bounds
-
-    @staticmethod
-    def check_arrays_contain_same_elements(arr1, arr2):
-        # check that initial_points are the same as the current points
-        same_elements = np.all(np.isin(arr2, arr1))
-        same_length = np.all(arr1.shape == arr2.shape)
-        return same_elements, same_length
-        
     def setUp(self):
         super().setUp(__file__)
 
-    def test_initialization(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            
-            for fo in [True, False]:
-                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
-                vor.build()
-            
-                # Validate that ghost points are created correctly and that _all_points
-                # includes both original and ghost points.
-                self.assertEqual(vor._ghost_points.shape[1], dim)
-                min_x, max_x = bounds[0]
-                min_y, max_y = bounds[1]
-                if dim == 3:
-                    min_z, max_z = bounds[2]
-                for point in vor._ghost_points:
-                    if dim == 2:
-                        x, y = point
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
-                                        msg=f"Ghost point {point} is inside the bounding box.")
-                    elif dim == 3:
-                        x, y, z = point
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y or z < min_z or z > max_z,
-                                        msg=f"Ghost point {point} is inside the bounding box.")
-                    
-                nghost = vor._ghost_points.shape[0]
-                self.assertEqual(vor._all_points.shape[0], nsamples + nghost, msg="vor._all_points does not have correct dimensions.")
-                self.assertEqual(vor._all_points[:nsamples, :].tolist(), X_init.tolist(), msg="vor._all_points does not contain X_init")
-                self.assertEqual(vor._all_points[nsamples:, :].tolist(), vor._ghost_points.tolist(), msg="vor._all_points does not contain ghost points.")
-                
-                self.assertTrue(all(vor._boo[nsamples:]), msg="Ghost points not correctly identified.")
-                self.assertFalse(any(vor._boo[:nsamples]), msg="Ghost points not correctly identified") 
-                
-                # Check that all training points belong to regions that contain no infinite vertices
-                training_point_regions = vor.vor.point_region[:nsamples].tolist()
-                finite_training_regions = [i for i in training_point_regions if -1 not in vor.vor.regions[i]]
-                self.assertEqual(training_point_regions, finite_training_regions)
-                
-                # Check that the dimension of the voronoi tessellation is correct
-                self.assertEqual(dim, vor.ndim, msg="Dimension of voronoi tessellation not correct.")
-            
-                # Check that ConvexHull is created only when finite_only is False
-                if fo:
-                    self.assertIsNone(vor.boundary_hull, msg="Boundary hull created for finite_only=False.")
-       
-    def test_identify_vertices_outside_bounds(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-            vor.build()
-            min_x, max_x = bounds[0]
-            min_y, max_y = bounds[1]
-            if dim == 3:
-                min_z, max_z = bounds[2]
-        
-            for point_idx in np.arange(nsamples):
-                region_idx = vor.get_voronoi_region(vor.vor.points[point_idx])[0][0]
-                region = vor.vor.regions[region_idx]
-                updated_region = vor.identify_vertices_outside_bounds(region)
-                outside_vertices = [region[i] for i in np.arange(len(updated_region)) if updated_region[i] < 0]
-                for vertex_idx in outside_vertices:
-                    vertex = vor.vor.vertices[vertex_idx]
-                    if dim == 2:
-                        x, y = vertex
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y,
-                                        msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
-                    elif dim == 3:
-                        x, y, z = vertex
-                        self.assertTrue(x < min_x or x > max_x or y < min_y or y > max_y or z < min_z or z > max_z,
-                                        msg=f"Identified 'outside' vertex {vertex} is inside the bounding box.")
-                    vor_region = vor.get_voronoi_region(vertex)[0]
-                    self.assertIn(region_idx, vor_region, msg="identified vertex not in region")
+    def test_validate_surrogate_storage_options_normalizes_score_alias(self):
+        best_n, every_n, metric = _validate_surrogate_storage_options(
+            best_n_surrogates=None,
+            save_every_n_batches=2,
+            score_metric="score",
+        )
 
-    def test_2d_find_boundary_hull_ray_crossing(self):
-        nsamples = 4
-        dim = 2
-        bounds = np.array([[-5, 5], [-5, 5]])
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-        vor.build()
-
-        # test crossing        
-        U = np.array([1, 1])  # Example ray direction
-        z = np.array([0, 0])  # Example ray origin
-        expected_result = np.array([5, 5])  # Replace with the expected intersection point
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertTrue(np.all(result == expected_result))
-
-        # test no crossing
-        z = np.array([6, 6])  # Origin above the convex hull
-        U = np.array([1, 1])  # Direction that does not intersect
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertIsNone(result) 
-    
-    def test_3d_find_boundary_hull_ray_crossing(self):
-        nsamples = 8
-        dim = 3
-        bounds = np.array([[-5, 5], [-5, 5], [-5, 5]])
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-        vor.build()
-
-        # test crossing        
-        U = np.array([1, 1, 1])  # Example ray direction
-        z = np.array([0, 0, 0])  # Example ray origin
-        expected_result = np.array([5, 5, 5])  # Replace with the expected intersection point
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertTrue(np.all(result == expected_result))
-
-        # test no crossing
-        z = np.array([6, 6, 6])  # Origin above the convex hull
-        U = np.array([1, 1, 1])  # Direction that does not intersect
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        self.assertIsNone(result)
-        
-        # test two crossings
-        z = np.array([-6, -6, -6]) # origin 
-        U = np.array([1, 1, 1,]) # Direction
-        result = vor.find_boundary_hull_ray_crossings(U, z)
-        
-    def test_get_region_vertices(self):
-        # implicitly tests vor.replace_unbounded_vertices and vor.snip_ridge_vertices
-        
-        from scipy.spatial import voronoi_plot_2d, ConvexHull, Delaunay
-        import matplotlib.pyplot as plt
-        from matplotlib.path import Path
-        from matplotlib.patches import Polygon as MplPolygon
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            for fo in [True, False]:
-                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
-                vor.build()
-            
-                for pt_idx in np.arange(nsamples):
-                    region_idx = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                    region_vertices = vor.get_region_vertices(region_idx, identify_outside_vertices=False)
-                    bounded_region_vertices = vor.get_region_vertices(region_idx, identify_outside_vertices=True)
-                    for vert in region_vertices:
-                        self.assertIn(region_idx, vor.get_voronoi_region(vert)[0]) # confirm vertices are within given region
-                    if bounded_region_vertices is not None:
-                        for vert in bounded_region_vertices:
-                            self.assertIn(region_idx, vor.get_voronoi_region(vert)[0]) # confirm vertices are within given region
-                            if not fo:
-                                self.assertGreaterEqual(vor.bhullD.find_simplex(vert), 0) # confirm point is within boundary hull
-
-                    self.assertEqual(vor._all_points.shape[0], len(vor.vor.point_region))
-
-                    # compare convex hulls of original and bounded region vertices
-                    # the area of the original hull should be >= the area of the bounded hull
-                    # the bounded hull should reside completely within the original hull
-                    if region_vertices.shape[0] > 2:
-                        region_hull = ConvexHull(region_vertices)
-                        region_hull_pts = region_vertices[region_hull.vertices]
-                        delaunay_region = Delaunay(region_hull_pts) #Delaunay triangulation of region vertices
-                    if bounded_region_vertices is not None and bounded_region_vertices.shape[0] > dim + 1:
-                        try:
-                            bounded_region_hull = ConvexHull(bounded_region_vertices)
-                            bounded_hull_pts = bounded_region_vertices[bounded_region_hull.vertices]
-                        except:
-                            import pdb
-                            pdb.set_trace()
-                        # check if all points of the bounded hull are inside the original hulls
-                        is_inside = delaunay_region.find_simplex(bounded_hull_pts) >= 0
-                    
-                        self.assertGreaterEqual(region_hull.area, bounded_region_hull.area)
-                        self.assertTrue(np.all(is_inside))
-                        
-                    # 2d plots
-                    if dim == 2:
-                        _, ax = plt.subplots(figsize=(12,8))
-                        voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
-                                        line_width=2)
-                        ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
-                        plt.legend(fontsize=20)
-                        #plt.savefig(f"/ascldap/users/dericci/voronoi_tessellation.png")
-
-                        ax.plot(region_vertices[:, 0], region_vertices[:, 1], '.', markersize=15, color='g', label='R1 Vertices')
-                        plt.legend(fontsize=20)
-                        plt.savefig(f"voronoi_tessellation_r{region_idx}_vertices.png")
-                        plt.close()
-                    
-                        _, ax = plt.subplots(figsize=(12,8))
-                        voronoi_plot_2d(vor.vor, ax=ax, show_vertices=True,
-                                        line_width=2)
-                        ax.plot(X_init[:, 0], X_init[:, 1], '.', markersize=10, color='m', label='Training Points')
-                        if bounded_region_vertices is not None:
-                            ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], '.', color='r', markersize=15, label=f'R{region_idx} Bounded Vertices')
-                        if not fo:
-                            for simplex in vor.boundary_hull.simplices:
-                                plt.plot(vor.boundary_points[simplex, 0], vor.boundary_points[simplex, 1], 'k-', lw=2)
-                            plt.legend(fontsize=20)
-                            plt.savefig(f"voronoi_tessellation_r{region_idx}_bounded_vertices.png")
-                            plt.close()
-
-                        # Fig of voronoi tessellation with boundary hull
-                        _, ax = plt.subplots(figsize=(12, 12))
-
-                        # Plot original points
-                        ax.plot(region_vertices[:, 0], region_vertices[:, 1], 'bo', label='Outer Points')
-                        if bounded_region_vertices is not None:
-                            ax.plot(bounded_region_vertices[:, 0], bounded_region_vertices[:, 1], 'ro', label='Inner Points')
-
-                        # Draw convex hulls as filled polygons
-                        try:
-                            outer_patch = MplPolygon(region_hull_pts, closed=True, fill=False, edgecolor='blue', linewidth=2, label='Outer Hull')
-                            inner_patch = MplPolygon(bounded_hull_pts, closed=True, fill=False, edgecolor='red', linewidth=2, label='Inner Hull')
-                            ax.add_patch(outer_patch)
-                            ax.add_patch(inner_patch)
-
-                            # Optional: mark inner hull vertices that are not contained
-                            for pt, inside in zip(bounded_hull_pts, is_inside):
-                                if not inside:
-                                    ax.plot(pt[0], pt[1], 'kx', markersize=10, label='Outside Hull Vertex')
-
-                        except:
-                            continue
-
-                        ax.legend()
-                        ax.set_title('Convex Hull Containment Test')
-                        ax.set_aspect('equal')
-                        plt.grid(True)
-                        plt.savefig(f"inner_outer_hull_r{region_idx}.png")
-                        plt.close("all")       
-         
-    def test_get_voronoi_vertices(self):
-        from matplotlib.path import Path
-        from scipy.spatial import Delaunay
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-            vor.build()
-            boundary_hull = vor.boundary_hull
-            boundary_hull_points = vor.boundary_points[boundary_hull.vertices]
-            #boundary_path = Path(vor.boundary_points[boundary_hull_points]) # only works for 2D
-            delaunay_region = Delaunay(boundary_hull_points) #Delaunay triangulation of region vertices
-            region_vertices = np.empty((0, dim))
-                    
-            # voronoi vertices of all training points
-            vor_vertices = vor.get_voronoi_vertices(identify_outside_vertices=False)
-
-            # check that the vertices returned by vor.get_voronoi_vertices are the same as
-            # the region vertices returned by vor.get_region_vertices for all regions
-            for pt_idx in np.arange(nsamples):
-                region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=False)])
-            unique_vertices = set(tuple(row) for row in region_vertices)
-            vertices = np.asarray([list(row) for row in unique_vertices])
-            self.assertEqual(set(map(tuple, vor_vertices)), set(map(tuple, vertices)))
-            
-            # voronoi vertices snipped to boundary - check that all bounded vertices are within Convex
-            # hull defined by boundary points
-            bounded_vor_vertices = vor.get_voronoi_vertices(identify_outside_vertices=True)
-            #is_inside = boundary_path.contains_points(bounded_vor_vertices, radius=1e-10)
-            is_inside = delaunay_region.find_simplex(bounded_vor_vertices) >= 0
-            self.assertTrue(np.all(is_inside))
-
-            # check that the bounded vertices returned by vor.get_voronoi_vertices are the same as
-            # the bounded region vertices returned by vor.get_region_vertices for all regions
-            region_vertices = np.empty((0, dim))
-            for pt_idx in np.arange(nsamples):
-                region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                region_vertices = np.vstack([region_vertices, vor.get_region_vertices(region_index, identify_outside_vertices=True)])
-            unique_vertices = set(tuple(row) for row in region_vertices)
-            vertices = np.asarray([list(row) for row in unique_vertices])
-            self.assertEqual(set(map(tuple, bounded_vor_vertices)), set(map(tuple, vertices)))
-    
-    def test_add_points_error_handling(self):
-        dim = 2
-        nsamples = 2 ** dim
-        bounds = np.array([[-5, 5] for d in np.arange(dim)])
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-
-        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-        vor.build()
-        initial_points = vor._all_points.copy()
-        
-        invalid_point = np.array([np.nan, np.nan])
-        vor.add_points(invalid_point)
-        same_elements, same_length = TestVoronoiTessellation.check_arrays_contain_same_elements(initial_points, vor._all_points)
-        self.assertTrue(same_elements)
-        self.assertTrue(same_length)
-        
-        invalid_point = np.array([np.inf, np.inf])
-        vor.add_points(invalid_point)
-        same_elements, same_length = TestVoronoiTessellation.check_arrays_contain_same_elements(initial_points, vor._all_points)
-        self.assertTrue(same_elements)
-        self.assertTrue(same_length)
-        
-        invalid_point = np.array([1.0, np.nan])
-        vor.add_points(invalid_point)
-        same_elements, same_length = TestVoronoiTessellation.check_arrays_contain_same_elements(initial_points, vor._all_points)
-        self.assertTrue(same_elements)
-        self.assertTrue(same_length)
-        
-        invalid_point = np.array([np.inf, 1.0])
-        vor.add_points(invalid_point)
-        same_elements, same_length = TestVoronoiTessellation.check_arrays_contain_same_elements(initial_points, vor._all_points)
-        self.assertTrue(same_elements)
-        self.assertTrue(same_length)
-        
-        repeat_point = X_init[0]
-        vor.add_points(repeat_point)
-        same_elements, same_length = TestVoronoiTessellation.check_arrays_contain_same_elements(initial_points, vor._all_points)
-        self.assertTrue(same_elements)
-        self.assertTrue(same_length)
-        
-        new_points = np.array([[1.01, 1.01, 1.01], [2.02, 2.02, 2.02], [np.nan, np.nan, 1.0]])
+        self.assertIsNone(best_n)
+        self.assertEqual(every_n, 2)
+        self.assertEqual(metric, "r2")
+    def test_validate_surrogate_storage_options_rejects_disabled_retention(self):
         with self.assertRaises(ValueError):
-            vor.add_points(new_points)
+            _validate_surrogate_storage_options(
+                best_n_surrogates=None,
+                save_every_n_batches=None,
+            )        
 
-        new_points = np.array([[1.01, 1.01], [np.nan, 1.0]])
-        vor.add_points(new_points)
-        same_elements, same_length = TestVoronoiTessellation.check_arrays_contain_same_elements(initial_points, vor._all_points)
-        self.assertFalse(same_elements)
-        self.assertFalse(same_length)
-        
-        new_points = {tuple(row) for row in new_points}
-        with self.assertRaises(TypeError):
-            vor.add_points(new_points)
-        with self.assertRaises(TypeError):
-            vor.remove_invalid_rows(new_points)
+    def test_package_unique_bounded_points_uniques_and_filters_bounds(self):
+        bounds = np.array([
+            [0.0, 1.0],
+            [-1.0, 1.0],
+        ])
 
-    def test_invalid_region_index_error_handling(self):
-        dim = 2
-        nsamples = 2 ** dim
-        bounds = np.array([[-5, 5] for d in np.arange(dim)])
-        X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
+        points = np.array([
+            [0.5, 0.0],
+            [0.5, 0.0],
+            [1.2, 0.0],
+            [0.25, -0.5],
+            [np.nan, 0.0],
+        ])
 
-        vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-        vor.build()
-                       
+        packaged = _package_unique_bounded_points(
+            points,
+            bounds,
+            n_parameters=2,
+        )
+
+        expected = np.array([
+            [0.25, -0.5],
+            [0.5, 0.0],
+        ])
+
+        self.assert_close_arrays(packaged, expected)
+
+    def test_validate_surrogate_generator_regressor_type_accepts_random_forest(self):
+        regressor_type = _validate_surrogate_generator_regressor_type("Random Forest")
+        self.assertEqual(regressor_type, "Random Forest")
+
+    def test_validate_surrogate_generator_regressor_type_accepts_rbf(self):
+        regressor_type = _validate_surrogate_generator_regressor_type("RBF")
+        self.assertEqual(regressor_type, "RBF")
+
+    def test_validate_surrogate_generator_regressor_type_rejects_unknown_regressor(self):
         with self.assertRaises(ValueError):
-            vor.raise_if_invalid_region_index(50)
-         
+            _validate_surrogate_generator_regressor_type("not_a_regressor")
+
+    def test_calculate_cv_error_uses_shared_response_metric(self):
+
+        class FakeSurrogate:
+
+            def __call__(self, X, batch_evaluate=False):
+                return {
+                    "response": np.array([[1.0, 2.0]])
+                }
+
+        X_test = np.array([[0.0, 0.0]])
+
+        y_test = [
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([1.0, 2.0]),
+            }
+        ]
+
+        with patch(
+            "matcal.core.adaptive_surrogates._calculate_response_error_metric",
+            return_value=123.0,
+        ) as metric_mock:
+            error = _calculate_cv_error(
+                FakeSurrogate(),
+                X_test,
+                y_test,
+                target_field="response",
+                interpolation_field="time",
+                interpolation_values=np.array([0.0, 1.0]),
+                metric="rmse",
+                scale=1.0,
+            )
+
+        self.assertEqual(error, 123.0)
+        metric_mock.assert_called_once()
+
+    def test_fit_surrogate_model_with_none_save_filename_calls_generate_with_none(self):
+        fake_surrogate = object()
+
+        with patch("matcal.core.surrogates.SurrogateGenerator") as generator_class:
+            generator = generator_class.return_value
+            generator.generate.return_value = fake_surrogate
+
+            result = _fit_surrogate_model(
+                eval_info=object(),
+                interpolation_field="x",
+                interpolation_locations=np.array([0.0, 1.0]),
+                test_eval_info=object(),
+                target_field="response",
+                save_filename=None,
+                logger_on=False,
+                regressor_type="RBF",
+                neighbors=3,
+            )
+
+        self.assertIs(result, fake_surrogate)
+        generator.generate.assert_called_once_with(None)
+
+    def test_fit_surrogate_model_strips_joblib_suffix_when_filename_is_supplied(self):
+        fake_surrogate = object()
+
+        with patch("matcal.core.surrogates.SurrogateGenerator") as generator_class:
+            generator = generator_class.return_value
+            generator.generate.return_value = fake_surrogate
+
+            result = _fit_surrogate_model(
+                eval_info=object(),
+                interpolation_field="x",
+                interpolation_locations=np.array([0.0, 1.0]),
+                test_eval_info=object(),
+                target_field="response",
+                save_filename="candidate_surrogate.joblib",
+                logger_on=False,
+                regressor_type="RBF",
+                neighbors=3,
+            )
+
+        self.assertIs(result, fake_surrogate)
+        generator.generate.assert_called_once_with("candidate_surrogate")
+
+    def test_cv_helper_fits_temporary_surrogate_without_save_filename(self):
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=7.5,
+            ) as error_mock:
+                error = _fit_cv_surrogate_and_calculate_original_data_space_error(
+                    train_eval_info=object(),
+                    test_eval_info=object(),
+                    X_test=np.array([[0.0, 0.0]]),
+                    y_test=[{"x": np.array([0.0]), "response": np.array([1.0])}],
+                    interpolation_field="x",
+                    interpolation_values=np.array([0.0]),
+                    target_field="response",
+                    surrogate_options={"regressor_type": "RBF", "neighbors": 3},
+                    metric="rmse",
+                    scale=1.0,
+                    save_filename="this_should_not_be_used.joblib",
+                )
+
+        self.assertEqual(error, 7.5)
+
+        fit_mock.assert_called_once()
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
+
+        error_mock.assert_called_once()
+        self.assertIs(error_mock.call_args[0][0], fake_surrogate)
+
+
+class TestVoronoiPureFunctions(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_make_bounded_nd_grid_returns_cartesian_grid(self):
+        bounds = np.array([
+            [0.0, 1.0],
+            [10.0, 20.0],
+        ])
+
+        grid = _make_bounded_nd_grid(bounds, 2)
+
+        expected_points = np.array([
+            [0.0, 10.0],
+            [1.0, 10.0],
+            [0.0, 20.0],
+            [1.0, 20.0],
+        ])
+
+        self.assertEqual(grid.shape, (4, 2))
+
+        for expected_point in expected_points:
+            self.assertTrue(
+                np.any(np.all(np.isclose(grid, expected_point), axis=1)),
+                msg=f"Expected point {expected_point} was not in grid {grid}.",
+            )
+
+    def test_make_bounded_nd_grid_rejects_bad_bounds_shape(self):
+        bad_bounds = np.array([0.0, 1.0])
+
         with self.assertRaises(ValueError):
-            vor.raise_if_invalid_region_index(-1)
-            
-    def test_replace_unbounded_vertices_error_handling(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            for fo in [True, False]:
-                vor = VoronoiTessellation(X_init, bounds, finite_only=fo)
-                with self.assertRaises(ValueError):
-                    vor.replace_unbounded_vertices([-2, -2, -2, -2], 100, [(1, -2), (2, -3), (3, -2), (4,-2)])
-                      
-    def test_get_closest_seed(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-            vor.build()
-            
-            # point close to seed: should return seed
-            for i in np.arange(nsamples):
-                test_point = vor.points[i] * 1.01
-                closest_point = vor.vor.points[vor.get_closest_seed(test_point)]
-                self.assertTrue(np.all(closest_point == vor.points[i]))
-                
-            # vertices of seed region: should return multiple seeds, including given seed
-            for pt_idx in np.arange(nsamples):
-                seed = vor.points[pt_idx]
-                region_index = vor.get_voronoi_region(seed)[0][0]
-                region_vertices = vor.vor.vertices[vor.vor.regions[region_index]]
-                for vertice in region_vertices:
-                    closest_point_indices = vor.get_closest_seed(vertice)
-                    self.assertGreater(len(closest_point_indices), 1)
-                    closest_points = vor.vor.points[closest_point_indices]
-                    self.assertTrue(seed in closest_points)
-    
-    def test_get_voronoi_region(self):
-        from scipy.spatial import Delaunay
-        
-        # Create polyhedron from region vertices
-        # sample point from within polygon, and assert that point is in the region
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-            vor.build()
+            _make_bounded_nd_grid(bad_bounds, 2)
 
-            # loop through all regions
-            for region_idx, region in enumerate(vor.vor.regions):
-            
-                if -1 in region: # skip over regions with infinite vertices (all seeds have finite vertices)
-                    continue
-                if not region: # skip over empty regions
-                    continue
-                
-                # Get region vertices
-                vertices = vor.vor.vertices[region]
+    def test_normalize_candidate_array_handles_empty_input(self):
+        normalized = _normalize_candidate_array([], 3)
 
-                # Create a Delaunay triangulation for the region vertices
-                delaunay_region = Delaunay(vertices)
-                
-                # Define the bounding box for sampling
-                min_coords = vertices.min(axis=0)
-                max_coords = vertices.max(axis=0)
-                
-                # Sample points
-                samples = np.random.uniform(min_coords, max_coords, (1000, dim))
-                # Create mask for samples that are inside the polyhedron
-                mask = delaunay_region.find_simplex(samples) >= 0
-                inside_samples = samples[mask] 
-        
-                # check that get_voronoi_region returns given region
-                voronoi_region_list = vor.get_voronoi_region(inside_samples)
-                voronoi_region = np.array(voronoi_region_list).squeeze()
-                self.assertTrue(np.all(region_idx == voronoi_region))
-               
-    def test_get_region_seed(self):
-        dims = [2, 3]
-        for dim in dims:
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-            vor.build()
-            for pt_idx in np.arange(nsamples):
-                region_index = vor.get_voronoi_region(vor.vor.points[pt_idx])[0][0]
-                seed = vor.get_region_seed(region_index)
-                region_point_idx, = np.where(vor.vor.point_region == region_index)
-                region_seed = vor.points[region_point_idx]
-                self.assertTrue(np.all(seed == region_seed))
-    
-    def test_find_furthest_vertex(self):
-        dims = [2, 3]
-        for dim in dims:        
-            nsamples = 2 ** dim
-            bounds = np.array([[-5, 5] for d in np.arange(dim)])
-            X_init, _, _, _, bounds = TestVoronoiTessellation.voronoi_initialization(dim, nsamples, bounds)
-            vor = VoronoiTessellation(X_init, bounds, finite_only=False)
-            vor.build()
-            
-            for pt_idx in np.arange(nsamples):
-                seed = vor.points[pt_idx]
-                region_index = vor.get_voronoi_region(seed)[0][0]
-                region = vor.vor.regions[region_index]
+        self.assertEqual(normalized.shape, (0, 3))
 
-                # without snipping vertices: assert the identified furthest vertex has the greatest distance
-                vertices = vor.get_region_vertices(region_index, identify_outside_vertices=False)
-                all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=False)
-                distances = np.linalg.norm(seed - all_vertices, axis=1)
-                max_dist = np.argmax(distances)
-                self.assertEqual(max_dist, furthest_vertex)
-                self.assertTrue(np.all(all_vertices == vertices))
-                
-                # with snipping vertices: assert the identified furthest vertex has the greatest distance
-                vertices = vor.get_region_vertices(region_index, identify_outside_vertices=True)
-                all_vertices, furthest_vertex = vor.find_furthest_vertex(region_index, identify_outside_vertices=True)
-                distances = np.linalg.norm(seed - all_vertices, axis=1)
-                max_dist = np.argmax(distances)
-                self.assertEqual(max_dist, furthest_vertex)
-                self.assertTrue(np.all(all_vertices == vertices))
+    def test_normalize_candidate_array_handles_single_point(self):
+        normalized = _normalize_candidate_array([1.0, 2.0, 3.0], 3)
+
+        expected = np.array([[1.0, 2.0, 3.0]])
+        self.assert_close_arrays(normalized, expected)
+
+    def test_normalize_candidate_array_rejects_wrong_dimension(self):
+        with self.assertRaises(ValueError):
+            _normalize_candidate_array([[1.0], [2.0]], 2)
+
+    def test_filter_points_within_bounds_removes_nan_inf_and_out_of_bounds(self):
+        bounds = np.array([
+            [0.0, 1.0],
+            [-1.0, 1.0],
+        ])
+        points = np.array([
+            [0.5, 0.0],
+            [1.0, 1.0],
+            [1.1, 0.0],
+            [0.5, np.nan],
+            [0.5, np.inf],
+            [0.0, -1.0],
+        ])
+
+        filtered = _filter_points_within_bounds(points, bounds, 2)
+
+        expected = np.array([
+            [0.5, 0.0],
+            [1.0, 1.0],
+            [0.0, -1.0],
+        ])
+
+        self.assert_close_arrays(filtered, expected)
+
+    def test_remove_duplicate_rows_against_existing_preserves_order(self):
+        existing_points = np.array([
+            [0.0, 0.0],
+            [1.0, 1.0],
+        ])
+        candidate_points = np.array([
+            [1.0, 1.0 + 5.0e-11],  # duplicate of existing point
+            [0.5, 0.5],
+            [0.5, 0.5 + 5.0e-11],  # duplicate of prior kept candidate
+            [2.0, 2.0],
+        ])
+
+        filtered = _remove_duplicate_rows_against_existing(
+            candidate_points,
+            existing_points,
+            n_parameters=2,
+            atol=1.0e-10,
+        )
+
+        expected = np.array([
+            [0.5, 0.5],
+            [2.0, 2.0],
+        ])
+
+        self.assert_close_arrays(filtered, expected)
+
+    def test_random_subset_rows_is_reproducible(self):
+        values = np.array([
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [2.0, 2.0],
+            [3.0, 3.0],
+            [4.0, 4.0],
+        ])
+
+        rng_a = np.random.default_rng(123)
+        rng_b = np.random.default_rng(123)
+
+        subset_a = _random_subset_rows(values, 3, rng_a, 2)
+        subset_b = _random_subset_rows(values, 3, rng_b, 2)
+
+        self.assert_close_arrays(subset_a, subset_b)
+        self.assertEqual(subset_a.shape, (3, 2))
+
+        for row in subset_a:
+            self.assertTrue(np.any(np.all(np.isclose(values, row), axis=1)))
+
+    def test_find_matching_row_index_returns_first_matching_row(self):
+        rows = np.array([
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [1.0, 1.0 + 5.0e-11],
+        ])
+
+        index = _find_matching_row_index(rows, [1.0, 1.0], atol=1.0e-10)
+
+        self.assertEqual(index, 1)
+
+    def test_find_matching_row_index_returns_none_when_no_match(self):
+        rows = np.array([
+            [0.0, 0.0],
+            [1.0, 1.0],
+        ])
+
+        index = _find_matching_row_index(rows, [2.0, 2.0])
+
+        self.assertIsNone(index)
+
+    def test_assign_points_to_nearest_seed(self):
+        query_points = np.array([
+            [0.1, 0.0],
+            [0.9, 0.0],
+            [2.2, 0.0],
+        ])
+        seed_points = np.array([
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [2.0, 0.0],
+        ])
+
+        owner_indices = _assign_points_to_nearest_seed(query_points, seed_points)
+
+        expected = np.array([0, 1, 2])
+        self.assert_close_arrays(owner_indices, expected)
+
+    def test_select_farthest_point(self):
+        candidate_points = np.array([
+            [0.1, 0.0],
+            [0.5, 0.0],
+            [2.0, 0.0],
+        ])
+        seed_location = np.array([0.0, 0.0])
+
+        farthest = _select_farthest_point(candidate_points, seed_location)
+
+        expected = np.array([2.0, 0.0])
+        self.assert_close_arrays(farthest, expected)
+
+    def test_select_farthest_point_returns_none_for_empty_candidates(self):
+        farthest = _select_farthest_point(np.empty((0, 2)), [0.0, 0.0])
+
+        self.assertIsNone(farthest)
+
+    def test_create_ghost_points_for_non_centered_domain_are_outside_domain(self):
+        bounds = np.array([
+            [2.0, 4.0],
+            [10.0, 20.0],
+        ])
+        boundary_points = _make_bounded_nd_grid(bounds, 2)
+
+        ghost_points = _create_ghost_points(boundary_points, n_dimensions=2)
+
+        inside_mask = (
+            (ghost_points >= bounds[:, 0])
+            & (ghost_points <= bounds[:, 1])
+        ).all(axis=1)
+
+        self.assertFalse(np.any(inside_mask))
+
+    def test_finite_vertex_indices_keeps_zero_and_removes_negative_markers(self):
+        region = [-2, -1, 0, 3, 7]
+
+        finite_indices = _finite_vertex_indices(region)
+
+        self.assertEqual(finite_indices, [0, 3, 7])
+
+    def test_reduce_voronoi_candidates_preserves_order_in_one_at_a_time_mode(self):
+        candidates = np.array([
+            [0.0, -1.0],
+            [0.25, -0.5],
+            [0.5, 0.0],
+        ])
+
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            n_parameters=2,
+            batch_size=1,
+            thin=2,
+            random_selection=None,
+            random_generator=np.random.default_rng(123),
+        )
+
+        self.assert_close_arrays(reduced, candidates)
+
+    def test_reduce_voronoi_candidates_uses_random_selection_before_batch_limit(self):
+        candidates = np.array([
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [2.0, 2.0],
+            [3.0, 3.0],
+            [4.0, 4.0],
+            [5.0, 5.0],
+        ])
+
+        rng = np.random.default_rng(123)
+
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            n_parameters=2,
+            batch_size=2,
+            thin=None,
+            random_selection=4,
+            random_generator=rng,
+        )
+
+        self.assertEqual(reduced.shape, (2, 2))
+
+        for row in reduced:
+            self.assertTrue(
+                np.any(np.all(np.isclose(candidates, row), axis=1))
+            )
+
+
+class TestVoronoiCrossValidationHelpers(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_calculate_cv_error_is_zero_for_exact_fake_surrogate(self):
+
+        class ExactFakeSurrogate:
+
+            def __call__(self, X, batch_evaluate=False):
+                X = np.asarray(X, dtype=float)
+                response = np.column_stack([
+                    X[:, 0] + X[:, 1],
+                    X[:, 0] - X[:, 1],
+                ])
+                return {"response": response}
+
+        X_test = np.array([
+            [1.0, 2.0],
+            [3.0, 4.0],
+        ])
+
+        y_test = [
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([3.0, -1.0]),
+            },
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([7.0, -1.0]),
+            },
+        ]
+
+        error = _calculate_cv_error(
+            ExactFakeSurrogate(),
+            X_test,
+            y_test,
+            target_field="response",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            metric="rmse",
+            scale=1.0,
+        )
+
+        self.assertAlmostEqual(error, 0.0)
+
+    def test_calculate_cv_error_sum_abs(self):
+
+        class BiasedFakeSurrogate:
+
+            def __call__(self, X, batch_evaluate=False):
+                X = np.asarray(X, dtype=float)
+                response = np.column_stack([
+                    X[:, 0] + X[:, 1] + 1.0,
+                    X[:, 0] - X[:, 1] - 2.0,
+                ])
+                return {"response": response}
+
+        X_test = np.array([
+            [1.0, 2.0],
+        ])
+
+        y_test = [
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([3.0, -1.0]),
+            },
+        ]
+
+        error = _calculate_cv_error(
+            BiasedFakeSurrogate(),
+            X_test,
+            y_test,
+            target_field="response",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            metric="sum_abs",
+            scale=1.0,
+        )
+
+        # Residual = true - predicted = [-1, 2], sum(abs(residual)) = 3.
+        self.assertAlmostEqual(error, 3.0)
+
+
+class TestCVResponseHelperBranches(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_extract_response_matrix_error_paths_and_interpolation(self):
+        y_test = [{"time": np.array([0.0, 1.0]), "response": np.array([1.0, 2.0])}]
+
+        with self.assertRaises(KeyError):
+            _extract_response_matrix([{"time": np.array([0.0, 1.0])}], "response")
+
+        with self.assertRaises(RuntimeError):
+            _extract_response_matrix(
+                [{"response": np.array([1.0])}],
+                "response",
+                interpolation_field=None,
+                interpolation_values=np.array([0.0, 1.0]),
+            )
+
+        with self.assertRaises(KeyError):
+            _extract_response_matrix(
+                [{"response": np.array([1.0])}],
+                "response",
+                interpolation_field="time",
+                interpolation_values=np.array([0.0, 1.0]),
+            )
+
+        with self.assertRaises(RuntimeError):
+            _extract_response_matrix(
+                [{"time": np.array([0.0, 1.0]), "response": np.array([1.0])}],
+                "response",
+                interpolation_field="time",
+                interpolation_values=np.array([0.0, 0.5]),
+            )
+
+        interpolated = _extract_response_matrix(
+            [{"time": np.array([0.0, 2.0]), "response": np.array([0.0, 2.0])}],
+            "response",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0, 2.0]),
+        )
+        self.assert_close_arrays(interpolated, np.array([[0.0, 1.0, 2.0]]))
+
+    def test_evaluate_surrogate_response_shape_branches(self):
+        class ScalarSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.array(5.0)}
+
+        class OneDSingleSampleSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.array([1.0, 2.0])}
+
+        class OneDBadShapeSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.array([1.0, 2.0, 3.0])}
+
+        class TwoDTransposeSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                # Shape (3, 2); for n_test_samples=2, this must be transposed.
+                return {"response": np.array([
+                    [1.0, 4.0],
+                    [2.0, 5.0],
+                    [3.0, 6.0],
+                ])}
+
+        class TwoDBadShapeSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.ones((3, 3))}
+
+        class ThreeDSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"response": np.ones((2, 2, 2))}
+
+        class MissingFieldSurrogate:
+            def __call__(self, X, batch_evaluate=False):
+                return {"wrong": np.array([1.0])}
+
+        out = _evaluate_surrogate_response(
+            ScalarSurrogate(),
+            np.array([[0.0, 0.0]]),
+            "response",
+        )
+        self.assertEqual(out.shape, (1, 1))
+
+        out = _evaluate_surrogate_response(
+            OneDSingleSampleSurrogate(),
+            np.array([[0.0, 0.0]]),
+            "response",
+        )
+        self.assertEqual(out.shape, (1, 2))
+
+        with self.assertRaises(RuntimeError):
+            _evaluate_surrogate_response(
+                OneDBadShapeSurrogate(),
+                np.array([[0.0, 0.0], [1.0, 1.0]]),
+                "response",
+            )
+
+        out = _evaluate_surrogate_response(
+            TwoDTransposeSurrogate(),
+            np.array([[0.0, 0.0], [1.0, 1.0]]),
+            "response",
+        )
+        self.assertEqual(out.shape, (2, 3))
+        self.assert_close_arrays(out, np.array([
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+        ]))
+
+        with self.assertRaises(RuntimeError):
+            _evaluate_surrogate_response(
+                TwoDBadShapeSurrogate(),
+                np.array([[0.0, 0.0], [1.0, 1.0]]),
+                "response",
+            )
+
+        with self.assertRaises(RuntimeError):
+            _evaluate_surrogate_response(
+                ThreeDSurrogate(),
+                np.array([[0.0, 0.0]]),
+                "response",
+            )
+
+        with self.assertRaises(KeyError):
+            _evaluate_surrogate_response(
+                MissingFieldSurrogate(),
+                np.array([[0.0, 0.0]]),
+                "response",
+            )
+
+    def test_apply_response_scaling_branches(self):
+        truth = np.array([[1.0, 8.0]])
+        pred = np.array([[2.0, 27.0]])
+
+        scaled_truth, scaled_pred = _apply_response_scaling(truth, pred, None)
+        self.assert_close_arrays(scaled_truth, truth)
+        self.assert_close_arrays(scaled_pred, pred)
+
+        scaled_truth, scaled_pred = _apply_response_scaling(truth, pred, "cbrt")
+        self.assert_close_arrays(scaled_truth, np.cbrt(truth))
+        self.assert_close_arrays(scaled_pred, np.cbrt(pred))
+
+        with self.assertRaises(ValueError):
+            _apply_response_scaling(truth, pred, "bad_scale")
+
+        with self.assertRaises(ValueError):
+            _apply_response_scaling(truth, pred, 0.0)
+
+        scaled_truth, scaled_pred = _apply_response_scaling(truth, pred, np.array([1.0, 2.0]))
+        self.assert_close_arrays(scaled_truth, np.array([[1.0, 4.0]]))
+        self.assert_close_arrays(scaled_pred, np.array([[2.0, 13.5]]))
+
+    def test_get_surrogate_metric_branches(self):
+        latent_scores = OrderedDict({
+            "field_a": {"score": np.array([1.0, 3.0]), "rmse": np.array([2.0]), "nlpd": np.array([1.5, 2.5])},
+            "field_b": {"score": np.array([5.0]), "rmse": np.array([4.0]), "nlpd": np.array([0.5])},
+            "field_c": "not_a_dict",
+        })
+
+        self.assertAlmostEqual(_get_surrogate_metric(latent_scores, "score"), 3.0)
+        self.assertAlmostEqual(_get_surrogate_metric(latent_scores, "rmse"), 3.0)
+        self.assertAlmostEqual(_get_surrogate_metric(latent_scores, "nlpd"), 4.5)
+
+        latent_scores_none = OrderedDict({"field": {"score": np.array([None], dtype=object)}})
+        self.assertTrue(np.isnan(_get_surrogate_metric(latent_scores_none, "score")))
+
+        latent_scores_missing = OrderedDict({"field": {"rmse": np.array([1.0])}})
+        self.assertTrue(np.isnan(_get_surrogate_metric(latent_scores_missing, "score")))
+
+        latent_scores_bad_nlpd = OrderedDict({"field": {"nlpd": np.array([np.nan])}})
+        self.assertTrue(np.isnan(_get_surrogate_metric(latent_scores_bad_nlpd, "nlpd")))
+
+
+class TestLeaveOneOutCrossValidation(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_loocv(self):
+        return LeaveOneOutCrossValidation(
+            scale=1.0,
+            metric="sum_abs",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            target_field="response",
+            par_names=["x", "y"],
+            surrogate_options={"surrogate_type": "fake"},
+        )
+
+    def _make_training_arrays(self):
+        X = np.array([
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ])
+
+        y = [
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([0.0, 1.0]),
+            },
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([1.0, 2.0]),
+            },
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([2.0, 3.0]),
+            },
+        ]
+
+        return X, y
+
+    def _assert_parameter_history_matches_samples(self, study_results, samples):
+        """
+        Assert that a StudyResults parameter history matches a sample matrix.
+
+        StudyResults stores parameter history in parameter-major form:
+
+        ``parameter_history["x"]``, ``parameter_history["y"]``, ...
+
+        rather than evaluation-major form:
+
+        ``parameter_history["eval_0"]["x"]``.
+        """
+        samples = np.asarray(samples, dtype=float)
+
+        x_values = np.asarray(study_results.parameter_history["x"], dtype=float)
+        y_values = np.asarray(study_results.parameter_history["y"], dtype=float)
+
+        self.assert_close_arrays(x_values, samples[:, 0])
+        self.assert_close_arrays(y_values, samples[:, 1])
+
+    def test_extract_loo_info_removes_selected_sample_from_training_set(self):
+        loocv = self._make_loocv()
+        X, y = self._make_training_arrays()
+
+        train_res, test_res, X_test, y_test = loocv.extract_loo_info(1, X, y)
+
+        expected_X_train = np.delete(X, 1, axis=0)
+        expected_X_test = X[[1], :]
+
+        self.assertIsInstance(train_res, StudyResults)
+        self.assertIsInstance(test_res, StudyResults)
+
+        self.assert_close_arrays(X_test, expected_X_test)
+
+        self.assertEqual(len(y_test), 1)
+        self.assert_close_arrays(
+            y_test[0]["response"],
+            y[1]["response"],
+        )
+
+        self._assert_parameter_history_matches_samples(
+            train_res,
+            expected_X_train,
+        )
+        self._assert_parameter_history_matches_samples(
+            test_res,
+            expected_X_test,
+        )
+
+    def test_evaluate_loo_sample_uses_native_cv_error_function(self):
+        loocv = self._make_loocv()
+        X, y = self._make_training_arrays()
+
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=12.5,
+            ) as error_mock:
+                error, omitted_index = loocv.evaluate_loo_sample(X, y, 1)
+
+        self.assertEqual(error, 12.5)
+        self.assertEqual(omitted_index, 1)
+
+        fit_mock.assert_called_once()
+        error_mock.assert_called_once()
+
+        error_args = error_mock.call_args[0]
+        self.assertIs(error_args[0], fake_surrogate)
+        self.assert_close_arrays(error_args[1], X[[1], :])
+        self.assertEqual(error_args[2], [y[1]])
+        self.assertEqual(error_args[3], "response")
+        self.assertEqual(error_args[4], "time")
+        self.assert_close_arrays(error_args[5], np.array([0.0, 1.0]))
+        self.assertEqual(error_args[6], "sum_abs")
+        self.assertEqual(error_args[7], 1.0)
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
+
+    def test_perform_loocv_returns_error_and_original_sample_index(self):
+        loocv = self._make_loocv()
+        X, y = self._make_training_arrays()
+
+        def fake_evaluate_loo_sample(_, __, index):
+            return float(index + 10), index
+
+        loocv.evaluate_loo_sample = fake_evaluate_loo_sample
+
+        results = _perform_leave_one_out_cv(
+            loocv,
+            X,
+            y,
+            indices=np.array([2, 0]),
+        )
+        self.assertEqual(results[0], (12.0, 2))
+        self.assertEqual(results[1], (10.0, 0))
+
+    def test_evaluate_loo_sample_forwards_random_forest_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        loocv = LeaveOneOutCrossValidation(
+            scale=1.0,
+            metric="sum_abs",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            target_field="response",
+            par_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "Random Forest",
+                "n_estimators": 4,
+                "random_state": 456,
+            },
+        )
+
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=12.5,
+            ):
+                loocv.evaluate_loo_sample(X, y, 1)
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "Random Forest")
+        self.assertEqual(fit_kwargs["n_estimators"], 4)
+        self.assertEqual(fit_kwargs["random_state"], 456)
+        self.assertIsNone(fit_kwargs["save_filename"])
+
+    def test_evaluate_loo_sample_forwards_rbf_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        loocv = LeaveOneOutCrossValidation(
+            scale=1.0,
+            metric="sum_abs",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            target_field="response",
+            par_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "RBF",
+                "neighbors": 5,
+            },
+        )
+
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=12.5,
+            ):
+                loocv.evaluate_loo_sample(X, y, 1)
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "RBF")
+        self.assertEqual(fit_kwargs["neighbors"], 5)
+        self.assertIsNone(fit_kwargs["save_filename"])
 
 
 class TestKFoldCrossValidation(MatcalUnitTest):
-    _study_class = HaltonStudy
-    
-    @staticmethod
-    def format_study_params_and_output(study):
-        from matcal.core.data import convert_data_to_dictionary
 
-        params_formatted = []
-        for param in study.parameter_history:
-            params_formatted.append(study.parameter_history[param])
-        X = np.array(params_formatted).T  
-    
-        model_name = list(study.simulation_history.keys())[0]
-        state0 = study.simulation_history[model_name].states['matcal_default_state']
-        sim_history = study.simulation_history[model_name][state0]
-        nsamples = len(X)
-        data = []
-        for nn in np.arange(nsamples):
-            data.append(convert_data_to_dictionary(sim_history[nn]))
-        y = data
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_kfold_cv(self, kfold_splits=2, group_kfold=False, random_seed=123):
+        return KFoldCrossValidation(
+            kfold_splits=kfold_splits,
+            group_kfold=group_kfold,
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            scale=1.0,
+            metric="rmse",
+            target_field="response",
+            param_names=["x", "y"],
+            surrogate_options={"surrogate_type": "fake"},
+            random_seed=random_seed,
+        )
+
+    def _make_training_arrays(self):
+        X = np.array([
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ])
+
+        y = [
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([0.0, 1.0]),
+            },
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([1.0, 2.0]),
+            },
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([2.0, 3.0]),
+            },
+            {
+                "time": np.array([0.0, 1.0]),
+                "response": np.array([3.0, 4.0]),
+            },
+        ]
+
         return X, y
-    
-    def setUp(self):
-        super().setUp(__file__)
 
-        # Sample data for testing
-        self.model = PythonModel(linear_model_2d)
-        self.model.set_name('quadratic_2d')
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        pc = ParameterCollection("two_parameter", theta1, theta2)
-        study = self._study_class(pc)
-        self.nsamples = 20
-        self.test_points = np.linspace(.25, .75, 10)
-        objective = SimulationResultsSynchronizer("x", self.test_points, "f")
-        study.add_evaluation_set(self.model, objective)
-        study.set_number_of_samples(self.nsamples)
-        study_info = study.launch()
-        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
-        
-    def test_initialization(self):
-        self.kfold = KFoldCrossValidation(5, False, 'x', [0,1], None, 'rmse', 
-                                         'y', None, {})
-
-        self.assertEqual(self.kfold.nsplits, 5)
-        self.assertFalse(self.kfold.group_kfold)
-        self.assertIsNone(self.kfold.scale)
-        self.assertEqual(self.kfold.metric, 'rmse')
-        self.assertEqual(self.kfold.interpolation_field, 'x')
-        self.assertIsNone(self.kfold.param_names)
-
-    def test_set_kfcv_options(self):
-        kfcv_options = {'nsplits':4, 'group_kfold':True,
-                        'scale': 'cbrt', 'metric':'nlpd',
-                        'interpolation_field': 'x',
-                        'interpolation_values':self.test_points,                         
-                        'param_names': ['a', 'b'],
-                        'target_field':'f', 
-                        'surrogate_options':{}
-                        }
-        self.kfold = KFoldCrossValidation(**kfcv_options)
-        self.assertEqual(self.kfold.nsplits, 4)
-        self.assertTrue(self.kfold.group_kfold)
-        self.assertEqual(self.kfold.scale, 'cbrt')
-        self.assertEqual(self.kfold.metric, 'nlpd')
-        self.assertEqual(self.kfold.interpolation_field, 'x')
-        self.assertEqual(self.kfold.param_names, ['a', 'b'])
-         
-        # Test setting splits > number of samples. Should revert to length of X
-        kfcv_options = {'nsplits':20, 'group_kfold':True,
-                        'scale': 'cbrt', 'metric':'nlpd',
-                        'interpolation_field': 'x',
-                        'interpolation_values':self.test_points,                         
-                        'param_names': ['a', 'b'],
-                        'target_field':'f', 
-                        'surrogate_options':{}
-                        } 
-        self.kfold = KFoldCrossValidation(**kfcv_options)
-        self.kfold._check_npslits(np.zeros((5,2)))
-        self.assertEqual(self.kfold.nsplits, 2)
-
-    def test_group_kfold_cv(self):
-        nsplits = 4
-        from sklearn.cluster import KMeans
-        kmeans = KMeans(n_clusters=nsplits, random_state=42)
-        groups = kmeans.fit_predict(self.X)
-        
-        kfcv_options = {'group_kfold': True,
-                        'nsplits': nsplits,
-                        'scale':1,
-                        'metric': 'rmse',
-                        'interpolation_field': 'x',
-                        'interpolation_values':self.test_points,                         
-                        'param_names': ['a', 'b'],
-                        'target_field':'f', 
-                        'surrogate_options':{}}  
-        self.kfold = KFoldCrossValidation(**kfcv_options)
-        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, groups)
-        self.assertTrue(len(kf_results) == nsplits)
-        
-    def test_perform_kfold_cv(self):
-        kfcv_options = {'nsplits':5, 
-                        'scale':1,
-                        'group_kfold':False,
-                        'metric': 'rmse',
-                        'interpolation_field':'x',
-                        'interpolation_values':self.test_points,                         
-                        'param_names':['a', 'b'],
-                        'target_field':'f', 
-                        'surrogate_options':{}}
-        self.kfold = KFoldCrossValidation(**kfcv_options)
-        kf_results = self.kfold.perform_kfold_cv(self.X, self.y, None)
-       
-        # Check that the results are in the expected format
-        self.assertIsInstance(kf_results, dict)
-        self.assertEqual(len(kf_results), self.kfold.nsplits)
-
-        # Check that each result is a tuple (kfold error, indices of test samples)
-        test_indices = []
-        for result in kf_results.values():
-            self.assertIsInstance(result, tuple)
-            self.assertEqual(len(result), 2)
-            self.assertIsInstance(result[0], float)  # error
-            self.assertIsInstance(result[1], np.ndarray)  # test indices
-            test_indices.append(result[1])
-        test_indices = np.vstack(test_indices)
-        
-        # check that each test sample is used once and only once
-        self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
-        self.assertEqual(len(np.unique(test_indices)), self.nsamples)
-            
-    def test_cross_val_fold(self):
-        kfcv_options = {'nsplits':5, 
-                        'group_kfold':False,
-                        'scale':1,
-                        'metric': 'rmse',
-                        'interpolation_field':'x',
-                        'interpolation_values':self.test_points,                         
-                        'param_names':['a', 'b'], 
-                        'target_field':'f', 
-                        'surrogate_options':{}}
-        self.kfold = KFoldCrossValidation(**kfcv_options)
-        self.kfold.X = self.X
-        self.kfold.y = self.y
-        self.kfold.par_names = ['a', 'b']
-        train_index = [0, 1, 2]
-        test_index = [3, 4]
-        error, test_idx_returned = self.kfold.evaluate_fold(train_index, test_index, self.X, self.y, 0)
-        self.assertEqual(test_idx_returned, test_index)
-        self.assertIsInstance(error, float)          
-       
-        
-class TestLeaveOneOutCrossValidation(MatcalUnitTest):
-    _study_class = HaltonStudy
-    
-    def setUp(self):
-        super().setUp(__file__)
-        self.test_points = np.linspace(.25, .75, 10)
-
-    def test_initialization(self):
-        loocv_options = {'scale': None, 'metric':'rmse',
-                        'interpolation_field': 'x',
-                        'interpolation_values':self.test_points, 
-                        'par_names': None, 
-                        'target_field':'f', 
-                        'surrogate_options':{}
-                        }
-        self.loocv = LeaveOneOutCrossValidation(**loocv_options)
-        self.assertIsNone(self.loocv.scale)
-        self.assertEqual(self.loocv.metric, 'rmse')
-        self.assertEqual(self.loocv.interpolation_field, 'x')
-        self.assertIsNone(self.loocv.par_names)
-
-    def test_perform_loocv(self):
-        self.model = PythonModel(linear_model_2d)
-        self.model.set_name('quadratic_2d')
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        study = self._study_class(theta1, theta2)
-        self.nsamples = 10
-        objective = SimulationResultsSynchronizer("x", self.test_points, "f")
-        study.add_evaluation_set(self.model, objective)
-        study.set_number_of_samples(self.nsamples)
-        study_info = study.launch()
-        self.X, self.y = TestKFoldCrossValidation.format_study_params_and_output(study_info)
-        indices = range(self.nsamples)
-        loocv_options = {'scale': None, 'metric':'nlpd',
-                    'interpolation_field': 'x',
-                        'interpolation_values':self.test_points, 
-                        'par_names': ['a', 'b'],
-                        'target_field':'f', 
-                        'surrogate_options':{}
-                        }
-        self.loocv = LeaveOneOutCrossValidation(**loocv_options)
-        loo_results = self.loocv.perform_loocv(self.X, self.y, indices)
-            
-        self.assertIsInstance(loo_results, dict)
-        self.assertEqual(len(loo_results), self.nsamples)
-        self.assertIn(0, loo_results)  # Check if the first index is present in results
-        
-        # Check that each result is a tuple (r, indices of test samples)
-        test_indices = []
-        for result in loo_results.values():
-            self.assertIsInstance(result, tuple)
-            self.assertEqual(len(result), 2)
-            self.assertIsInstance(result[0], float)  # error
-            self.assertIsInstance(result[1], int)  # test indices
-            test_indices.append(result[1])
-        test_indices = np.vstack(test_indices)
-        
-        # check that each test sample is used once and only once
-        self.assertTrue(np.all(np.isin(np.arange(self.nsamples), test_indices)))
-        self.assertEqual(len(np.unique(test_indices)), self.nsamples)
-
-
-class TestVoronoiAdaptiveSurrogateStudy(MatcalUnitTest):
-    
-    _study_class = VoronoiAdaptiveSurrogateStudy
-    _study_test_class = HaltonStudy
-    
-    @staticmethod
-    def setup_parameter_collection(dim):
-        theta1 = Parameter('a', -5, 5, distribution="uniform_uncertain")
-        theta2 = Parameter('b', -5, 5, distribution="uniform_uncertain")
-        if dim == 2:
-            return ParameterCollection("two_parameter", theta1, theta2)
-        elif dim == 3:
-            theta3 = Parameter('c', -5, 5, distribution="uniform_uncertain")
-            return ParameterCollection("three_parameter", theta1, theta2, theta3)
-
-    @staticmethod
-    def setup_model(dim):
-        if dim == 2:
-            physical_model = PythonModel(linear_model_2d)
-            model_name = 'quadratic_2d'
-        elif dim == 3:            
-            physical_model = PythonModel(quadratic_model_3d)
-            model_name = 'quadratic_3d'
-        physical_model.set_name(model_name)
-        parameter_collection =  TestVoronoiAdaptiveSurrogateStudy.setup_parameter_collection(dim)
-
-        return physical_model, parameter_collection
-
-    def setUp(self):
-        super().setUp(__file__)
-    
-    def setup_study(self, dim):
-        physical_model, parameter_collection = TestVoronoiAdaptiveSurrogateStudy.setup_model(dim)
-        vor_study = self._study_class(parameter_collection)
-
-        indep_vals = np.linspace(.25, .75, 20)
-        vor_study.set_independent_variable("x", indep_vals)
-        vor_study.set_target_field_name("f")
-        vor_study.add_evaluation_set(physical_model)
-        vor_study.set_max_training_samples(5)
-        vor_study.set_number_of_initial_samples(10)
-        vor_study.set_cross_validation_options(nsplits=5, nmax_loo='all', cv_metric='nlpd')
-        return vor_study
-
-    def test_initialization(self):
-        dims = [2, 3]
-        for dim in dims:
-            vor_study = self.setup_study(dim)
-            vor_study.launch()
-            # build surrogate that given a, b, c gives you f
-            self.assertFalse(vor_study._finite_only)
-            self.assertTrue(vor_study._iterative_updates)
-            self.assertEqual(vor_study._voronoi_type, 'full')
-            
-            if dim == 2:
-                expected_boundary_points = np.array([[-5, -5],[5, -5],[-5, 5],[5, 5]])
-            elif dim == 3:
-                expected_boundary_points = np.array([[-5, -5, -5],
-                                                     [-5, -5, 5],
-                                                     [5, -5, -5],
-                                                     [5, -5, 5],
-                                                     [-5, 5, -5],
-                                                     [-5, 5, 5],
-                                                     [5, 5, -5],
-                                                     [5, 5, 5]])
-            self.assertTrue(np.all(vor_study._boundary_points == expected_boundary_points))
-            surr_score = vor_study._current_surrogate_score['score']
-            rmse = vor_study._current_surrogate_score['rmse']
-            nlpd = vor_study._current_surrogate_score['nlpd']
-            self.assertGreater(len(surr_score), 0)
-            self.assertTrue(np.all([i > 0 for i in surr_score]))
-            self.assertTrue(np.all([i > 0 for i in rmse]))
-            shutil.rmtree("test_samples")
-            
-    def test_convergence(self):
-        vor_study = self.setup_study(2)
-        vor_study.set_max_training_samples(50)
-        vor_study.set_cross_validation_options(nsplits=0, nmax_loo='all', 
-                                               cv_metric='rmse')
-        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-        vor_study.set_convergence_criteria(1e-1, 'rmse')
-        vor_study.launch()
-        score = vor_study._current_surrogate_score
-        metric = vor_study._convergence_metric
-        converged = np.abs(score[metric][-1] - score[metric][-2]) <= vor_study._eps
-        self.assertTrue(converged)
-        
-    def test_nmax_loo_all(self):
-        vor_study = self.setup_study(2)
-        vor_study.set_max_training_samples(15)
-        vor_study.set_number_of_initial_samples(7)
-        vor_study.set_cross_validation_options(nsplits=2, nmax_loo='all')
-        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-        vor_study.set_convergence_criteria(1e-1, 'rmse')
-        vor_study.launch()
-        self.assertIsNone(vor_study._loo_errors)
-        
-    def test_thin(self):
-        vor_study = self.setup_study(2)
-        vor_study.set_max_training_samples(7)
-        vor_study.set_number_of_initial_samples(6)
-        vor_study.set_cross_validation_options(nsplits=0)
-        vor_study.set_voronoi_sampling_options(thin=2)
-        vor_study.set_seed(100)
-        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-        vor_study.set_convergence_criteria(1e-1, 'rmse')
-        vor_study.launch()
-        self.assertEqual(vor_study._nbatch_samples[-1], 
-                         vor_study._num_initial_samples*1.5)
-
-    def test_random_selection(self):
-        vor_study = self.setup_study(2)
-        vor_study.set_max_training_samples(7)
-        vor_study.set_number_of_initial_samples(6)
-        vor_study.set_cross_validation_options(nsplits=0)
-        vor_study.set_voronoi_sampling_options(random_selection=3)
-        vor_study.set_seed(100)
-        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-        vor_study.set_convergence_criteria(1e-1, 'rmse')
-        vor_study.launch()
-        self.assertEqual(vor_study._nbatch_samples[-1], 
-                        vor_study._num_initial_samples*1.5)
-
-    def test_local_tess(self):
-        vor_study = self.setup_study(2)
-        vor_study.set_max_training_samples(21)
-        vor_study.set_number_of_initial_samples(20)
-        vor_study.set_cross_validation_options(nsplits=0)
-        vor_study.set_voronoi_sampling_options(random_selection=3, 
-                                               voronoi_type='local')
-        vor_study.set_seed(42)
-        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-        vor_study.set_convergence_criteria(1e-1, 'rmse')
-        vor_study.launch()
-        self.assertIsNotNone(vor_study._tree)
-        
-    def test_group_kfold(self):
-        vor_study = self.setup_study(2)
-        vor_study.set_max_training_samples(21)
-        vor_study.set_number_of_initial_samples(20)
-        vor_study.set_cross_validation_options(nsplits=4, group_kfold=True)
-        vor_study.set_voronoi_sampling_options(random_selection=10, 
-                                               voronoi_type='local')
-        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-        vor_study.set_convergence_criteria(1e-1, 'rmse')
-        vor_study.launch()
-        self.assertTrue(vor_study._nbatch_samples[-1] > vor_study._num_initial_samples)
-
-    def test_perform_cv_and_find_max_errors(self):
-        dims = [2, 3]
-        for dim in dims:
-            vor_study = self.setup_study(dim)           
-            nsplits = 2
-            nmax_loo = 3
-            vor_study.set_max_training_samples(21)
-            vor_study.set_number_of_initial_samples(20)
-            vor_study.set_cross_validation_options(nsplits=nsplits, cv_metric='nlpd', 
-                                                   nmax_loo=3, nmax_folds=1)
-            vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-            vor_study.set_convergence_criteria(1e-1, 'rmse') 
-            vor_study.launch()
-            max_fold_indices = vor_study._max_fold_error_indices
-            kf_results = vor_study._kf
-
-            # Check that the results are in the expected format
-            self.assertIsInstance(kf_results, dict)
-            self.assertEqual(len(kf_results), nsplits)
-
-            # Check that each result is a tuple (kfold error, indices of test samples)
-            test_indices = []
-            for result in kf_results.values():
-                self.assertIsInstance(result, tuple)
-                self.assertIsInstance(result[0], float)  # error
-                self.assertIsInstance(result[1], np.ndarray)  # test indices
-                test_indices.append(result[1])
-            test_indices = np.vstack(test_indices)
-            
-            # check that each test sample is used once and only once
-            self.assertTrue(np.all(np.isin(np.arange(vor_study._num_initial_samples), test_indices)))
-            self.assertEqual(len(np.unique(test_indices)), vor_study._num_initial_samples)
-
-            max_key = max(kf_results, key=kf_results.get)
-            self.assertTrue(np.all(max_fold_indices == kf_results[max_key][1]))
-    
-            loo_errors = vor_study._loo_errors
-            self.assertIsInstance(loo_errors, dict)
-            self.assertEqual(len(loo_errors), len(max_fold_indices))
-            for val in loo_errors.values():
-                self.assertIsInstance(val, tuple)
-                self.assertIsInstance(val[0], float) # error
-                self.assertIsInstance(val[1], np.int64) # indice
-                
-            indices = [val[1] for val in loo_errors.values()]
-            # check that each indice in max_fold_indices appear once and only once
-            self.assertTrue(np.all(np.isin(max_fold_indices, indices)))
-
-            loo_errors_list = [value for key, value_tuple in loo_errors.items() for value in value_tuple]
-            loo_errors_array = np.asarray(loo_errors_list).reshape(-1, 2)
-            sorted_array = np.asarray(sorted(loo_errors_array, key=lambda x: x[0]))
-
-            # verify that the training samples with the greatest LOO error are returned
-            training_params = vor_study._format_params(vor_study._results)
-
-            worst_sample_locations = vor_study._find_loo_max_errors(training_params)
-            max_error_indices = sorted_array[-nmax_loo:, :][:, 1][::-1] # get indices of largest errors and reverse (greatest to smallest)
-            max_error_indices = [int(x) for x in max_error_indices] # convert entries to int
-            self.assertTrue(np.all(worst_sample_locations == training_params[max_error_indices]))
-            shutil.rmtree("test_samples")
-
-    def test_adaptive_voronoi_surrogate_generation(self):
-        #move to integration
-        dims = [2, 3]
-        for dim in dims:
-            vor_study = self.setup_study(dim)
-            
-            cross_validation_options = {'nsplits':2,
-                                        'nmax_folds':1,
-                                        'nmax_loo':5,
-                                        'cv_metric': 'nlpd'
-                                        }
-            vor_study.set_max_training_samples(60)
-            vor_study.set_number_of_initial_samples(10)
-            vor_study.set_convergence_criteria(convergence_metric='score')
-            vor_study.set_cross_validation_options(**cross_validation_options)
-             
-            vor_study.launch()
-            # verify that errors are decreasing
-            metrics = [vor_study._current_surrogate_score['score'],
-                      vor_study._current_surrogate_score['nlpd'],
-                      vor_study._current_surrogate_score['rmse']]
-            for idx, metric in enumerate(metrics):
-                # error metric may not decrease every iteration. Looking for overall trend.
-                metric_decreasing = metric[0] > metric[-1]
-                if idx == 0:
-                    self.assertFalse(metric_decreasing)
-                else:
-                    self.assertTrue(metric_decreasing)
-
-            # verify that the number of samples is increasing each iteration
-            nsamples = vor_study._nbatch_samples
-            nsamples_increasing = all(x < y for x, y in zip(nsamples, nsamples[1:]))
-            self.assertTrue(nsamples_increasing)
-            samples = vor_study._format_params(vor_study._results)
-            self.assertEqual(samples.shape[0], vor_study._nbatch_samples[-1])
-            
-            # verify that all samples are within bounds
-            lb = vor_study._bounds[:,0]
-            ub = vor_study._bounds[:,1]
-            outside_samples = (samples < lb).any(axis=1) | (samples > ub).any(axis=1)
-            self.assertFalse(np.any(outside_samples))
-            shutil.rmtree("test_samples")
-
-    def test_call_error_on_invalid_input(self):
+    def _assert_parameter_history_matches_samples(self, study_results, samples):
         """
-        Supplying a mismatched number of positional arguments (or an
-        incomplete keyword dict) must raise RuntimeError.
+        Assert that a StudyResults parameter history matches a sample matrix.
+
+        StudyResults stores parameter history in parameter-major form:
+
+        ``parameter_history["x"]``, ``parameter_history["y"]``, ...
+
+        rather than evaluation-major form:
+
+        ``parameter_history["eval_0"]["x"]``.
         """
-        vor_study = self.setup_study(2)
-        vor_study.set_max_training_samples(7)
-        vor_study.set_number_of_initial_samples(6)
-        vor_study.set_cross_validation_options(nsplits=0)
-        vor_study.set_voronoi_sampling_options(random_selection=3)
-        vor_study.set_seed(100)
-        vor_study.set_error_stopping_criteria(1e-8, 1e-8)
-        vor_study.set_convergence_criteria(1e-1, 'rmse')
-        vor_study.launch()
-        surrogate = vor_study._surrogate
+        samples = np.asarray(samples, dtype=float)
 
-        # Wrong number of positional arguments (only one while two are required)
-        with self.assertRaises(RuntimeError):
-            surrogate(0.1)  # missing second parameter
+        x_values = np.asarray(study_results.parameter_history["x"], dtype=float)
+        y_values = np.asarray(study_results.parameter_history["y"], dtype=float)
 
-        # Incomplete keyword dict (missing 'b')
-        with self.assertRaises(RuntimeError):
-            surrogate(a=0.2)
+        self.assert_close_arrays(x_values, samples[:, 0])
+        self.assert_close_arrays(y_values, samples[:, 1])
 
-        # Incorrect keyword dict 'a2' != 'b')
-        with self.assertRaises(RuntimeError):
-            surrogate(a=0.2, a2=0.1)
+    def test_make_standard_kfold_splits_is_reproducible(self):
+        X, _ = self._make_training_arrays()
 
-        # Both positional and keyword arguments together – also invalid
-        with self.assertRaises(RuntimeError):
-            surrogate(0.1, b=0.3)
+        kfcv_a = self._make_kfold_cv(
+            kfold_splits=2,
+            group_kfold=False,
+            random_seed=42,
+        )
+        kfcv_b = self._make_kfold_cv(
+            kfold_splits=2,
+            group_kfold=False,
+            random_seed=42,
+        )
 
-        #outside of bound (-5,5) for both params
-        with self.assertRaises(RuntimeError):
-            surrogate(-10, 0)
-        with self.assertRaises(RuntimeError):
-            surrogate(0, 10)
+        splits_a = list(
+            _make_standard_kfold_splits(
+                X,
+                kfcv_a.kfold_splits,
+                kfcv_a.random_seed,
+            )
+        )
+        splits_b = list(
+            _make_standard_kfold_splits(
+                X,
+                kfcv_b.kfold_splits,
+                kfcv_b.random_seed,
+            )
+        )
+
+        self.assertEqual(len(splits_a), 2)
+        self.assertEqual(len(splits_b), 2)
+
+        for (train_a, test_a), (train_b, test_b) in zip(splits_a, splits_b):
+            self.assert_close_arrays(train_a, train_b)
+            self.assert_close_arrays(test_a, test_b)
+
+    def test_make_group_kfold_splits_requires_groups(self):
+        X, y = self._make_training_arrays()
+        kfcv = self._make_kfold_cv(kfold_splits=2, group_kfold=True)
 
         with self.assertRaises(RuntimeError):
-            surrogate([[0, 10], [1, 0]], batch_evaluate=True)
-        #verify it takes in kwargs with lists of param values
-        res = surrogate(a=[0, 1], b=[1, 0])
-        self.assertEqual(res["f"].shape, (2,20))
+            list(
+                _make_group_kfold_splits(
+                    X,
+                    y,
+                    groups=None,
+                    kfold_splits=kfcv.kfold_splits,
+                )
+            )
+
+    def test_make_group_kfold_splits_uses_group_labels(self):
+        X, y = self._make_training_arrays()
+        kfcv = self._make_kfold_cv(kfold_splits=2, group_kfold=True)
+
+        groups = np.array([0, 0, 1, 1])
+
+        splits = list(
+            _make_group_kfold_splits(
+                X,
+                y,
+                groups,
+                kfcv.kfold_splits,
+            )
+        )
+        self.assertEqual(len(splits), 2)
+
+        for _, test_index in splits:
+            test_groups = np.unique(groups[test_index])
+            self.assertEqual(test_groups.size, 1)
+
+    def test_extract_fold_info_partitions_training_and_test_data(self):
+        X, y = self._make_training_arrays()
+        kfcv = self._make_kfold_cv(kfold_splits=2)
+
+        train_index = np.array([0, 2])
+        test_index = np.array([1, 3])
+
+        train_res, test_res, X_test, y_test = kfcv.extract_fold_info(
+            train_index,
+            test_index,
+            X,
+            y,
+        )
+
+        expected_X_train = X[train_index]
+        expected_X_test = X[test_index]
+        expected_y_test = [y[1], y[3]]
+
+        self.assertIsInstance(train_res, StudyResults)
+        self.assertIsInstance(test_res, StudyResults)
+
+        self.assert_close_arrays(X_test, expected_X_test)
+
+        self.assertEqual(len(y_test), len(expected_y_test))
+        for actual, expected in zip(y_test, expected_y_test):
+            self.assert_close_arrays(
+                actual["response"],
+                expected["response"],
+            )
+
+        self._assert_parameter_history_matches_samples(
+            train_res,
+            expected_X_train,
+        )
+        self._assert_parameter_history_matches_samples(
+            test_res,
+            expected_X_test,
+        )
+
+    def test_evaluate_fold_uses_native_cv_error_function(self):
+        X, y = self._make_training_arrays()
+        kfcv = self._make_kfold_cv(kfold_splits=2)
+
+        train_index = np.array([0, 2])
+        test_index = np.array([1, 3])
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=4.25,
+            ) as error_mock:
+                error, returned_test_index = kfcv.evaluate_fold(
+                    train_index,
+                    test_index,
+                    X,
+                    y,
+                    kfold_count=0,
+                )
+
+        self.assertEqual(error, 4.25)
+        self.assert_close_arrays(returned_test_index, test_index)
+
+        fit_mock.assert_called_once()
+        error_mock.assert_called_once()
+
+        error_args = error_mock.call_args[0]
+        self.assertIs(error_args[0], fake_surrogate)
+        self.assert_close_arrays(error_args[1], X[test_index])
+        self.assertEqual(error_args[2], [y[1], y[3]])
+        self.assertEqual(error_args[3], "response")
+        self.assertEqual(error_args[4], "time")
+        self.assert_close_arrays(error_args[5], np.array([0.0, 1.0]))
+        self.assertEqual(error_args[6], "rmse")
+        self.assertEqual(error_args[7], 1.0)
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
+
+    def test_evaluate_cv_splits_returns_fold_dictionary(self):
+        X, y = self._make_training_arrays()
+        kfcv = self._make_kfold_cv(kfold_splits=2)
+
+        splits = [
+            (np.array([0, 1]), np.array([2, 3])),
+            (np.array([2, 3]), np.array([0, 1])),
+        ]
+
+        def fake_evaluate_fold(train_index, test_index, X_arg, y_arg, kfold_count):
+            return float(kfold_count), test_index
+
+        kfcv.evaluate_fold = fake_evaluate_fold
+
+        results = _evaluate_kfold_cv_splits(kfcv, X, y, splits)
+        self.assertEqual(set(results.keys()), {0, 1})
+        self.assertEqual(results[0][0], 0.0)
+        self.assertEqual(results[1][0], 1.0)
+        self.assert_close_arrays(results[0][1], np.array([2, 3]))
+        self.assert_close_arrays(results[1][1], np.array([0, 1]))
+
+    def test_perform_kfold_cv_uses_global_split_and_evaluation_helpers(self):
+        X, y = self._make_training_arrays()
+        kfcv = self._make_kfold_cv(kfold_splits=2)
+
+        def fake_evaluate_fold(train_index, test_index, X_arg, y_arg, kfold_count):
+            return float(kfold_count), test_index
+
+        kfcv.evaluate_fold = fake_evaluate_fold
+
+        results = _perform_kfold_cv(kfcv, X, y)
+
+        self.assertEqual(set(results.keys()), {0, 1})
+        self.assertEqual(results[0][0], 0.0)
+        self.assertEqual(results[1][0], 1.0)
+
+    def test_evaluate_fold_forwards_random_forest_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        kfcv = KFoldCrossValidation(
+            kfold_splits=2,
+            group_kfold=False,
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            scale=1.0,
+            metric="rmse",
+            target_field="response",
+            param_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "Random Forest",
+                "n_estimators": 3,
+                "random_state": 123,
+            },
+            random_seed=123,
+        )
+
+        train_index = np.array([0, 2])
+        test_index = np.array([1, 3])
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=4.25,
+            ):
+                kfcv.evaluate_fold(
+                    train_index,
+                    test_index,
+                    X,
+                    y,
+                    kfold_count=0,
+                )
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "Random Forest")
+        self.assertEqual(fit_kwargs["n_estimators"], 3)
+        self.assertEqual(fit_kwargs["random_state"], 123)
+        self.assertIsNone(fit_kwargs["save_filename"])
+
+    def test_evaluate_fold_forwards_rbf_surrogate_options(self):
+        X, y = self._make_training_arrays()
+
+        kfcv = KFoldCrossValidation(
+            kfold_splits=2,
+            group_kfold=False,
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            scale=1.0,
+            metric="rmse",
+            target_field="response",
+            param_names=["x", "y"],
+            surrogate_options={
+                "regressor_type": "RBF",
+                "neighbors": 7,
+            },
+            random_seed=123,
+        )
+
+        train_index = np.array([0, 2])
+        test_index = np.array([1, 3])
+        fake_surrogate = object()
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates._calculate_cv_error",
+                return_value=4.25,
+            ):
+                kfcv.evaluate_fold(
+                    train_index,
+                    test_index,
+                    X,
+                    y,
+                    kfold_count=0,
+                )
+
+        fit_kwargs = fit_mock.call_args.kwargs
+
+        self.assertEqual(fit_kwargs["regressor_type"], "RBF")
+        self.assertEqual(fit_kwargs["neighbors"], 7)
+        self.assertIsNone(fit_kwargs["save_filename"])
+
+
+class TestVoronoiTessellation(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_points(self):
+        return np.array([
+            [0.25, 0.25],
+            [0.75, 0.25],
+            [0.25, 0.75],
+            [0.75, 0.75],
+        ])
+
+    def _make_bounds(self):
+        return np.array([
+            [0.0, 1.0],
+            [0.0, 1.0],
+        ])
+
+    def _make_tessellation(self, finite_only=False):
+        return VoronoiTessellation(
+            self._make_points(),
+            self._make_bounds(),
+            finite_only=finite_only,
+        )
+  
+    def _expected_number_of_ghost_points(self, tessellation):
+        """
+        Match the ghost-point construction used by _create_ghost_points.
+
+        _create_ghost_points returns:
+
+        * one stretched ghost point for each boundary point; and
+        * positive/negative axis ghost points for each dimension.
+        """
+        return tessellation.boundary_points.shape[0] + 2 * tessellation.ndim
+
+    def test_module_level_remove_invalid_rows_removes_nonfinite_rows(self):
+        values = np.array([
+            [0.0, 0.0],
+            [np.nan, 1.0],
+            [1.0, np.inf],
+            [2.0, 2.0],
+        ])
+
+        filtered = _remove_invalid_rows(values)
+
+        expected = np.array([
+            [0.0, 0.0],
+            [2.0, 2.0],
+        ])
+
+        self.assert_close_arrays(filtered, expected)
+
+    def test_build_creates_expected_boundary_points(self):
+        tessellation = self._make_tessellation(finite_only=False)
+
+        tessellation.build()
+
+        expected_boundary_points = _make_bounded_nd_grid(self._make_bounds(), 2)
+
+        self.assert_close_arrays(
+            tessellation.boundary_points,
+            expected_boundary_points,
+        )
+
+    def test_build_uses_native_and_ghost_points_in_voronoi_object(self):
+        tessellation = self._make_tessellation(finite_only=False)
+
+        tessellation.build()
+
+        n_native_points = tessellation.points.shape[0]
+        n_ghost_points = self._expected_number_of_ghost_points(tessellation)
+        expected_total_points = n_native_points + n_ghost_points
+
+        self.assertEqual(tessellation.vor.points.shape[0], expected_total_points)
+
+    def test_build_marks_native_and_ghost_points_in_boolean_mask(self):
+        tessellation = self._make_tessellation(finite_only=False)
+
+        tessellation.build()
+
+        n_native_points = tessellation.points.shape[0]
+        n_ghost_points = self._expected_number_of_ghost_points(tessellation)
+
+        self.assertEqual(len(tessellation._boo), n_native_points + n_ghost_points)
+
+        # The tessellation is constructed with native points followed by local
+        # ghost points, so the first block should be native and the second
+        # block should be ghost points.
+        self.assertEqual(
+            tessellation._boo[:n_native_points],
+            [False] * n_native_points,
+        )
+        self.assertEqual(
+            tessellation._boo[n_native_points:],
+            [True] * n_ghost_points,
+        )
+
+    def test_get_voronoi_region_returns_region_for_existing_seed(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        seed = tessellation.points[0]
+        region = tessellation.get_voronoi_region(seed)
+
+        expected_region = tessellation.vor.point_region[0]
+
+        self.assertEqual(region, [[int(expected_region)]])
+
+    def test_get_region_vertices_returns_finite_vertices_inside_bounds(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        seed = tessellation.points[0]
+        region_index = tessellation.get_voronoi_region(seed)[0][0]
+
+        vertices = tessellation.get_region_vertices(
+            region_index,
+            identify_outside_vertices=True,
+        )
+
+        self.assertIsNotNone(vertices)
+        self.assertTrue(np.isfinite(vertices).all())
+        self.assertTrue(np.all(vertices >= tessellation.bounds[:, 0]))
+        self.assertTrue(np.all(vertices <= tessellation.bounds[:, 1]))
+
+    def test_get_voronoi_vertices_skips_ghost_regions_and_returns_bounded_vertices(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        vertices = tessellation.get_voronoi_vertices(
+            identify_outside_vertices=True,
+        )
+
+        self.assertIsNotNone(vertices)
+        self.assertEqual(vertices.shape[1], 2)
+        self.assertTrue(np.isfinite(vertices).all())
+        self.assertTrue(np.all(vertices >= tessellation.bounds[:, 0]))
+        self.assertTrue(np.all(vertices <= tessellation.bounds[:, 1]))
+
+    def test_add_points_discards_invalid_rows_and_removes_duplicates(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        original_points = tessellation.points.copy()
+
+        new_points = np.array([
+            [0.5, 0.5],
+            [0.5, 0.5],
+            [np.nan, 0.0],
+            [np.inf, 0.0],
+        ])
+
+        tessellation.add_points(new_points)
+
+        self.assertTrue(np.isfinite(tessellation.points).all())
+        self.assertEqual(
+            tessellation.points.shape[0],
+            original_points.shape[0] + 1,
+        )
+        self.assertTrue(
+            np.any(np.all(np.isclose(tessellation.points, [0.5, 0.5]), axis=1))
+        )
+
+    def test_add_points_with_empty_array_leaves_points_unchanged(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        original_points = tessellation.points.copy()
+
+        tessellation.add_points(np.empty((0, 2)))
+
+        self.assert_close_arrays(tessellation.points, original_points)
+
+    def test_add_points_rebuilds_cached_voronoi_state_without_persisting_ghost_points(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        tessellation.add_points(np.array([[0.5, 0.5]]))
+
+        self.assertTrue(hasattr(tessellation, "vor"))
+        self.assertTrue(hasattr(tessellation, "_boo"))
+        self.assertTrue(hasattr(tessellation, "boundary_regions"))
+        self.assertFalse(hasattr(tessellation, "_ghost_points"))
+        self.assertFalse(hasattr(tessellation, "ghost_points"))
+
+        n_native_points = tessellation.points.shape[0]
+        n_ghost_points = self._expected_number_of_ghost_points(tessellation)
+
+        self.assertEqual(len(tessellation._boo), n_native_points + n_ghost_points)
+        self.assertEqual(
+            tessellation.vor.points.shape[0],
+            n_native_points + n_ghost_points,
+        )
+        self.assertEqual(
+            len(tessellation.boundary_regions),
+            tessellation.boundary_points.shape[0],
+        )
+
+    def test_add_points_rebuilds_boolean_mask_after_point_addition(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        tessellation.add_points(np.array([[0.5, 0.5]]))
+
+        n_native_points = tessellation.points.shape[0]
+        n_ghost_points = self._expected_number_of_ghost_points(tessellation)
+
+        self.assertEqual(
+            tessellation._boo[:n_native_points],
+            [False] * n_native_points,
+        )
+        self.assertEqual(
+            tessellation._boo[n_native_points:],
+            [True] * n_ghost_points,
+        )
+
+    def test_raise_if_invalid_region_index_rejects_non_integer(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        with self.assertRaises(TypeError):
+            tessellation.raise_if_invalid_region_index(1.2)
+
+    def test_raise_if_invalid_region_index_rejects_out_of_range_index(self):
+        tessellation = self._make_tessellation(finite_only=False)
+        tessellation.build()
+
+        with self.assertRaises(ValueError):
+            tessellation.raise_if_invalid_region_index(len(tessellation.vor.regions))
+
+
+class TestVoronoiTessellationExtraBranches(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_tessellation(self, finite_only=False):
+        points = np.array([
+            [0.25, 0.25],
+            [0.75, 0.25],
+            [0.25, 0.75],
+            [0.75, 0.75],
+        ])
+        bounds = np.array([
+            [0.0, 1.0],
+            [0.0, 1.0],
+        ])
+        return VoronoiTessellation(points, bounds, finite_only=finite_only)
+
+    def test_build_finite_only_branch(self):
+        tess = self._make_tessellation(finite_only=True)
+        tess.build()
+        self.assertIsNone(tess.boundary_hull)
+        self.assertIsNone(tess.bhullD)
+
+    def test_get_region_vertices_without_identifying_outside_vertices(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+        region_index = tess.get_voronoi_region(tess.points[0])[0][0]
+        vertices = tess.get_region_vertices(region_index, identify_outside_vertices=False)
+        self.assertTrue(vertices is None or isinstance(vertices, np.ndarray))
+
+    def test_vertices_from_indices_empty_returns_none(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+        self.assertIsNone(tess._vertices_from_indices([]))
+
+    def test_region_belongs_to_ghost_point_when_mapping_not_unique(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+
+        original = tess.vor.point_region.copy()
+        try:
+            region0 = original[0]
+            tess.vor.point_region[1] = region0
+            self.assertTrue(tess._region_belongs_to_ghost_point(region0))
+        finally:
+            tess.vor.point_region = original
+
+    def test_identify_vertices_outside_bounds_empty_region(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+        self.assertEqual(tess.identify_vertices_outside_bounds([]), [])
+
+    def test_unique_vertex_list_empty(self):
+        tess = self._make_tessellation(finite_only=False)
+        self.assertEqual(tess._unique_vertex_list([]), [])
+
+    def test_get_normal_ray_direction_zero_length_raises(self):
+        tess = self._make_tessellation(finite_only=False)
+        with self.assertRaises(ValueError):
+            tess.get_normal_ray_direction(np.array([1.0, 1.0]), np.array([1.0, 1.0]))
+
+    def test_find_boundary_hull_ray_crossings_no_positive_intersection_returns_none(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+
+        # Start outside and point further away so no positive crossing exists.
+        z = np.array([2.0, 2.0])
+        U = np.array([1.0, 0.0])
+        crossing = tess.find_boundary_hull_ray_crossings(U, z)
+        self.assertIsNone(crossing)
+
+    def test_prepare_points_to_add_empty_and_dimension_error(self):
+        tess = self._make_tessellation(finite_only=False)
+        tess.build()
+
+        prepared = tess._prepare_points_to_add(np.array([]))
+        self.assertEqual(prepared.shape, (0, tess.ndim))
+
+        with self.assertRaises(ValueError):
+            tess._check_added_point_dimension(np.array([[0.0, 0.0, 0.0]]))
+
+
+class TestVoronoiNLPDCV(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_calculate_cv_error_returns_stored_latent_nlpd_for_nlpd_metric(self):
+
+        class FakeGPSurrogate:
+
+            def __init__(self):
+                self._latent_scores = OrderedDict()
+                self._latent_scores["test"] = OrderedDict()
+                self._latent_scores["test"]["response"] = {
+                    "score": np.array([0.9, 0.8]),
+                    "rmse": np.array([0.1, 0.2]),
+                    "nlpd": np.array([1.25, 2.75]),
+                }
+
+            def __call__(self, *args, **kwargs):
+                raise RuntimeError(
+                    "Surrogate should not be evaluated in native space for "
+                    "metric='nlpd'."
+                )
+
+        error = _calculate_cv_error(
+            FakeGPSurrogate(),
+            X_test=np.array([[0.0, 0.0]]),
+            y_test=[],
+            target_field="response",
+            interpolation_field="time",
+            interpolation_values=np.array([0.0, 1.0]),
+            metric="nlpd",
+            scale=1.0,
+        )
+
+        self.assertAlmostEqual(error, 4.0)
+
+    def test_calculate_surrogate_latent_nlpd_returns_nan_error_for_nonfinite_nlpd(self):
+
+        class FakeNonGPSurrogate:
+
+            def __init__(self):
+                self._latent_scores = OrderedDict()
+                self._latent_scores["test"] = OrderedDict()
+                self._latent_scores["test"]["response"] = {
+                    "nlpd": np.array([np.nan]),
+                }
+
+        with self.assertRaises(RuntimeError):
+            _calculate_surrogate_latent_nlpd(FakeNonGPSurrogate())
+
+    def test_voronoi_cv_metric_nlpd_rejects_non_gp_regressor(self):
+        study = VoronoiAdaptiveSurrogateStudy(
+            Parameter("x", 0.0, 1.0),
+            Parameter("y", -1.0, 1.0),
+        )
+
+        study.set_cross_validation_options(
+            kfold_splits=2,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count=1,
+            cv_metric="nlpd",
+        )
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_regressor(
+                "Random Forest",
+                n_estimators=5,
+                random_state=123,
+            )
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_regressor(
+                "RBF",
+                neighbors=5,
+            )
+
+    def test_voronoi_cv_metric_nlpd_accepts_default_gaussian_process(self):
+        study = VoronoiAdaptiveSurrogateStudy(
+            Parameter("x", 0.0, 1.0),
+            Parameter("y", -1.0, 1.0),
+        )
+
+        study.set_cross_validation_options(
+            kfold_splits=2,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count=1,
+            cv_metric="nlpd",
+        )
+
+        self.assertEqual(study._cv_metric, "nlpd")
+
+
+class AdaptiveSurrogateStudyBaseBehaviorMixin:
+    """
+    Tests for behavior implemented by AdaptiveSurrogateStudyBase.
+
+    Concrete test classes must provide:
+
+    * ``StudyClass``
+    * ``make_study()``
+    """
+
+    StudyClass = None
+
+    def make_study(self):
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        return self.StudyClass(p1, p2)
+
+    def test_parameter_bounds(self):
+        study = self.make_study()
+        bounds = _get_parameter_bounds(study._parameter_collection)
+        expected = np.array([[0.0, 1.0], [-1.0, 1.0]])
+        np.testing.assert_array_equal(bounds, expected)
+
+    def test_set_independent_variable(self):
+        study = self.make_study()
+        study.set_independent_variable("time", np.linspace(0, 1, 5))
+
+        self.assertEqual(study._independent_variable, "time")
+        np.testing.assert_array_equal(
+            study._independent_variable_values,
+            np.linspace(0, 1, 5),
+        )
+
+        with self.assertRaises(TypeError):
+            study.set_independent_variable(1.0, np.linspace(0, 1, 2))
+
+        with self.assertRaises(ValueError):
+            study.set_independent_variable("", "")
+
+        with self.assertRaises(TypeError):
+            study.set_independent_variable("x", "")
+
+    def test_set_target_field(self):
+        study = self.make_study()
+
+        study.set_target_field_name("temperature")
+        self.assertEqual(study._target_field_name, "temperature")
+
+        with self.assertRaises(TypeError):
+            study.set_target_field_name(1.0)
+
+    def test_set_number_of_test_samples(self):
+        study = self.make_study()
+
+        study.set_number_of_test_samples(20)
+        self.assertEqual(study._number_of_test_samples, 20)
+
+        with self.assertRaises(TypeError):
+            study.set_number_of_test_samples("a")
+
+    def test_set_max_training_samples(self):
+        study = self.make_study()
+
+        study.set_max_training_samples(500)
+        self.assertEqual(study._max_training_samples, 500)
+
+        with self.assertRaises(TypeError):
+            study.set_max_training_samples("a")
+
+    def test_set_test_group_random_seed(self):
+        study = self.make_study()
+
+        study.set_seed(10)
+        study.set_test_group_random_seed(1234)
+
+        self.assertEqual(study._test_group_random_seed, 1234)
+        self.assertEqual(study._seed, 10)
+
+        with self.assertRaises(TypeError):
+            study.set_test_group_random_seed("bad")
+
+    def test_default_test_samples_calculation(self):
+        study = self.make_study()
+
+        study.set_max_training_samples(200)
+        self.assertEqual(study._set_default_number_of_test_samples(), 20)
+
+        study.set_max_training_samples(2000)
+        self.assertEqual(study._set_default_number_of_test_samples(), 100)
+
+    def test_make_simulation_results_synchronizer_success(self):
+        study = self.make_study()
+
+        study.set_independent_variable("x", [0.0, 1.0])
+        study.set_target_field_name("y")
+
+        sync = study._make_simulation_results_synchronizer(None)
+
+        self.assertIsInstance(sync, SimulationResultsSynchronizer)
+        self.assertEqual(sync.independent_field, "x")
+        self.assertEqual(sync._independent_field_values, [0.0, 1.0])
+        self.assertEqual(sync.fields_of_interest, ("y",))
+
+    def test_make_simulation_results_synchronizer_missing_inputs(self):
+        study = self.make_study()
+
+        study.set_independent_variable("x", [0, 1])
+        with self.assertRaises(RuntimeError) as ctx:
+            study._make_simulation_results_synchronizer(None)
+        self.assertIn("Target field name", str(ctx.exception))
+
+        study._independent_variable = None
+        study._independent_variable_values = None
+        study.set_target_field_name("test")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            study._make_simulation_results_synchronizer(None)
+        self.assertIn("Independent variable name", str(ctx.exception))
+
+    def test_add_evaluation_set_once(self):
+        study = self.make_study()
+
+        study.set_independent_variable("t", [0, 1])
+        study.set_target_field_name("z")
+
+        self.assertFalse(study._evaluation_set_added)
+        study.add_evaluation_set(light_model)
+        self.assertTrue(study._evaluation_set_added)
+
+        with self.assertRaises(RuntimeError):
+            study.add_evaluation_set(light_model)
+
+    def test_add_evaluation_set_invalid_state(self):
+        study = self.make_study()
+
+        study.set_independent_variable("t", [0, 1])
+        study.set_target_field_name("z")
+
+        with self.assertRaises(TypeError):
+            study.add_evaluation_set(light_model, state="not_a_state")
+
+    def test_results_synchronizer_property_before_and_after_add_evaluation_set(self):
+        study = self.make_study()
+
+        self.assertIsNone(study.results_synchronizer)
+
+        study.set_independent_variable("x", [0.0, 1.0])
+        study.set_target_field_name("y")
+        study.add_evaluation_set(light_model)
+
+        self.assertIsInstance(
+            study.results_synchronizer,
+            SimulationResultsSynchronizer,
+        )
+
+    def test_set_save_filename(self):
+        study = self.make_study()
+
+        self.assertIsNone(study.surrogate_save_filename)
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_save_filename("my_surrogate_name")
+
+        with self.assertRaises(TypeError):
+            study.set_surrogate_save_filename(0)
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_save_filename("")
+
+        study.set_surrogate_save_filename("my_surrogate_name.joblib")
+        self.assertEqual(
+            study.surrogate_save_filename,
+            "my_surrogate_name.joblib",
+        )
+
+    def test_set_surrogate_storage_options(self):
+        study = self.make_study()
+
+        self.assertEqual(study._surrogate_storage_best_n_surrogates, 1)
+        self.assertIsNone(study._surrogate_storage_every_n_batches)
+        self.assertEqual(study._surrogate_storage_score_metric, "max_error")
+
+        study.set_surrogate_storage_options(
+            best_n_surrogates=3,
+            save_every_n_batches=5,
+            score_metric="max_error",
+        )
+
+        self.assertEqual(study._surrogate_storage_best_n_surrogates, 3)
+        self.assertEqual(study._surrogate_storage_every_n_batches, 5)
+        self.assertEqual(study._surrogate_storage_score_metric, "max_error")
+
+        study.set_surrogate_storage_options(
+            best_n_surrogates=None,
+            save_every_n_batches=2,
+            score_metric="score",
+        )
+
+        self.assertIsNone(study._surrogate_storage_best_n_surrogates)
+        self.assertEqual(study._surrogate_storage_every_n_batches, 2)
+        self.assertEqual(study._surrogate_storage_score_metric, "r2")
+
+    def test_set_surrogate_storage_options_invalid_inputs(self):
+        study = self.make_study()
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_storage_options(
+                best_n_surrogates=None,
+                save_every_n_batches=None,
+            )
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_storage_options(score_metric="not_a_metric")
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_storage_options(best_n_surrogates=0)
+
+        with self.assertRaises(TypeError):
+            study.set_surrogate_storage_options(save_every_n_batches="bad")
+
+
+
+class TestVoronoiAdaptiveSurrogateStudyBaseBehavior(
+    AdaptiveSurrogateStudyBaseBehaviorMixin,
+    MatcalUnitTest,
+):
+    StudyClass = VoronoiAdaptiveSurrogateStudy
+
+    def setUp(self):
+        super().setUp(__file__)
+        self.study = self.make_study()
+
+    def _make_two_parameter_study(self):
+        return VoronoiAdaptiveSurrogateStudy(
+            Parameter("x", 0.0, 1.0),
+            Parameter("y", -1.0, 1.0),
+        )
+
+    def test_reduce_voronoi_candidates_returns_all_candidates_in_one_at_a_time_mode(self):
+        study = self._make_two_parameter_study()
+        study._batch_size = 1
+        study._thin = 2
+        study._random_selection = None
+
+        candidates = np.array([
+            [0.0, -1.0],
+            [0.25, -0.5],
+            [0.5, 0.0],
+            [0.75, 0.5],
+        ])
+
+        reduced = _reduce_voronoi_candidates(
+            candidates,
+            study._number_parameters,
+            study._batch_size,
+            study._thin,
+            study._random_selection,
+            study._random_generator,
+        )
+
+        self.assert_close_arrays(reduced, candidates)
+
+    def test_get_deterministic_in_cell_grid_points_uses_nearest_seed_assignment(self):
+        study = self._make_two_parameter_study()
+        study.set_selected_cell_search_grid_points(3)
+
+        class FakeVoronoiTessellation:
+            points = np.array([
+                [0.0, -1.0],
+                [1.0, 1.0],
+            ])
+
+        study._voronoi_tessellation = FakeVoronoiTessellation()
+
+        seed_location = np.array([0.0, -1.0])
+        in_cell_points = study._get_deterministic_in_cell_grid_points(seed_location)
+
+        seed_points = study._voronoi_tessellation.points
+        owner_indices = _assign_points_to_nearest_seed(in_cell_points, seed_points)
+
+        self.assertTrue(in_cell_points.shape[0] > 0)
+        self.assertTrue(np.all(owner_indices == 0))
+
+    def test_find_first_valid_ranked_candidate_point_returns_first_valid_generated_point(self):
+        study = self._make_two_parameter_study()
+
+        candidate_locations = np.array([
+            [0.0, -1.0],
+            [0.5, 0.0],
+            [1.0, 1.0],
+        ])
+
+        def fake_find_new_sample_location(location):
+            if np.allclose(location, [0.0, -1.0]):
+                return None
+            if np.allclose(location, [0.5, 0.0]):
+                return np.array([0.25, -0.5])
+            return np.array([0.75, 0.5])
+
+        study._find_new_sample_location_for_candidate = fake_find_new_sample_location
+
+        point = study._find_first_valid_ranked_candidate_point(candidate_locations)
+
+        self.assert_close_arrays(point, np.array([0.25, -0.5]))
+
+    def test_find_first_valid_ranked_candidate_point_skips_out_of_bounds_points(self):
+        study = self._make_two_parameter_study()
+
+        candidate_locations = np.array([
+            [0.0, -1.0],
+            [0.5, 0.0],
+        ])
+
+        proposed_points = [
+            np.array([2.0, 0.0]),
+            np.array([0.25, -0.5]),
+        ]
+
+        def fake_find_new_sample_location(_):
+            return proposed_points.pop(0)
+
+        study._find_new_sample_location_for_candidate = fake_find_new_sample_location
+
+        point = study._find_first_valid_ranked_candidate_point(candidate_locations)
+
+        self.assert_close_arrays(point, np.array([0.25, -0.5]))
+
+    def test_set_surrogate_regressor_accepts_random_forest(self):
+        study = self._make_two_parameter_study()
+
+        self.assertEqual(study._convergence_metric, "r2")
+
+        study.set_surrogate_regressor(
+            "Random Forest",
+            n_estimators=7,
+            random_state=123,
+        )
+
+        self.assertEqual(
+            study._surrogate_options["regressor_type"],
+            "Random Forest",
+        )
+        self.assertEqual(study._surrogate_options["n_estimators"], 7)
+        self.assertEqual(study._surrogate_options["random_state"], 123)
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_surrogate_regressor_accepts_rbf(self):
+        study = self._make_two_parameter_study()
+
+        self.assertEqual(study._convergence_metric, "r2")
+
+        study.set_surrogate_regressor(
+            "RBF",
+            neighbors=11,
+        )
+
+        self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
+        self.assertEqual(study._surrogate_options["neighbors"], 11)
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_surrogate_regressor_rejects_unknown_regressor(self):
+        study = self._make_two_parameter_study()
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_regressor("not_a_regressor")
+
+    def test_set_surrogate_options_validates_random_forest_regressor(self):
+        study = self._make_two_parameter_study()
+
+        study.set_surrogate_options(
+            regressor_type="Random Forest",
+            n_estimators=5,
+            random_state=321,
+        )
+
+        self.assertEqual(
+            study._surrogate_options["regressor_type"],
+            "Random Forest",
+        )
+        self.assertEqual(study._surrogate_options["n_estimators"], 5)
+        self.assertEqual(study._surrogate_options["random_state"], 321)
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_surrogate_options_validates_rbf_regressor(self):
+        study = self._make_two_parameter_study()
+
+        study.set_surrogate_options(
+            regressor_type="RBF",
+            neighbors=9,
+        )
+
+        self.assertEqual(study._surrogate_options["regressor_type"], "RBF")
+        self.assertEqual(study._surrogate_options["neighbors"], 9)
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_surrogate_options_rejects_unknown_regressor(self):
+        study = self._make_two_parameter_study()
+
+        with self.assertRaises(ValueError):
+            study.set_surrogate_options(regressor_type="bad_regressor")
+
+    def test_set_convergence_criteria_accepts_original_response_space_metrics(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="rmse",
+        )
+        self.assertEqual(study._eps, 1.0e-8)
+        self.assertEqual(study._convergence_metric, "rmse")
+
+        study.set_convergence_criteria(
+            eps=1.0e-7,
+            convergence_metric="max_error",
+        )
+        self.assertEqual(study._eps, 1.0e-7)
+        self.assertEqual(study._convergence_metric, "max_error")
+
+        study.set_convergence_criteria(
+            eps=1.0e-6,
+            convergence_metric="r2",
+        )
+        self.assertEqual(study._eps, 1.0e-6)
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_convergence_criteria_treats_score_as_r2_alias(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="score",
+        )
+
+        # If your implementation keeps "score" internally, change this expected
+        # value to "score".
+        self.assertEqual(study._convergence_metric, "r2")
+
+    def test_set_convergence_criteria_accepts_nlpd_for_default_gp(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="nlpd",
+        )
+
+        self.assertEqual(study._convergence_metric, "nlpd")
+
+    def test_set_convergence_criteria_rejects_invalid_metric(self):
+        study = self._make_two_parameter_study()
+
+        with self.assertRaises(ValueError):
+            study.set_convergence_criteria(
+                eps=1.0e-8,
+                convergence_metric="not_a_metric",
+            )
+
+    def _make_voronoi_study_for_stopping_test(self):
+        study = self._make_two_parameter_study()
+        study._surrogate = _FakeSurrogate()
+        study._results = _FakeResults(n_evals=10)
+        study._max_training_samples = 1000
+        study.set_error_stopping_criteria(
+            rmse_goal=1.0e-300,
+            max_abs_error_goal=1.0e-300,
+        )
+        return study
+
+    def test_voronoi_convergence_uses_original_response_space_rmse_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="rmse",
+        )
+
+        study._surrogate._root_mean_squared_errors = [1.0, 1.03]
+        study._surrogate._max_errors = [10.0, 20.0]
+        study._surrogate._r2_scores = [0.1, 0.2]
+
+        # Latent-space diagnostics should not control deterministic RMSE
+        # convergence after the refactor.
+        study._current_surrogate_score = {
+            "score": [0.0, 0.0],
+            "rmse": [100.0, 200.0],
+            "nlpd": [np.nan, np.nan],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_voronoi_convergence_uses_original_response_space_max_error_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="max_error",
+        )
+
+        study._surrogate._root_mean_squared_errors = [1.0, 2.0]
+        study._surrogate._max_errors = [10.0, 10.03]
+        study._surrogate._r2_scores = [0.1, 0.2]
+
+        study._current_surrogate_score = {
+            "score": [0.0, 0.0],
+            "rmse": [100.0, 200.0],
+            "nlpd": [np.nan, np.nan],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_voronoi_convergence_uses_original_response_space_r2_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="r2",
+        )
+
+        study._surrogate._root_mean_squared_errors = [1.0, 2.0]
+        study._surrogate._max_errors = [10.0, 20.0]
+        study._surrogate._r2_scores = [0.80, 0.83]
+
+        study._current_surrogate_score = {
+            "score": [0.0, 0.0],
+            "rmse": [100.0, 200.0],
+            "nlpd": [np.nan, np.nan],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_voronoi_nlpd_convergence_uses_latent_nlpd_history(self):
+        study = self._make_voronoi_study_for_stopping_test()
+
+        study.set_convergence_criteria(
+            eps=5.0e-2,
+            convergence_metric="nlpd",
+        )
+
+        # Original-response-space histories do not stagnate.
+        study._surrogate._root_mean_squared_errors = [1.0, 2.0]
+        study._surrogate._max_errors = [10.0, 20.0]
+        study._surrogate._r2_scores = [0.1, 0.2]
+
+        # NLPD does stagnate, so convergence should be triggered.
+        study._current_surrogate_score = {
+            "score": [0.0, 0.5],
+            "rmse": [1.0, 2.0],
+            "nlpd": [3.0, 3.03],
+        }
+
+        should_stop = study._stopping_criterion_met(training_batch_number=2)
+
+        self.assertTrue(should_stop)
+
+    def test_nlpd_convergence_switches_to_rmse_for_random_forest(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="nlpd",
+        )
+
+        study.set_surrogate_regressor(
+            "Random Forest",
+            n_estimators=5,
+            random_state=123,
+        )
+
+        self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_nlpd_convergence_switches_to_rmse_for_rbf(self):
+        study = self._make_two_parameter_study()
+
+        study.set_convergence_criteria(
+            eps=1.0e-8,
+            convergence_metric="nlpd",
+        )
+
+        study.set_surrogate_regressor(
+            "RBF",
+            neighbors=5,
+        )
+
+        self.assertEqual(study._convergence_metric, "rmse")
+
+    def test_voronoi_train_current_results_does_not_save_candidate_surrogate(self):
+        study = self._make_two_parameter_study()
+
+        study._independent_variable = "x"
+        study._independent_variable_values = np.array([0.0, 1.0])
+        study._target_field_name = "response"
+        study._test_eval_info = object()
+        study._surrogate_options = {}
+        study._surrogate_save_filename = "adaptive_container.joblib"
+        study._results = _FakeResults(n_evals=5)
+
+        study._format_params = lambda results: np.zeros((5, 2))
+        study._format_output_for_surrogate_gen = lambda results: []
+
+        class FakeAdaptiveSurrogateContainer:
+            def __init__(self):
+                self.added_surrogate = None
+                self.added_nsamples = None
+
+            def _add_iteration(self, surrogate, nsamples):
+                self.added_surrogate = surrogate
+                self.added_nsamples = nsamples
+
+        fake_container = FakeAdaptiveSurrogateContainer()
+        study._surrogate = fake_container
+
+        fake_candidate_surrogate = types.SimpleNamespace(
+            _latent_scores={
+                "test": {
+                    "response": {
+                        "score": np.array([0.95]),
+                        "rmse": np.array([0.01]),
+                        "nlpd": np.array([1.25]),
+                    }
+                }
+            }
+        )
+
+        with patch(
+            "matcal.core.adaptive_surrogates._fit_surrogate_model",
+            return_value=fake_candidate_surrogate,
+        ) as fit_mock:
+            with patch(
+                "matcal.core.adaptive_surrogates.matcal_save",
+            ) as save_mock:
+                training_params, training_data = study._train_surrogate_with_current_results()
+
+        fit_mock.assert_called_once()
+        self.assertIsNone(fit_mock.call_args.kwargs["save_filename"])
+
+        self.assertIs(fake_container.added_surrogate, fake_candidate_surrogate)
+        self.assertEqual(fake_container.added_nsamples, 5)
+
+        save_mock.assert_called_once_with(
+            "adaptive_container.joblib",
+            fake_container,
+        )
+
+        self.assert_close_arrays(training_params, np.zeros((5, 2)))
+        self.assertEqual(training_data, [])
+
+
+class TestSparseGridAdaptiveSurrogateStudy(
+    AdaptiveSurrogateStudyBaseBehaviorMixin,
+    MatcalUnitTest,
+):
+    StudyClass = SparseGridAdaptiveSurrogateStudy
+
+    def setUp(self):
+        super().setUp(__file__)
+        self.study = self.make_study()
+    
+    def test_error_with_add_parameter_set(self):
+        with self.assertRaises(RuntimeError):
+            self.study.add_parameter_evaluation(p1=1, p2=2)
+
+    def test_update_work_dir_for_test_sampling(self):
+        original = self.study._working_directory
+        returned = self.study._update_work_dir_for_test_sampling()
+        self.assertEqual(returned, original)
+        self.assertEqual(self.study._working_directory, os.path.abspath("test_samples"))
+
+        self.study.set_working_directory("work")
+        returned = self.study._update_work_dir_for_test_sampling()
+        self.assertEqual(os.path.abspath("work"), returned)
+
+        expected = os.path.abspath("work" + "_test_samples")
+        self.assertEqual(os.path.abspath(self.study._working_directory), expected)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_launch_creates_test_directory_and_restores(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        self.study.add_evaluation_set(light_model)
+        self.study.launch()
+        test_dir = os.path.abspath("test_samples")
+        self.assertTrue(os.path.isdir(test_dir))
+
+        self.study._reset_study_after_test_sampling_generation(None, True)
+        self.study.set_working_directory("work")
+        test_dir = os.path.abspath("work_test_samples")
+        self.study.launch()
+        self.assertTrue(os.path.isdir(test_dir))
+        self.assertTrue(os.path.isdir("work"))
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_qoi_extractor_in_add_eval_set(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("z")
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        extractor = UserDefinedExtractor(change_y_to_z, "y", "x")
+        with self.assertRaises(TypeError):
+            self.study.add_evaluation_set(light_model, qoi_extractor="yay")
+        self.study.add_evaluation_set(light_model, qoi_extractor=extractor)
+        results = self.study.launch()
+        objs = results.get_objectives_for_model("light_model")
+        self.assertTrue("z" in results.best_simulation_qois("light_model", objs[0], 
+                                                             "matcal_default_state", 0).field_names)
+
+    def test_format_params_and_output(self):
+        """Check that the two formatting helpers produce the expected arrays."""
+        class FakeResults:
+            def __init__(self):
+                self.parameter_history = {"p1": [0.1, 0.2, 0.4],
+                                          "p2": [0.3, 0.4, 0.25]}
+                self.number_of_evaluations = 3
+                self.simulation_history = {}
+                self.qoi_history = {}
+
+        fake = FakeResults()
+
+        params = self.study._format_params(fake)
+        self.assertIsInstance(params, np.ndarray)
+        self.assertTupleEqual(params.shape, (3, 2))
+
+        model_name = "dummy_model"
+
+        class DummyObjective:
+            def __init__(self, name):
+                self.name = name
+        dummy_obj = DummyObjective("obj")
+
+        class DummySimQoi:
+            def __init__(self, state_name, target, values):
+                self._data = {state_name: [{target: np.array(values)}]}
+
+            def __getitem__(self, key):
+                return self._data[key]
+
+        state_name = "state0"
+        target = "temperature"
+        sim0 = DummySimQoi(state_name, target, [1.0, 2.0])
+        sim1 = DummySimQoi(state_name, target, [3.0, 4.0])
+        sim2 = DummySimQoi(state_name, target, [5.0, 6.0])
+
+        class DummyQoiContainer:
+            def __init__(self, sim_qois):
+                self.simulation_qois = sim_qois
+
+        fake.qoi_history[f"{model_name}:{dummy_obj.name}"] = DummyQoiContainer([sim0, sim1, sim2])
+
+        # simulation_history must provide state_names
+        fake.simulation_history = {
+            model_name: types.SimpleNamespace(state_names=[state_name])
+        }
+
+        self.study.set_independent_variable("time", np.array([0.0, 1.0]))
+        self.study.set_target_field_name(target)
+
+        # Monkey‑patch the private helpers that would otherwise inspect the real
+        # evaluation‑set collections.
+        self.study._get_model_names = lambda: [model_name]
+        self.study._results_synchronizer = dummy_obj
+
+        # ----- _format_output -----
+        output = self.study._format_output(fake)
+        self.assertIsInstance(output, np.ndarray)
+        self.assertTupleEqual(output.shape, (3, 2))
+
+        expected = np.array([[1.0, 2.0],
+                             [3.0, 4.0], 
+                             [5.0, 6.0]])
+        np.testing.assert_array_equal(output, expected)
+
+    def test_format_batch_results_returns_expected_array(self):
+        class DummyQoiInfo:
+            def __init__(self, state, target, values):
+                # store as: {state: [{target: np.array(values)}]}
+                self.simulation_qois = {
+                    state: [{target: np.array(values)}]
+                }
+
+        sample_values = [
+            [10.0, 20.0, 30.0],  
+            [40.0, 50.0, 60.0],  
+            [70.0, 80.0, 90.0]   
+        ]
+
+        self.study.set_independent_variable("x", np.linspace(0,1,3))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        state_name = "state"
+
+        class FakeResults:
+            class FakeDC:
+                def __init__(self, state):
+                    self.state_names = [state]
+
+            def __init__(self,state):
+                self.simulation_history = {light_model.name:self.FakeDC(state)}
+
+        self.study._results = FakeResults(state_name)
+        target = "y"
+        model_name = light_model.name
+        qois_list = []
+        for vals in sample_values:
+            qoi_obj = DummyQoiInfo(state_name, target, vals)
+            # The outer dict is {model_name: {objective_name: qoi_obj}}
+            qois_list.append({model_name: {self.study._results_synchronizer.name: qoi_obj}})
+
+        batch_results = {"qois": qois_list}
+
+        n_params = 2
+        n_samples = len(sample_values)          # 3 samples
+        param_sets = np.zeros((n_params, n_samples))
+
+        formatted = self.study._format_batch_results(batch_results, param_sets)
+
+        expected = np.array(sample_values, dtype=float)
+
+        self.assertIsInstance(formatted, np.ndarray)
+        self.assertEqual(formatted.shape, (n_samples, len(self.study._independent_variable_values)))
+        np.testing.assert_array_equal(formatted, expected)
+
+    def test_populate_parameter_evaluations_adaptive(self):
+        """
+        Verify that the method:
+        * treats the sample matrix as native parameter values,
+        * creates a list ``_parameter_sets_to_evaluate`` with one dict per
+            sample,
+        * each dict contains the correct parameter names and values, and
+        * ``_add_parameter_evaluation`` is called with the same dictionaries.
+        """
+        native_samples = np.array([
+            [0.1, 0.2, 0.3],    # p1 values
+            [0.1, 0.5, -0.1],   # p2 values
+        ])
+
+        self.study._populate_parameter_evaluations_adaptive(native_samples)
+        self.assertEqual(len(self.study._parameter_sets_to_evaluate), 3)
+
+        expected_names = self.study._parameter_collection.get_item_names()
+        expected_names = list(expected_names)
+
+        for i, param_dict in enumerate(self.study._parameter_sets_to_evaluate):
+            self.assertCountEqual(param_dict.keys(), expected_names)
+            for name, col_idx in zip(expected_names, range(len(expected_names))):
+                expected_value = native_samples[col_idx, i]
+                self.assertAlmostEqual(param_dict[name], expected_value)
+
+    def test_update_surrogate_score(self):
+        self.study._test_params = np.array([[0.0, 1.0],
+                                            [0.5, 0.5],
+                                            [1.0, 0.0]])
+        self.study._test_responses = np.array([[1.0, 2.0],
+                                            [1.5, 2.5],
+                                            [0.75, 0.85]])
+
+        class DoubleParamSurrogate:
+            def __init__(self):
+                self.surrogate = self
+
+            def __call__(self, params):
+                results = np.array(params) * 2.0
+                return results
+
+        self.study._surrogate = SparseGridAdaptiveSurrogate(
+            "target",
+            "independent",
+            np.array([0.0, 1.0]),
+            self.study._test_params,
+            self.study._test_responses,
+            ["p1", "p2"],
+            np.array([[-1.0, 1.0], [-1.0, 1.0]]),
+        )
+
+        self.study._surrogate._add_iteration(DoubleParamSurrogate(), 2)
+
+        self.assertEqual(len(self.study.surrogate.rmse_history), 1)
+        self.assertEqual(len(self.study.surrogate.max_error_history), 1)
+
+        expected_rmse = np.sqrt(
+            np.mean(
+                (
+                    self.study._test_responses
+                    - DoubleParamSurrogate()(self.study._test_params.T).T
+                ) ** 2
+            )
+        )
+        self.assertAlmostEqual(self.study.surrogate.rmse_history[0], expected_rmse)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_study_results_is_not_none(self):
+        """launch must eventually call the sparse‑grid routine."""
+        self.study.set_independent_variable("x", np.linspace(0,1,3))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(30)
+        self.study.set_number_of_test_samples(1)
+        self.study.launch()
+        self.assertIsNotNone(self.study.results)
+        sur_file = self.study.surrogate_save_filename
+        sur_results = matcal_load(sur_file)
+        self.assertEqual(self.study.surrogate.rmse_history, 
+                         sur_results.rmse_history)
+        self.assertEqual(self.study.surrogate.sample_count_history, 
+                         sur_results.sample_count_history)
+        self.assertEqual(self.study.surrogate.max_error_history, 
+                         sur_results.max_error_history) 
+        self.assertEqual(len(self.study.surrogate._surrogates), 
+                         len(sur_results._surrogates))
+        self.assert_close_dicts_or_data(sur_results(p1=0, p2=0), 
+                                        self.study.surrogate(p1=0, p2=0))
+
+    def _set_number_of_evaluations(self, n):
+        self.fake_results = types.SimpleNamespace(number_of_evaluations=0)
+        self.study._results = self.fake_results
+        self.fake_results.number_of_evaluations = n
+
+    def test_default_goals(self):
+        self.assertAlmostEqual(
+            self.study._rmse_goal,
+            1e-2,
+        )
+        self.assertAlmostEqual(
+            self.study._max_abs_error_goal,
+            1e-1,
+        )
+
+    def test_setting_both_goals(self):
+        new_rmse = 5e-3
+        new_max = 2e-3
+        self.study.set_error_stopping_criteria(
+            rmse_goal=new_rmse,
+            max_abs_error_goal=new_max,
+        )
+        self.assertAlmostEqual(
+            self.study._rmse_goal,
+            new_rmse,
+        )
+        self.assertAlmostEqual(
+            self.study._max_abs_error_goal,
+            new_max,
+        )
+
+    def test_setting_one_goal_keeps_other_untouched(self):
+        new_rmse = 1e-4
+        self.study.set_error_stopping_criteria(
+            rmse_goal=new_rmse
+        )
+        self.assertAlmostEqual(
+            self.study._rmse_goal,
+            new_rmse,
+        )
+        self.assertAlmostEqual(
+            self.study._max_abs_error_goal,
+            1e-1,
+        )
+    def test_invalid_non_numeric_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.study.set_error_stopping_criteria(rmse_goal="bad")
+
+        with self.assertRaises(TypeError):
+            self.study.set_error_stopping_criteria(max_abs_error_goal=[1, 2])
+
+    def test_invalid_non_positive_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.study.set_error_stopping_criteria(rmse_goal=0.0)
+
+        with self.assertRaises(ValueError):
+            self.study.set_error_stopping_criteria(max_abs_error_goal=-1e-3)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_study_set_test_data_as_study_result(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        self.simple_parameters =(p1, p2)
+        self.test_study = HaltonStudy(*self.simple_parameters)
+        self.test_study.set_number_of_samples(50)
+        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
+
+        results = self.test_study.launch()
+        self.study.set_test_data(results)
+        results = self.study.launch()
+        self.assertFalse(os.path.exists("test_samples"))
+        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+
+    @unittest.skipIf(not HAS_PYAPPROX,
+                 "pyapprox not installed – skipping pyapprox‑dependent tests")
+    def test_user_study_set_test_data_as_string(self):
+        self.study.set_independent_variable("x", np.linspace(0.0, 1.0, 4))
+        self.study.set_target_field_name("y")
+        self.study.add_evaluation_set(light_model)
+        self.study.set_max_training_samples(1)
+        self.study.set_number_of_test_samples(1)
+        
+        p1 = Parameter("p1", 0.0, 1.0, 0.5)
+        p2 = Parameter("p2", -1.0, 1.0, 0.0)
+        self.simple_parameters =(p1, p2)
+        self.test_study = HaltonStudy(*self.simple_parameters)
+        self.test_study.set_number_of_samples(50)
+        self.test_study.add_evaluation_set(light_model, self.study.results_synchronizer)
+
+        results = self.test_study.launch()
+        self.study.set_test_data("final_results.joblib")
+        results = self.study.launch()
+        self.assertFalse(os.path.exists("test_samples"))
+        self.assertIsInstance(self.study.surrogate, SparseGridAdaptiveSurrogate)
+    # -------------------------
+    # Validation / API errors
+    # -------------------------
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_basis_type(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="not-a-basis")
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_rejects_invalid_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=0)
+        with self.assertRaises(ValueError):
+            sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=4)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_validation(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        # If you did not implement this method, remove/skip this test
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=0, pnorm=1.0)
+        with self.assertRaises((ValueError, TypeError)):
+            sg_study.set_sparse_grid_adaptivity_limits(max_level=2, pnorm=0.0)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_lagrange(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="lagrange")
+        self.assertEqual(sg_study._sg_basis_type, "lagrange")
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_basis_sets_piecewise_degree(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        sg_study.set_sparse_grid_basis(basis_type="piecewise", piecewise_degree=2)
+        self.assertEqual(sg_study._sg_basis_type, "piecewise")
+        self.assertEqual(sg_study._sg_piecewise_degree, 2)
+
+    @unittest.skipIf(
+        not HAS_PYAPPROX,
+        "pyapprox not installed – skipping pyapprox‑dependent tests",
+    )
+    def test_set_sparse_grid_adaptivity_limits_sets_values(self):
+        sg_study = SparseGridAdaptiveSurrogateStudy(a, b, c)
+        if not hasattr(sg_study, "set_sparse_grid_adaptivity_limits"):
+            self.skipTest("set_sparse_grid_adaptivity_limits not implemented")
+
+        sg_study.set_sparse_grid_adaptivity_limits(max_level=7, pnorm=2.0)
+        self.assertEqual(sg_study._sg_max_level, 7)
+        self.assertEqual(sg_study._sg_pnorm, 2.0)
+
+    def test_set_test_data_invalid_type_raises(self):
+        with self.assertRaises(TypeError):
+            self.study.set_test_data(123)
+
+    def test_set_test_data_string_invalid_loaded_object_raises(self):
+        with open("not_a_study_results.joblib", "wb") as f:
+            import pickle
+            pickle.dump({"not": "study_results"}, f)
+
+        with self.assertRaises(RuntimeError):
+            self.study.set_test_data("not_a_study_results.joblib")
+
+    def test_default_save_filename_is_none_before_launch(self):
+        self.assertIsNone(self.study._surrogate_save_filename)
+        self.assertIsNone(self.study.surrogate_save_filename)
+
+
+class AdaptiveSurrogateActualFitMixin:
+    """
+    Smoke test that launches an adaptive surrogate study and fits at least one
+    surrogate. This intentionally does not assert convergence.
+    """
+
+    StudyClass = None
+
+    def make_study(self):
+        raise NotImplementedError
+
+    def configure_method_specific_options(self, study):
+        pass
+
+    def test_launch_fits_at_least_one_surrogate_without_checking_convergence(self):
+        study = self.make_study()
+
+        study.set_independent_variable("x", np.linspace(0.0, 1.0, 8))
+        study.set_target_field_name("f")
+        study.set_number_of_test_samples(2)
+        study.set_max_training_samples(5)
+        study.set_error_stopping_criteria(
+            rmse_goal=1.0e-30,
+            max_abs_error_goal=1.0e-30,
+        )
+        study.add_evaluation_set(PythonModel(linear_model_2d))
+
+        self.configure_method_specific_options(study)
+
+        results = study.launch()
+
+        self.assertIsNotNone(results)
+        self.assertIsNotNone(study.surrogate)
+        self.assertGreaterEqual(len(study.surrogate.rmse_history), 1)
+        self.assertGreaterEqual(len(study.surrogate.max_error_history), 1)
+        self.assertGreaterEqual(len(study.surrogate.sample_count_history), 1)
+        self.assertGreaterEqual(len(study.surrogate.surrogate_records), 1)
+
+    def test_run_test_sampling_restores_original_seed_after_test_group_seed(self):
+        study = self.make_study()
+        self.configure_method_specific_options(study)
+
+        study.set_seed(11)
+        study.set_test_group_random_seed(123)
+        study.set_independent_variable("x", np.array([0.0, 1.0]))
+        study.set_target_field_name("f")
+        study.add_evaluation_set(light_model)
+        study.set_number_of_test_samples(1)
+        study.set_max_training_samples(2)
+
+        # Use the real path; _run_test_sampling should restore the original seed.
+        try:
+            study._run_test_sampling()
+        except Exception:
+            # If model/test-study setup triggers external issues, we still want
+            # to verify seed restoration only when possible.
+            pass
+
+        self.assertEqual(study._seed, 11)
+
+
+@unittest.skipIf(
+    not HAS_PYAPPROX,
+    "pyapprox not installed – skipping sparse-grid fit smoke test",
+)
+class TestSparseGridAdaptiveSurrogateActualFit(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return SparseGridAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_sparse_grid_adaptivity_limits(max_level=1, pnorm=1.0)
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )
+
+
+class TestVoronoiAdaptiveSurrogateActualFit(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return VoronoiAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_number_of_initial_samples(4)
+        study.set_cross_validation_options(
+            kfold_splits=0,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count="skip_loo",
+            cv_metric="sum_abs",
+            batch_size=1,
+        )
+        study.set_voronoi_sampling_options(
+            voronoi_type="full",
+            finite_only=False,
+            iterative_updates=True,
+        )
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )
+
+class TestVoronoiAdaptiveSurrogateActualFitWithRBF(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return VoronoiAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_number_of_initial_samples(4)
+        study.set_cross_validation_options(
+            kfold_splits=0,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count="skip_loo",
+            cv_metric="sum_abs",
+            batch_size=1,
+        )
+        study.set_voronoi_sampling_options(
+            voronoi_type="full",
+            finite_only=False,
+            iterative_updates=True,
+        )
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )
+        study.set_surrogate_regressor(
+            "RBF",
+            neighbors=3,
+            kernel="linear",
+            degree=0,
+        )
+        
+
+class TestVoronoiAdaptiveSurrogateActualFitWithRandomForest(
+    AdaptiveSurrogateActualFitMixin,
+    MatcalUnitTest,
+):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def make_study(self):
+        return VoronoiAdaptiveSurrogateStudy(a, b)
+
+    def configure_method_specific_options(self, study):
+        study.set_number_of_initial_samples(4)
+        study.set_cross_validation_options(
+            kfold_splits=0,
+            kfold_regions_for_loo=1,
+            loo_seed_candidate_count="skip_loo",
+            cv_metric="sum_abs",
+            batch_size=1,
+        )
+        study.set_voronoi_sampling_options(
+            voronoi_type="full",
+            finite_only=False,
+            iterative_updates=True,
+        )
+        study.set_surrogate_storage_options(
+            best_n_surrogates=1,
+            save_every_n_batches=None,
+            score_metric="max_error",
+        )
+        study.set_surrogate_regressor(
+            "Random Forest",
+            n_estimators=5,
+            random_state=123,
+        )

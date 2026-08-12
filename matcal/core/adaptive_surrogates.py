@@ -5,7 +5,6 @@ from collections import OrderedDict
 import copy
 import numpy as np
 import os
-from sklearn.metrics import r2_score
 
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.objective import SimulationResultsSynchronizer
@@ -13,21 +12,29 @@ from matcal.core.parameter_studies import HaltonStudy
 from matcal.core.qoi_extractor import UserDefinedExtractor
 from matcal.core.state import State
 from matcal.core.study_base import StudyResults
-from matcal.core.utilities import (check_value_is_positive_integer, 
-                                   check_value_is_positive_integer_or_none,
-                                   check_value_is_array_like_of_reals, 
-                                   check_value_is_nonempty_str, 
-                                   check_value_is_array_like_of_reals, 
-                                   check_value_is_positive_real, 
-                                   check_value_is_bool, 
-                                   check_value_is_nonnegative_integer, 
-                                   check_item_is_correct_type)
+from matcal.core.utilities import (
+    check_item_is_correct_type,
+    check_value_is_array_like_of_reals, 
+    check_value_is_bool, 
+    check_value_is_nonempty_str, 
+    check_value_is_nonnegative_integer, 
+    check_value_is_nonnegative_real,
+    check_value_is_positive_integer, 
+    check_value_is_positive_integer_or_none,
+    check_value_is_positive_real, 
+)
 from matcal.core.serializer_wrapper import matcal_load, matcal_save
-from matcal.core.surrogates import (_root_mean_squared_error, 
-                                    _max_error_inf_norm, 
-                                    _process_surrogate_args_call, 
-                                    _check_params_in_range, 
-                                    _convert_param_array_to_dict)
+from matcal.core.surrogates import (
+    _calculate_response_error_metric,
+    _check_params_in_range, 
+    _convert_param_array_to_dict, 
+    _global_r2_score,
+    _max_error_inf_norm, 
+    _normalize_evaluation_information_names,
+    _process_surrogate_args_call, 
+    _root_mean_squared_error, 
+)
+
 
 logger = initialize_matcal_logger(__name__)
 
@@ -218,6 +225,62 @@ def _add_label_to_first_curve(style, label, curve_index):
     return style
 
 
+def _get_first_state_name(results, model_name):
+    """
+    Return the first state name stored for a model in StudyResults-like objects.
+    """
+    return results.simulation_history[model_name].state_names[0]
+
+
+def _extract_target_values_from_sim_qoi(sim_qoi, state_name, target_field):
+    """
+    Extract target-field values from a MatCal simulation QoI-like object.
+    """
+    return np.asarray(sim_qoi[state_name][0][target_field], dtype=float)
+
+
+def _format_sim_qois_to_matrix(sim_qois, state_name, target_field, n_qois):
+    """
+    Convert a sequence of simulation QoI objects into a dense matrix.
+
+    Returns an array with shape ``(n_samples, n_qois)``.
+    """
+    data = np.zeros((len(sim_qois), n_qois))
+
+    for idx, sim_qoi in enumerate(sim_qois):
+        data[idx, :] = _extract_target_values_from_sim_qoi(
+            sim_qoi,
+            state_name,
+            target_field,
+        )
+
+    return data
+
+
+def _format_batch_qois_to_matrix(
+    batch_qois,
+    model_name,
+    objective_name,
+    state_name,
+    target_field,
+    n_qois,
+):
+    """
+    Convert MatCal batch-evaluation QoIs into a dense matrix.
+    """
+    data = np.zeros((len(batch_qois), n_qois))
+
+    for idx, qoi_container in enumerate(batch_qois):
+        sim_qoi = qoi_container[model_name][objective_name]
+        data[idx, :] = _extract_target_values_from_sim_qoi(
+            sim_qoi.simulation_qois,
+            state_name,
+            target_field,
+        )
+
+    return data
+
+
 def _validate_error_type(error_type):
     check_value_is_nonempty_str(error_type, "error_type")
     error_type = error_type.lower().strip()
@@ -236,7 +299,7 @@ def _validate_error_statistic(error_statistic):
     if error_statistic is None:
         return None
 
-    check_value_is_nonempty_str(error_statistic, "error_statistic")
+    check_value_is_nonempty_str(error_statistic, "error_statistic", 1)
     error_statistic = error_statistic.lower().strip()
 
     valid_error_statistics = ("mean", "median", "max")
@@ -268,9 +331,350 @@ def _get_parameter_bounds(parameters):
     return bounds
 
 
+def _validate_cv_scale(cv_scale):
+    """
+    Validate and normalize the cross-validation response scaling option.
+
+    Accepted values are ``None``, a positive scalar, a positive array-like
+    object, or the string ``"cbrt"``.
+    """
+    if cv_scale is None:
+        return None
+
+    if isinstance(cv_scale, str):
+        cv_scale = cv_scale.lower().strip()
+        if cv_scale == "cbrt":
+            return cv_scale
+        raise ValueError("cv_scale string option must be 'cbrt'.")
+
+    scale = np.asarray(cv_scale, dtype=float)
+    if scale.size == 0 or np.any(~np.isfinite(scale)) or np.any(scale <= 0):
+        raise ValueError("cv_scale must contain finite positive values.")
+
+    return float(scale) if scale.ndim == 0 else scale
+
+
+def _get_valid_kfold_split_count(kfold_splits, n_samples):
+    """
+    Return a valid number of K-fold splits for the current sample count.
+
+    If the requested split count is larger than the sample count, it is reduced
+    to a valid value and a warning is emitted.
+    """
+    check_value_is_nonnegative_integer(kfold_splits, "kfold_splits")
+
+    if kfold_splits == 0:
+        return 0
+
+    if kfold_splits == 1:
+        raise ValueError("kfold_splits must be 0 to disable K-fold CV or at least 2.")
+
+
+    if n_samples < 2:
+        raise ValueError("At least two samples are required for K-fold CV.")
+
+    if kfold_splits <= n_samples:
+        return int(kfold_splits)
+
+    new_kfold_splits = min(max(2, n_samples // 2), n_samples)
+    logger.warning(f"Reducing kfold_splits from {kfold_splits} to {new_kfold_splits}.")
+    return int(new_kfold_splits)
+
+
+def _make_standard_kfold_splits(X, kfold_splits, random_seed=None):
+    """
+    Make reproducible shuffled K-fold splits.
+    """
+    from sklearn.model_selection import KFold
+
+    splitter = KFold(
+        n_splits=kfold_splits,
+        shuffle=True,
+        random_state=random_seed,
+    )
+    return splitter.split(X)
+
+
+def _make_group_kfold_splits(X, y, groups, kfold_splits):
+    """
+    Make group-aware K-fold splits.
+    """
+    if groups is None:
+        raise RuntimeError(
+            "groups must be provided when group_kfold is True."
+        )
+
+    from sklearn.model_selection import GroupKFold
+
+    splitter = GroupKFold(n_splits=kfold_splits)
+    return splitter.split(X, y, groups)
+
+
+def _make_kfold_cv_splits(
+    X,
+    y,
+    kfold_splits,
+    group_kfold=False,
+    groups=None,
+    random_seed=None,
+):
+    """
+    Make either standard or grouped K-fold splits.
+    """
+    if group_kfold:
+        return _make_group_kfold_splits(X, y, groups, kfold_splits)
+
+    return _make_standard_kfold_splits(X, kfold_splits, random_seed)
+
+
+def _evaluate_kfold_cv_splits(kfold_runner, X, y, splits):
+    """
+    Evaluate supplied K-fold splits with a KFoldCrossValidation-like runner.
+    """
+    fold_errors = OrderedDict()
+
+    for kfold_count, (train_index, test_index) in enumerate(splits):
+        fold_errors[kfold_count] = kfold_runner.evaluate_fold(
+            train_index,
+            test_index,
+            X,
+            y,
+            kfold_count,
+        )
+
+    return fold_errors
+
+
+def _perform_kfold_cv(kfold_runner, X, y, groups=None):
+    """
+    Perform K-fold cross validation using a KFoldCrossValidation-like runner.
+    """
+    splits = _make_kfold_cv_splits(
+        X,
+        y,
+        kfold_runner.kfold_splits,
+        group_kfold=kfold_runner.group_kfold,
+        groups=groups,
+        random_seed=kfold_runner.random_seed,
+    )
+
+    return _evaluate_kfold_cv_splits(kfold_runner, X, y, splits)
+
+
+def _perform_leave_one_out_cv(loo_runner, X, y, indices=None):
+    """
+    Perform leave-one-out cross validation for selected sample indices.
+    """
+    if indices is None:
+        indices = np.arange(X.shape[0], dtype=int)
+    else:
+        indices = np.asarray(indices, dtype=int)
+
+    loo_errors = OrderedDict()
+
+    for loo_count, index in enumerate(indices):
+        loo_errors[loo_count] = loo_runner.evaluate_loo_sample(
+            X,
+            y,
+            int(index),
+        )
+
+    return loo_errors
+
+
+_VALID_SURROGATE_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
+
+
+def _validate_surrogate_storage_options(
+    best_n_surrogates=1,
+    save_every_n_batches=None,
+    score_metric="max_error",
+):
+    """
+    Validate and normalize surrogate-storage options.
+
+    Returns
+    -------
+    tuple
+        ``(best_n_surrogates, save_every_n_batches, normalized_score_metric)``.
+        The metric alias ``"score"`` is normalized to ``"r2"``.
+    """
+    check_value_is_positive_integer_or_none(
+        best_n_surrogates,
+        "best_n_surrogates",
+    )
+    check_value_is_positive_integer_or_none(
+        save_every_n_batches,
+        "save_every_n_batches",
+    )
+    check_value_is_nonempty_str(score_metric, "score_metric")
+
+    score_metric = score_metric.lower().strip()
+
+    if score_metric not in _VALID_SURROGATE_STORAGE_METRICS:
+        raise ValueError(
+            "Invalid surrogate storage score metric. "
+            f"Supported metrics are {_VALID_SURROGATE_STORAGE_METRICS}. "
+            f"Received '{score_metric}'."
+        )
+
+    if best_n_surrogates is None and save_every_n_batches is None:
+        raise ValueError(
+            "At least one surrogate retention option must be active. "
+            "Set best_n_surrogates to a positive integer or "
+            "save_every_n_batches to a positive integer."
+        )
+
+    if score_metric == "score":
+        score_metric = "r2"
+
+    return best_n_surrogates, save_every_n_batches, score_metric
+
+
+def _metric_value_for_record(record, metric):
+    value = record[metric]
+
+    if value is None or np.isnan(value):
+        if metric == "r2":
+            return -np.inf
+        return np.inf
+
+    return value
+
+
+def _sorted_record_indices_by_metric(records, metric):
+    reverse = metric == "r2"
+
+    return [
+        rec["iteration_index"]
+        for rec in sorted(
+            records,
+            key=lambda rec: _metric_value_for_record(rec, metric),
+            reverse=reverse,
+        )
+    ]
+
+
+def _validate_test_sample_error_metric(metric):
+    check_value_is_nonempty_str(metric, "metric")
+    metric = metric.lower().strip()
+
+    valid_metrics = (
+        "max_error",
+        "max_abs_error",
+        "linf",
+        "rmse",
+        "mae",
+        "mean_abs_error",
+    )
+
+    if metric not in valid_metrics:
+        raise ValueError(
+            "Unsupported test-sample error metric. Supported values are "
+            "'max_error', 'max_abs_error', 'linf', 'rmse', 'mae', and "
+            "'mean_abs_error'. "
+            f"Received '{metric}'."
+        )
+
+    return metric
+
+
+def _plot_limit_padding(lower, upper):
+    if np.isclose(lower, upper):
+        return 0.05 * max(abs(lower), 1.0)
+    return 0.05 * (upper - lower)
+
+
+def _padded_limits_from_finite_values(values):
+    if values.size == 0:
+        return None
+
+    lower = np.nanmin(values)
+    upper = np.nanmax(values)
+    pad = _plot_limit_padding(lower, upper)
+
+    return lower - pad, upper + pad
+
+
+def _get_padded_plot_limits(values, include_zero=False):
+    values = np.asarray(values, dtype=float).ravel()
+    values = values[np.isfinite(values)]
+
+    if include_zero:
+        values = np.concatenate((values, np.array([0.0])))
+
+    return _padded_limits_from_finite_values(values)
+
+
+def _sorted_error_items(error_records):
+    """
+    Sort error records from largest scalar error to smallest.
+
+    Expected record values are ``(error, payload)``.
+    """
+    items = [
+        (key, value[0], value[1])
+        for key, value in error_records.items()
+    ]
+
+    return sorted(items, key=lambda item: item[1], reverse=True)
+
+
+def _package_unique_bounded_points(points, bounds, n_parameters):
+    """
+    Return unique finite in-bound points.
+    """
+    points = _normalize_candidate_array(points, n_parameters)
+
+    if points.size == 0:
+        return np.empty((0, n_parameters))
+
+    points = np.unique(points, axis=0)
+
+    return _filter_points_within_bounds(
+        points,
+        bounds,
+        n_parameters,
+    )
+
+
+def _reduce_voronoi_candidates(
+    candidates,
+    n_parameters,
+    batch_size,
+    thin,
+    random_selection,
+    random_generator,
+):
+    """
+    Apply Voronoi candidate thinning/random down-selection.
+
+    In one-at-a-time mode, preserve full ranked candidate order.
+    """
+    candidates = _normalize_candidate_array(candidates, n_parameters)
+
+    if candidates.shape[0] == 0:
+        return candidates
+
+    if batch_size == 1:
+        return candidates
+
+    if thin is not None:
+        candidates = candidates[::thin]
+
+    elif random_selection is not None:
+        candidates = _random_subset_rows(
+            candidates,
+            random_selection,
+            random_generator,
+            n_parameters,
+        )
+
+    return candidates[:batch_size]
+
+
 def _setup_pyapprox_adaptive_sparse_grid_fitter(
     n_parameters: int,
-    n_qois: int,
     bounds,
     basis_type: str = "lagrange",
     piecewise_degree: int = 2,
@@ -282,8 +686,8 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
 
     Notes
     -----
-    * Parameters are assumed to be in native/physical parameter space.
-    * The physical parameter bounds are supplied to PyApprox through the
+    * Parameters are assumed to be in original parameter space.
+    * The parameter bounds are supplied to PyApprox through the
       one-dimensional marginal distributions.
     * basis_type:
         - 'lagrange': global Clenshaw-Curtis Lagrange
@@ -366,14 +770,14 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
 
 class AdaptiveSurrogate:
     """
-    Stores retained surrogate objects, training/test score histories, test data,
+    Stores retained surrogate objects, test score histories, test data,
     and metadata describing the progress of adaptive surrogate training.
 
     The adaptive surrogate study may generate many surrogate models during
     training. To avoid unnecessarily large ``.joblib`` files, this class does
     not have to retain every trained surrogate object. Instead, the retention
     policy is configurable through
-    :meth:`AdaptiveSurrogateStudyBase.set_surrogate_storage_options`.
+    :meth:`~AdaptiveSurrogateStudyBase.set_surrogate_storage_options`.
 
     Regardless of the surrogate-object retention policy, this class always
     stores:
@@ -394,9 +798,6 @@ class AdaptiveSurrogate:
     By default, only the best surrogate, as measured by maximum absolute error
     on the test set, is retained.
     """
-
-    _VALID_STORAGE_METRICS = ("rmse", "max_error", "r2", "score")
-
     def __init__(self, target_field_name, indep_variable_name,
                 indep_variable_values, test_params, test_responses,
                 param_names, bounds,
@@ -549,45 +950,29 @@ class AdaptiveSurrogate:
         ...     score_metric="rmse",
         ... )
         """
-        check_value_is_positive_integer_or_none(best_n_surrogates, "best_n_surrogates")
-        check_value_is_positive_integer_or_none(save_every_n_batches, "save_every_n_batches")
-        check_value_is_nonempty_str(score_metric, "score_metric")
-
-        score_metric = score_metric.lower().strip()
-        if score_metric not in self._VALID_STORAGE_METRICS:
-            raise ValueError(
-                "Invalid surrogate storage score metric. "
-                f"Supported metrics are {self._VALID_STORAGE_METRICS}. "
-                f"Received '{score_metric}'."
-            )
-
-        if best_n_surrogates is None and save_every_n_batches is None:
-            raise ValueError(
-                "At least one surrogate retention option must be active. "
-                "Set best_n_surrogates to a positive integer or "
-                "save_every_n_batches to a positive integer."
-            )
-
-        if score_metric == "score":
-            score_metric = "r2"
-
-        self._storage_best_n_surrogates = best_n_surrogates
-        self._storage_every_n_batches = save_every_n_batches
-        self._storage_score_metric = score_metric
+        (
+            self._storage_best_n_surrogates,
+            self._storage_every_n_batches,
+            self._storage_score_metric,
+        ) = _validate_surrogate_storage_options(
+            best_n_surrogates,
+            save_every_n_batches,
+            score_metric,
+        )
 
     def enforce_training_data_parameter_range(self, enforce_training_data_parameter_range=True):
         """
         Activate or deactivate parameter-range enforcement during surrogate calls.
 
         By default, the surrogate raises an error if it is evaluated at
-        parameter values outside the parameter bounds used to generate the
-        training data. Calling this method with ``False`` permits extrapolative
-        surrogate calls outside the training-data parameter range. Calling it
+        parameter values outside the study parameter bounds. 
+        Calling this method with ``False`` permits extrapolative
+        surrogate calls outside the study parameter range. Calling it
         again with ``True`` restores the default range-checking behavior.
 
         :param enforce_training_data_parameter_range: If ``True``, reject
-            surrogate calls outside the training parameter bounds. If ``False``,
-            allow calls outside the training parameter bounds.
+            surrogate calls outside the study parameter bounds. If ``False``,
+            allow calls outside the study parameter bounds.
         :type enforce_training_data_parameter_range: bool
 
         :raises TypeError: If ``enforce_training_data_parameter_range`` is not
@@ -596,6 +981,11 @@ class AdaptiveSurrogate:
         check_value_is_bool(enforce_training_data_parameter_range, 
                             "enforce_training_data_parameter_range")
         self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
+        for surrogate in self._surrogates.values():
+            if hasattr(surrogate, "enforce_training_data_parameter_range"):
+                surrogate.enforce_training_data_parameter_range(
+                    enforce_training_data_parameter_range
+                )
 
     def _add_iteration(self, surrogate, nsamples) -> None:
         """
@@ -610,11 +1000,7 @@ class AdaptiveSurrogate:
 
         rmse = _root_mean_squared_error(self._test_responses, surrogate_values)
         max_abs_error = _max_error_inf_norm(self._test_responses, surrogate_values)
-
-        if self._test_responses.shape[1] > 1:
-            score = r2_score(self._test_responses, surrogate_values)
-        else:
-            score = np.nan
+        score = _global_r2_score(self._test_responses, surrogate_values)
 
         self._root_mean_squared_errors.append(rmse)
         self._max_errors.append(max_abs_error)
@@ -666,28 +1052,6 @@ class AdaptiveSurrogate:
 
         self._prune_score_based_retained_surrogates()
 
-    def _metric_value_for_record(self, record):
-        metric = self._storage_score_metric
-        value = record[metric]
-        if value is None or np.isnan(value):
-            if metric == "r2":
-                return -np.inf
-            return np.inf
-        return value
-
-    def _sorted_record_indices_by_metric(self):
-        metric = self._storage_score_metric
-        reverse = metric == "r2"
-
-        return [
-            rec["iteration_index"]
-            for rec in sorted(
-                self._surrogate_iteration_records,
-                key=self._metric_value_for_record,
-                reverse=reverse,
-            )
-        ]
-
     def _prune_score_based_retained_surrogates(self):
         """
         Retain:
@@ -700,7 +1064,10 @@ class AdaptiveSurrogate:
             return
 
         best_indices = set(
-            self._sorted_record_indices_by_metric()[:self._storage_best_n_surrogates]
+            _sorted_record_indices_by_metric(
+                self._surrogate_iteration_records,
+                self._storage_score_metric,
+            )[:self._storage_best_n_surrogates]
         )
 
         periodic_indices = set()
@@ -797,7 +1164,10 @@ class AdaptiveSurrogate:
         """
         if not self._surrogate_iteration_records:
             return None
-        best_order = self._sorted_record_indices_by_metric()
+        best_order = _sorted_record_indices_by_metric(
+            self._surrogate_iteration_records,
+            self._storage_score_metric,
+        )
         for idx in best_order:
             if idx in self._surrogates:
                 return idx
@@ -929,28 +1299,6 @@ class AdaptiveSurrogate:
         error_type = _validate_error_type(error_type)
         return self._get_surrogate_error_array(surrogate_index, error_type)
 
-    def _validate_test_sample_error_metric(self, metric):
-        check_value_is_nonempty_str(metric, "metric")
-        metric = metric.lower().strip()
-
-        valid_metrics = (
-            "max_error",
-            "max_abs_error",
-            "linf",
-            "rmse",
-            "mae",
-            "mean_abs_error",
-        )
-        if metric not in valid_metrics:
-            raise ValueError(
-                "Unsupported test-sample error metric. Supported values are "
-                "'max_error', 'max_abs_error', 'linf', 'rmse', 'mae', and "
-                "'mean_abs_error'. "
-                f"Received '{metric}'."
-            )
-
-        return metric
-
     def test_sample_errors(self, surrogate_index="best", metric="max_error"):
         """
         Return one scalar error per stored test sample.
@@ -974,7 +1322,7 @@ class AdaptiveSurrogate:
         :return: One scalar error value per stored test sample.
         :rtype: numpy.ndarray
         """
-        metric = self._validate_test_sample_error_metric(metric)
+        metric = _validate_test_sample_error_metric(metric)
         raw_error = self._raw_surrogate_error(surrogate_index)
 
         if metric in ("max_error", "max_abs_error", "linf"):
@@ -1077,9 +1425,10 @@ class AdaptiveSurrogate:
         The score history is retained for all batches, even if the corresponding
         surrogate object was discarded by the storage policy.
 
-        :param surrogate_index: Index into the full score history. The default
-            ``-1`` returns the score from the most recent adaptive-training
-            batch.
+        :param surrogate_index: Integer index into the full score history. This method
+            does not accept retained-surrogate selectors such as ``"best"`` or
+            ``"latest"``. To get the score for the best retained surrogate, pass
+            ``surrogate.best_surrogate_iteration_index``.
         :type surrogate_index: int
 
         :return: :math:`R^2` score for the selected batch. Returns ``nan`` when
@@ -1097,7 +1446,30 @@ class AdaptiveSurrogate:
         :rtype: list[int]
         """
         return self._sample_counts
-    
+
+    @property
+    def r2_history(self):
+        """
+        Return the full original-response-space global R2 score history.
+
+        The R2 score is calculated for each adaptive-training batch using the
+        stored test responses and the candidate surrogate predictions in the
+        original response space.
+
+        :return: R2 value for every adaptive-training batch.
+        :rtype: list[float]
+        """
+        return self._r2_scores
+
+    @property
+    def score_history(self):
+        """
+        Return the full original-response-space global R2 score history.
+
+        This is an alias for :attr:`r2_history`.
+        """
+        return self._r2_scores
+
     def __call__(self, *args, surrogate_index="best", batch_evaluate=False,
                  transpose=False, **kwargs):
         """
@@ -1846,7 +2218,7 @@ class AdaptiveSurrogate:
         selected test sample.
 
         Matplotlib is imported lazily when this method is called, so importing
-        :mod:`matcal.core.adaptive_surrogates` does not require Matplotlib unless
+        :mod:`~matcal.core.adaptive_surrogates` does not require Matplotlib unless
         plotting is requested.
 
         Axis labels automatically replace underscores with spaces. For example,
@@ -2085,16 +2457,10 @@ class AdaptiveSurrogate:
         )
         return figures, axes_groups, worst_indices
 
-    def plot_worst_n(self, n=5, **kwargs):
-        """
-        Lowercase alias for :meth:`plot_worst_N`.
-        """
-        return self.plot_worst_N(N=n, **kwargs)
-
     def _validate_plot_worst_N_inputs(self, N, n_figures, metric, error_type):
         check_value_is_positive_integer(N, "N")
         check_value_is_positive_integer(n_figures, "n_figures")
-        metric = self._validate_test_sample_error_metric(metric)
+        metric = _validate_test_sample_error_metric(metric)
         error_type = _validate_error_type(error_type)
         return metric, error_type
 
@@ -2181,11 +2547,11 @@ class AdaptiveSurrogate:
 
     def _get_plot_worst_N_limits(self, arrays, worst_indices, error_type):
         limits = {}
-        limits["x"] = self._get_padded_plot_limits(arrays["x"])
+        limits["x"] = _get_padded_plot_limits(arrays["x"])
         limits["response_y"] = self._get_plot_worst_N_response_limits(
             arrays, worst_indices
         )
-        limits["error_y"] = self._get_padded_plot_limits(
+        limits["error_y"] = _get_padded_plot_limits(
             arrays["error"][worst_indices, :].ravel(),
             include_zero=error_type == "signed",
         )
@@ -2196,27 +2562,7 @@ class AdaptiveSurrogate:
             arrays["test"][worst_indices, :].ravel(),
             arrays["prediction"][worst_indices, :].ravel(),
         ))
-        return self._get_padded_plot_limits(values)
-
-    def _get_padded_plot_limits(self, values, include_zero=False):
-        values = np.asarray(values, dtype=float).ravel()
-        values = values[np.isfinite(values)]
-        if include_zero:
-            values = np.concatenate((values, np.array([0.0])))
-        return self._padded_limits_from_finite_values(values)
-
-    def _padded_limits_from_finite_values(self, values):
-        if values.size == 0:
-            return None
-        lower = np.nanmin(values)
-        upper = np.nanmax(values)
-        pad = self._plot_limit_padding(lower, upper)
-        return lower - pad, upper + pad
-
-    def _plot_limit_padding(self, lower, upper):
-        if np.isclose(lower, upper):
-            return 0.05 * max(abs(lower), 1.0)
-        return 0.05 * (upper - lower)
+        return _get_padded_plot_limits(values)
 
     def _make_plot_worst_N_figures(
         self, index_groups, arrays, labels, styles, limits, sample_errors,
@@ -2408,8 +2754,8 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
     handles the additional steps required to evaluate those objects:
 
     * process MatCal-style positional, keyword, dictionary, or batch inputs;
-    * check physical parameter bounds;
-    * evaluate the PyApprox sparse-grid surrogate in native parameter space; and
+    * check parameter bounds;
+    * evaluate the PyApprox sparse-grid surrogate in original input parameter space; and
     * package the response with the independent-variable values.
 
     Surrogate-object retention, score histories, test data storage, and
@@ -2433,14 +2779,14 @@ class SparseGridAdaptiveSurrogate(AdaptiveSurrogate):
             if params_array.shape[0] != len(self._param_names):
                 params_array = params_array.T
 
-        # Range check in physical/native parameter space.
+        # Range check on parameters in original parameter space.
         params_dict = _convert_param_array_to_dict(params_array.T, self._param_names)
         _check_params_in_range(
             params_dict, self._bounds.T,
             self._enforce_training_data_parameter_range
         )
 
-        # PyApprox sparse grids are constructed directly on the physical/native
+        # PyApprox sparse grids are constructed directly on the input
         # parameter domain. No parameter transform is performed.
 
         # PyApprox returns (n_qois, nsamples).
@@ -2511,6 +2857,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         self._surrogate = None
         self._user_test_data = None
+        self._test_eval_info = None
 
         self._max_training_samples=None
         self._training_samples_user_set = False
@@ -2540,7 +2887,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         When
         the *rmse* falls below ``rmse_goal`` **or** the
         *maximum absolute* error falls below ``max_abs_error_goal`` the training
-        loop terminates (provided at least two batches have been evaluated).
+        loop terminates after at least one surrogate has been scored.
 
         :param rmse_goal: Desired upper bound for the root mean squared
             error. Must be a positive number. 
@@ -2589,8 +2936,8 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         By default we test against ``max_training_samples``/20 or 
         the number of parameters*10, whichever is greater.
         
-        :param max_training_samples: desired number of test samples
-        :type max_training_samples: int
+        :param number_of_test_samples: Number of test samples used for scoring the adaptive surrogate.
+        :type number_of_test_samples: int
         """
         self._test_samples_user_set = True
         check_value_is_positive_integer(number_of_test_samples, "number_of_test_samples")
@@ -2600,10 +2947,10 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def set_max_training_samples(self, max_training_samples=1000):
         """
-        Set the maximum number of training samples you want to be run for 
-        Sparse Grid surrogate generation. If the convergence criteria is not reached, 
-        the training for the surrogate will stop after max_training_samples has been 
-        reached.
+        If the convergence criteria are not reached, surrogate training stops after the
+        current number of model evaluations becomes greater than ``max_training_samples``.
+        The adaptive study checks this limit after each adaptive batch, so the final
+        number of evaluations can exceed ``max_training_samples``.
         
         :param max_training_samples: desired maximum number of samples
         :type max_training_samples: int
@@ -2641,8 +2988,8 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         :raises TypeError: If ``study_results`` is neither a ``StudyResults`` instance
             nor a string.
-        :raises FileNotFoundError: If ``study_results`` is a string but the file
-            cannot be located or loaded.
+        :raises Exception: Exceptions from ``matcal_load`` if
+            ``study_results`` is a string and the file cannot be located or loaded.
         :raises RuntimeError: If the loaded object is not a ``StudyResults`` instance.
 
         :notes:
@@ -2697,12 +3044,51 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
     def _get_test_data(self):
         results = None
         if self._user_test_data is not None:
-            results = self._user_test_data
+            results = self._prepare_user_test_data_for_adaptive_study(
+                self._user_test_data
+            )
         else:
             results = self._run_test_sampling()
+
+        self._test_eval_info = results
         test_params = self._format_params(results)
         test_responses = self._format_output(results)
         return test_params, test_responses
+
+    def _prepare_user_test_data_for_adaptive_study(self, study_results):
+        """
+        Normalize user-supplied test-data names for this adaptive surrogate study.
+
+        Adaptive surrogate studies support one model and one internally generated
+        SimulationResultsSynchronizer objective. User-supplied test data may have
+        equivalent data stored under different runtime-generated model/objective
+        names. When the supplied test data are unambiguous, rename those entries at
+        runtime so the rest of the adaptive surrogate workflow can use the standard
+        study model/objective names.
+        """
+        model_names = self._get_model_names()
+
+        if len(model_names) != 1:
+            raise RuntimeError(
+                f"{self.__class__.__name__} requires exactly one model for "
+                "adaptive surrogate testing. Model names found in the current "
+                f"study are {model_names}."
+            )
+
+        if self._results_synchronizer is None:
+            raise RuntimeError(
+                "The adaptive surrogate study has not created its internal "
+                "SimulationResultsSynchronizer. Call add_evaluation_set before "
+                "launching the study or preparing user test data."
+            )
+
+        return _normalize_evaluation_information_names(
+            study_results,
+            required_model_name=model_names[0],
+            required_objective_name=self._results_synchronizer.name,
+            data_set_name="adaptive surrogate test data",
+            logger_on=True,
+        )
 
     def _run_test_sampling(self):
         """
@@ -2715,7 +3101,8 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         2. Calls the parent ``HaltonStudy`` ``launch`` method to generate the
            test samples.
         3. Restores the original working directory.
-        4. Stores the formatted test parameters and responses for later use.
+        4. Returns the generated test-study results, which are formatted by
+        ``_get_test_data``.
 
         :raises RuntimeError: If the test‑sampling launch fails.
         """
@@ -2731,6 +3118,16 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             self.set_seed(seed)
         return test_results
 
+    def set_seed(self, seed):
+        """
+        Set the study seed and synchronize the Voronoi sampler RNG.
+
+        This keeps K-fold assignment, K-means grouping, and random candidate
+        selection tied to the study seed.
+        """
+        super().set_seed(seed)
+        self._random_generator = np.random.default_rng(seed)
+
     def set_test_group_random_seed(self, seed):
         """
         Set the random seed for the random generator that the study uses
@@ -2739,10 +3136,10 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         :meth:`launch` to
         guarantee reproducibility.
 
-        :param seed: Integer seed for the pseudo‑random number generator.
+        :param seed: Nonnegative integer seed for the pseudo‑random number generator.
         :type seed: int
         """
-        check_value_is_positive_integer(seed, "seed")
+        check_value_is_nonnegative_integer(seed, "seed")
         self._test_group_random_seed = seed
 
     def _update_work_dir_for_test_sampling(self):
@@ -2939,9 +3336,6 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         batch_results = eval_meth(self._parameter_sets_to_evaluate)
         return self._format_batch_results(batch_results, parameter_sets)
 
-    def _add_parameter_evaluation(self, **p):
-      super()._add_parameter_evaluation(**p)
-
     @property
     def surrogate(self):
         """
@@ -2961,7 +3355,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
         The surrogate (an :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` 
         instance) is periodically saved to
-        disk with :func:`matcal.core.serializer_wrapper.matcal_save`.  The filename
+        disk with :func:`~matcal.core.serializer_wrapper.matcal_save`.  The filename
         must be a non‑empty string that ends with the ``.joblib`` extension.
         The directory
         component of the path is not created automatically; it must already exist
@@ -2977,7 +3371,7 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
         :raises TypeError: If *filename* is not a string.
         """
         check_value_is_nonempty_str(filename, "filename")
-        if ".joblib" not in filename:
+        if not filename.endswith(".joblib"):
             raise ValueError("The save filename for the Adaptive Surrogate Study " +
                 f"must end with \".joblib\". Passed filename is \"{filename}\".")
         self._surrogate_save_filename = filename
@@ -3023,15 +3417,17 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
     def _format_output(self, results):
         model_name = self._get_model_names()[0]
         objective = self._results_synchronizer
-        state_name = results.simulation_history[model_name].state_names[0]
+        state_name = _get_first_state_name(results, model_name)
+
         qois = results.qoi_history[f"{model_name}:{objective.name}"]
         sim_qois = qois.simulation_qois
-        nsamples = results.number_of_evaluations
-        nqois = len(self._independent_variable_values)
-        data = np.zeros((nsamples, nqois))
-        for idx, sim_qoi in enumerate(sim_qois):
-            data[idx,:] = sim_qoi[state_name][0][self._target_field_name]
-        return data
+
+        return _format_sim_qois_to_matrix(
+            sim_qois,
+            state_name,
+            self._target_field_name,
+            len(self._independent_variable_values),
+        )
 
     def set_surrogate_storage_options(self, best_n_surrogates=1,
                                       save_every_n_batches=None,
@@ -3058,26 +3454,15 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
             ``"score"`` is treated as an alias for ``"r2"``.
         :type score_metric: str
         """
-        check_value_is_positive_integer_or_none(best_n_surrogates, "best_n_surrogates")
-        check_value_is_positive_integer_or_none(save_every_n_batches, "save_every_n_batches")
-        check_value_is_nonempty_str(score_metric, "score_metric")
-
-        score_metric = score_metric.lower().strip()
-        valid_metrics = ("rmse", "max_error", "r2", "score")
-        if score_metric not in valid_metrics:
-            raise ValueError(
-                f"score_metric must be one of {valid_metrics}. "
-                f"Received '{score_metric}'."
-            )
-
-        if best_n_surrogates is None and save_every_n_batches is None:
-            raise ValueError(
-                "At least one surrogate retention option must be active."
-            )
-
-        self._surrogate_storage_best_n_surrogates = best_n_surrogates
-        self._surrogate_storage_every_n_batches = save_every_n_batches
-        self._surrogate_storage_score_metric = score_metric
+        (
+            self._surrogate_storage_best_n_surrogates,
+            self._surrogate_storage_every_n_batches,
+            self._surrogate_storage_score_metric,
+        ) = _validate_surrogate_storage_options(
+            best_n_surrogates,
+            save_every_n_batches,
+            score_metric,
+        )
 
 
 class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
@@ -3122,7 +3507,6 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
         fitter = _setup_pyapprox_adaptive_sparse_grid_fitter(
             self._number_parameters,
-            n_qois,
             bounds=self._bounds,
             basis_type=self._sg_basis_type,
             piecewise_degree=self._sg_piecewise_degree,
@@ -3137,7 +3521,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                 logger.info("No more admissible sparse-grid indices. Stopping.")
                 break
 
-            # new_samples are physical/native parameter values with shape
+            # new_samples are in the original input parameter space with shape
             # (nvars, nsamples_new).
             new_vals = self._matcal_evaluate_parameter_sets_batch_adaptive_training(new_samples)
 
@@ -3171,13 +3555,16 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _format_batch_results(self, batch_results, parameter_sets_from_pyapprox):
         model_name = self._get_model_names()[0]
         objective_name = self._results_synchronizer.name
-        state_name = self._results.simulation_history[model_name].state_names[0]
-        formatted_results = np.zeros((parameter_sets_from_pyapprox.shape[1],
-                                      len(self._independent_variable_values)))
-        for idx, qoi in enumerate(batch_results["qois"]):
-            qoi = qoi[model_name][objective_name]
-            formatted_results[idx, :] = qoi.simulation_qois[state_name][0][self._target_field_name]
-        return formatted_results
+        state_name = _get_first_state_name(self._results, model_name)
+
+        return _format_batch_qois_to_matrix(
+            batch_results["qois"],
+            model_name,
+            objective_name,
+            state_name,
+            self._target_field_name,
+            len(self._independent_variable_values),
+        )
 
     def set_sparse_grid_basis(self, basis_type="lagrange", piecewise_degree=2):
         """
@@ -3223,7 +3610,7 @@ class SparseGridAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
 
 def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations, 
-                         test_eval_info, target_field, save_filename='voronoi_surrogate',  
+                         test_eval_info, target_field, save_filename=None,  
                          logger_on=True, **kwargs):
     from matcal.core.surrogates import SurrogateGenerator
     decomp_var=0.99
@@ -3236,9 +3623,526 @@ def _fit_surrogate_model(eval_info, interpolation_field, interpolation_locations
     surrogate_generator.set_fields_of_interest(target_field)
     surrogate_generator.set_PCA_details(decomp_var=decomp_var)
     surrogate_generator._logger_on=logger_on
-    save_filename = save_filename.split(".joblib")[0]
+    if save_filename is not None:
+        save_filename = save_filename.split(".joblib")[0]
     return surrogate_generator.generate(save_filename)
         
+
+def _make_bounded_nd_grid(bounds, npts_along_dim):
+    """
+    Create a Cartesian grid over a bounded parameter domain.
+
+    This is a deterministic, side-effect-free helper used by both
+    :class:`VoronoiAdaptiveSurrogateStudy` and :class:`VoronoiTessellation`.
+
+    :param bounds: Parameter bounds with shape ``(n_parameters, 2)``.
+        Column 0 contains lower bounds and column 1 contains upper bounds.
+    :type bounds: array-like
+
+    :param npts_along_dim: Number of grid points along each parameter dimension.
+    :type npts_along_dim: int
+
+    :return: Grid points with shape ``(npts_along_dim**n_parameters,
+        n_parameters)``.
+    :rtype: numpy.ndarray
+
+    :raises ValueError: If ``bounds`` does not have shape ``(n_parameters, 2)``.
+    """
+    check_value_is_positive_integer(npts_along_dim, "npts_along_dim")
+
+    bounds = np.asarray(bounds, dtype=float)
+
+    if bounds.ndim != 2 or bounds.shape[1] != 2:
+        raise ValueError(
+            "bounds must have shape (n_parameters, 2). "
+            f"Received shape {bounds.shape}."
+        )
+
+    axes = [
+        np.linspace(bounds[dim, 0], bounds[dim, 1], npts_along_dim)
+        for dim in range(bounds.shape[0])
+    ]
+
+    mesh = np.meshgrid(*axes, indexing="xy")
+    return np.column_stack([axis_values.ravel() for axis_values in mesh])
+
+
+def _normalize_candidate_array(candidates, n_parameters):
+    """
+    Convert candidate sample locations to a two-dimensional floating-point array.
+
+    Empty input is normalized to shape ``(0, n_parameters)``. A single candidate
+    point with shape ``(n_parameters,)`` is normalized to shape
+    ``(1, n_parameters)``.
+
+    :param candidates: Candidate points.
+    :type candidates: array-like
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :return: Candidate array with shape ``(n_candidates, n_parameters)``.
+    :rtype: numpy.ndarray
+
+    :raises ValueError: If the candidate array does not have one column per
+        parameter.
+    """
+    check_value_is_positive_integer(n_parameters, "n_parameters")
+
+    candidates = np.asarray(candidates, dtype=float)
+
+    if candidates.size == 0:
+        return np.empty((0, n_parameters))
+
+    candidates = np.atleast_2d(candidates)
+
+    if candidates.ndim != 2 or candidates.shape[1] != n_parameters:
+        raise ValueError(
+            f"Expected candidate points with {n_parameters} columns. "
+            f"Received shape {candidates.shape}."
+        )
+
+    return candidates
+
+
+def _filter_points_within_bounds(points, bounds, n_parameters):
+    """
+    Return finite points that lie inside inclusive parameter bounds.
+
+    Points containing ``NaN`` or infinite values are discarded. Bounds are
+    inclusive, so points exactly on the lower or upper bound are retained.
+
+    :param points: Candidate points.
+    :type points: array-like
+
+    :param bounds: Parameter bounds with shape ``(n_parameters, 2)``.
+    :type bounds: array-like
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :return: Bounded finite points with shape ``(n_valid, n_parameters)``.
+    :rtype: numpy.ndarray
+    """
+    points = _normalize_candidate_array(points, n_parameters)
+    bounds = np.asarray(bounds, dtype=float)
+
+    expected_shape = (n_parameters, 2)
+    if bounds.shape != expected_shape:
+        raise ValueError(
+            f"bounds must have shape {expected_shape}. Received {bounds.shape}."
+        )
+
+    if points.size == 0:
+        return np.empty((0, n_parameters))
+
+    lower_bounds = bounds[:, 0]
+    upper_bounds = bounds[:, 1]
+
+    mask = np.isfinite(points).all(axis=1)
+    mask &= ((points >= lower_bounds) & (points <= upper_bounds)).all(axis=1)
+
+    return points[mask]
+
+
+def _remove_duplicate_rows_against_existing(
+    candidate_points,
+    existing_points,
+    n_parameters,
+    atol=1.0e-10,
+):
+    """
+    Remove candidate points that duplicate existing points or earlier candidates.
+
+    Duplicate detection uses ``numpy.isclose`` with ``rtol=0`` and the supplied
+    absolute tolerance. Candidate order is preserved.
+
+    :param candidate_points: Proposed new points.
+    :type candidate_points: array-like
+
+    :param existing_points: Existing training points.
+    :type existing_points: array-like
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :param atol: Absolute tolerance for duplicate detection.
+    :type atol: float
+
+    :return: Non-duplicate candidate points.
+    :rtype: numpy.ndarray
+    """
+    candidates = _normalize_candidate_array(candidate_points, n_parameters)
+    existing = _normalize_candidate_array(existing_points, n_parameters)
+
+    if candidates.size == 0:
+        return np.empty((0, n_parameters))
+
+    kept = []
+
+    for point in candidates:
+        duplicate_existing = False
+        if existing.size > 0:
+            duplicate_existing = np.any(
+                np.all(np.isclose(existing, point, atol=atol, rtol=0.0), axis=1)
+            )
+
+        duplicate_kept = False
+        if kept:
+            kept_array = np.asarray(kept, dtype=float)
+            duplicate_kept = np.any(
+                np.all(np.isclose(kept_array, point, atol=atol, rtol=0.0), axis=1)
+            )
+
+        if not duplicate_existing and not duplicate_kept:
+            kept.append(point)
+
+    if not kept:
+        return np.empty((0, n_parameters))
+
+    return np.asarray(kept, dtype=float)
+
+
+def _random_subset_rows(values, n_rows, random_generator, n_parameters):
+    """
+    Select a reproducible random subset of rows.
+
+    Selected row indices are sorted before returning, preserving the original row
+    ordering in the returned subset.
+
+    :param values: Candidate rows.
+    :type values: array-like
+
+    :param n_rows: Maximum number of rows to select.
+    :type n_rows: int
+
+    :param random_generator: NumPy random generator.
+    :type random_generator: numpy.random.Generator
+
+    :param n_parameters: Expected number of parameter columns.
+    :type n_parameters: int
+
+    :return: Random row subset.
+    :rtype: numpy.ndarray
+    """
+    check_value_is_nonnegative_integer(n_rows, "n_rows")
+
+    values = _normalize_candidate_array(values, n_parameters)
+    n_rows = min(int(n_rows), values.shape[0])
+
+    if n_rows <= 0:
+        return np.empty((0, n_parameters))
+
+    rows = random_generator.choice(values.shape[0], n_rows, replace=False)
+    return values[np.sort(rows)]
+
+
+def _find_matching_row_index(rows, target_row, atol=1.0e-10):
+    """
+    Return the first row index matching ``target_row`` within tolerance.
+
+    :param rows: Candidate row array.
+    :type rows: array-like
+
+    :param target_row: Row to find.
+    :type target_row: array-like
+
+    :param atol: Absolute matching tolerance.
+    :type atol: float
+
+    :return: Matching row index, or ``None`` if no match is found.
+    :rtype: int or None
+    """
+    rows = np.atleast_2d(np.asarray(rows, dtype=float))
+    target_row = np.asarray(target_row, dtype=float).reshape(-1)
+
+    matches = np.where(
+        np.all(np.isclose(rows, target_row, atol=atol, rtol=0.0), axis=1)
+    )[0]
+
+    if matches.size == 0:
+        return None
+
+    return int(matches[0])
+
+
+def _assign_points_to_nearest_seed(query_points, seed_points):
+    """
+    Assign each query point to its nearest seed point.
+
+    :param query_points: Points to classify.
+    :type query_points: array-like
+
+    :param seed_points: Seed points defining nearest-neighbor cells.
+    :type seed_points: array-like
+
+    :return: Seed index for each query point.
+    :rtype: numpy.ndarray
+    """
+    query_points = np.atleast_2d(np.asarray(query_points, dtype=float))
+    seed_points = np.atleast_2d(np.asarray(seed_points, dtype=float))
+
+    if seed_points.size == 0:
+        raise ValueError("At least one seed point is required.")
+
+    if query_points.size == 0:
+        return np.empty(0, dtype=int)
+
+    diff = query_points[:, None, :] - seed_points[None, :, :]
+    distance_squared = np.sum(diff**2, axis=2)
+
+    return np.argmin(distance_squared, axis=1)
+
+
+def _select_farthest_point(candidate_points, seed_location):
+    """
+    Select the candidate point farthest from a seed location.
+
+    :param candidate_points: Candidate points in a selected Voronoi cell.
+    :type candidate_points: array-like
+
+    :param seed_location: Selected Voronoi seed.
+    :type seed_location: array-like
+
+    :return: Farthest candidate point, or ``None`` if no candidates exist.
+    :rtype: numpy.ndarray or None
+    """
+    candidate_points = np.atleast_2d(np.asarray(candidate_points, dtype=float))
+
+    if candidate_points.size == 0:
+        return None
+
+    seed_location = np.asarray(seed_location, dtype=float).reshape(1, -1)
+    distances = np.linalg.norm(candidate_points - seed_location, axis=1)
+
+    return candidate_points[int(np.argmax(distances))]
+
+
+def _create_ghost_points(boundary_points, n_dimensions, stretch_coef=1.75,
+                         centroid_distance_coef=1.5):
+    """
+    Create auxiliary ghost seed points outside a bounded parameter domain.
+
+    Ghost points are generated by stretching domain boundary-corner points away
+    from the domain centroid and by adding positive/negative coordinate-direction
+    points about that centroid. Stretching about the centroid works for both
+    centered and non-centered domains.
+
+    :param boundary_points: Boundary corner points of the domain.
+    :type boundary_points: numpy.ndarray
+
+    :param n_dimensions: Number of parameter dimensions.
+    :type n_dimensions: int
+
+    :param stretch_coef: Multiplicative factor used to stretch boundary corners
+        away from the centroid.
+    :type stretch_coef: float
+
+    :param centroid_distance_coef: Multiplicative factor used with the maximum
+        centroid-to-corner distance for axis ghost points.
+    :type centroid_distance_coef: float
+
+    :return: Ghost points.
+    :rtype: numpy.ndarray
+    """
+    boundary_points = np.asarray(boundary_points, dtype=float)
+    check_value_is_positive_integer(n_dimensions, "n_dimensions")
+    check_value_is_positive_real(stretch_coef, "stretch_coef")
+    check_value_is_positive_real(centroid_distance_coef, "centroid_distance_coef")
+
+    boundary_centroid = np.mean(boundary_points, axis=0)
+
+    stretched_boundary_points = (
+        boundary_centroid
+        + stretch_coef * (boundary_points - boundary_centroid)
+    )
+
+    max_centroid_distance = np.max(
+        np.linalg.norm(boundary_points - boundary_centroid, axis=1)
+    )
+
+    axis_ghost_points = np.vstack([
+        boundary_centroid
+        + centroid_distance_coef * max_centroid_distance * np.eye(n_dimensions),
+        boundary_centroid
+        - centroid_distance_coef * max_centroid_distance * np.eye(n_dimensions),
+    ])
+
+    return np.vstack([stretched_boundary_points, axis_ghost_points])
+
+
+def _finite_vertex_indices(region):
+    """
+    Return valid finite Voronoi vertex indices.
+
+    SciPy uses ``-1`` for infinite vertices. This module also uses ``-2`` for
+    vertices that are infinite or outside the bounded parameter domain. Both are
+    excluded. Valid vertex index ``0`` is retained.
+
+    :param region: Voronoi region vertex-index list.
+    :type region: sequence[int]
+
+    :return: Valid finite vertex indices.
+    :rtype: list[int]
+    """
+    return [int(idx) for idx in region if int(idx) >= 0]
+
+
+def _remove_invalid_rows(array):
+    """
+    Remove rows containing ``NaN`` or infinite values.
+
+    :param array: Input array.
+    :type array: array-like
+
+    :return: Array containing only finite rows.
+    :rtype: numpy.ndarray
+    """
+    array = np.atleast_2d(np.asarray(array, dtype=float))
+    mask = np.isfinite(array).all(axis=1)
+    return array[mask]
+
+
+def _validate_voronoi_type(voronoi_type):
+    """
+    Validate and normalize the Voronoi tessellation mode.
+    """
+    check_value_is_nonempty_str(voronoi_type, "voronoi_type")
+    voronoi_type = voronoi_type.lower().strip()
+
+    if voronoi_type not in ("full", "local"):
+        raise ValueError(
+            "Voronoi type must be either 'full' or 'local', "
+            f"received '{voronoi_type}'."
+        )
+    return voronoi_type
+
+
+def _validate_optional_positive_integer(value, name):
+    """
+    Validate an optional positive integer setting.
+    """
+    if value is None:
+        return None
+
+    check_value_is_positive_integer(value, name)
+    return int(value)
+
+
+def _validate_loo_seed_candidate_count(loo_seed_candidate_count):
+    """
+    Validate the number of LOO-ranked candidates retained after KFCV filtering.
+    """
+    if isinstance(loo_seed_candidate_count, str):
+        loo_seed_candidate_count = loo_seed_candidate_count.lower().strip()
+        if loo_seed_candidate_count == "skip_loo":
+            return loo_seed_candidate_count
+        raise ValueError("If loo_seed_candidate_count is a string, it must be 'skip_loo'.")
+
+    check_value_is_positive_integer(loo_seed_candidate_count, "loo_seed_candidate_count", 1)
+    return int(loo_seed_candidate_count)
+
+
+def _validate_cv_metric(cv_metric):
+    """
+    Validate and normalize the original data space cross-validation error metric.
+    """
+    check_value_is_nonempty_str(cv_metric, "cv_metric")
+    cv_metric = cv_metric.lower().strip()
+
+    valid_cv_metrics = ("rmse", "mae", "abs", "sum_abs", "nrmse", "nlpd")
+    if cv_metric not in valid_cv_metrics:
+        raise ValueError(
+            "cv_metric not implemented. cv_metric must be one of "
+            f"{valid_cv_metrics}. Received '{cv_metric}'."
+        )
+
+    return cv_metric
+
+
+def _get_surrogate_regressor_type(surrogate_options):
+    """
+    Return the configured surrogate regressor type.
+
+    SurrogateGenerator defaults to Gaussian Process when no regressor_type is
+    provided.
+    """
+    return surrogate_options.get("regressor_type", "Gaussian Process")
+
+
+def _raise_if_nlpd_cv_requested_for_non_gp(cv_metric, surrogate_options):
+    """
+    NLPD CV ranking is only meaningful for Gaussian Process regressors because
+    it requires predictive standard deviations.
+    """
+    if cv_metric != "nlpd":
+        return
+
+    regressor_type = _get_surrogate_regressor_type(surrogate_options)
+
+    if regressor_type != "Gaussian Process":
+        raise ValueError(
+            "cv_metric='nlpd' is only valid for Gaussian Process surrogates "
+            "because NLPD requires predictive standard deviations. "
+            f"Received regressor_type='{regressor_type}'."
+        )
+
+
+def _calculate_surrogate_latent_nlpd(surrogate):
+    """
+    Return the stored test-set latent-space NLPD for a fitted MatCal surrogate.
+
+    This is used by Voronoi adaptive CV when ``cv_metric='nlpd'``. The NLPD is
+    calculated during surrogate fitting by the underlying Gaussian Process
+    regressors and stored in ``surrogate._latent_scores['test']``.
+    """
+    if not hasattr(surrogate, "_latent_scores"):
+        raise RuntimeError(
+            "Cannot calculate NLPD CV error because the surrogate does not "
+            "provide stored latent-space scores."
+        )
+
+    if "test" not in surrogate._latent_scores:
+        raise RuntimeError(
+            "Cannot calculate NLPD CV error because the surrogate does not "
+            "provide test latent-space scores."
+        )
+
+    nlpd = _get_surrogate_metric(surrogate._latent_scores["test"], "nlpd")
+
+    if nlpd is None or not np.isfinite(nlpd):
+        raise RuntimeError(
+            "The stored NLPD score is not finite. NLPD CV error is only valid "
+            "for Gaussian Process surrogates that provide predictive standard "
+            "deviations."
+        )
+
+    return float(nlpd)
+
+
+def _validate_surrogate_generator_regressor_type(regressor_type):
+    """
+    Validate a regressor type against the regressors registered with
+    SurrogateGenerator.
+
+    This intentionally uses the SurrogateGenerator regressor registry so that
+    Voronoi adaptive surrogate studies support the same regressor names as the
+    standard surrogate generator.
+    """
+    check_value_is_nonempty_str(regressor_type, "regressor_type")
+
+    from matcal.core.surrogates import _regressor_lookup
+
+    valid_regressor_types = tuple(_regressor_lookup.keys())
+
+    if regressor_type not in valid_regressor_types:
+        raise ValueError(
+            "Unsupported surrogate regressor type. Supported regressor types "
+            f"are {valid_regressor_types}. Received '{regressor_type}'."
+        )
+
+    return regressor_type
+
 
 class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
 
@@ -3248,12 +4152,18 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         return None
     
     def __init__(self, *parameters):
-        """Initialize the VoronoiAdaptiveSurrogateStudy
+        """
+        Initialize the Voronoi adaptive surrogate study.
+
+        This initializes sampling options, cross-validation options, convergence
+        options, surrogate score histories, and the reproducible random generator
+        used by the adaptive sampler.
         """
         super().__init__(*parameters)
 
+        self._surrogate_options = {}
+
         self._num_initial_samples = None
-        self._test_eval_info = None
         self.set_number_of_initial_samples()
 
         self._voronoi_type = None
@@ -3263,15 +4173,16 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._random_selection = None
         self.set_voronoi_sampling_options()
 
-        self._nsplits = None
-        self._nmax_folds = None
-        self._nmax_loo = None
+        self._kfold_splits = None
+        self._kfold_regions_for_loo = None
+        self._loo_seed_candidate_count = None
+        self._batch_size = None
         self._cv_scale = None
         self._cv_metric = None
         self._group_kfold = None
         self._loo_errors = None
         self.set_cross_validation_options()
-        
+
         self._nbatch_samples = []
         self.test_eval_info = None
 
@@ -3279,18 +4190,41 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._eps = None
         self.set_convergence_criteria()
 
-        self._current_surrogate_score = {}
-        self._current_surrogate_score['score'] = []
-        self._current_surrogate_score['nlpd'] = []
-        self._current_surrogate_score['rmse'] = []
+        self._current_surrogate_score = {"score": [], "nlpd": [], "rmse": []}
         self._max_fold_error_indices = None
-        self._surrogate_options = {}
-        self._seed = None
-            
+
+        self._random_generator = np.random.default_rng(getattr(self, "_seed", None))
+        self._selected_cell_search_grid_points = 51
+
+    def set_selected_cell_search_grid_points(self, selected_cell_search_grid_points=51):
+        """
+        Set the number of grid points per dimension used when constructing a
+        deterministic candidate set inside the selected Voronoi cell.
+
+        This candidate set is only used to better approximate the paper's rule:
+        choose the point within the selected Voronoi cell that is furthest from
+        the selected sample.
+
+        :param selected_cell_search_grid_points: Number of grid points per
+            dimension in the bounded domain candidate grid.
+        :type selected_cell_search_grid_points: int
+        """
+        check_value_is_positive_integer(
+            selected_cell_search_grid_points,
+            "selected_cell_search_grid_points",
+        )
+        self._selected_cell_search_grid_points = int(selected_cell_search_grid_points)
+
     def _update_surrogate_score(self, surrogate=None):
         """
-        Store the latent-space scores for the surrogate produced by the current
+        Store latent-space diagnostics for the surrogate produced by the current
         batch.
+
+        Original-response-space RMSE, maximum absolute error, and :math:`R^2`
+        histories are stored by :meth:`AdaptiveSurrogate._add_iteration`. This
+        method stores the internal SurrogateGenerator latent-space diagnostics,
+        primarily for reporting and for the optional Gaussian-process ``"nlpd"``
+        convergence metric.
 
         This must use the current candidate surrogate, not necessarily
         ``current_surrogate``, because the storage policy may choose not to
@@ -3303,31 +4237,13 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
         self._current_surrogate_score['score'].append(_get_surrogate_metric(latent_score, 'score'))
         self._current_surrogate_score['nlpd'].append(_get_surrogate_metric(latent_score, 'nlpd'))
         self._current_surrogate_score['rmse'].append(_get_surrogate_metric(latent_score, 'rmse'))
-         
-    def _build_boundary_hull(self):
-        from scipy.spatial import ConvexHull, Delaunay
-        self._boundary_points = self._make_nd_grid(2)
-        self._boundary_hull = ConvexHull(self._boundary_points)
-        self._boundary_hull_eq = self._boundary_hull.equations # (nfacet, ndim + 1)
-        self._boundary_hull_V, self._boundary_hull_b = self._boundary_hull_eq[:, :-1],\
-            self._boundary_hull_eq[:, -1] # normal, offset
-        self._bhullD = Delaunay(self._boundary_points)
-
-    def _make_nd_grid(self, npts_along_dim):
-        grid_pts = []
-        for param_index in np.arange(self._number_parameters):
-            grid_pts.append(np.linspace(self._bounds[param_index][0], self._bounds[param_index][1],
-                                        npts_along_dim))
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self._number_parameters)]
-        return np.vstack(tuple(coords_ravel)).T
 
     def set_number_of_initial_samples(self, num_initial_samples=None):
         """
-        :param num_initial_samples: The number of samples to initiate the algorithm with.
-        The initial samples are used to train the initial surrogate and built the 
-        initial voronoi tessellation. Default 10*ndim.
-        :type initial_training_length: None or int
+        :param num_initial_samples: Number of initial training samples used before
+            adaptive Voronoi refinement begins. If ``None``, defaults to
+            ``10 * number_of_parameters``.
+        :type num_initial_samples: int or None
         """
         if num_initial_samples is None:
             self._num_initial_samples = 10*self._number_parameters
@@ -3335,16 +4251,120 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             check_value_is_positive_integer(num_initial_samples, "num_initial_samples")
             self._num_initial_samples = num_initial_samples
 
-    def set_voronoi_sampling_options(self, voronoi_type='full', 
-                                     finite_only=False, 
-                                     iterative_updates = True, 
-                                     thin=None,
-                                     random_selection=None):
+    def set_surrogate_regressor(self, regressor_type="Gaussian Process",
+                                **regressor_kwargs):
+        """
+        Select the regressor used by the internal
+        :class:`~matcal.core.surrogates.SurrogateGenerator`.
+        See :meth:`~matcal.core.surrogates.SurrogateGenerator.set_surrogate_details`
+        for more details.
+
+        Additional keyword arguments are forwarded directly to the underlying
+        regressor constructor. For example, to use a local SciPy RBF interpolator:
+
+        .. code-block:: python
+
+            study.set_surrogate_regressor(
+                "RBF",
+                neighbors=25,
+            )
+
+        To use a random forest:
+
+        .. code-block:: python
+
+            study.set_surrogate_regressor(
+                "Random Forest",
+                n_estimators=50,
+                random_state=123,
+            )
+
+        .. note::
+
+            ``"Random Forest"`` and ``"RBF"`` do not provide predictive
+            standard deviations. Therefore, ``convergence_metric="nlpd"`` is not
+            meaningful for these regressors. If the study is requesting
+            ``"nlpd"`` convergence for one of these regressors, this method
+            switches the convergence metric to ``"rmse"``. The deterministic
+            convergence metrics ``"rmse"``, ``"max_error"``, ``"r2"``, and
+            ``"score"`` are computed in original response space and are valid
+            for all supported Voronoi surrogate backends.
+
+        :param regressor_type: SurrogateGenerator regressor identifier.
+        :type regressor_type: str
+
+        :param regressor_kwargs: Keyword arguments forwarded to the regressor.
+        """
+        regressor_type = _validate_surrogate_generator_regressor_type(regressor_type)
+
+        self._surrogate_options["regressor_type"] = regressor_type
+        self._surrogate_options.update(regressor_kwargs)
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._cv_metric,
+            self._surrogate_options,
+        )
+        self._update_convergence_metric_for_current_surrogate_regressor()
+
+    def _update_convergence_metric_for_current_surrogate_regressor(self):
+        """
+        Replace ``"nlpd"`` convergence with ``"rmse"`` for regressors that do
+        not provide Gaussian-process predictive uncertainty.
+
+        Deterministic convergence metrics such as ``"rmse"``, ``"max_error"``,
+        ``"r2"``, and ``"score"`` are computed in original response space and
+        are valid for all supported Voronoi surrogate backends. The ``"nlpd"``
+        convergence metric is the only GP-specific latent-space diagnostic.
+        """
+        regressor_type = self._surrogate_options.get(
+            "regressor_type",
+            "Gaussian Process",
+        )
+
+        if regressor_type != "Gaussian Process" and self._convergence_metric == "nlpd":
+            logger.warning(
+                "The Voronoi adaptive surrogate convergence metric was set to "
+                "'nlpd', but regressor type "
+                f"'{regressor_type}' does not provide predictive standard "
+                "deviations. Switching convergence_metric to 'rmse'."
+            )
+            self._convergence_metric = "rmse"
+
+    def set_batch_size(self, batch_size=None):
+        """
+        Set the number of new Voronoi sample locations requested per batch.
+
+        If ``batch_size`` is ``None``, the legacy behavior is preserved by using
+        ``loo_seed_candidate_count`` when it is an integer. If ``loo_seed_candidate_count='skip_loo'``, the default
+        batch size is one.
+
+        :param batch_size: Number of new Voronoi sample locations requested per adaptive
+            batch. If ``None``, defaults to ``loo_seed_candidate_count`` 
+            when ``loo_seed_candidate_count`` is an integer, or to 
+            one when ``_loo_seed_candidate_count='skip_loo'``.
+        :type batch_size: int or None
+        """
+        if batch_size is None:
+            if isinstance(self._loo_seed_candidate_count, (int, np.integer)):
+                self._batch_size = int(self._loo_seed_candidate_count)
+            else:
+                self._batch_size = 1
+            return
+
+        check_value_is_positive_integer(batch_size, "batch_size")
+        self._batch_size = int(batch_size)
+
+    def set_voronoi_sampling_options(
+        self,
+        voronoi_type='full', 
+        finite_only=False, 
+        iterative_updates = True, 
+        thin=None,
+        random_selection=None
+    ):
         """Set options pertaining to the voronoi sampling algorithm. Properties
         that can be altered are listed below.
         
-        
-        :param vornoi_type: Defines which Vornoi-based sampling strategy to use.
+        :param voronoi_type: Defines which Voronoi-based sampling strategy to use.
             Supported options are:
                 * 'full': Constructs the full Voronoi tessellation over all points (Default)
                 * 'local': Constructs a local Voronoi tessellation using only nearby
@@ -3352,12 +4372,12 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
                     cost in high dimensions.
         :type voronoi_type: str
         
-        :param finite_only: If True, only Vornoi vertices that lie inside the 
-            convex hull defined by the boundary points are consided as candidate sample
+        :param finite_only: If True, only Voronoi vertices that lie inside the 
+            convex hull defined by the boundary points are considered as candidate sample
             locations. If False, all vertices are considered, and those lying outside
             the parameter bounds are clipped back to the convex hull. This is more flexible but
             can be more computationally expensive, especially in high dimensions. 
-        :type finite_onlye: bool
+        :type finite_only: bool
         
         :param iterative_updates: If True, the Voronoi tessellation is recomputed 
             after each new sample is added, promoting a more space-filling design.
@@ -3366,177 +4386,416 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             clustering. 
         :type iterative_updates: bool
 
-        :param thin: If specified, every nth candidate sample location is selected as a new
-            sample location. This can significantly reduce computational 
-            cost in high-dimensional spaces.
+        :param thin: If specified and ``batch_size > 1``, down-select candidate
+            Voronoi seed locations by keeping every N-th candidate before final batch
+            selection.
         :type thin: int or None
         
-        :param random_selection: If sepecified, this defines the number of candidate sample
-            locations that are randomly selected as new samples. This provides an 
-            alternative way to reduce computational cost in high-dimensional problems. 
+        :param random_selection: If specified and ``batch_size > 1``, randomly
+            down-select this many candidate Voronoi seed locations before final batch
+            selection.
         :type random_selection: int or None
         """
-        check_value_is_nonempty_str(voronoi_type, "voronoi_type")
-        if voronoi_type.lower() not in ['full', 'local']:
-            raise ValueError(f"Voronoi type must be either 'full' or 'local', recieved '{voronoi_type}'.")
-        else:
-            self._voronoi_type = voronoi_type.lower()
+        self._voronoi_type = _validate_voronoi_type(voronoi_type)
+
         check_value_is_bool(finite_only, "finite_only")
-        self._finite_only = finite_only
         check_value_is_bool(iterative_updates, "iterative_updates")
+
+        self._finite_only = finite_only
         self._iterative_updates = iterative_updates
-        if thin is not None:
-            check_value_is_positive_integer(thin, "thin")
-            self._thin = thin
-        if random_selection is not None:
-            check_value_is_positive_integer(random_selection, "random_selection")
-            self._random_selection = random_selection
-        if self._random_selection is not None and self._thin is not None:
-            raise ValueError("Only one of 'thin' and 'random_selection' can be activated. Not both.")
-    
+        self._thin = _validate_optional_positive_integer(thin, "thin")
+        self._random_selection = _validate_optional_positive_integer(
+            random_selection, "random_selection"
+        )
+        self._raise_if_multiple_candidate_reduction_options_active()
+
+    def _raise_if_multiple_candidate_reduction_options_active(self):
+        """
+        Reject simultaneous use of ``thin`` and ``random_selection``.
+        """
+        if self._thin is not None and self._random_selection is not None:
+            raise ValueError(
+                "Only one of 'thin' and 'random_selection' can be activated. "
+                "Not both."
+            )
+
     def set_surrogate_options(self, **kwargs):
         """
-        :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
-            Please refer to the sklearn documentation for more information for what can be passed to 
-            the predictors. 
+        Set keyword options forwarded to
+        :class:`~matcal.core.surrogates.SurrogateGenerator`.
+
+        These options may include surrogate-generation options such as
+        ``decomp_var``, ``surrogate_type``, ``regressor_type``, or
+        regressor-specific keyword arguments.
+
+        Examples
+        --------
+
+        Use the default PCA surrogate with a random forest latent-space
+        regressor:
+
+        .. code-block:: python
+
+            study.set_surrogate_options(
+                regressor_type="Random Forest",
+                n_estimators=25,
+                random_state=123,
+            )
+
+        Use a local RBF interpolator:
+
+        .. code-block:: python
+
+            study.set_surrogate_options(
+                regressor_type="RBF",
+                neighbors=30,
+            )
+
+        :param kwargs: Keyword options passed to surrogate generation during
+            adaptive training and cross-validation surrogate fitting.
+        :type kwargs: dict
         """
+        if "regressor_type" in kwargs:
+            kwargs["regressor_type"] = _validate_surrogate_generator_regressor_type(
+                kwargs["regressor_type"]
+            )
+
         self._surrogate_options = kwargs
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._cv_metric,
+            self._surrogate_options,
+        )
+        self._update_convergence_metric_for_current_surrogate_regressor()
 
-    def set_convergence_criteria(self, eps=1e-12, convergence_metric='nlpd'):
+    def set_convergence_criteria(self, eps=1e-12, convergence_metric='score'):
         """
-        Convergence is determined by comparing RMSE or NLPD of
-        surrogate between two successive batches.
+        Set convergence criteria based on the change in a selected metric between
+        successive adaptive batches.
 
-        :param convergence_metric: Choose from root mean squared error ('rmse') 
-            or negative log posterior density ('nlpd') to track surrogate performance
-            at each batch iteration. This metric is used to determine if the surrogate
-            has converged according to eps. 
-        :type convergence metric: str
-        
-        :param eps: Tolerance for surrogate convergence. 
-        :type eps: float 
+        For deterministic metrics, convergence is evaluated using original
+        response-space common-test metrics stored by the adaptive surrogate:
+
+        * ``"rmse"``: original-response-space common-test RMSE;
+        * ``"max_error"``: original-response-space common-test maximum absolute error;
+        * ``"r2"`` or ``"score"``: original-response-space common-test global R2.
+
+        The special metric ``"nlpd"`` uses the Gaussian-process latent-space
+        negative log predictive density from the internal SurrogateGenerator and
+        is only valid for ``regressor_type="Gaussian Process"``.
+
+        :param eps: Absolute tolerance for the change in the selected metric
+            between successive adaptive batches.
+        :type eps: float
+
+        :param convergence_metric: Metric used for convergence. Supported values
+            are ``"rmse"``, ``"max_error"``, ``"r2"``, ``"score"``, and ``"nlpd"``.
+            ``"score"`` is treated as an alias for ``"r2"``.
+        :type convergence_metric: str
         """
+        check_value_is_nonnegative_real(eps, "eps")
         self._eps = eps
+
+        valid_metrics = ("rmse", "max_error", "r2", "score", "nlpd")
+        if convergence_metric not in valid_metrics:
+            raise ValueError(
+                f"Selected metric '{convergence_metric}' is not valid. "
+                f"Use one of the following: {valid_metrics}"
+            )
+
+        if convergence_metric == "score":
+            convergence_metric = "r2"
+
         self._convergence_metric = convergence_metric
 
-    def set_cross_validation_options(self, nsplits=5, nmax_folds=3, nmax_loo=10, cv_scale=1.0,
-                                     cv_metric='rmse', group_kfold=False):
-        """Set options for cross validation. Properties that can be altered are listed below.
-        
-        :param nsplits: The number of folds to use in k-fold cross validation. 
-            If nsplits = 0, k-fold cross-validation is skipped entirely and new samples
-            are instead selected from every region of the Voronoi tessellation defined 
-            by the current set of training samples.
-        :type nsplits: int
-        
-        :param nmax_folds: Points in the folds with the highest k-fold error 
-            (the top nmax_folds) define the Voronoi regions from which new samples 
-            will be drawn. 
-        :type nmax_folds: int
-        
-        :param nmax_loo: Points with the largest leave-one-out cross-validation (LOOCV)
-            errors (the top nmax_loo). These define the Voronoi regions from which new 
-            samples will be drawn. If nmax_loo = 'all', then new samples are drawn from
-            all Voronoi regions defined by nmax_folds, and leave-one-out cross-validation
-            is not performed.
-        :type nmax_loo: int or 'all'
-        
-        :param cv_scale: Optional scaling applied to output before calculating errors in
-            cross-validation and leave-one-out cross-validation. This can be used to 
-            balance error magnitude across dimensions or outputs.
-        :type scale: float
-        
-        :param cv_metric: Determines which metric is used when computing errors during
-            cross-validation. Supported options are:
-                * rmse -- root mean squared error (Default)
-                * nlpd -- negative log posterior density
-        :type cv_metric: str
-        
-        :param group_kfold: If True, samples are grouped using k-means clustering
-            prior to k-fold cross-validation so that nearby points are allways assigned
-            to the same fold. This prevents spatially correllated points from being split
-            across training and validation sets. If False, folds are assigned randomly
-            by the standard KFold algorithm. 
-        :type group_kfold: bool
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._convergence_metric,
+            self._surrogate_options,
+        )
+
+    def _get_original_data_space_convergence_history(self, metric):
         """
-        check_value_is_nonnegative_integer(nsplits, "nsplits")
-        self._nsplits = nsplits
-        check_value_is_positive_integer(nmax_folds, "nmax_folds")
-        self._nmax_folds = nmax_folds
-        if isinstance(nmax_loo, str):
-            if nmax_loo != 'all':
-                raise ValueError(f"If the {__class__} 'nmax_loo' parameter is a string, "+
-                    "it must be 'all'.")
-        else:
-            try:   
-                check_value_is_positive_integer(nmax_loo, "nmax_loo")
-            except TypeError:
-                raise TypeError(f"The {__class__} 'nmax_loo' parameter must be a positive integer "+
-                                f"or the string 'all'. Recieved value {nmax_loo}.")
-            except  ValueError:
-                raise ValueError(f"The {__class__} 'nmax_loo' parameter must be a positive integer "+
-                                f"recieved value {nmax_loo}.")
-        self._nmax_loo = nmax_loo
-        check_value_is_positive_real(cv_scale, "cv_scale")
-        self._cv_scale = cv_scale
-        check_value_is_nonempty_str(cv_metric, "cv_metric")
-        self._cv_metric = cv_metric
-        valid_cv_metrics = ['rmse', 'nlpd']
-        if self._cv_metric not in valid_cv_metrics:
-            raise ValueError("cv_metric not implemented. 'cv_metric' must one of"
-                             " 'rmse', 'nlpd'")
+        Return the original-response-space convergence history for a metric.
+        """
+        if metric == "rmse":
+            return self._surrogate.rmse_history
+
+        if metric == "max_error":
+            return self._surrogate.max_error_history
+
+        if metric in ("r2", "score"):
+            return self._surrogate.r2_history
+
+        raise ValueError(
+            f"Metric '{metric}' is not an original-response-space "
+            "adaptive-surrogate convergence metric."
+        )
+
+    def _get_convergence_history_and_description(self):
+        """
+        Return the active convergence history and a text description.
+        """
+        if self._convergence_metric == "nlpd":
+            return (
+                self._current_surrogate_score["nlpd"],
+                "latent-space Gaussian-process NLPD",
+            )
+
+        return (
+            self._get_original_data_space_convergence_history(
+                self._convergence_metric
+            ),
+            f"original-response-space {self._convergence_metric}",
+        )
+
+    def set_cross_validation_options(
+        self,
+        kfold_splits=10,
+        kfold_regions_for_loo=1,
+        loo_seed_candidate_count=1,
+        cv_scale=1.0,
+        cv_metric="sum_abs",
+        group_kfold=False,
+        batch_size=None,
+    ):
+        """
+        Configure the cross-validation options used to select Voronoi refinement
+        regions.
+
+        The Voronoi adaptive sampler can use a two-stage error filter modeled after
+        the KFCV-Voronoi procedure:
+
+        1. Split the current training samples into ``kfold_splits`` folds and build one
+        surrogate per held-out fold.
+        2. Compute the original data response-space prediction error on each held-out
+        fold.
+        3. Select the ``kfold_regions_for_loo`` folds with the largest original data space
+        cross-validation errors.
+        4. Optionally perform leave-one-out cross validation only on the samples
+        contained in those selected folds.
+        5. Select Voronoi cells associated with the largest leave-one-out original data space
+        errors and place new samples at farthest vertices of those cells.
+
+        If ``kfold_splits`` is set to ``0``, the cross-validation filter is disabled.
+        In that case, all current training samples are treated as candidate Voronoi
+        cell seeds.
+
+        Cross-validation and leave-one-out errors are computed in original response space
+        for deterministic metrics such as ``"rmse"``, ``"mae"``, ``"sum_abs"``, and
+        ``"nrmse"``. The special metric ``"nlpd"`` is an exception: it uses the
+        Gaussian-process latent-space negative log predictive density stored by the
+        fitted surrogate and is only valid when ``regressor_type="Gaussian Process"``.
+
+        :param kfold_splits: Number of folds used for K-fold cross validation. If
+            ``kfold_splits=0``, K-fold cross validation and leave-one-out cross
+            validation are skipped and candidate Voronoi regions are drawn from all
+            current training samples. If ``kfold_splits`` is larger than the current
+            number of training samples, it is reduced internally.
+        :type kfold_splits: int
+
+        :param kfold_regions_for_loo: Number of highest-error K-folds retained for possible
+            refinement. Samples contained in these folds define the candidate
+            regions for leave-one-out cross validation. This corresponds to the
+            number of K-fold groups selected by the global KFCV filter.
+        :type kfold_regions_for_loo: int
+
+        :param loo_seed_candidate_count: Number of highest-error leave-one-out samples retained
+            after the K-fold filter. These samples define the Voronoi regions from
+            which new adaptive samples are drawn. If loo_seed_candidate_count='skip_loo', leave-one-out
+            cross validation is skipped. Samples in the selected high-error 
+            folds form the candidate pool, from which up to batch_size 
+            candidates are selected.
+        :type loo_seed_candidate_count: int or str
+
+        :param cv_scale: Optional scaling applied to original data space responses before
+            computing cross-validation errors. Use this to normalize response
+            magnitudes when the target response has multiple components or when
+            different response locations have substantially different scales.
+            Accepted values are:
+
+            * ``None`` or ``1.0``: no scaling;
+            * positive scalar: divide all response values by this scalar;
+            * positive array-like: divide response values componentwise; or
+            * ``"cbrt"``: apply a cube-root transform to true and predicted
+            responses before error calculation.
+
+        :type cv_scale: float, array-like, str, or None
+
+        :param cv_metric: Cross-validation ranking metric used for both K-fold and
+            leave-one-out ranking. Deterministic metrics are the original data response-space
+            errors; ``"nlpd"`` is a Gaussian-process latent-space uncertainty metric.
+
+            * ``"rmse"``: root mean squared original data space response error.
+            * ``"mae"`` or ``"abs"``: mean absolute original data space response error.
+            * ``"sum_abs"``: sum of absolute original data space response errors. This is
+            closest to the error expression used in the KFCV-Voronoi paper.
+            * ``"nrmse"``: normalized root mean squared original data space response error.
+            * ``"nlpd"``: Gaussian-process latent-space negative log predictive density.
+            This requires predictive standard deviations and is only valid for
+            ``regressor_type="Gaussian Process"``.
+
+        :type cv_metric: str
+
+        :param group_kfold: If ``True``, samples are grouped using k-means
+            clustering before K-fold cross validation and nearby samples are kept in
+            the same validation fold using ``GroupKFold``. This can reduce leakage
+            between spatially correlated training and validation points. If
+            ``False``, samples are assigned to folds with standard shuffled
+            ``KFold``.
+        :type group_kfold: bool
+
+        :param batch_size: Number of Voronoi-selected sample locations requested per
+            adaptive batch. If ``None``, the batch size defaults to ``loo_seed_candidate_count`` when
+            ``loo_seed_candidate_count`` is an integer, or to one when ``loo_seed_candidate_count='skip_loo'``.
+        :type batch_size: int or None
+        
+        :raises TypeError: If input types are invalid.
+        :raises ValueError: If numeric options are out of range, if ``loo_seed_candidate_count`` is
+            a string other than ``"skip_loo"``, or if ``cv_metric`` is unsupported.
+
+        :notes:
+            * ``kfold_regions_for_loo`` controls how many high-error K-fold groups pass the
+            global KFCV filter.
+            * ``loo_seed_candidate_count`` controls how many individual high-error samples are used
+            after the optional leave-one-out refinement step.
+            * The actual number of new samples added in a batch may be smaller than
+            ``loo_seed_candidate_count`` if some Voronoi regions produce invalid, duplicate, or
+            out-of-bounds candidate points.
+            * For behavior closest to the paper, use ``cv_metric="sum_abs"``.
+            For fold-size-independent ranking, use ``cv_metric="rmse"``.
+        """
+        check_value_is_nonnegative_integer(kfold_splits, "kfold_splits")
+        self._kfold_splits = int(kfold_splits)
+
+        check_value_is_positive_integer(kfold_regions_for_loo, "kfold_regions_for_loo")
+        self._kfold_regions_for_loo = int(kfold_regions_for_loo)
+
+        self._loo_seed_candidate_count = _validate_loo_seed_candidate_count(
+        loo_seed_candidate_count
+)
+        self._cv_scale = _validate_cv_scale(cv_scale)
+        self._cv_metric = _validate_cv_metric(cv_metric)
+        _raise_if_nlpd_cv_requested_for_non_gp(
+            self._cv_metric,
+            self._surrogate_options,
+        )
+
         check_value_is_bool(group_kfold, "group_kfold")
         self._group_kfold = group_kfold
-    
+
+        self.set_batch_size(batch_size)
+
     def _format_output_for_surrogate_gen(self, results):
         from matcal.core.data import convert_data_to_dictionary
         model_name = self._get_model_names()[0]
         state_name = results.simulation_history[model_name].state_names[0]
-        sim_history = self._results.simulation_history[model_name][state_name]
+        sim_history = results.simulation_history[model_name][state_name]
         nsamples = results.number_of_evaluations
         data = []
         for nn in np.arange(nsamples):
             data.append(convert_data_to_dictionary(sim_history[nn]))
         return data
     
-    def _reset_study_after_test_sampling_generation(self, orig_working_directory, remove_existing):
-        self._test_eval_info = copy.deepcopy(self._results)
-        super()._reset_study_after_test_sampling_generation(orig_working_directory, remove_existing)
-        
     def _perform_adaptive_surrogate_batch_sampling(self):
-        if self._surrogate_save_filename is None:
-            self.set_surrogate_save_filename(f"{self._get_model_names()[0]}_voronoi_adaptive_surrogate.joblib") 
-        self._build_boundary_hull()
-        self.param_names = self._parameter_collection.get_item_names()
+        """
+        Run the Voronoi adaptive sampling loop.
+
+        The loop now exits gracefully if a batch produces no valid sample
+        locations.
+        """
+        self._initialize_voronoi_surrogate_run()
         training_params, training_data = self._run_initial_training_samples()
         batch_number = 0
+
         while not self._stopping_criterion_met(batch_number):
-            logger.info(f"Active learning batch {batch_number+1}."
-                        f"\nCurrently the surrogate is trained on "+
-                        f"{self._nbatch_samples[-1]} samples.")
-            logger.info("................................................................")
-            new_points = self._create_voronoi_tess_and_choose_new_samples(batch_number, 
-                                                                          training_params, 
-                                                                          training_data)
-            self._populate_parameter_evaluations(new_points)
-            self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate)
+            self._log_voronoi_batch_start(batch_number)
+            new_points = self._get_next_voronoi_batch(
+                batch_number, training_params, training_data
+            )
+
+            if new_points.size == 0:
+                logger.warning("No valid Voronoi sample locations found. Stopping.")
+                break
+            new_points = _remove_duplicate_rows_against_existing(
+                new_points,    
+                training_params, 
+                self._number_parameters
+            )
+            if new_points.size == 0:
+                logger.warning("All proposed Voronoi points were duplicates. Stopping.")
+                break
+            self._evaluate_voronoi_batch(new_points)            
             training_params, training_data = self._train_surrogate_with_current_results()
             batch_number += 1
+
         return self._results
 
+    def _initialize_voronoi_surrogate_run(self):
+        """
+        Initialize file names, boundary geometry, and parameter-name bookkeeping.
+        """
+        if self._surrogate_save_filename is None:
+            self.set_surrogate_save_filename(
+                f"{self._get_model_names()[0]}_voronoi_adaptive_surrogate.joblib"
+            )
+        self.param_names = self._parameter_collection.get_item_names()
+
+    def _log_voronoi_batch_start(self, batch_number):
+        """
+        Log the start of a Voronoi active-learning batch.
+        """
+        logger.info(
+            f"Active learning batch {batch_number + 1}."
+            f"\nCurrently the surrogate is trained on {self._nbatch_samples[-1]} samples."
+        )
+        logger.info("................................................................")
+
+    def _get_next_voronoi_batch(self, batch_number, training_params, training_data):
+        """
+        Select and validate the next batch of Voronoi sample locations.
+        """
+        new_points = self._create_voronoi_tess_and_choose_new_samples(
+            batch_number, training_params, training_data
+        )
+
+        return _filter_points_within_bounds(
+            new_points,
+            self._bounds,
+            self._number_parameters,
+        )
+
+    def _evaluate_voronoi_batch(self, new_points):
+        """
+        Evaluate the model at a batch of new Voronoi-selected points.
+        """
+        self._populate_parameter_evaluations(new_points)
+        self._matcal_evaluate_parameter_sets_batch(self._parameter_sets_to_evaluate)
+
     def _stopping_criterion_met(self, training_batch_number, stop=False):
-        scores = self._current_surrogate_score
-        if training_batch_number > 1:
-            this_score = scores[self._convergence_metric][training_batch_number]
-            last_score = scores[self._convergence_metric][training_batch_number-1]
-            if np.abs(this_score - last_score) <= self._eps:
-                logger.info(f"Surrogate Converged!\n"+
-                             f"Convergence from surrogate '{self._convergence_metric}' score:")
-                logger.info(f"Final score: {this_score}")
-                logger.info(f"Score delta: {np.abs(this_score - last_score)}")
-                logger.info(f"Score delta convergence criteria: {self._eps}\n")
-                
-                stop = True
+        history, metric_description = self._get_convergence_history_and_description()
+
+        if training_batch_number > 1 and len(history) >= 2:
+            this_score = history[-1]
+            last_score = history[-2]
+
+            if np.isfinite(this_score) and np.isfinite(last_score):
+                score_delta = np.abs(this_score - last_score)
+
+                if score_delta <= self._eps:
+                    logger.info(
+                        "Surrogate converged based on change in "
+                        f"{metric_description}."
+                    )
+                    logger.info(f"Final metric value: {this_score}")
+                    logger.info(f"Metric delta: {score_delta}")
+                    logger.info(f"Metric delta convergence criterion: {self._eps}\n")
+                    stop = True
+            else:
+                logger.warning(
+                    "Skipping Voronoi surrogate convergence-delta check because "
+                    f"the selected metric '{self._convergence_metric}' contains "
+                    f"non-finite values: previous={last_score}, current={this_score}."
+                )
+
         return super()._stopping_criterion_met(training_batch_number, stop)
 
     def _run_initial_training_samples(self):
@@ -3554,56 +4813,70 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             interpolation_locations=self._independent_variable_values, 
             test_eval_info=self._test_eval_info, 
             target_field=self._target_field_name,
-            save_filename=self._surrogate_save_filename,
+            save_filename=None,
             **self._surrogate_options
         )
         self._surrogate._add_iteration(current_surrogate, self._results.number_of_evaluations)
         self._update_surrogate_score(current_surrogate)
         self._nbatch_samples.append(self.results.number_of_evaluations)
         # Persist the AdaptiveSurrogate container, not only the latest PCA surrogate.
-        if self._surrogate_save_filename is not None:
-            matcal_save(self._surrogate_save_filename, self._surrogate)
+        matcal_save(self._surrogate_save_filename, self._surrogate)
         return training_params, training_data
 
-    def _create_voronoi_tess_and_choose_new_samples(self, iteration, training_params, 
-                                                    training_data):
-        """Perform Voronoi batch sampling based on the specified algorithm.
-        
-        :return: Returns a list of the new samples selected.
+    def _create_voronoi_tess_and_choose_new_samples(
+        self,
+        iteration,
+        training_params,
+        training_data,
+    ):
         """
-        if self._nsplits > 0:
-            # Step 1: Randomly sort existing samples into K-folds and perform KFold Cross Validation
-            self._perform_kfold_cross_validation(training_params, training_data)
-
-            # Step 2: Select the fold(s) with the n largest K-fold CV error(s)
-            self._find_kfold_max_errors()
-            
-            if self._nmax_loo == 'all':
-                worst_sample_locations = training_params[self._max_fold_error_indices]
-            else:
-                # Step 3: Use LOOCV to evaluate each sample within the selected fold(s)
-                self._perform_loo_cross_validation(training_params, training_data)
-                # Step 4: Identify the n sample(s) with the highest LOOCV error(s)
-                worst_sample_locations = self._find_loo_max_errors(training_params)
-                
-        else:
-            # Do not perform kfold or loo CV. New samples drawn for all Voroni regions.
-            worst_sample_locations = training_params
-
-        if self._thin is not None:
-            # thin the new samples locations according to "thin"
-            worst_sample_locations = worst_sample_locations[::self._thin, ...]
-        elif self._random_selection is not None:
-            # randomly select the new sample locations from the candidates in worst_sample_locations
-            draw_n = np.min((int(0.5 * worst_sample_locations.shape[0]), self._random_selection))
-            random_rows = np.random.choice(worst_sample_locations.shape[0], 
-                                           size=draw_n, replace=False)
-            worst_sample_locations = worst_sample_locations[random_rows, ...]
-
-        self._worst_sample_locations = worst_sample_locations
+        Select candidate regions, build the Voronoi object, and choose new samples.
+        """
+        candidates = self._get_voronoi_candidate_locations(training_params, training_data)
+        candidates = _reduce_voronoi_candidates(
+            candidates,
+            self._number_parameters,
+            self._batch_size,
+            self._thin,
+            self._random_selection,
+            self._random_generator
+        )
+    
         logger.info(f"Initializing voronoi/tree for batch {iteration}")
         self._create_voronoi_tess(training_params)
+
+        # Paper-faithful one-at-a-time mode:
+        # preserve the candidate ranking and choose the first valid point.
+        if self._batch_size == 1:
+            point = self._find_first_valid_ranked_candidate_point(candidates)
+            if point is None:
+                return np.empty((0, self._number_parameters))
+            return np.atleast_2d(point)
+
+        self._worst_sample_locations = candidates
         return self._find_new_sample_locations()
+
+    def _get_voronoi_candidate_locations(self, training_params, training_data):
+        """
+        Return candidate sample locations from KFCV/LOO or from all samples.
+        """
+        if self._kfold_splits <= 0:
+            return training_params
+
+        self._perform_kfold_cross_validation(training_params, training_data)
+        self._find_kfold_max_errors()
+
+        if self._loo_seed_candidate_count == "skip_loo":
+            candidates = training_params[self._max_fold_error_indices]
+            return _random_subset_rows(
+                candidates, 
+                self._batch_size, 
+                self._random_generator,
+                self._number_parameters
+            )
+
+        self._perform_loo_cross_validation(training_params, training_data)
+        return self._find_loo_max_errors(training_params)
         
     def _create_voronoi_tess(self, training_params):
         if self._voronoi_type == 'full':
@@ -3613,87 +4886,412 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
             self._voronoi_tessellation.build()
 
         elif self._voronoi_type == 'local':
-            # Make a local voronoi tesselation for each new sample by using knearest neighbors
+            # Make a local voronoi tessellation for each new sample by using knearest neighbors
             # to determine the closest points
             from scipy.spatial import KDTree
             self._all_tree_points = training_params.copy()
             self._tree = KDTree(self._all_tree_points)
                 
     def _find_new_sample_locations(self):
+        """
+        Find new sample locations from the selected Voronoi candidate regions.
+
+        Local Voronoi sampling now checks that enough nearest neighbors exist before
+        attempting to build a local tessellation.
+        """
         new_points = []
         logger.info("Finding new sample locations")
+
         for loc_idx, location in enumerate(self._worst_sample_locations):
-            if np.mod(loc_idx, 100) == 0:
-                logger.info(f"Drawing new sample from region index {loc_idx}"
-                            f" of {len(self._worst_sample_locations)}.")
+            self._log_new_sample_location_progress(loc_idx)
+            new_point = self._find_new_sample_location_for_candidate(location)
 
-            if self._voronoi_type == 'full':
-                # Identify corresponding voronoi cell
-                region_index = self._voronoi_tessellation.get_voronoi_region(location)[0][0]
+            if new_point is None:
+                continue
 
-                # Step 5: Select the point within this sample’s Voronoi cell that
-                # is furthest from existing samples
-                region_vertices, furthest_vertex_index = \
-                    self._voronoi_tessellation.find_furthest_vertex(region_index)
-                if region_vertices is None:
-                    continue
-                furthest_vertex = region_vertices[furthest_vertex_index]
+            new_points.append(new_point)
+            self._update_adaptive_voronoi_after_new_point(new_point)
 
-                # Step 6: Add the new point and update Voronoi tessellation
-                if self._iterative_updates:
-                    self._voronoi_tessellation.add_points(furthest_vertex)
+        return _package_unique_bounded_points(
+            new_points,
+            self._bounds,
+            self._number_parameters,
+        )
 
-                # Step 7: Update X
-                new_points.append(furthest_vertex)
+    def _log_new_sample_location_progress(self, loc_idx):
+        """
+        Log progress while selecting new Voronoi sample locations.
+        """
+        if np.mod(loc_idx, 100) == 0:
+            logger.info(
+                f"Drawing new sample from region index {loc_idx} "
+                f"of {len(self._worst_sample_locations)}."
+            )
 
-            elif self._voronoi_type == 'local':
-                nneighbors = int(self._all_tree_points.shape[0] * 0.25)
-                nearest_neighbors = self._tree.query(location, k=nneighbors)
-                nn_points = self._all_tree_points[nearest_neighbors[1].squeeze()]
-                nn_vor = VoronoiTessellation(nn_points, self._bounds, self._finite_only)
-                nn_vor.build()
-                nn_region = nn_vor.get_voronoi_region(location)[0][0]
-                try:
-                    nn_vert, nn_fvi = nn_vor.find_furthest_vertex(nn_region)
-                except:
-                    continue
+    def _find_new_sample_location_for_candidate(self, location):
+        """
+        Find one new sample location for a selected candidate region.
+        """
+        try:
+            if self._voronoi_type == "full":
+                return self._find_full_voronoi_new_point(location)
 
-                if nn_vert is None:
-                    continue
-                furthest_vertex = nn_vert[nn_fvi]
-                new_points.append(furthest_vertex)
-                if self._iterative_updates:
-                    from scipy.spatial import KDTree
-                    self._all_tree_points = np.vstack((self._all_tree_points, furthest_vertex))
-                    self._tree = KDTree(self._all_tree_points)
+            if self._voronoi_type == "local":
+                return self._find_local_voronoi_new_point(location)
 
-        new_points = np.asarray(new_points)
-        # Make sure all new points are unique
-        unique_points = set(tuple(row) for row in new_points)
-        new_points = np.asarray([list(row) for row in unique_points])
-        new_points = self._check_points_within_bounds(new_points)
-        return new_points
+        except (TypeError, ValueError, RuntimeError) as err:
+            logger.warning(f"Skipping invalid Voronoi candidate: {err}")
+            return None
 
-    def _check_points_within_bounds(self, points):
-        # verify that all samples are within bounds
-        lb = self._bounds[:,0]
-        ub = self._bounds[:,1]
-        mask = ((points >= lb) & (points <= ub)).all(axis=1)
-        return points[mask]
+        raise RuntimeError(f"Unsupported Voronoi type '{self._voronoi_type}'.")
+
+    def _find_full_voronoi_new_point(self, location):
+        """
+        Find a new sample in the selected Voronoi cell by choosing the point in
+        that cell that is farthest from the selected seed/sample.
+
+        This follows the paper's intended rule:
+            choose the point within the selected Voronoi cell that is furthest
+            from the existing sample associated with that cell.
+
+        The search uses:
+          1. bounded Voronoi-cell geometry points, when available,
+          2. otherwise, a deterministic bounded-domain candidate grid filtered
+             to the selected Voronoi cell.
+
+        :param location: The selected sample location whose Voronoi cell is used.
+        :type location: numpy.ndarray
+
+        :return: New sample point or ``None`` if no valid in-cell point is found.
+        :rtype: numpy.ndarray or None
+        """
+        location = np.asarray(location, dtype=float).reshape(-1)
+
+        region_index = self._voronoi_tessellation.get_voronoi_region(location)[0][0]
+        self._voronoi_tessellation.raise_if_invalid_region_index(region_index)
+
+        candidate_points = self._get_points_in_selected_voronoi_cell(
+            region_index,
+            location,
+        )
+
+        if candidate_points is None or candidate_points.shape[0] == 0:
+            return None
+
+        return _select_farthest_point(
+            candidate_points,
+            location,
+        )
+
+    def _get_points_in_selected_voronoi_cell(self, region_index, seed_location):
+        """
+        Return candidate points inside the selected Voronoi cell.
+
+        The method first uses the bounded Voronoi-cell geometry returned by the
+        tessellation. If that does not yield valid candidate points, it creates a
+        deterministic bounded-domain grid and retains only those grid points that
+        belong to the selected Voronoi cell.
+
+        :param region_index: Region index of the selected Voronoi cell.
+        :type region_index: int
+
+        :param seed_location: Coordinates of the selected sample/seed.
+        :type seed_location: numpy.ndarray
+
+        :return: Candidate points in the selected Voronoi cell.
+        :rtype: numpy.ndarray or None
+        """
+        geometry_points = self._voronoi_tessellation.get_region_vertices(
+            region_index,
+            identify_outside_vertices=True,
+        )
+
+        geometry_points = self._filter_selected_cell_candidate_points(
+            geometry_points,
+            seed_location,
+        )
+
+        if geometry_points is not None and geometry_points.shape[0] > 0:
+            return geometry_points
+
+        grid_points = self._get_deterministic_in_cell_grid_points(seed_location)
+        grid_points = self._filter_selected_cell_candidate_points(
+            grid_points,
+            seed_location,
+        )
+
+        if grid_points is None or grid_points.shape[0] == 0:
+            return None
+
+        return grid_points
+
+    def _filter_selected_cell_candidate_points(self, points, seed_location, atol=1.0e-10):
+        """
+        Filter candidate points for selected-cell farthest-point search.
+
+        Points must be finite, in bounds, not equal to the selected seed, not
+        duplicates of existing training points, and unique.
+        """
+        if points is None:
+            return None
+
+        points = _filter_points_within_bounds(
+            points,
+            self._bounds,
+            self._number_parameters,
+        )
+
+        if points.size == 0:
+            return np.empty((0, self._number_parameters))
+
+        seed_location = np.asarray(seed_location, dtype=float).reshape(1, -1)
+
+        not_seed = ~np.all(
+            np.isclose(points, seed_location, atol=atol, rtol=0.0),
+            axis=1,
+        )
+        points = points[not_seed]
+
+        if points.size == 0:
+            return np.empty((0, self._number_parameters))
+
+        training_points = np.asarray(self._format_params(self._results), dtype=float)
+
+        return _remove_duplicate_rows_against_existing(
+            points,
+            training_points,
+            self._number_parameters,
+            atol=atol,
+        )
+
+    def _get_deterministic_in_cell_grid_points(self, seed_location):
+        """
+        Create a deterministic bounded-domain grid and retain only the points
+        belonging to the selected Voronoi cell of the given seed.
+
+        Voronoi-cell membership is determined by nearest-seed assignment to the
+        training points in the input parameter space.
+
+        :param seed_location: Selected sample/seed location.
+        :type seed_location: numpy.ndarray
+
+        :return: Grid points belonging to the selected Voronoi cell.
+        :rtype: numpy.ndarray
+        """
+        seed_location = np.asarray(seed_location, dtype=float).reshape(-1)
+        training_points = np.asarray(self._voronoi_tessellation.points, dtype=float)
+
+        seed_index = _find_matching_row_index(
+            training_points,
+            seed_location
+        )
+        if seed_index is None:
+            return np.empty((0, self._number_parameters))
+
+        candidate_grid = _make_bounded_nd_grid(
+            self._bounds, 
+            self._selected_cell_search_grid_points
+        )
+
+        owner_indices = _assign_points_to_nearest_seed(
+            candidate_grid,
+            training_points,
+        )
+
+        return candidate_grid[owner_indices == seed_index]
+
+    def _find_local_voronoi_new_point(self, location):
+        """
+        Build a local Voronoi tessellation and select its furthest valid vertex.
+        """
+        neighbor_points = self._get_local_voronoi_neighbor_points(location)
+        local_voronoi = self._build_local_voronoi_tessellation(neighbor_points)
+
+        region_index = local_voronoi.get_voronoi_region(location)[0][0]
+        vertices, furthest_vertex_index = local_voronoi.find_furthest_vertex(region_index)
+
+        return self._select_furthest_vertex(vertices, furthest_vertex_index)
+
+    def _select_furthest_vertex(self, vertices, furthest_vertex_index):
+        """
+        Return a furthest Voronoi vertex or ``None`` when no valid vertex exists.
+        """
+        if vertices is None or furthest_vertex_index is None:
+            return None
+
+        return vertices[furthest_vertex_index]
+
+    def _get_local_voronoi_neighbor_points(self, location):
+        """
+        Return nearest-neighbor points for a local Voronoi tessellation.
+
+        The neighbor count is clamped so it is never zero and never below the
+        minimum needed for a dimensionally valid local tessellation.
+        """
+        neighbor_count = self._get_local_voronoi_neighbor_count()
+        nearest_indices = self._query_local_voronoi_neighbors(location, neighbor_count)
+
+        return self._all_tree_points[nearest_indices]
+
+    def _get_local_voronoi_neighbor_count(self):
+        """
+        Return a safe neighbor count for local Voronoi construction.
+        """
+        n_available = self._all_tree_points.shape[0]
+        min_neighbors = self._minimum_local_voronoi_neighbors()
+
+        if n_available < min_neighbors:
+            raise RuntimeError(
+                "Not enough points are available to build a local Voronoi "
+                f"tessellation. Need at least {min_neighbors}, but only "
+                f"{n_available} are available."
+            )
+
+        requested_neighbors = int(np.ceil(0.25 * n_available))
+        neighbor_count = max(min_neighbors, requested_neighbors)
+
+        return min(neighbor_count, n_available)
+
+    def _minimum_local_voronoi_neighbors(self):
+        """
+        Return the minimum number of neighbors for local Voronoi construction.
+        """
+        return self._number_parameters + 2
+
+    def _query_local_voronoi_neighbors(self, location, neighbor_count):
+        """
+        Query the KDTree for local Voronoi nearest-neighbor indices.
+        """
+        _, nearest_indices = self._tree.query(location, k=neighbor_count)
+        return np.asarray(nearest_indices, dtype=int).reshape(-1)
+
+    def _build_local_voronoi_tessellation(self, neighbor_points):
+        """
+        Build and return a local Voronoi tessellation from nearest neighbors.
+        """
+        local_voronoi = VoronoiTessellation(
+            neighbor_points,
+            self._bounds,
+            self._finite_only,
+        )
+        local_voronoi.build()
+
+        return local_voronoi
+
+    def _update_adaptive_voronoi_after_new_point(self, new_point):
+        """
+        Update the active full tessellation or local KDTree after selecting a point.
+        """
+        if not self._iterative_updates:
+            return
+
+        if self._voronoi_type == "full":
+            self._voronoi_tessellation.add_points(np.asarray(new_point, dtype=float))
+            return
+
+        self._update_local_voronoi_tree(new_point)
+
+    def _update_local_voronoi_tree(self, new_point):
+        """
+        Add a new point to the local Voronoi KDTree.
+        """
+        from scipy.spatial import KDTree
+
+        self._all_tree_points = np.vstack(
+            (self._all_tree_points, np.atleast_2d(new_point))
+        )
+        self._tree = KDTree(self._all_tree_points)
+
+    def _find_first_valid_ranked_candidate_point(self, candidate_locations):
+        """
+        In one-at-a-time mode, try candidate locations in ranked order and return
+        the first valid new point that can be generated from a candidate Voronoi
+        region.
+
+        This preserves the KFCV->LOOCV ranking when geometry or duplication causes
+        the top-ranked candidate to fail.
+        """
+        candidate_locations = _normalize_candidate_array(
+            candidate_locations, 
+            self._number_parameters
+        )
+
+        for location in candidate_locations:
+            new_point = self._find_new_sample_location_for_candidate(location)
+            if new_point is None:
+                continue
+
+            new_point = _filter_points_within_bounds(
+                np.atleast_2d(new_point),
+                self._bounds,
+                self._number_parameters,
+            )
+            if new_point.size == 0:
+                continue
+
+            return new_point[0]
+
+        return None
+
+    def _check_candidate_point_dimension(self, points):
+        """
+        Validate that candidate points have one column per parameter.
+        """
+        if points.shape[1] != self._number_parameters:
+            raise ValueError(
+                f"Expected {self._number_parameters} columns, got {points.shape[1]}."
+            )   
         
     def _perform_kfold_cross_validation(self, training_params, training_data):
-        self._kf = None
+        """
+        Perform K-fold CV using a split count valid for the current data size.
+        """
         logger.info("Performing kfold cross-validation")
-        kfcv = KFoldCrossValidation(self._nsplits, self._group_kfold, self._independent_variable, 
-                                    self._independent_variable_values, 
-                                    self._cv_scale, self._cv_metric, self._target_field_name, 
-                                    self.param_names, self._surrogate_options)
-        groups = None
-        if self._group_kfold:
-            from sklearn.cluster import KMeans
-            kmeans = KMeans(n_clusters=self._nsplits, random_state=42)
-            groups = kmeans.fit_predict(training_params)
-        self._kf = kfcv.perform_kfold_cv(training_params, training_data, groups)
+
+        kfold_splits = _get_valid_kfold_split_count(
+            self._kfold_splits,
+            training_params.shape[0],
+        )
+        kfcv = self._make_kfold_cross_validation_runner(kfold_splits)
+        groups = self._make_kfold_groups(training_params, kfold_splits)
+
+        self._kf = _perform_kfold_cv(
+            kfcv,
+            training_params,
+            training_data,
+            groups,
+        )
+
+    def _make_kfold_cross_validation_runner(self, kfold_splits):
+        """
+        Construct the K-fold cross-validation helper object.
+        """
+        return KFoldCrossValidation(
+            kfold_splits,
+            self._group_kfold,
+            self._independent_variable,
+            self._independent_variable_values,
+            self._cv_scale,
+            self._cv_metric,
+            self._target_field_name,
+            self.param_names,
+            self._surrogate_options,
+            random_seed=getattr(self, "_seed", None),
+        )
+
+    def _make_kfold_groups(self, training_params, kfold_splits):
+        """
+        Build grouping labels for GroupKFold, or return None for standard KFold.
+        """
+        if not self._group_kfold:
+            return None
+
+        from sklearn.cluster import KMeans
+
+        return KMeans(
+            n_clusters=kfold_splits,
+            random_state=getattr(self, "_seed", 42),
+        ).fit_predict(training_params)
 
     def _find_kfold_max_errors(self):
         max_folds = self._find_indices_of_n_largest_kf_errors()
@@ -3704,61 +5302,96 @@ class VoronoiAdaptiveSurrogateStudy(AdaptiveSurrogateStudyBase):
     def _perform_loo_cross_validation(self, training_params, training_data):
         self._loo_errors = None
         logger.info("Finding worst sample locations using leave one out validation...")
-        loocv = LeaveOneOutCrossValidation(self._cv_scale, self._cv_metric, 
-                                           self._independent_variable, 
-                                           self._independent_variable_values, 
-                                           self._target_field_name,
-                                           self.param_names, self._surrogate_options)
-        self._loo_errors = loocv.perform_loocv(training_params, training_data,
-                                               self._max_fold_error_indices)
+
+        loocv = LeaveOneOutCrossValidation(
+            self._cv_scale,
+            self._cv_metric,
+            self._independent_variable,
+            self._independent_variable_values,
+            self._target_field_name,
+            self.param_names,
+            self._surrogate_options,
+        )
+
+        self._loo_errors = _perform_leave_one_out_cv(
+            loocv,
+            training_params,
+            training_data,
+            self._max_fold_error_indices,
+        )
     
     def _find_loo_max_errors(self, training_params):
-            self._worst_sample_locations = None
-            max_loo_indices = self._find_indices_of_n_largest_errors()
-            logger.info(f"\n\tWorst errors when the following sample indices " +
-                        "are left out of training:\n"+
-                        f"\t{max_loo_indices}\n")
-            return training_params[max_loo_indices]
-        
-    def _find_indices_of_n_largest_kf_errors(self):
-        # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in self._kf.items()]
-        # Sort the items based on the error in descending order
-        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-        # Get the top n items
-        top_n_items = sorted_items[:self._nmax_folds]
-        # Extract the arrays associated with the top n largest floats
-        result_arrays = {key: array for key, _, array in top_n_items}
-        return result_arrays
+        """
+        Return training locations associated with the largest LOO errors.
+        """
+        self._worst_sample_locations = None
+        max_loo_indices = self._get_ordered_loo_candidate_indices()
+
+        logger.info(
+            "\n\tWorst errors when the following sample indices are left out of "
+            f"training:\n\t{max_loo_indices}\n"
+        )
+
+        return training_params[max_loo_indices]
 
     def _find_indices_of_n_largest_errors(self):
-        """Find the indices of the n largest values in an array of errors.
-
-        :return: Returns an array of indices corresponding to the n largest errors.
         """
-        nkeep = int(self._nmax_loo)
-        # Create a list of (key, error, sample_index) tuples
-        items = [(key, value[0], value[1]) for key, value in self._loo_errors.items()]
-        # Sort the items based on the error in descending order
-        sorted_items = sorted(items, key=lambda x: x[1], reverse=True)
-        # Get the top n items
-        top_n_items = sorted_items[:nkeep]
-        # Extract the indices associated with the top n largest floats
-        indices = [item[2] for item in top_n_items]
-        return np.array(indices)
+        Return sample indices with the largest LOO errors, limited by batch size.
+        """
+        nkeep = self._get_number_of_loo_errors_to_keep()
+        sorted_items = _sorted_error_items(self._loo_errors)
+        indices = [item[2] for item in sorted_items[:nkeep]]
 
-    def _add_parameter_evaluation(self, **p):
-      super()._add_parameter_evaluation(**p)
+        return np.asarray(indices[: self._batch_size], dtype=int)
+
+    def _get_number_of_loo_errors_to_keep(self):
+        """
+        Return the configured number of LOO-ranked candidates to retain.
+        """
+        if self._loo_seed_candidate_count == "skip_loo":
+            return len(self._loo_errors)
+
+        return min(int(self._loo_seed_candidate_count), len(self._loo_errors))
+
+    def _get_ordered_loo_candidate_indices(self):
+        """
+        Return candidate training-sample indices ordered from largest LOO error
+        to smallest LOO error.
+
+        The number returned is limited by ``loo_seed_candidate_count`` unless ``loo_seed_candidate_count='skip_loo'``.
+        """
+        nkeep = self._get_number_of_loo_errors_to_keep()
+        sorted_items = _sorted_error_items(self._loo_errors)
+        indices = [item[2] for item in sorted_items[:nkeep]]
+        return np.asarray(indices, dtype=int)
+    
+    def _find_indices_of_n_largest_kf_errors(self):
+        sorted_items = _sorted_error_items(self._kf)
+        top_n_items = sorted_items[:self._kfold_regions_for_loo]
+        return {
+            key: sample_indices
+            for key, _, sample_indices in top_n_items
+        }
 
     def add_parameter_evaluation(self, **parameters):
-        """"""
+        """
+        Manual parameter-evaluation insertion for Voronoi adaptive studies is disabled.
+
+        Voronoi adaptive studies choose new parameter evaluations internally based on
+        the current surrogate error and Voronoi tessellation. Users should not manually
+        add evaluations.
+
+        :raises StudyInputError: Always raised because manual evaluations are not
+            supported.
+
+        """
         raise self.StudyInputError("Users cannot add parameter evaluations to"
                                    " a VoronoiAdaptiveSurrogateStudy.")
 
 
 class VoronoiTessellation:
     def __init__(self, points, bounds, finite_only):
-        """Initialize the VoronoiBatchSamplingStudy
+        """Initialize the Voronoi tessellation helper.
         
         :param points: Array of points that are the seeds of the Voronoi tessellation
         :type points: nd_array
@@ -3766,6 +5399,11 @@ class VoronoiTessellation:
         :param bounds: Bounds for the parameter space,
             e.g., [(xmin, xmax), (ymin, ymax)] for a 2D space.
         :type bounds: list of tuples
+
+        :param finite_only: If ``True``, only finite Voronoi vertices inside the bounded
+            domain are used. If ``False``, out-of-bound vertices may be clipped to the
+            domain boundary.
+        :type finite_only: bool
         """
         self.points = np.array(points)
         self.ndim = self.points.shape[1]
@@ -3777,7 +5415,10 @@ class VoronoiTessellation:
         """Initialize the Voronoi tessellation with given points and bounds.
         """
         from scipy.spatial import Voronoi, Delaunay, ConvexHull
-        self.boundary_points = self._make_nd_grid(npts_along_dim=2)
+        self.boundary_points = _make_bounded_nd_grid(
+            self.bounds,
+            npts_along_dim=2
+        )
         if not self.finite_only:
             self.boundary_hull = ConvexHull(self.boundary_points)
             self.boundary_hull_eq = self.boundary_hull.equations # (nfacet, ndim + 1)
@@ -3787,171 +5428,235 @@ class VoronoiTessellation:
         else:
             self.boundary_hull = None
             self.bhullD = None
-        self.create_ghost_points()
-        self._all_points = np.vstack([self.points, self._ghost_points])
+        ghost_points = _create_ghost_points(
+            self.boundary_points, 
+            self.ndim
+        )
+        self._all_points = np.vstack([self.points, ghost_points])
         
         self.vor = Voronoi(self._all_points, incremental=self.incremental)
-        self.ghost_busters()
+        self.ghost_busters(ghost_points)
         self.boundary_regions = self.get_voronoi_region(self.boundary_points) # may need to update
-       
-    def _make_nd_grid(self, npts_along_dim):
-        grid_pts = []
-        for dim in np.arange(self.ndim):
-            grid_pts.append(np.linspace(self.bounds[dim,0], self.bounds[dim,1], npts_along_dim))
-        coords = np.meshgrid(*grid_pts)
-        coords_ravel = [np.asarray(coords[i]).ravel() for i in np.arange(self.ndim)]
-        return np.vstack(tuple(coords_ravel)).T
-        
-    def create_ghost_points(self, stretchCoef=1.75, centCoef=1.5):
-        """Reflect points nearest to the boundary hull across the nearest
-        face of the boundary hull """
 
-        boundary_points_stretched = self.boundary_points * stretchCoef
-        self._ghost_points = boundary_points_stretched
-
-        boundary_centroid = np.mean(self.boundary_points, axis=0)
-        max_dist = np.max(np.linalg.norm(self.boundary_points - boundary_centroid, axis=1))
-        self._ghost_points = \
-            np.vstack([self._ghost_points, \
-                boundary_centroid + centCoef * max_dist * np.eye(self.points.shape[1])])
-        self._ghost_points =\
-            np.vstack([self._ghost_points, \
-                boundary_centroid - centCoef * max_dist * np.eye(self.points.shape[1])])
-
-    def ghost_busters(self):
+    def ghost_busters(self, ghost_points):
         """ Identify which points in self._all_points are ghost points"""
         self._boo = []
         for point in self._all_points:
-            if point in self._ghost_points:
+            if np.any(np.all(np.isclose(ghost_points, point), axis=1)):
                 self._boo.append(True)
             else:
                 self._boo.append(False)
 
     def get_region_vertices(self, region_index, identify_outside_vertices=True):
-        """Return the vertices of the Voronoi region."""
-        region = self.vor.regions[region_index].copy()
-        if -1 in region:
-            logger.warning(f"Infinite vertice in Region {region_index}")
-        
-        if identify_outside_vertices:
-            updated_region = self.identify_vertices_outside_bounds(region)
-            if not -2 in updated_region and len(updated_region) > 0:
-                region_vertices = self.vor.vertices[region]
-            elif -2 in updated_region:
-                if self.finite_only:
-                    if max(updated_region) < 0:
-                        region_vertices = None
-                    else: 
-                        region_vertices = \
-                            np.asarray([self.vor.vertices[i]\
-                                for i in updated_region if i > 0])
-                else:
-                    region_tuple_list = list(zip(region, updated_region))
-                    region_vertices = \
-                        self.replace_unbounded_vertices(updated_region, region_index, region_tuple_list)
-            if region_vertices is not None:
-                if not self.finite_only:
-                    boundary_in_region = \
-                        [i for i in np.arange(len(self.boundary_regions))\
-                            if self.boundary_regions[i][0] == region_index]
-                    if boundary_in_region:
-                        boundary_vertices = self.boundary_points[boundary_in_region] 
-                        region_vertices = np.concatenate((region_vertices, boundary_vertices))
-                        unique_vertices = set(tuple(row) for row in region_vertices)
-                        return np.asarray([list(row) for row in unique_vertices])
-            return region_vertices
+        """
+        Return vertices for a Voronoi region.
 
-        elif not identify_outside_vertices:
-            return self.vor.vertices[region]
+        Infinite vertices are never used as NumPy indices. Valid vertex index ``0``
+        is retained.
+        """
+        self.raise_if_invalid_region_index(region_index)
+
+        region = self.vor.regions[region_index].copy()
+
+        if not identify_outside_vertices:
+            return self._get_unclipped_region_vertices(region)
+
+        return self._get_clipped_region_vertices(region_index, region)
+
+    def _get_unclipped_region_vertices(self, region):
+        """
+        Return finite region vertices without clipping to the parameter bounds.
+        """
+        finite_indices = _finite_vertex_indices(region)
+        return self._vertices_from_indices(finite_indices)
+
+    def _vertices_from_indices(self, vertex_indices):
+        """
+        Return Voronoi vertex coordinates for a list of valid finite vertex indices.
+
+        Returns ``None`` if no valid finite vertices are available.
+        """
+        if len(vertex_indices) == 0:
+            return None
+
+        return self.vor.vertices[vertex_indices]
+
+    def _get_clipped_region_vertices(self, region_index, region):
+        """
+        Return region vertices clipped or filtered to the parameter bounds.
+
+        Finite vertices, clipped ridge-boundary intersections, and associated
+        boundary vertices are combined, filtered for finite in-bound coordinates,
+        and uniqued.
+        """
+        updated_region = self.identify_vertices_outside_bounds(region)
+        vertices = self._vertices_from_updated_region(region_index, region, updated_region)
+        vertices = self._append_boundary_vertices_for_region(region_index, vertices)
+        vertices = _filter_points_within_bounds(
+            vertices, 
+            self.bounds, 
+            self.ndim
+        )
+
+        if vertices is None or vertices.shape[0] == 0:
+            return None
+
+        return np.unique(np.atleast_2d(vertices), axis=0)
+
+    def _vertices_from_updated_region(self, region_index, original_region, updated_region):
+        """
+        Return valid region vertices from an updated bounded-region list.
+        """
+        finite_indices = _finite_vertex_indices(updated_region)
+
+        if -2 not in updated_region:
+            return self._vertices_from_indices(finite_indices)
+
+        if self.finite_only:
+            return self._vertices_from_indices(finite_indices)
+
+        region_tuple = list(zip(original_region, updated_region))
+        return self.replace_unbounded_vertices(updated_region, region_index, region_tuple)
+
+    def _append_boundary_vertices_for_region(self, region_index, vertices):
+        """
+        Append boundary-corner vertices associated with a bounded Voronoi region.
+        """
+        pieces = []
+
+        if vertices is not None and len(vertices) > 0:
+            pieces.append(np.atleast_2d(vertices))
+
+        if not self.finite_only:
+            boundary_vertices = self._get_boundary_vertices_for_region(region_index)
+            if boundary_vertices is not None and len(boundary_vertices) > 0:
+                pieces.append(np.atleast_2d(boundary_vertices))
+
+        if len(pieces) == 0:
+            return None
+
+        return np.concatenate(pieces, axis=0)
+
+    def _get_boundary_vertices_for_region(self, region_index):
+        """
+        Return parameter-domain boundary points associated with a Voronoi region.
+        """
+        boundary_indices = [
+            idx
+            for idx in np.arange(len(self.boundary_regions))
+            if self.boundary_regions[idx][0] == region_index
+        ]
+
+        if len(boundary_indices) == 0:
+            return None
+
+        return self.boundary_points[boundary_indices]
 
     def get_voronoi_vertices(self, identify_outside_vertices=True):
-        """Return the vertices of the Voronoi tessellation."""
+        """
+        Return all valid Voronoi vertices.
+
+        Regions belonging to ghost points are skipped.
+        """
         vertices = []
-        for i, region in enumerate(self.vor.regions):
-            try:
-                region_point_index, = np.where(self.vor.point_region == i)[0]
-            except:
-                # empty region: Voronoi region for a point at infinity that was added internally
-                continue
-            if self._boo[region_point_index]:
-                # region belongs to a ghost point
-                continue
-            elif -1 in region:
-                logger.warning(f"Infinite vertice in Region {i}")
 
-            if identify_outside_vertices:
-                updated_region = self.identify_vertices_outside_bounds(region)
-                if not -2 in updated_region and len(updated_region) > 0:
-                    vertices.append(self.vor.vertices[region])
-                elif -2 in updated_region:
-                    if self.finite_only:
-                        verts = np.asarray([self.vor.vertices[i] for i in updated_region if i > 0])
-                        vertices.append(verts)
-                    else:
-                        region_tuple_list = list(zip(region, updated_region))
-                        vertices.append(self.replace_unbounded_vertices(updated_region, i, region_tuple_list))
-                        boundary_in_region =\
-                            [ii for ii in np.arange(len(self.boundary_regions))\
-                                if self.boundary_regions[ii][0] == i]
-                        if boundary_in_region:
-                            boundary_vertices = self.boundary_points[boundary_in_region] 
-                            vertices.append(boundary_vertices)
+        for region_index, _ in enumerate(self.vor.regions):
+            if self._region_belongs_to_ghost_point(region_index):
+                continue
 
-            elif not identify_outside_vertices:
-                vertices.append(self.vor.vertices[region])
-        
-        if vertices is not None:
-            vertices = np.concatenate((vertices))
-            unique_vertices = set(tuple(row) for row in vertices)
-            return np.asarray([list(row) for row in unique_vertices])
-        else: 
-            return vertices
+            region_vertices = self.get_region_vertices(
+                region_index,
+                identify_outside_vertices,
+            )
+
+            if region_vertices is not None and len(region_vertices) > 0:
+                vertices.append(np.atleast_2d(region_vertices))
+
+        if len(vertices) == 0:
+            return None
+
+        return np.unique(np.concatenate(vertices), axis=0)
+
+    def _region_belongs_to_ghost_point(self, region_index):
+        """
+        Return True if a Voronoi region belongs to a ghost seed point.
+        """
+        point_indices = np.where(self.vor.point_region == region_index)[0]
+
+        if len(point_indices) != 1:
+            return True
+
+        return self._boo[point_indices[0]]
         
     def identify_vertices_outside_bounds(self, region):
         """
-        Identify vertices that sit outside the bounding region
-
-        :param region: A list of the voronoi regions. Each list contains indices of the voronoi 
-            vertices forming each Voronoi region.
-        :type region: list
-
-        :return: Returns a new list of voronoi regions with vertices outside
-            the bounding region replaced with -2.
+        Mark infinite or out-of-bounds Voronoi vertices as ``-2``.
         """
+        region = np.asarray(region, dtype=int)
 
-        #outside = lambda lb, ub, x: (x < lb) + (x > ub)
-        # Create a boolean mask for vertices outside the bounds
-        region = np.array(region)
-        region_vertices = self.vor.vertices[region]
-        outside_mask = np.zeros(region_vertices.shape, dtype=bool)
+        if region.size == 0:
+            return []
 
-        for col_index in range(self.ndim):
-            lb, ub = self.bounds[col_index,0], self.bounds[col_index, 1]
-            #vert_outside, = np.where(outside(lb, ub, region_vertices[:, col_index]))
-            outside_mask[:, col_index] |= \
-                (region_vertices[:, col_index] < lb) | (region_vertices[:, col_index] > ub)
+        updated_region = self._mark_infinite_vertices(region)
+        updated_region = self._mark_outside_finite_vertices(updated_region)
 
-        # Get the indices of vertices that are outside the bounds
-        vert_outside = np.where(outside_mask.any(axis=1))[0]
-        if len(vert_outside) > 0:
-            outside_vert_index = [region[i] for i in vert_outside]
-            region[vert_outside] = -2
-        return region.tolist()
+        return updated_region.tolist()
+
+    def _mark_infinite_vertices(self, region):
+        """
+        Convert SciPy infinite vertex markers from ``-1`` to ``-2``.
+        """
+        updated_region = region.copy()
+        updated_region[updated_region == -1] = -2
+        return updated_region
+
+    def _mark_outside_finite_vertices(self, updated_region):
+        """
+        Mark finite Voronoi vertices outside the parameter bounds as ``-2``.
+        """
+        finite_mask = updated_region >= 0
+
+        if not np.any(finite_mask):
+            return updated_region
+
+        finite_vertices = self.vor.vertices[updated_region[finite_mask]]
+        outside_mask = self._outside_bounds_mask(finite_vertices)
+
+        finite_positions = np.where(finite_mask)[0]
+        updated_region[finite_positions[outside_mask]] = -2
+
+        return updated_region
+
+    def _outside_bounds_mask(self, vertices):
+        """
+        Return a mask indicating which vertices lie outside the parameter bounds.
+        """
+        outside_mask = np.zeros(vertices.shape[0], dtype=bool)
+
+        for dim in range(self.ndim):
+            lb = self.bounds[dim, 0]
+            ub = self.bounds[dim, 1]
+            outside_mask |= (vertices[:, dim] < lb) | (vertices[:, dim] > ub)
+
+        return outside_mask
 
     def replace_unbounded_vertices(self, region, region_index, region_tuple):
         """
-        Replace the infinite vertices in a Voronoi region with new vertices on 
-        the edge of the bounding box.
-        ** vertices that sit outside the bounding region are considered infinite here
+        :param region: Vertex-index list for one Voronoi region. Entries marked ``-2``
+            represent infinite or out-of-bounds vertices that should be replaced by
+            boundary intersections.
+        :type region: list[int]
 
-        :param region: A list of the voronoi regions. Each list contains indices
-        of the Voronoi vertices forming each Voronoi region.
-        :type region: list
-        
-        :param region_index: Region index
+        :param region_index: Index of the Voronoi region being processed.
         :type region_index: int
-        
-        :return: Returns a new list of voronoi regions with infinite vertices replaced.
+
+        :param region_tuple: Pairs mapping original region vertex markers to updated
+            bounded-region markers.
+        :type region_tuple: list[tuple[int, int]]
+
+        :return: Vertex coordinates for the bounded/clipped region, or ``None`` if no
+            valid replacement vertices are available.
+        :rtype: numpy.ndarray or None
         """
         try:
             region_point_index, = np.argwhere(self.vor.point_region == region_index)[0]
@@ -3976,88 +5681,144 @@ class VoronoiTessellation:
                 return None
 
         else:
-            region_vertices = self.vor.vertices[region]
-
+            finite_indices = [idx for idx in region if idx >= 0]
+            region_vertices = self.vor.vertices[finite_indices]
         return region_vertices
 
     def snip_ridge_vertices(self, region_index, region_point_index, region_tuple):
+        """
+        Replace out-of-bounds ridge vertices with boundary-hull intersections.
 
-        # Find the ridge vertices for the specified region
-        region_dict = {x[0]: x[1] for x in region_tuple}
-        
-        # the voronoi points that are equidistant from the ridge that lies between them
-        ridge_point_indices = np.argwhere(self.vor.ridge_points == region_point_index)[:, 0]
-        
-        # the vertices at the end of each ridge
-        region_ridge_vertices = [self.vor.ridge_vertices[i] for i in ridge_point_indices]
-
+        Ridges containing SciPy's ``-1`` infinite vertex marker are skipped rather
+        than accidentally indexing ``vertices[-1]``.
+        """
+        region_dict = {old_idx: new_idx for old_idx, new_idx in region_tuple}
+        ridge_ids = self._ridge_ids_for_region_point(region_point_index)
         new_vertices = []
-        for rv in region_ridge_vertices:
-            urv = [region_dict.get(num) for num in rv]
-            if len(urv) == 2: #2D Voronoi region
-                u, v = np.argsort(urv)
-                # and urv[v] > 0: # only one vertice is out of bounds - snip one end to the boundary hull
-                if urv[u] == -2:
-                    ray_end = self.vor.vertices[rv[u]]
-                    ray_origin = self.vor.vertices[rv[v]]
-                    norm_ray_direction =\
-                        self.get_normal_ray_direction(ray_origin, ray_end)
-                    new_vertice = \
-                        self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    # confirm new vertice is in given region
-                    if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
-                        # confirm point is within boundary hull
-                        if self.bhullD.find_simplex(new_vertice) >= 0:
-                            new_vertices.append(new_vertice)
-                # both vertices are out of bounds - snip both ends to the boundary hull
-                if urv[v] == -2:
-                    ray_end = self.vor.vertices[rv[v]]
-                    ray_origin = self.vor.vertices[rv[u]]
-                    norm_ray_direction = \
-                        self.get_normal_ray_direction(ray_origin, ray_end)
-                    new_vertice =\
-                        self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                    if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
-                        if self.bhullD.find_simplex(new_vertice) >= 0:
-                            new_vertices.append(new_vertice)
 
-            elif len(urv) > 2: #3D + Voronoi region
-                nunbounded_vert = urv.count(-1) + urv.count(-2)
-                if nunbounded_vert > 0 and nunbounded_vert < len(urv):
+        for ridge_id in ridge_ids:
+            new_vertices += self._snip_one_ridge(
+                ridge_id,
+                region_dict,
+                region_index,
+            )
 
-                    edges = [[rv[i], rv[(i+1) % len(rv)]] for i in range(len(rv))]
-                    updated_edges = \
-                        [[urv[i], urv[(i+1) % len(urv)]] for i in range(len(urv))]
-                    unbounded_edges =\
-                        [[i, edge] for i, edge in enumerate(updated_edges) if -2 in edge]
-                    for i, ev in unbounded_edges:
-                        u, v = np.argsort(ev)
-                        if ev[u] == -2: # and ev[v] > 0:
-                            ray_end = self.vor.vertices[edges[i][u]]
-                            ray_origin = self.vor.vertices[edges[i][v]]
-                            norm_ray_direction = \
-                                self.get_normal_ray_direction(ray_origin, ray_end)
-                            new_vertice = \
-                                self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                            if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
-                                if self.bhullD.find_simplex(new_vertice) >= 0:
-                                            new_vertices.append(new_vertice)
-                        if ev[v] == -2: # and ev[v] > 0:
-                            ray_end = self.vor.vertices[edges[i][v]]
-                            ray_origin = self.vor.vertices[edges[i][u]]
-                            norm_ray_direction = \
-                                self.get_normal_ray_direction(ray_origin, ray_end)
-                            new_vertice = \
-                                self.find_boundary_hull_ray_crossings(norm_ray_direction, ray_origin)
-                            if new_vertice is not None and region_index in self.get_voronoi_region(new_vertice)[0]:
-                                if self.bhullD.find_simplex(new_vertice) >= 0:
-                                            new_vertices.append(new_vertice)
+        if len(new_vertices) == 0:
+            return np.empty((0, self.ndim))
 
-        return np.asarray(new_vertices)
+        return np.asarray(new_vertices, dtype=float)
+
+    def _ridge_ids_for_region_point(self, region_point_index):
+        """
+        Return ridge indices associated with a Voronoi seed point.
+        """
+        return np.argwhere(self.vor.ridge_points == region_point_index)[:, 0]
+
+    def _snip_one_ridge(self, ridge_id, region_dict, region_index):
+        """
+        Return clipped vertices generated from one Voronoi ridge.
+
+        Ridges containing SciPy's ``-1`` infinite vertex marker are skipped to avoid
+        accidental negative indexing.
+        """
+        ridge_vertices = self.vor.ridge_vertices[ridge_id]
+
+        if -1 in ridge_vertices:
+            return []
+
+        updated_vertices = [region_dict.get(idx, idx) for idx in ridge_vertices]
+        clipped_vertices = []
+
+        for outside_pos, inside_pos in self._outside_inside_ridge_edges(updated_vertices):
+            clipped = self._snip_one_edge(
+                ridge_vertices[inside_pos],
+                ridge_vertices[outside_pos],
+                region_index,
+            )
+
+            if clipped is not None:
+                clipped_vertices.append(clipped)
+
+        return self._unique_vertex_list(clipped_vertices)
+    
+    def _outside_inside_ridge_edges(self, updated_vertices):
+        """
+        Yield ridge-edge positions with one outside and one finite inside vertex.
+
+        The returned tuple is always ``(outside_position, inside_position)``.
+        Both edge orientations are handled.
+        """
+        positions = list(range(len(updated_vertices)))
+
+        for a, b in zip(positions, np.roll(positions, -1)):
+            a_outside = updated_vertices[a] == -2
+            b_outside = updated_vertices[b] == -2
+            a_finite = updated_vertices[a] >= 0
+            b_finite = updated_vertices[b] >= 0
+
+            if a_outside and b_finite:
+                yield a, b
+            elif b_outside and a_finite:
+                yield b, a
+
+    def _snip_one_edge(self, origin_vertex_id, end_vertex_id, region_index):
+        """
+        Clip one bounded-to-outside Voronoi edge to the parameter-domain hull.
+        """
+        if origin_vertex_id < 0 or end_vertex_id < 0:
+            return None
+
+        origin = self.vor.vertices[origin_vertex_id]
+        end = self.vor.vertices[end_vertex_id]
+        direction = self.get_normal_ray_direction(origin, end)
+
+        new_vertex = self.find_boundary_hull_ray_crossings(direction, origin)
+
+        if not self._new_vertex_is_valid_for_region(new_vertex, region_index):
+            return None
+
+        return new_vertex
+
+    def _new_vertex_is_valid_for_region(self, new_vertex, region_index):
+        """
+        Return True if a clipped vertex is finite and inside the boundary hull.
+
+        The explicit Voronoi-region membership check is intentionally omitted here
+        because clipped boundary intersections can be numerically assigned to an
+        adjacent or ghost-influenced region even when they are valid for bounding
+        the cell.
+        """
+        if new_vertex is None:
+            return False
+
+        new_vertex = np.asarray(new_vertex, dtype=float)
+
+        if not np.isfinite(new_vertex).all():
+            return False
+
+        return self.bhullD.find_simplex(new_vertex, tol=1e-10) >= 0
+
+    def _unique_vertex_list(self, vertices):
+        """
+        Return a list of unique vertices from a possibly duplicated vertex list.
+        """
+        if len(vertices) == 0:
+            return []
+
+        vertices = np.unique(np.asarray(vertices, dtype=float), axis=0)
+        return [vertex for vertex in vertices]
 
     def get_normal_ray_direction(self, ray_origin, ray_end):
+        """
+        Return the normalized direction from ``ray_origin`` to ``ray_end``.
+        """
         ray_direction = ray_end - ray_origin
-        return ray_direction / np.linalg.norm(ray_direction)
+        norm = np.linalg.norm(ray_direction)
+
+        if norm <= 0:
+            raise ValueError("Cannot normalize a zero-length Voronoi ray direction.")
+
+        return ray_direction / norm
         
     def find_boundary_hull_ray_crossings(self, U, z):
         """Find where a ray crosses the convex hull of the boundary.
@@ -4068,7 +5829,9 @@ class VoronoiTessellation:
         :param z: Ray origin.
         :type z: np.ndarray
 
-        :return: Returns a list of intersection points with the convex hull.
+        :return: Closest positive ray intersection with the boundary hull, or ``None``
+            if the ray has no positive intersection.
+        :rtype: numpy.ndarray or None
         """
         V = self.boundary_hull_V
         b = self.boundary_hull_b
@@ -4081,21 +5844,63 @@ class VoronoiTessellation:
         return np.min(alpha[alpha >0]) * U + z
 
     def find_furthest_vertex(self, region_index, identify_outside_vertices=True):
-        """Find the vertex that has the greatest distance from the cell centroid."""
-
+        """
+        Find the Voronoi vertex farthest from the region seed.
+        """
         self.raise_if_invalid_region_index(region_index)
-        vertices = self.get_region_vertices(region_index,\
-            identify_outside_vertices=identify_outside_vertices)
-        if vertices is not None:
-            centroid = self.get_region_seed(region_index)
-            distances = np.linalg.norm(vertices - centroid, axis=1)
-            furthest_vertex_index = np.argmax(distances)
-        else:
-            furthest_vertex_index = None
+
+        vertices = self.get_region_vertices(
+            region_index,
+            identify_outside_vertices=identify_outside_vertices,
+        )
+
+        if vertices is None or len(vertices) == 0:
+            return None, None
+
+        centroid = self.get_region_seed(region_index)
+        distances = np.linalg.norm(vertices - centroid, axis=1)
+        furthest_vertex_index = int(np.argmax(distances))
+
         return vertices, furthest_vertex_index
 
+    def raise_if_invalid_region_index(self, region_index):
+        """
+        Validate that a Voronoi region index refers to a valid, nonempty region.
+
+        This method is used before accessing ``self.vor.regions[region_index]``.
+        SciPy Voronoi objects may contain empty regions, and invalid region indices
+        can otherwise produce confusing downstream errors when selecting adaptive
+        sample locations.
+
+        :param region_index: Index into ``self.vor.regions``.
+        :type region_index: int or numpy.integer
+
+        :raises TypeError: If ``region_index`` is not an integer.
+        :raises ValueError: If ``region_index`` is outside the valid range or refers
+            to an empty Voronoi region.
+        """
+        if not isinstance(region_index, (int, np.integer)):
+            raise TypeError(
+                "Voronoi region index must be an integer. "
+                f"Received type '{type(region_index)}'."
+            )
+
+        n_regions = len(self.vor.regions)
+
+        if region_index < 0 or region_index >= n_regions:
+            raise ValueError(
+                f"Invalid Voronoi region index {region_index}. "
+                f"Valid region indices are in [0, {n_regions - 1}]."
+            )
+
+        if len(self.vor.regions[region_index]) == 0:
+            raise ValueError(
+                f"Voronoi region {region_index} is empty and cannot be used "
+                "to select a new adaptive sample."
+            )
+
     def get_region_seed(self, region_index):
-        """Given a region_index, return the seed of the Voronoi tesselation that
+        """Given a region_index, return the seed of the Voronoi tessellation that
         belongs to the region.
 
         :param region_index: Region index.
@@ -4108,8 +5913,8 @@ class VoronoiTessellation:
         return np.atleast_2d(self.vor.points[point_index[0]])
 
     def get_voronoi_region(self, point_array):
-        """Given an array of points, return the region of the Voronoi tesselation that the
-        points belongs to. If a point lies on a ridge or vertice, multiple regions are 
+        """Given an array of points, return the region of the Voronoi tessellation that the
+        points belongs to. If a point lies on a ridge or vertex, multiple regions are 
         returned for that point.
 
         :param point: An array of points to find the region of.
@@ -4117,7 +5922,7 @@ class VoronoiTessellation:
 
         :return: Returns a list of lists, where each sublist contains the Voronoi 
             region(s) that contains the point. A point on a ridge has a sublist with 
-            two regions (for 2D). A point on a vertice has a sublist
+            two regions (for 2D). A point on a vertex has a sublist
             with 3 regions (for 2D)
         """
         point_array = np.atleast_2d(point_array)
@@ -4138,7 +5943,7 @@ class VoronoiTessellation:
         """Return the index of the seed of the Voronoi cell that contains the given point.
             If the point lies on a ridge or vertex, multiple seeds are returned."""
         closest_seed_index = self.get_closest_point(self.vor.points, point)
-        return closest_seed_index[0]
+        return closest_seed_index
 
     def get_closest_point(self, candidates, target_point):
         """Return the index of the candidate point that has the min distance
@@ -4146,62 +5951,128 @@ class VoronoiTessellation:
         distances = np.linalg.norm(candidates - target_point, axis=1)
         min_dist = min(distances)
         closest_candidate_index = np.where(np.isclose(distances, min_dist, rtol=0, atol=1e-10))
-        return closest_candidate_index        
-
-    def remove_invalid_rows(self, arr):
-        """ Remove points from NumPy array that contain NaN or infinite values."""
-        if not isinstance(arr, np.ndarray):
-            raise TypeError("Input to remove_invalid_rows must be a NumPy array.")
-        arr = np.atleast_2d(arr)
-        
-        # Create a boolean mask for valid rows (no NaN, no inf, no -inf)
-        mask = np.isfinite(arr).all(axis=1)
-        return arr[mask]
+        return closest_candidate_index[0]        
     
     def add_points(self, points):
-        """Process a set of additional points.
-        
-        Voronoi has a built in function to add points 
-            -- self.vor.add_points(points, restart=True).
-        However, 'incremental` must be set to True to use the built-in add_points() 
-        method and is very slow. Qhull throws an error for dim>2 when 
-        incremental=True and restart=False. This class method, which rebuilds 
-        'manually` is faster.
         """
-        from scipy.spatial import Voronoi 
-        if not isinstance(points, np.ndarray):
-            raise TypeError("Input to add_points must be a NumPy array.")
-        points = np.atleast_2d(points)
-        
-        if not points.shape[-1] == self._all_points.shape[-1]:
-            raise ValueError(f"Points in add_points have a different dimension"
-                             " ({points.shape[-1]}) than points in voronoi"
-                             " tessellation ({self._all_points.shape[-1]})")
-        
-        points = self.remove_invalid_rows(points)
+        Add sample points and rebuild the Voronoi tessellation.
+
+        The Voronoi tessellation contains two classes of seed points:
+
+        * sample points stored in ``self.points``; and
+        * ghost points used to bound the tessellation.
+
+        Only sample points should be added through this method. After new
+        points are added, all derived tessellation state is rebuilt,
+        including ghost points, the combined point array, the SciPy Voronoi object,
+        ghost-point bookkeeping, and boundary-region bookkeeping.
+
+        Rebuilding all derived state is necessary because SciPy Voronoi region
+        indices and point-region mappings can change whenever points are added. If
+        only ``self.vor`` is rebuilt while cached arrays such as ``self._boo`` or
+        ``self.boundary_regions`` are left unchanged, later calls to region and
+        vertex-selection methods can use stale indices and select incorrect adaptive
+        samples.
+
+        Invalid rows containing ``NaN`` or infinite values are discarded. Duplicate
+        points are removed before rebuilding the tessellation.
+
+        :param points: New sample point or points to add. A single point
+            may be supplied with shape ``(n_dimensions,)``. Multiple points should
+            have shape ``(n_points, n_dimensions)``.
+        :type points: array-like
+
+        :raises TypeError or ValueError: If ``points`` cannot be converted to a
+            floating-point NumPy array.
+
+        :raises ValueError: If the supplied points do not have the same dimension as
+            the existing sample points.
+
+        :ivar points: Updated unique sample points.
+        :vartype points: array-like
+
+        :ivar _all_points: Combined and ghost seed points used to construct
+            the Voronoi tessellation.
+        :vartype _all_points: numpy.ndarray
+
+        :ivar vor: Rebuilt SciPy Voronoi tessellation.
+        :vartype vor: scipy.spatial.Voronoi
+
+        :ivar _boo: Boolean list marking which entries of ``_all_points`` are ghost
+            points.
+        :vartype _boo: list[bool]
+
+        :ivar boundary_regions: Updated Voronoi region indices associated with the
+            domain boundary points.
+        :vartype boundary_regions: list[list[int]]
+        """
+        points = self._prepare_points_to_add(points)
+
         if points.size == 0:
-            logger.warning("All input points were NaN or Inf."
-                           " No new points added to voronoi tessellation.")
+            logger.warning("No finite points were added to the Voronoi tessellation.")
             return
 
-        # make sure all new points are unique
-        all_points = np.vstack((self._all_points, points))
-        unique_points = set(tuple(row) for row in all_points)
-        self._all_points = np.asarray([list(row) for row in unique_points])
-        self.vor = Voronoi(self._all_points)
+        self._append_unique_points(points)
+        self._rebuild_voronoi_state()
 
-    def raise_if_invalid_region_index(self, region_index):
-        if region_index > len(self.vor.regions) or region_index < 0:
-            raise ValueError('Invalid region index. Index must be in (0, nregions]')
-
-
-class KFoldCrossValidation:
-    def __init__(self, nsplits, group_kfold, interpolation_field, interpolation_values, 
-                 scale, metric, target_field, param_names, surrogate_options):
-        """Initialize the K-Fold Cross-Validation with a given surrogate model.
+    def _prepare_points_to_add(self, points):
         """
-        self.nsplits = nsplits
-        self.group_kfold = group_kfold
+        Validate and sanitize points before adding them to the tessellation.
+        """
+        points = np.asarray(points, dtype=float)
+
+        if points.size == 0:
+            return np.empty((0, self.ndim))
+
+        points = _remove_invalid_rows(np.atleast_2d(points))
+        self._check_added_point_dimension(points)
+
+        return points
+
+    def _check_added_point_dimension(self, points):
+        """
+        Validate that new points have the tessellation dimension.
+        """
+        if points.size > 0 and points.shape[1] != self.points.shape[1]:
+            raise ValueError("New points have the wrong dimension.")
+
+    def _append_unique_points(self, points):
+        """
+        Append points and remove duplicates.
+        """
+        self.points = np.unique(np.vstack((self.points, points)), axis=0)
+
+    def _rebuild_voronoi_state(self):
+        """
+        Rebuild ghost points, combined points, Voronoi object, and cached mappings.
+        """
+        from scipy.spatial import Voronoi
+
+        ghost_points = _create_ghost_points(
+            self.boundary_points, 
+            self.ndim
+        )
+        self._all_points = np.vstack([self.points, ghost_points])
+        self.vor = Voronoi(self._all_points, incremental=self.incremental)
+        self.ghost_busters(ghost_points)
+        self.boundary_regions = self.get_voronoi_region(self.boundary_points)
+
+
+class CrossValidationBase:
+    """
+    Shared cross-validation behavior for original data space response metrics and the special
+    Gaussian-process latent-space NLPD metric.
+    """
+    def __init__(
+        self,
+        scale,
+        metric,
+        interpolation_field,
+        interpolation_values,
+        target_field,
+        param_names,
+        surrogate_options,
+    ):
         self.scale = scale
         self.metric = metric
         self.interpolation_field = interpolation_field
@@ -4210,135 +6081,168 @@ class KFoldCrossValidation:
         self.param_names = param_names
         self.surrogate_options = surrogate_options
 
-    def _check_npslits(self, training_params):
-        if self.nsplits > training_params.shape[0]:
-            self.nsplits = int(training_params.shape[0]/2.0)
-            logger.warning("Input parameter \"nsplits\" can't be greater than " +
-                           "the number of samples in KFoldCrosValidation. Reducing " +
-                           "number of splits to approximately half the number of samples.")
-        
-    def perform_kfold_cv(self, training_params, training_data, groups):
-        """
-        Perform K-Fold Cross-Validation.
+    def _fit_and_score_cv_split(
+        self,
+        train_eval_info,
+        test_eval_info,
+        X_test,
+        y_test,
+        save_filename="kfold_validation_surrogate.joblib",
+    ):
+        return _fit_cv_surrogate_and_calculate_original_data_space_error(
+            train_eval_info,
+            test_eval_info,
+            X_test,
+            y_test,
+            self.interpolation_field,
+            self.interpolation_values,
+            self.target_field,
+            self.surrogate_options,
+            self.metric,
+            self.scale,
+            save_filename=save_filename,
+        )
 
-        :param X: Feature matrix (training samples).
-        :type X: np.ndarray
-        
-        :param y: Target values (ground truth).
-        :type y: np.ndarray
-        
-        :return: Returns the index of the sample with the greatest 
-            prediction error and the corresponding error value.
-            tuple (index_of_max_error, max_error)
-        """
-        self._check_npslits(training_params)
-        self.groups = groups
-        from sklearn.model_selection import GroupKFold, KFold
-        from joblib import Parallel, delayed
-        if self.group_kfold:
-            assert self.groups is not None
-            cv = GroupKFold(n_splits=self.nsplits)
-            kf_results = Parallel(n_jobs=1)(
-                delayed(self.evaluate_fold)(train_index, test_index, training_params, training_data, index)
-                for index, (train_index, test_index) in enumerate(cv.split(training_params, training_data, self.groups))
-            )
-        else:
-            cv = KFold(n_splits=self.nsplits, shuffle=True, random_state=1)
-            kf_results = Parallel(n_jobs=1)(
-                delayed(self.evaluate_fold)(train_index, test_index, training_params, training_data, index)
-                for index, (train_index, test_index) in enumerate(cv.split(training_params))
-            )
-        # Convert the results to a dictionary
-        kf = {k_idx: result for k_idx, result in enumerate(kf_results)}
-        return kf
+    def _make_cv_study_results(self, X_train, X_test, y_train, y_test):
+        return _setup_studies_for_cv(
+            self.param_names,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
 
-    def evaluate_fold(self, train_index, test_index, X, y, kfold_count):
-        logger.info(f"\tEvaluating test '{self.metric}' error for surrogate for kfold cross validation set {kfold_count}..." +
-                    "")
-        info = self.extract_fold_info(train_index, test_index, X, y)
-        train_eval_info, test_eval_info, X_test, y_test = info
-        fold_surrogate = _fit_surrogate_model(train_eval_info, self.interpolation_field, 
-                                              self.interpolation_values, test_eval_info, 
-                                              self.target_field,
-                                              "kfold_validation_surrogate.joblib", logger_on=False, 
-                                              **self.surrogate_options)
-        error = _get_surrogate_metric(fold_surrogate._latent_scores['test'], self.metric)
-        logger.info(f"\t\terror = {error}")
-        return error, test_index
-   
+
+class KFoldCrossValidation(CrossValidationBase):
+    def __init__(
+        self,
+        kfold_splits,
+        group_kfold,
+        interpolation_field,
+        interpolation_values,
+        scale,
+        metric,
+        target_field,
+        param_names,
+        surrogate_options,
+        random_seed=None,
+    ):
+        super().__init__(
+            scale,
+            metric,
+            interpolation_field,
+            interpolation_values,
+            target_field,
+            param_names,
+            surrogate_options,
+        )
+        self.kfold_splits = kfold_splits
+        self.group_kfold = group_kfold
+        self.random_seed = random_seed
+
     def extract_fold_info(self, train_index, test_index, X, y):
         X_train, X_test = X[train_index], X[test_index]
         y_train = [y[i] for i in train_index]
         y_test = [y[i] for i in test_index]
-        train_res, test_res = _setup_studies_for_cv(self.param_names,
-                                                    X_train, X_test, y_train, y_test)
+        train_res, test_res = self._make_cv_study_results(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
         return train_res, test_res, X_test, y_test
 
-
-class LeaveOneOutCrossValidation:
-    def __init__(self, scale, metric, interpolation_field, 
-                 interpolation_values, target_field, par_names, surrogate_options):
-        """
-        Initialize the LOOCV.
-        """
-        self.scale = scale
-        self.metric = metric
-        self.interpolation_field = interpolation_field
-        self.interpolation_values = interpolation_values
-        self.target_field = target_field
-        self.par_names = par_names
-        self.surrogate_options = surrogate_options
-
-    def perform_loocv(self, X, y, indices):
-
-        """Perform Leave-One-Out Cross-Validation.
-
-        :param X: Feature matrix (training samples).
-        :type X: np.ndarray
-        
-        :param y: Target values (ground truth).
-        :type y: np.ndarray
-
-        :return: Returns the index of the sample with the greatest 
-            prediction error and the corresponding error value.
-            tuple: (index_of_max_error, max_error)
-        """
-        from joblib import Parallel, delayed
-        
-        loo_results = Parallel(n_jobs=1)(
-            delayed(self.evaluate_loo_sample)(X, y, i)
-            for i in indices
+    def evaluate_fold(self, train_index, test_index, X, y, kfold_count):
+        logger.info(
+            f"\tEvaluating original data space '{self.metric}' error for surrogate "
+            f"for kfold cross validation set {kfold_count}..."
         )
 
-        loo = {loo_idx: result for loo_idx, result in enumerate(loo_results)}
-        return loo
-    
-    def evaluate_loo_sample(self, X, y, index):
-        # Leave one out: create training and test sets
-        logger.info(f"\tEvaluating test '{self.metric}' error for surrogate leaving out sample {index}" +
-                    "")
-        info = self.extract_loo_info(index, X, y)
-        train_eval_info, test_eval_info, X_test, y_test = info
-        fold_surrogate = _fit_surrogate_model(train_eval_info, self.interpolation_field, 
-                                              self.interpolation_values, test_eval_info, 
-                                              self.target_field,
-                                              "kfold_validation_surrogate.joblib", 
-                                               logger_on=False, 
-                                               **self.surrogate_options)
-        error = _get_surrogate_metric(fold_surrogate._latent_scores['test'], self.metric)
-        logger.info(f"\t\terror = {error}")
-        return error, index
+        train_eval_info, test_eval_info, X_test, y_test = self.extract_fold_info(
+            train_index,
+            test_index,
+            X,
+            y,
+        )
+
+        error = self._fit_and_score_cv_split(
+            train_eval_info,
+            test_eval_info,
+            X_test,
+            y_test,
+        )
+
+        logger.info(f"\t\tOriginal data space error = {error}")
+        return error, test_index
+
+
+class LeaveOneOutCrossValidation(CrossValidationBase):
+    def __init__(
+        self,
+        scale,
+        metric,
+        interpolation_field,
+        interpolation_values,
+        target_field,
+        par_names,
+        surrogate_options,
+    ):
+        super().__init__(
+            scale,
+            metric,
+            interpolation_field,
+            interpolation_values,
+            target_field,
+            par_names,
+            surrogate_options,
+        )
+
+    @property
+    def par_names(self):
+        """
+        Backward-compatible alias for older tests/code.
+        """
+        return self.param_names
 
     def extract_loo_info(self, index, X, y):
         X_train = np.delete(X, index, axis=0)
         y_train = y.copy()
         del y_train[index]
-        X_test = X[index].reshape(1, -1)  # Reshape for a single sample
+
+        X_test = X[index].reshape(1, -1)
         y_test = [y[index]]
-        train_res, test_res = _setup_studies_for_cv(self.par_names,
-                                                    X_train, X_test,
-                                                    y_train, y_test)
+
+        train_res, test_res = self._make_cv_study_results(
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
+
         return train_res, test_res, X_test, y_test
+
+    def evaluate_loo_sample(self, X, y, index):
+        logger.info(
+            f"\tEvaluating original data space '{self.metric}' error for surrogate "
+            f"leaving out sample {index}"
+        )
+
+        train_eval_info, test_eval_info, X_test, y_test = self.extract_loo_info(
+            index,
+            X,
+            y,
+        )
+
+        error = self._fit_and_score_cv_split(
+            train_eval_info,
+            test_eval_info,
+            X_test,
+            y_test,
+            save_filename="loo_validation_surrogate.joblib",
+        )
+
+        logger.info(f"\t\toriginal data space error = {error}")
+        return error, index
 
 
 def _setup_studies_for_cv(p_names, train_samples, test_samples,
@@ -4377,13 +6281,366 @@ def _format_parameter_evaluations(model_evals):
 
 
 def _get_surrogate_metric(latent_scores_test, metric):
+    """
+    Aggregate stored latent-space surrogate metrics across fields/modes.
+
+    For ``nlpd``, independent modal/field contributions are summed because
+    negative log predictive densities are additive for independent Gaussian
+    predictive factors.
+
+    For ``score`` and ``rmse``, values are averaged across available
+    fields/modes.
+
+    Non-finite NLPD values indicate that the selected regressor does not provide
+    predictive standard deviations, so the aggregate NLPD is returned as ``nan``.
+    """
     combined_score = []
-    for field_idx, field_name in enumerate(latent_scores_test):
-        if isinstance(latent_scores_test[field_name], (dict, OrderedDict)):
-            combined_score += list(latent_scores_test[field_name][metric])
-    if combined_score == len(combined_score)*[None]:
+
+    for field_name in latent_scores_test:
+        field_scores = latent_scores_test[field_name]
+
+        if not isinstance(field_scores, (dict, OrderedDict)):
+            continue
+
+        if metric not in field_scores:
+            continue
+
+        values = np.atleast_1d(field_scores[metric])
+
+        for value in values:
+            if value is None:
+                combined_score.append(np.nan)
+            else:
+                combined_score.append(float(value))
+
+    if len(combined_score) == 0:
         return np.nan
-    elif metric == 'nlpd':
-        return np.sum(combined_score)
+
+    combined_score = np.asarray(combined_score, dtype=float)
+
+    if np.all(np.isnan(combined_score)):
+        return np.nan
+
+    if metric == "nlpd":
+        if np.any(~np.isfinite(combined_score)):
+            return np.nan
+        return float(np.sum(combined_score))
+
+    return float(np.nanmean(combined_score))
+
+
+def _extract_response_matrix(model_evals, target_field,
+                                      interpolation_field=None,
+                                      interpolation_values=None):
+    """
+    Extract target-response values from a list of model-evaluation
+    dictionaries.
+
+    For deterministic cross-validation metrics, the adaptive-sampling criteria are
+    based on original data response error rather than latent-space surrogate diagnostics.
+    For these metrics the diagnostic error is defined as
+    
+    .. math::
+
+        y(s_i) - \\hat{y}_{S \\setminus s_i}(s_i).
+
+    This helper converts the held-out
+    model responses into a dense array suitable for direct comparison with
+    surrogate predictions.
+
+    The special ``"nlpd"`` metric is handled separately and does not use this helper.
+  
+    If ``interpolation_values`` are provided and the stored target response is
+    defined on a different independent-variable grid, the target response is
+    interpolated onto ``interpolation_values`` using ``interpolation_field``.
+
+    :param model_evals: List of model-evaluation dictionaries. Each dictionary
+        must contain ``target_field`` and, when interpolation is needed,
+        ``interpolation_field``.
+    :type model_evals: list[dict]
+
+    :param target_field: Name of the response field to compare.
+    :type target_field: str
+
+    :param interpolation_field: Name of the independent-variable field used for
+        interpolation, e.g. ``"time"`` or ``"x"``.
+    :type interpolation_field: str or None
+
+    :param interpolation_values: Independent-variable values at which the
+        surrogate response is evaluated.
+    :type interpolation_values: array-like or None
+
+    :return: Physical response array with shape ``(n_samples, n_qois)``.
+    :rtype: numpy.ndarray
+    """
+    responses = []
+
+    if interpolation_values is not None:
+        interpolation_values = np.asarray(interpolation_values, dtype=float).reshape(-1)
+
+    for eval_data in model_evals:
+        if target_field not in eval_data:
+            raise KeyError(
+                f"Target field '{target_field}' was not found in a "
+                "cross-validation model evaluation."
+            )
+
+        target_response = np.asarray(eval_data[target_field], dtype=float).reshape(-1)
+
+        needs_interpolation = (
+            interpolation_values is not None
+            and target_response.size != interpolation_values.size
+        )
+
+        if needs_interpolation:
+            if interpolation_field is None:
+                raise RuntimeError(
+                    "Cannot interpolate held-out response because "
+                    "interpolation_field is None."
+                )
+
+            if interpolation_field not in eval_data:
+                raise KeyError(
+                    f"Interpolation field '{interpolation_field}' was not found "
+                    "in a cross-validation model evaluation."
+                )
+
+            source_x = np.asarray(eval_data[interpolation_field], dtype=float).reshape(-1)
+
+            if source_x.size != target_response.size:
+                raise RuntimeError(
+                    "Cannot interpolate held-out response because the "
+                    f"independent field '{interpolation_field}' has length "
+                    f"{source_x.size}, but target field '{target_field}' has "
+                    f"length {target_response.size}."
+                )
+
+            sort_idx = np.argsort(source_x)
+            source_x = source_x[sort_idx]
+            target_response = target_response[sort_idx]
+
+            target_response = np.interp(
+                interpolation_values,
+                source_x,
+                target_response
+            )
+
+        responses.append(target_response)
+
+    return np.asarray(responses, dtype=float)
+
+
+def _evaluate_surrogate_response(surrogate, X_test, target_field):
+    """
+    Evaluate a surrogate at held-out parameter samples and return its 
+    target-field response.
+
+    The returned array is normalized to shape ``(n_samples, n_qois)`` so that it
+    can be directly compared with the held-out model responses.
+
+    :param surrogate: Surrogate object returned by ``_fit_surrogate_model``.
+    :type surrogate: object
+
+    :param X_test: Held-out parameter samples with shape
+        ``(n_test_samples, n_parameters)``.
+    :type X_test: numpy.ndarray
+
+    :param target_field: Name of the target field.
+    :type target_field: str
+
+    :return: Surrogate predictions with shape ``(n_test_samples, n_qois)``.
+    :rtype: numpy.ndarray
+    """
+    X_test = np.asarray(X_test, dtype=float)
+    n_test_samples = X_test.shape[0]
+
+    surrogate_results = surrogate(X_test, batch_evaluate=True)
+
+    if target_field not in surrogate_results:
+        raise KeyError(
+            f"Target field '{target_field}' was not returned by the surrogate."
+        )
+
+    predicted_response = np.asarray(surrogate_results[target_field], dtype=float)
+
+    if predicted_response.ndim == 0:
+        predicted_response = predicted_response.reshape(1, 1)
+
+    elif predicted_response.ndim == 1:
+        if n_test_samples == 1:
+            predicted_response = predicted_response.reshape(1, -1)
+        else:
+            if predicted_response.size % n_test_samples != 0:
+                raise RuntimeError(
+                    "One-dimensional surrogate prediction cannot be reshaped into "
+                    f"(n_test_samples, n_qois). Prediction size is "
+                    f"{predicted_response.size}, n_test_samples is {n_test_samples}."
+                )
+            predicted_response = predicted_response.reshape(n_test_samples, -1)
+    elif predicted_response.ndim == 2:
+        if predicted_response.shape[0] == n_test_samples:
+            pass
+        elif predicted_response.shape[1] == n_test_samples:
+            predicted_response = predicted_response.T
+        else:
+            raise RuntimeError(
+                "Could not orient surrogate prediction array for "
+                f"cross-validation error. Prediction shape is "
+                f"{predicted_response.shape}; expected one dimension to equal "
+                f"the number of held-out samples, {n_test_samples}."
+            )
+
     else:
-        return np.mean(combined_score)
+        raise RuntimeError(
+            "Physical cross-validation error only supports scalar, vector, or "
+            f"matrix surrogate responses. Received response with shape "
+            f"{predicted_response.shape}."
+        )
+
+    return predicted_response
+
+
+def _apply_response_scaling(true_response, predicted_response, scale):
+    """
+    Apply optional scaling to responses before error calculation.
+
+    ``scale`` is intended to normalize response magnitudes before computing
+    cross-validation errors. If ``scale`` is ``None`` or ``1``, responses are
+    returned unchanged.
+
+    The legacy string option ``"cbrt"`` is supported for compatibility.
+
+    :param true_response: Held-out response.
+    :type true_response: numpy.ndarray
+
+    :param predicted_response: Surrogate-predicted response.
+    :type predicted_response: numpy.ndarray
+
+    :param scale: Response scaling option.
+    :type scale: float, str, numpy.ndarray, or None
+
+    :return: Scaled true and predicted responses.
+    :rtype: tuple[numpy.ndarray, numpy.ndarray]
+    """
+    if scale is None:
+        return true_response, predicted_response
+
+    if isinstance(scale, str):
+        scale_lower = scale.lower().strip()
+        if scale_lower == "cbrt":
+            return np.cbrt(true_response), np.cbrt(predicted_response)
+        raise ValueError(
+            f"Unsupported response scale option '{scale}'."
+        )
+
+    scale = np.asarray(scale, dtype=float)
+
+    if np.any(scale <= 0):
+        raise ValueError("Response scale values must be positive.")
+
+    return true_response / scale, predicted_response / scale
+
+
+def _calculate_cv_error(surrogate, X_test, y_test, target_field,
+                                 interpolation_field, interpolation_values,
+                                 metric="rmse", scale=1.0):
+    """
+    Calculate cross-validation error.
+
+    Deterministic original data response-space metrics are computed by comparing the held-out
+    response with the surrogate prediction at the same held-out parameter
+    locations.
+
+    For ``metric='nlpd'``, this returns the stored Gaussian Process
+    latent-space NLPD on the held-out test fold. NLPD requires a GP surrogate
+    because predictive standard deviations are needed.
+    """
+    metric = metric.lower().strip()
+
+    if metric == "nlpd":
+        return _calculate_surrogate_latent_nlpd(surrogate)
+
+    true_response = _extract_response_matrix(
+        y_test,
+        target_field,
+        interpolation_field,
+        interpolation_values,
+    )
+
+    predicted_response = _evaluate_surrogate_response(
+        surrogate,
+        X_test,
+        target_field,
+    )
+
+    if true_response.shape != predicted_response.shape:
+        raise RuntimeError(
+            "Held-out response and surrogate prediction have "
+            "different shapes during cross-validation error calculation. "
+            f"True response shape: {true_response.shape}. "
+            f"Predicted response shape: {predicted_response.shape}."
+        )
+
+    true_response, predicted_response = _apply_response_scaling(
+        true_response,
+        predicted_response,
+        scale,
+    )
+
+    return _calculate_response_error_metric(
+        true_response,
+        predicted_response,
+        metric,
+    )
+
+
+def _fit_cv_surrogate_and_calculate_original_data_space_error(
+    train_eval_info,
+    test_eval_info,
+    X_test,
+    y_test,
+    interpolation_field,
+    interpolation_values,
+    target_field,
+    surrogate_options,
+    metric,
+    scale,
+    save_filename="kfold_validation_surrogate.joblib",
+):
+    """
+    Fit a cross-validation surrogate and calculate the requested CV metric.
+
+    Deterministic metrics are computed in the original data response space. ``"nlpd"`` uses
+    the fitted Gaussian-process latent-space NLPD.
+
+    This helper is shared by K-fold and leave-one-out cross validation.
+    """
+
+    metric = metric.lower().strip()
+
+    _raise_if_nlpd_cv_requested_for_non_gp(
+        metric,
+        surrogate_options,
+    )
+
+    fold_surrogate = _fit_surrogate_model(
+        train_eval_info,
+        interpolation_field,
+        interpolation_values,
+        test_eval_info,
+        target_field,
+        save_filename=None,
+        logger_on=False,
+        **surrogate_options,
+    )
+
+    return _calculate_cv_error(
+        fold_surrogate,
+        X_test,
+        y_test,
+        target_field,
+        interpolation_field,
+        interpolation_values,
+        metric,
+        scale,
+    )

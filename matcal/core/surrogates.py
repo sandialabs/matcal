@@ -14,7 +14,6 @@ from matcal.core.serializer_wrapper import matcal_save
 from matcal.core.state import State
 from matcal.core.utilities import (check_value_is_nonempty_str, 
                                    check_item_is_correct_type, 
-                                   _time_interpolate, 
                                    _find_smallest_rect, 
                                    check_value_is_bool)
 
@@ -57,7 +56,7 @@ class SurrogateGenerator:
     Principal Component Analysis(PCA) to generate an efficient representation 
     of the data and then trains 
     a predictor in the latent space identified by the PCA. 
-    To preform these calculations sklearn is 
+    To perform these calculations sklearn is 
     leveraged to perform the correct scaling, PCA, and predictor training required. 
     """
 
@@ -66,28 +65,24 @@ class SurrogateGenerator:
                 training_fraction=.8, surrogate_type = "PCA Multiple Regressors", 
                 regressor_type="Gaussian Process", test_eval_info=None, **regressor_kwargs):
         """
-        :param evaluation_information: A container of the relevant 
-            information to form a surrogate off of 
-            a body of data. This is intended to be based off of the results of a MatCal conducted 
-            sampling study.
-            In addition, previously run surrogates joblib files can be passed to rerun the surrogate
-            generation process with new settings.            
-        :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        :param evaluation_information: A container of the relevant information used 
+            to form a surrogate from MatCal study data.    
+        :type evaluation_information: :class:`~matcal.core.study_base.StudyResults`,
+            :class:`~matcal.core.study_base.StudyBase`, or dict
 
         :param training_fraction: What fraction of the source data to use as training data. 
             Value should be 0 < training_fraction <= 1. If training_fraction == 1, 
-            test_evaluation_information
-            must be provided.
+            test_eval_info must be provided.
         :type training_fraction: float
 
         :param interpolation_field: the field that will be the independent field for surrogate results.            
         :type interpolation_field: str
 
-        :interpolation_locations: the number of interpolation locations for the 
+        :param interpolation_locations: the number of interpolation locations for the 
             surrogate to output at or an array-like of values for the interpolation locations.
             If a number of locations is given, the surrogate will linearly space the points
             over the min and max value for the interpolation field for all evaluations.
-        :interpolation_locations: int or Array-like
+        :type interpolation_locations: int or Array-like
         
         :param surrogate_type: What type of surrogate to run. Details of each are detailed in the 
             surrogate's documentation. Currently the only available 
@@ -99,19 +94,24 @@ class SurrogateGenerator:
 
         :param regressor_type: The identifier key for what core regressor 
             form to use as the predictor. 
-            Only "Random Forest" and "Gaussian Process" are accepted. Currently, MatCal
-            uses the implementations of these tools from the sklearn library. 
+            Only "Random Forest", "Gaussian Process" and "RBF" are accepted. Currently, MatCal
+            uses the implementations of the random forest and Gaussian Process tools
+            from the sklearn library. For "RBF", MatCal uses scipy.interpolate.RBFInterpolator with a default
+            local-neighbor count of 20. This can be changed by passing neighbors=<int>
+            through regressor_kwargs.
         :type regressor_type: str
 
         :param test_eval_info: A container of the relevant
             information to test a surrogate generated
             from a MatCal sampling study. This data is only used and must
             be provided if training_fraction == 1.0.
-        :type test_evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        :type test_eval_info: :class:`~matcal.core.study_base.StudyResults`
         
         :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
-            Please refer to the sklearn documentation for more information for what can be passed to 
-            the predictors. 
+            Please refer to the scikit-learn documentation for ``"Random Forest"`` and
+            ``"Gaussian Process"`` options, and the SciPy ``RBFInterpolator`` documentation
+            for ``"RBF"`` options.
+        :type regressor_kwargs: dict
         """
         self._interpolation_field = interpolation_field
         self._input_parameter_history = None
@@ -141,7 +141,7 @@ class SurrogateGenerator:
            generate results. 
            If no argument is passed, the surrogate generator will 
            expect the study to have a single model. 
-        :type eval_set_key: str 
+        :type model_name: str or None 
 
         :param state: This specifies the state for the model for which the surrogate 
             will generate results. It can be either a :class:`~matcal.core.state.State` 
@@ -160,6 +160,8 @@ class SurrogateGenerator:
    
     def set_PCA_details(self, decomp_var=.99, reconstruction_error=None):
         """
+        Set options that control how many PCA modes are retained.
+
         :param decomp_var: What level of the total variance should be accounted for in the PCA
             decomposition. Values closer to 1 will keep more modes than lower values. The more modes
             kept the more difficult it can become to train the predictors. A default value of .99 is 
@@ -167,15 +169,21 @@ class SurrogateGenerator:
             seen behavior, and for an appropriate data set can lead
             to very few modes being retained. 
         :type decomp_var: float
+
+        :param reconstruction_error: Optional reconstruction-error tolerance used to
+            tune the number of retained modes. If provided, this overrides variance-based
+            mode selection.
+        :type reconstruction_error: float or None
         """
         self._decomp_tool = _assign_decomp(decomp_var, reconstruction_error)
+        
 
     def set_surrogate_details(self, surrogate_type="PCA Multiple Regressors", 
                               regressor_type="Gaussian Process", 
                               training_fraction=.8, interpolation_locations=None, 
                               test_eval_info=None, **regressor_kwargs):
         """
-        This method provides an other avenue to alter the surrogate 
+        This method provides another avenue to alter the surrogate 
         generation parameters after initialization. 
 
         :param surrogate_type: What type of surrogate to run. Details of each are detailed in the 
@@ -186,25 +194,35 @@ class SurrogateGenerator:
             better performance but uses more memory than the monolithic surrogate. 
         :type surrogate_type: str
 
-        :param training_fraction: What fraction of the source data to use as 
-            training data. Value should be 0 < training_fraction < 1. 
-        :type training_fraction: float
-
         :param regressor_type: The identifier key for what core regressor 
             form to use as the predictor. 
-            Only "Random Forest" and "Gaussian Process" are accepted. Currently, MatCal
-            uses the implementations of these tools from the sklearn library. 
+            Only "Random Forest", "Gaussian Process" and "RBF" are accepted. 
+            Currently, MatCal uses the implementations of the "Random Forest" and
+            "Gaussian Process" regressors from the sklearn library. The "RBF" option
+            uses the RBFInterpolator from SciPy.
         :type regressor_type: str
 
+        :param training_fraction: Fraction of source data used for training. Must satisfy
+            ``0 < training_fraction <= 1``. If equal to ``1.0``, ``test_eval_info`` must
+            be provided.
+        :type training_fraction: float
+
+        :param interpolation_locations: Optional replacement interpolation locations.
+            If provided, updates the interpolation locations used during surrogate
+            generation.
+        :type interpolation_locations: int, array-like, or None
+        
         :param test_eval_info: A container of the relevant
             information to test a surrogate generated
             from a MatCal sampling study. This data is only used and must
             be provided if training_fraction == 1.0.
-        :type test_evaluation_information: :class:`~matcal.core.study_base.StudyResults`
+        :type test_eval_info: :class:`~matcal.core.study_base.StudyResults`
         
-        :param regressor_kwargs: A keyword selection of parameters to pass to the predictor used. 
-            Please refer to the sklearn documentation for more information for what can be passed to 
-            the predictors. 
+        :param regressor_kwargs: Keyword arguments passed to the selected regressor.
+            Refer to the scikit-learn documentation for ``"Random Forest"`` and
+            ``"Gaussian Process"`` options, and the SciPy ``RBFInterpolator``
+            documentation for ``"RBF"`` options. 
+        :type regressor_kwargs: dict
         """
         self._training_fraction  = training_fraction
         self._surrogate_type = surrogate_type
@@ -219,13 +237,15 @@ class SurrogateGenerator:
     def set_fields_to_log_scale(self, *field_names):
         """
         For fields of interest that span over orders of magnitude it can be easier
-        to train to the natural log of the data rather than the raw data. 
+        to train a base-10 logarithmic scale rather than the raw data. 
         Passing fields here will inform the surrogate and the generator that 
-        these fields should be evaluated on the natural log scale. Any predictions
+        these fields should be evaluated on a base-10 logarithmic scale. Any predictions
         given by the surrogate will be at the original scale. This just adds an 
-        additional scaling/descaling step within it. Note that data that has values
-        less than or equal to zero will need to be scaled or modified by the user 
-        prior to selecting them as an option for log scaling.
+        additional scaling/descaling step within it.
+         
+        The current implementation applies an internal feature-wise offset before the
+        base-10 logarithm so that the minimum fitted value maps to ``log10(1)``.
+        Predictions are transformed back to the original scale before being returned.
 
         :param field_names: a series of field names to train on the log scale
         :type field_names: str
@@ -257,28 +277,24 @@ class SurrogateGenerator:
                 check_value_is_nonempty_str(field, "field_of_interest")
             self._fields_of_interest = fields_of_interest
 
-    def generate(self, save_filename:str, preprocessing_function:Callable=None, 
+    def generate(self, save_filename:str=None, preprocessing_function:Callable=None, 
                  plot_n_worst:int=0)->Callable:
         """
         Generates a surrogate based on the information passed to it upon initialization
 
-        :parameter save_filename: the base of a filename without any extensions 
-            to be used to record the surrogate. 
-        :type save_filename: str
+        :param save_filename: The base of a filename without any extensions
+            used to save the surrogate. If ``None``, the surrogate is returned
+            but not serialized to disk. A filename is required when
+            ``plot_n_worst > 0`` because the worst-recreation plot uses this
+            filename as its output prefix.
+        :type save_filename: str or None
 
-        :parameter preprocessing_function: an optional function that modifies
+        :param preprocessing_function: an optional function that modifies
             the model data before it is passed to the tools that generate the 
             surrogate model.
         :type preprocessing_function: Callable
 
-        :parameter source_data_dict: a dictionary of training data from which to generate
-            the surrogate. Its keys are the field names for the data, rows contain
-            data samples and  and columns are the data pts at each independent variable
-            data point. Not intended to be an argument for users. Passing data this way 
-            will take the place of any other data source. 
-        :type source_data_dict: dict(str, Array-Like)
-            
-        :parameter plot_n_worst: Generate a number of plots that show the worst 
+        :param plot_n_worst: Generate a number of plots that show the worst 
             recreations made by the surrogate. The number of plots made is equal to the 
             value passed to this argument. Any values less than 1 will result in no
             plots being generated or worst analysis being performed.
@@ -287,7 +303,15 @@ class SurrogateGenerator:
         :return: a callable surrogate
         :rtype: :class:`~matcal.core.surrogates.MatCalPCASurrogateBase` 
         """
-        check_value_is_nonempty_str(save_filename, "save_filename")
+        if save_filename is not None:
+            check_value_is_nonempty_str(save_filename, "save_filename")
+        elif plot_n_worst > 0:
+            raise ValueError(
+                "save_filename must be provided when plot_n_worst > 0 because "
+                "the worst-recreation plots require an output filename prefix."
+            )
+        self._normalize_test_evaluation_information_names()
+
         results = _package_surrogate_generator_input_data(self._eval_info, self._model_name, 
                                                           self._state)
         source_data, params = results
@@ -313,7 +337,8 @@ class SurrogateGenerator:
                                             self._fields_to_log_scale,
                                             self._decomp_tool, self, param_ranges, 
                                             self._logger_on)
-        matcal_save(save_filename+".joblib", new_surrogate)
+        if save_filename is not None:
+            matcal_save(save_filename + ".joblib", new_surrogate)
         self._plot_worst_recreations(new_surrogate, params, source_dict, 
                                      plot_n_worst, save_filename)
         return new_surrogate
@@ -321,7 +346,33 @@ class SurrogateGenerator:
     def _check_test_evaluation_information_provided(self):
         if self._training_fraction == 1.0 and self._test_eval_info is None:
             raise ValueError("Test evaluations must be provided when training_fraction = 1.0.")
-        
+
+    def _normalize_test_evaluation_information_names(self):
+        """
+        Normalize supplied test-evaluation information to match training data names.
+
+        This is primarily needed when training and test StudyResults were generated
+        by equivalent model objects that received different runtime-generated names.
+        """
+        if self._test_eval_info is None:
+            return
+
+        required_model_name = _get_model_name_from_evaluation_information(
+            self._eval_info,
+            self._model_name,
+        )
+
+        if required_model_name is None:
+            return
+
+        self._test_eval_info = _normalize_evaluation_information_names(
+            self._test_eval_info,
+            required_model_name=required_model_name,
+            required_objective_name=None,
+            data_set_name="surrogate test_eval_info",
+            logger_on=self._logger_on,
+        )
+
     def _plot_worst_recreations(self, surrogate, parameters, source_data, n_worst, save_filename):
         if n_worst < 1:
             return
@@ -473,6 +524,684 @@ def _parse_evaluation_info(eval_info, model_name):
     return input_hist, output_hist
 
 
+def _get_results_like_from_evaluation_information(eval_info):
+    """
+    Return a StudyResults-like object from supported evaluation information.
+
+    This intentionally accepts StudyResults-like objects by attribute rather than
+    by strict type so the name-normalization helpers can be unit tested with
+    lightweight objects.
+    """
+    if eval_info is None:
+        return None
+
+    if hasattr(eval_info, "simulation_history") or hasattr(eval_info, "qoi_history"):
+        return eval_info
+
+    if hasattr(eval_info, "results"):
+        return eval_info.results
+
+    return None
+
+
+def _get_model_name_from_evaluation_information(eval_info, model_name=None):
+    """
+    Determine the model name that should be used for surrogate data extraction.
+
+    If ``model_name`` is supplied, it is returned directly. If not supplied and
+    the evaluation information contains exactly one model, that model name is
+    returned. If the model name cannot be determined unambiguously, ``None`` is
+    returned and no automatic test-data model-name normalization is attempted.
+    """
+    if model_name is not None:
+        return model_name
+
+    results = _get_results_like_from_evaluation_information(eval_info)
+
+    if results is None or not hasattr(results, "simulation_history"):
+        return None
+
+    simulation_history = results.simulation_history
+
+    if simulation_history is None:
+        return None
+
+    model_names = list(simulation_history.keys())
+
+    if len(model_names) == 1:
+        return model_names[0]
+
+    return None
+
+
+def _split_qoi_history_key(qoi_key):
+    """
+    Split a QoI-history key into model and objective names.
+
+    Expected keys have the form ``'<model_name>:<objective_name>'``.
+    """
+    if not isinstance(qoi_key, str) or ":" not in qoi_key:
+        raise RuntimeError(
+            "Surrogate test-data QoI-history keys must have the form "
+            f"'<model_name>:<objective_name>'. Received key '{qoi_key}'."
+        )
+
+    model_name, objective_name = qoi_key.split(":", 1)
+
+    if model_name == "" or objective_name == "":
+        raise RuntimeError(
+            "Surrogate test-data QoI-history keys must have nonempty model "
+            f"and objective names. Received key '{qoi_key}'."
+        )
+
+    return model_name, objective_name
+
+
+def _get_qoi_history_model_and_objective_names(qoi_history):
+    """
+    Extract model and objective names from QoI-history keys.
+    """
+    model_names = set()
+    objective_names = set()
+
+    for qoi_key in qoi_history.keys():
+        model_name, objective_name = _split_qoi_history_key(qoi_key)
+        model_names.add(model_name)
+        objective_names.add(objective_name)
+
+    return model_names, objective_names
+
+
+def _rename_mapping_key(mapping, old_key, new_key):
+    """
+    Rename one key in a mutable mapping while preserving its value.
+    """
+    if new_key in mapping:
+        raise RuntimeError(
+            f"Renaming surrogate test-data key '{old_key}' to '{new_key}' "
+            "would create a duplicate key."
+        )
+
+    mapping[new_key] = mapping.pop(old_key)
+
+
+def _normalize_single_key_mapping_name(
+    mapping,
+    required_name,
+    entry_kind,
+    data_set_name,
+    logger_on=True,
+):
+    """
+    Rename a one-entry mapping key to ``required_name`` when unambiguous.
+
+    If the required key already exists, no change is made. If the required key is
+    absent and exactly one key is present, that key is renamed. If the required
+    key is absent and multiple keys are present, an error is raised.
+    """
+    if mapping is None:
+        return
+
+    names = list(mapping.keys())
+
+    if required_name in names:
+        return
+
+    if len(names) == 0:
+        raise RuntimeError(
+            f"The supplied {data_set_name} does not contain any {entry_kind} "
+            "entries and cannot be used for surrogate testing."
+        )
+
+    if len(names) > 1:
+        raise RuntimeError(
+            f"The supplied {data_set_name} contains more than one {entry_kind} "
+            f"name. MatCal cannot determine which {entry_kind} should be used "
+            f"for surrogate testing. {entry_kind.capitalize()} names found: "
+            f"{names}. The required {entry_kind} name is '{required_name}'."
+        )
+
+    current_name = names[0]
+
+    if logger_on:
+        logger.warning(
+            f"The supplied {data_set_name} uses {entry_kind} name "
+            f"'{current_name}', but the surrogate requires {entry_kind} name "
+            f"'{required_name}'. Because the supplied data contains exactly one "
+            f"{entry_kind} name, MatCal is renaming the {data_set_name} "
+            f"{entry_kind} entry at runtime."
+        )
+
+    _rename_mapping_key(mapping, current_name, required_name)
+
+
+def _qoi_history_is_optional(required_objective_name):
+    """
+    Return True when missing QoI history can be ignored.
+
+    SurrogateGenerator only needs simulation-history model-name normalization.
+    It does not require QoI history, so missing/empty QoI history is acceptable
+    when no required objective name is supplied.
+    """
+    return required_objective_name is None
+
+
+def _raise_missing_qoi_history_error(data_set_name):
+    raise RuntimeError(
+        f"The supplied {data_set_name} does not contain a QoI history and "
+        "cannot be used for adaptive surrogate testing."
+    )
+
+
+def _raise_empty_qoi_history_error(data_set_name):
+    raise RuntimeError(
+        f"The supplied {data_set_name} does not contain any QoI-history "
+        "entries and cannot be used for adaptive surrogate testing."
+    )
+
+
+def _qoi_history_has_required_content(
+    qoi_history,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Validate whether a QoI-history mapping must be processed.
+
+    Returns False when there is no required objective name and the QoI history is
+    absent or empty, because this is acceptable for non-adaptive surrogate
+    normalization.
+    """
+    if qoi_history is None:
+        if _qoi_history_is_optional(required_objective_name):
+            return False
+        _raise_missing_qoi_history_error(data_set_name)
+
+    if len(qoi_history) == 0:
+        if _qoi_history_is_optional(required_objective_name):
+            return False
+        _raise_empty_qoi_history_error(data_set_name)
+
+    return True
+
+
+def _raise_multiple_qoi_model_names_error(
+    model_names,
+    required_model_name,
+    data_set_name,
+):
+    raise RuntimeError(
+        f"The supplied {data_set_name} contains more than one model "
+        "name in its QoI history. MatCal cannot determine which model "
+        "should be used for surrogate testing. Model names found: "
+        f"{sorted(model_names)}. The required model name is "
+        f"'{required_model_name}'."
+    )
+
+
+def _raise_multiple_qoi_objective_names_error(
+    objective_names,
+    required_objective_name,
+    data_set_name,
+):
+    raise RuntimeError(
+        f"The supplied {data_set_name} contains more than one "
+        "objective name in its QoI history. MatCal cannot determine "
+        "which objective should be used for surrogate testing. "
+        f"Objective names found: {sorted(objective_names)}. The "
+        f"required objective name is '{required_objective_name}'."
+    )
+
+
+def _require_single_qoi_model_name(model_names, required_model_name, data_set_name):
+    """
+    Return the only QoI-history model name when model-name normalization is requested.
+    """
+    if required_model_name is None:
+        return None
+
+    if len(model_names) > 1:
+        _raise_multiple_qoi_model_names_error(
+            model_names,
+            required_model_name,
+            data_set_name,
+        )
+
+    return next(iter(model_names))
+
+
+def _require_single_qoi_objective_name(
+    objective_names,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Return the only QoI-history objective name when objective-name normalization is requested.
+    """
+    if required_objective_name is None:
+        return None
+
+    if len(objective_names) > 1:
+        _raise_multiple_qoi_objective_names_error(
+            objective_names,
+            required_objective_name,
+            data_set_name,
+        )
+
+    return next(iter(objective_names))
+
+
+def _required_name_was_supplied(required_name):
+    return required_name is not None
+
+
+def _name_change_required(current_name, required_name):
+    """
+    Return True if a supplied required name differs from the current name.
+    """
+    if not _required_name_was_supplied(required_name):
+        return False
+
+    return current_name != required_name
+
+
+def _get_qoi_model_name_change(
+    model_names,
+    required_model_name,
+    data_set_name,
+):
+    """
+    Return ``(old_model_name, new_model_name, model_changed)``.
+    """
+    current_model_name = _require_single_qoi_model_name(
+        model_names,
+        required_model_name,
+        data_set_name,
+    )
+
+    if not _required_name_was_supplied(required_model_name):
+        return None, None, False
+
+    return (
+        current_model_name,
+        required_model_name,
+        _name_change_required(current_model_name, required_model_name),
+    )
+
+
+def _get_qoi_objective_name_change(
+    objective_names,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Return ``(old_objective_name, new_objective_name, objective_changed)``.
+    """
+    current_objective_name = _require_single_qoi_objective_name(
+        objective_names,
+        required_objective_name,
+        data_set_name,
+    )
+
+    if not _required_name_was_supplied(required_objective_name):
+        return None, None, False
+
+    return (
+        current_objective_name,
+        required_objective_name,
+        _name_change_required(current_objective_name, required_objective_name),
+    )
+
+
+def _get_qoi_history_name_changes(
+    qoi_history,
+    required_model_name,
+    required_objective_name,
+    data_set_name,
+):
+    """
+    Determine required model/objective renames for a QoI-history mapping.
+
+    Returns:
+        old_model_name, old_objective_name, new_model_name, new_objective_name,
+        model_changed, objective_changed
+    """
+    model_names, objective_names = _get_qoi_history_model_and_objective_names(
+        qoi_history
+    )
+
+    old_model_name, new_model_name, model_changed = _get_qoi_model_name_change(
+        model_names,
+        required_model_name,
+        data_set_name,
+    )
+
+    old_objective_name, new_objective_name, objective_changed = (
+        _get_qoi_objective_name_change(
+            objective_names,
+            required_objective_name,
+            data_set_name,
+        )
+    )
+
+    return (
+        old_model_name,
+        old_objective_name,
+        new_model_name,
+        new_objective_name,
+        model_changed,
+        objective_changed,
+    )
+
+
+def _qoi_history_name_changes_required(model_changed, objective_changed):
+    """
+    Return True if any QoI-history key component must be renamed.
+    """
+    return model_changed or objective_changed
+
+
+def _log_qoi_model_name_change(
+    old_model_name,
+    new_model_name,
+    data_set_name,
+):
+    logger.warning(
+        f"The supplied {data_set_name} uses QoI-history model name "
+        f"'{old_model_name}', but the surrogate requires model name "
+        f"'{new_model_name}'. Because the supplied data contains exactly "
+        "one QoI-history model name, MatCal is renaming the QoI-history "
+        "key at runtime."
+    )
+
+
+def _log_qoi_objective_name_change(
+    old_objective_name,
+    new_objective_name,
+    data_set_name,
+):
+    logger.warning(
+        f"The supplied {data_set_name} uses objective name "
+        f"'{old_objective_name}', but the surrogate requires objective "
+        f"name '{new_objective_name}'. Because the supplied data contains "
+        "exactly one objective name, MatCal is renaming the QoI-history "
+        "key at runtime."
+    )
+
+
+def _log_qoi_history_name_changes(
+    old_model_name,
+    old_objective_name,
+    new_model_name,
+    new_objective_name,
+    model_changed,
+    objective_changed,
+    data_set_name,
+    logger_on=True,
+):
+    """
+    Log warnings for requested QoI-history key renames.
+    """
+    if not logger_on:
+        return
+
+    if model_changed:
+        _log_qoi_model_name_change(
+            old_model_name,
+            new_model_name,
+            data_set_name,
+        )
+
+    if objective_changed:
+        _log_qoi_objective_name_change(
+            old_objective_name,
+            new_objective_name,
+            data_set_name,
+        )
+
+
+def _validate_qoi_key_component(
+    actual_name,
+    expected_name,
+    component_name,
+    old_key,
+):
+    """
+    Validate one old QoI-history key component against an expected name.
+
+    ``expected_name=None`` means any actual name is accepted.
+    """
+    if expected_name is None:
+        return
+
+    if actual_name == expected_name:
+        return
+
+    raise RuntimeError(
+        f"Unexpected {component_name} name encountered while renaming "
+        "surrogate test-data QoI history. Expected {component_name} name "
+        f"'{expected_name}', but found '{actual_name}' in key '{old_key}'."
+    )
+
+
+def _select_qoi_key_component_name(actual_name, new_name):
+    """
+    Return the renamed QoI-history key component, or preserve the original.
+    """
+    if new_name is None:
+        return actual_name
+
+    return new_name
+
+
+def _make_updated_qoi_history_key(
+    old_key,
+    old_model_name=None,
+    old_objective_name=None,
+    new_model_name=None,
+    new_objective_name=None,
+):
+    """
+    Build the updated QoI-history key for one existing key.
+    """
+    model_name, objective_name = _split_qoi_history_key(old_key)
+
+    _validate_qoi_key_component(
+        model_name,
+        old_model_name,
+        "model",
+        old_key,
+    )
+    _validate_qoi_key_component(
+        objective_name,
+        old_objective_name,
+        "objective",
+        old_key,
+    )
+
+    final_model_name = _select_qoi_key_component_name(
+        model_name,
+        new_model_name,
+    )
+    final_objective_name = _select_qoi_key_component_name(
+        objective_name,
+        new_objective_name,
+    )
+
+    return f"{final_model_name}:{final_objective_name}"
+
+
+def _insert_renamed_qoi_history_item(qoi_history, new_key, value):
+    """
+    Insert a renamed QoI-history item, rejecting duplicate keys.
+    """
+    if new_key in qoi_history:
+        raise RuntimeError(
+            "Renaming surrogate test-data QoI history would create a "
+            f"duplicate QoI-history key '{new_key}'."
+        )
+
+    qoi_history[new_key] = value
+
+
+def _rename_qoi_history_keys(
+    qoi_history,
+    old_model_name=None,
+    old_objective_name=None,
+    new_model_name=None,
+    new_objective_name=None,
+):
+    """
+    Rename model/objective components of QoI-history keys in place.
+
+    Any component with ``None`` is treated as a wildcard/preserve operation:
+
+    * ``old_model_name=None``: accept any existing model name.
+    * ``old_objective_name=None``: accept any existing objective name.
+    * ``new_model_name=None``: preserve each key's existing model name.
+    * ``new_objective_name=None``: preserve each key's existing objective name.
+
+    This supports the SurrogateGenerator use case where only the model-name
+    component needs to be renamed while multiple objective names may be present.
+    """
+    original_items = list(qoi_history.items())
+    qoi_history.clear()
+
+    for old_key, value in original_items:
+        new_key = _make_updated_qoi_history_key(
+            old_key,
+            old_model_name=old_model_name,
+            old_objective_name=old_objective_name,
+            new_model_name=new_model_name,
+            new_objective_name=new_objective_name,
+        )
+        _insert_renamed_qoi_history_item(qoi_history, new_key, value)
+
+
+def _normalize_qoi_history_names(
+    qoi_history,
+    required_model_name=None,
+    required_objective_name=None,
+    data_set_name="test data",
+    logger_on=True,
+):
+    """
+    Normalize model/objective names in a QoI-history mapping.
+
+    If ``required_model_name`` is supplied, the QoI history must contain exactly
+    one model name. If the single model name differs from the required model
+    name, it is renamed.
+
+    If ``required_objective_name`` is supplied, the QoI history must contain
+    exactly one objective name. If the single objective name differs from the
+    required objective name, it is renamed.
+
+    If ``required_objective_name`` is ``None``, objective names are preserved.
+    This permits SurrogateGenerator to normalize test-data model names while
+    preserving multiple objective names.
+    """
+    if not _qoi_history_has_required_content(
+        qoi_history,
+        required_objective_name,
+        data_set_name,
+    ):
+        return
+
+    (
+        old_model_name,
+        old_objective_name,
+        new_model_name,
+        new_objective_name,
+        model_changed,
+        objective_changed,
+    ) = _get_qoi_history_name_changes(
+        qoi_history,
+        required_model_name,
+        required_objective_name,
+        data_set_name,
+    )
+
+    if not _qoi_history_name_changes_required(
+        model_changed,
+        objective_changed,
+    ):
+        return
+
+    _log_qoi_history_name_changes(
+        old_model_name,
+        old_objective_name,
+        new_model_name,
+        new_objective_name,
+        model_changed,
+        objective_changed,
+        data_set_name,
+        logger_on=logger_on,
+    )
+
+    _rename_qoi_history_keys(
+        qoi_history,
+        old_model_name=old_model_name,
+        old_objective_name=old_objective_name,
+        new_model_name=new_model_name,
+        new_objective_name=new_objective_name,
+    )
+
+
+def _normalize_evaluation_information_names(
+    eval_info,
+    required_model_name=None,
+    required_objective_name=None,
+    data_set_name="test data",
+    logger_on=True,
+):
+    """
+    Normalize model/objective names in StudyResults-like evaluation information.
+
+    This is used to make externally supplied test data compatible with surrogate
+    generation and adaptive surrogate studies when the test data were generated
+    with equivalent model/objective objects that have different runtime names.
+
+    The normalization is intentionally conservative:
+
+    * simulation-history model names are renamed only when the supplied data has
+      exactly one model name and the required model name is missing;
+    * QoI-history model names are renamed only when exactly one QoI-history model
+      name is present;
+    * if ``required_objective_name`` is supplied, the QoI history must contain
+      exactly one objective name; otherwise an error is raised;
+    * every runtime rename logs a warning.
+    """
+    results = _get_results_like_from_evaluation_information(eval_info)
+
+    if results is None:
+        return eval_info
+
+    if required_model_name is not None and hasattr(results, "simulation_history"):
+        _normalize_single_key_mapping_name(
+            results.simulation_history,
+            required_model_name,
+            "model",
+            data_set_name,
+            logger_on=logger_on,
+        )
+
+    if hasattr(results, "qoi_history"):
+        _normalize_qoi_history_names(
+            results.qoi_history,
+            required_model_name=required_model_name,
+            required_objective_name=required_objective_name,
+            data_set_name=data_set_name,
+            logger_on=logger_on,
+        )
+    elif required_objective_name is not None:
+        raise RuntimeError(
+            f"The supplied {data_set_name} does not have a qoi_history "
+            "attribute and cannot be used for adaptive surrogate testing."
+        )
+
+    return eval_info
+
+
 def _apply_preprocessing_function(preprocessing_function, training_data_history):
     if preprocessing_function is not None:
         check_item_is_correct_type(preprocessing_function, Callable, "preprocessing_function")
@@ -543,6 +1272,85 @@ class _WorstEvaluations:
         return self._field_eval_sets
 
 
+class _RBFInterpolatorRegressor(BaseEstimator):
+    """
+    sklearn-like wrapper around scipy.interpolate.RBFInterpolator.
+
+    By default, this uses a local RBF interpolant with a limited number of
+    nearest neighbors so that prediction cost does not grow too aggressively
+    for large training sets.
+    """
+
+    def __init__(self, neighbors=20, **rbf_kwargs):
+        self.neighbors = neighbors
+        self.rbf_kwargs = rbf_kwargs
+        self._rbf = None
+        self._effective_neighbors = None
+        self._single_output = False
+
+    def fit(self, input_values, output_values):
+        from scipy.interpolate import RBFInterpolator
+
+        input_values = np.asarray(input_values, dtype=float)
+        output_values = np.asarray(output_values, dtype=float)
+
+        if input_values.ndim != 2:
+            raise ValueError("RBFInterpolator input values must be a 2D array.")
+
+        if output_values.ndim == 1:
+            self._single_output = True
+        elif output_values.ndim == 2 and output_values.shape[1] == 1:
+            self._single_output = True
+
+        n_samples = input_values.shape[0]
+
+        if self.neighbors is None:
+            effective_neighbors = None
+        else:
+            effective_neighbors = min(int(self.neighbors), n_samples)
+            if effective_neighbors < 1:
+                raise ValueError("RBFInterpolator neighbors must be at least 1.")
+
+        self._effective_neighbors = effective_neighbors
+        self._rbf = RBFInterpolator(
+            input_values,
+            output_values,
+            neighbors=effective_neighbors,
+            **self.rbf_kwargs,
+        )
+
+        return self
+
+    def predict(self, input_values):
+        if self._rbf is None:
+            raise RuntimeError("RBFInterpolatorRegressor must be fit before predict is called.")
+
+        input_values = np.asarray(input_values, dtype=float)
+        prediction = self._rbf(input_values)
+
+        if self._single_output:
+            prediction = np.asarray(prediction).ravel()
+
+        return prediction
+
+    def score(self, input_values, output_values):
+        prediction = np.asarray(self.predict(input_values))
+        output_values = np.asarray(output_values)
+
+        if prediction.shape != output_values.shape and prediction.size == output_values.size:
+            prediction = prediction.reshape(output_values.shape)
+
+        if output_values.ndim == 2 and output_values.shape[1] == 1:
+            output_values = output_values.ravel()
+            prediction = prediction.ravel()
+
+        return r2_score(output_values, prediction)
+
+
+def _init_rbf_surrogate(n_inputs, **kwargs):
+    return _RBFInterpolatorRegressor(**kwargs)
+
+
 def _init_random_forest_surrogate(n_inputs, **kwargs):
     from sklearn.ensemble import RandomForestRegressor
     return RandomForestRegressor(**kwargs)
@@ -550,14 +1358,29 @@ def _init_random_forest_surrogate(n_inputs, **kwargs):
 
 def _init_gp_surrogate(n_inputs, **kwargs):
     from sklearn.gaussian_process import GaussianProcessRegressor
-    # reference for later for anisotropic kernel generation
-    # aniso_kernel = RBF(1e-1 * np.ones(n_inputs), length_scale_bounds=(1e-5, 1e5))
+
+    if "kernel" not in kwargs:
+        from sklearn.gaussian_process.kernels import (
+            RBF, 
+            ConstantKernel, 
+        )
+
+        kernel = ConstantKernel(1.0, (1e-5, 1e5)) * RBF(
+            length_scale=0.1*np.ones(n_inputs),
+            length_scale_bounds=(1e-5, 1e5),
+        )
+        kwargs["kernel"] = kernel
+    #if "alpha" not in kwargs:
+    #    kwargs["alpha"] = 1e-8
     gpr = GaussianProcessRegressor(**kwargs)
     return gpr
 
 
-_regressor_lookup = {"Random Forest":_init_random_forest_surrogate,
-                        "Gaussian Process":_init_gp_surrogate}
+_regressor_lookup = {
+    "Random Forest":_init_random_forest_surrogate,
+    "Gaussian Process":_init_gp_surrogate, 
+    "RBF": _init_rbf_surrogate
+}
 
 
 def _initialize_regressor(regressor_type, n_inputs, regressor_kwargs):
@@ -700,7 +1523,7 @@ class MatCalSurrogateBase(ABC):
     def rmse_errors(self):
         """
         The test and train root mean squared errors for the surrogate in the
-        given field's native units.
+        given field's original units.
 
         The RMSE is calculated as
 
@@ -750,20 +1573,22 @@ class MatCalSurrogateBase(ABC):
 
     def enforce_training_data_parameter_range(self, enforce_training_data_parameter_range=True):
         """
-        By default the surrogate will error if called with a parameter set outside of the 
-        parameter ranges used in the training data set. To call the surrogate for parameters 
-        outside of the training data range, call this method with the argument set to False. 
-        Adherence to the training data range can be reactivated by calling this method 
-        with the argument set to True.
+        By default, the surrogate raises an error if called with parameter values
+        outside the stored admissible parameter ranges. For surrogates generated by
+        SurrogateGenerator, these ranges are initially built from the combined training
+        and test parameter data used during surrogate generation. They can be updated
+        with set_parameter_ranges().
         
-        :param ignore_training_range: bool flag to ignore training data range.
-        :type ignore_training_range:
+        :param enforce_training_data_parameter_range: If ``True``, reject surrogate
+            calls outside the stored parameter ranges. If ``False``, allow calls outside
+            the stored parameter ranges.
+        :type enforce_training_data_parameter_range: bool
         """
         check_value_is_bool(enforce_training_data_parameter_range, 
                             "enforce_training_data_parameter_range")
         self._enforce_training_data_parameter_range = enforce_training_data_parameter_range
 
-    def _set_native_space_scores(self, rmse_scores, max_scores, r2_scores):
+    def _set_original_data_space_scores(self, rmse_scores, max_scores, r2_scores):
         self._rmse_scores['train'] = rmse_scores[0]
         self._rmse_scores['test'] = rmse_scores[1]
 
@@ -854,8 +1679,8 @@ def _get_decomp_results(train_data, test_data, make_log_scale, decomposition_too
 
 def _apply_decomposing_and_scaling_to_data(data, data_scaler, decomposer, 
                              latent_scaler):
-    """Transform test data after scalers and decomposition tool have already 
-        been trained on training data."""
+    """Transform data using previously fitted response scaling, 
+    decomposition, and latent-space scaling tools."""
     scaled_data = data_scaler.transform(data)
     latent_data = decomposer.transform(scaled_data)
     latent_data = _ensure_2d_array(latent_data)
@@ -904,15 +1729,42 @@ def _score_regressor_in_latent_space(regressor, scaled_train_params,
     return train_score, test_score
 
 
-def _print_scores(latent_train_score, latent_test_score, native_train_score, native_test_score):
+def _field_uses_pca(decomposers, field):
+    """
+    Return True if the field was actually decomposed with PCA.
+
+    For fields with <= 15 features, MatCal uses _DoNothingDataTransformer,
+    so the so-called latent-space scores are really scaled response-space
+    regressor scores and should not be reported as PCA latent-space scores.
+    """
+    return not isinstance(decomposers[field], _DoNothingDataTransformer)
+
+
+def _print_scores(latent_train_score, latent_test_score, 
+                  data_space_train_score, data_space_test_score, decomposers=None):
     for field in latent_train_score:
         logger.info(f"\nSurrogate scores for {field}: ")
-        score_message = f"\tTrain:\n"
-        score_message += f"\t\tlatent space score: {latent_train_score[field]['score']}\n"    
-        score_message += f"\t\tnative space score: {native_train_score[field]}\n"    
-        score_message += f"\tTest:\n"
-        score_message += f"\t\tlatent space score: {latent_test_score[field]['score']}\n"    
-        score_message += f"\t\tnative space score: {native_test_score[field]}\n"    
+
+        score_message = "\tTrain:\n"
+
+        if _field_uses_pca(decomposers, field):
+            score_message += (
+                f"\t\tPCA latent space score: "
+                f"{latent_train_score[field]['score']}\n"
+            )
+
+        score_message += f"\t\toriginal data space score: {data_space_train_score[field]}\n"
+
+        score_message += "\tTest:\n"
+
+        if _field_uses_pca(decomposers, field):
+            score_message += (
+                f"\t\tPCA latent space score: "
+                f"{latent_test_score[field]['score']}\n"
+            )
+
+        score_message += f"\t\toriginal data space score: {data_space_test_score[field]}\n"
+
         logger.info(score_message)
 
 
@@ -995,26 +1847,7 @@ def _regressor_rmse(regressor, input_values, evals):
         evals,
         _calculate_rmse,
     )
-
-
-def _calculate_nlpd(gpr, input_values, y_true):
-    mu, std = gpr.predict(input_values, return_std=True)
-
-    y_true = y_true.ravel()
-    mu = mu.ravel()
-
-    var = std ** 2
-    residuals = y_true - mu
-
-    return 0.5 * np.mean(
-        np.log(2 * np.pi * var) + (residuals ** 2) / var
-    )
-
-
-def _calculate_rmse(regressor, input_values, y_true):
-    y_pred = regressor.predict(input_values)
-    return _root_mean_squared_error(y_true, y_pred)
-   
+ 
     
 def _convert_instances_to_stats(scores):
     score_stats = OrderedDict()
@@ -1094,14 +1927,26 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         By executing a call on the surrogate object. [Example my_surrogate(my_parameters)]
         return a dictionary of the different field predictions
 
+        If passing a batch array with shape ``(n_samples, n_parameters)``, call with
+        ``batch_evaluate=True``. For a single sample, pass one positional value per
+        parameter, keyword arguments for all parameters, or a parameter dictionary.
+
+        :param batch_evaluate: If ``True``, treat the first positional argument as a
+            batch parameter array.
+        :type batch_evaluate: bool
+
+        :param transpose: If ``True``, transpose the batch array before evaluation.
+        :type transpose: bool
+
         :param parameters: parameter values to evaluate the surrogate at.
             If not a dict, the parameters are expected to be in an order as detailed by 
             :meth:`~matcal.core.surrogates.MatCalPCASurrogateBase.parameter_order`. 
             As an array, the input should have shape (n_samples, n_parameters).
         :type parameters: np.ndarray or list or dict
 
-        :return: A dictionary of the various field predictions.
-        :rtype: dict
+        :return: Ordered dictionary containing predicted fields and, when applicable,
+            the interpolation field.
+        :rtype: OrderedDict
         """
         param_names = self._parameter_scaler.parameter_order
         params_array = _process_surrogate_args_call(param_names, *args, 
@@ -1119,12 +1964,12 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
         for field in self._regressors:
             scaled_latent_prediction = self._regressors[field].predict(scaled_params)
             scaled_latent_prediction = scaled_latent_prediction.reshape(scaled_params.shape[0], -1)
-            results[field] = self._transform_data_to_native_space(field, scaled_latent_prediction)
+            results[field] = self._transform_data_to_original_data_space(field, scaled_latent_prediction)
             if not multiple_samples:
                 results[field] = results[field].flatten()
         return results
     
-    def _transform_data_to_native_space(self, field, scaled_latent_data):
+    def _transform_data_to_original_data_space(self, field, scaled_latent_data):
         latent_scaler = self._latent_scalers[field]
         latent_prediction = latent_scaler.inverse_transform(scaled_latent_data)
         scaled_prediction  = self._decomposers[field].inverse_transform(latent_prediction)
@@ -1179,12 +2024,12 @@ class MatCalPCASurrogateBase(MatCalSurrogateBase):
                                     param_scaler, regressors, 
                                     decomposers, data_scalers, latent_scalers, param_ranges) 
 
-        native_space_scores = _get_scores_in_native_data_space(surrogate, test_params, test_data, 
+        original_data_space_scores = _get_scores_in_original_data_space(surrogate, test_params, test_data, 
                                                                train_params, train_data)
-        rmse_scores, max_scores, r2_scores = native_space_scores
-        surrogate._set_native_space_scores(rmse_scores, max_scores, r2_scores)
+        rmse_scores, max_scores, r2_scores = original_data_space_scores
+        surrogate._set_original_data_space_scores(rmse_scores, max_scores, r2_scores)
         if logger_on:
-            _print_scores(*latent_scores, *r2_scores)
+            _print_scores(*latent_scores, *r2_scores, decomposers=decomposers)
         return surrogate
 
 
@@ -1194,7 +2039,7 @@ def _process_surrogate_args_call(param_names, *args,
         processed_args = np.asarray(args[0], dtype=float)
         if transpose:
             processed_args = processed_args.T
-    elif len(args)==1 and isinstance(args[0], dict or OrderedDict):
+    elif len(args)==1 and isinstance(args[0], (dict, OrderedDict)):
         if _all_params_exist_dict(param_names, args[0]):
             params = _convert_param_dict_to_array(args[0], param_names)
         batch_evaluate=True
@@ -1239,20 +2084,18 @@ def _check_params_in_range( params_dict, param_ranges, enforce_range=True):
                                 f"{param_ranges[param][1]}.\n{param_values}")
    
 
-def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_params, train_data):
+def _get_scores_in_original_data_space(surrogate, test_params, test_data, train_params, train_data):
     rmse_train_score = _get_field_scores(surrogate, train_params, train_data, 
                                         _root_mean_squared_error)
     max_train_score = _get_field_scores(surrogate, train_params, train_data, 
                                         _max_error_inf_norm)
-    r2_train_score = _get_field_scores(surrogate, train_params, train_data, r2_score)
+    r2_train_score = _get_field_scores(surrogate, train_params, train_data, _global_r2_score)
 
     rmse_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _root_mean_squared_error)
     max_test_score = _get_field_scores(surrogate, test_params, test_data, 
                                         _max_error_inf_norm)
-    r2_test_score = _get_field_scores(surrogate, test_params, test_data, r2_score, 
-                                          needs_length=True)
-
+    r2_test_score = _get_field_scores(surrogate, test_params, test_data, _global_r2_score)
 
     rmse_scores = (rmse_train_score, rmse_test_score)
     max_scores = (max_train_score, max_test_score)
@@ -1260,22 +2103,23 @@ def _get_scores_in_native_data_space(surrogate, test_params, test_data, train_pa
     return rmse_scores, max_scores, r2_scores
 
 
-def _get_field_scores(surrogate, params, data, score_function, needs_length=False):
+def _get_field_scores(surrogate, params, data, score_function):
+    """
+    Compute one original data space score per predicted field.
+
+    The score function is responsible for returning ``nan`` when a metric is not
+    defined, such as global R2 with fewer than two scalar comparisons.
+    """
     surrogate_data = surrogate(params)
     scores = OrderedDict()
-    eval_score=True
+
     for field in surrogate_data:
-        surogate_data_field = np.atleast_2d(surrogate_data[field])
-        if needs_length:
-            if len(surogate_data_field) > 1:
-                eval_score = surogate_data_field.shape[1] > 1
-            else:
-                eval_score = len(surogate_data_field) > 1
-        if field != surrogate._interpolation_field:
-            if eval_score:
-                scores[field] = score_function(data[field], surogate_data_field)
-            else:
-                scores[field] = np.nan
+        if field == surrogate._interpolation_field:
+            continue
+
+        surrogate_data_field = np.atleast_2d(surrogate_data[field])
+        scores[field] = score_function(data[field], surrogate_data_field)
+
     return scores
 
 
@@ -1292,7 +2136,7 @@ class MatCalMonolithicPCASurrogate(MatCalPCASurrogateBase):
     :param surrogate_information: The file path to or the lists of information generated by 
         :meth:`~matcal.core.surrogates.SurrogateGenerator.generate`.        
     """    
-    name = "PCA Monolythic Regressor"
+    name = "PCA Monolithic Regressor"
     
     def fit(train_data, test_data, train_params, test_params, 
             fields_to_log_scale, decomposition_tool,
@@ -1376,14 +2220,21 @@ def _assign_decomp(decomp_var, reconstruction_error):
 def _process_interpolation_locations(output_history, interpolation_locations, interpolation_field):
     if interpolation_field is None:
         return None
-    elif isinstance(interpolation_locations, (np.ndarray)):
-        return interpolation_locations
-    elif isinstance(interpolation_locations, Integral):
-        return _get_interpolation_field(output_history, interpolation_field, 
-                                 interpolation_locations)
-    else:
-        raise ValueError("The surrogate generator expects an integer or array-like "
-            f"set of values. Received variable of type {type(interpolation_locations)}.")
+
+    if isinstance(interpolation_locations, Integral):
+        return _get_interpolation_field(
+            output_history,
+            interpolation_field,
+            interpolation_locations,
+        )
+
+    try:
+        return np.asarray(interpolation_locations, dtype=float)
+    except Exception:
+        raise ValueError(
+            "The surrogate generator expects an integer or array-like "
+            f"set of values. Received variable of type {type(interpolation_locations)}."
+        )
     
 
 def _get_interpolation_field(output_history, interpolation_field, n_interp):
@@ -1407,15 +2258,22 @@ def _identify_common_region(output_history, interpolation_field):
     return start,end   
     
 
-def _identify_fields_of_interest(sim_list,  indep_field, user_fields_of_interest):
-    sim_data_fields = sim_list[0].field_names
+def _identify_fields_of_interest(sim_list, indep_field, user_fields_of_interest):
+    sim_data_fields = list(sim_list[0].field_names)
+
     if user_fields_of_interest is not None:
-        fields_of_interest = user_fields_of_interest
-        _check_fields_in_keys_list(fields_of_interest, sim_data_fields, "training data set")
+        fields_of_interest = list(user_fields_of_interest)
+        _check_fields_in_keys_list(
+            fields_of_interest,
+            sim_data_fields,
+            "training data set",
+        )
     else:
-        fields_of_interest = sim_data_fields
+        fields_of_interest = list(sim_data_fields)
+
     if indep_field is not None and indep_field in fields_of_interest:
         fields_of_interest.remove(indep_field)
+
     return fields_of_interest
 
 
@@ -1533,7 +2391,7 @@ def _root_mean_squared_error(test_values, surrogate_values):
     surrogate predictions.
 
     The arrays are expected to represent responses with shape
-    ``(n_samples, n_qois)`` or any shape that can be compared element-wise.
+    ``(n_samples, n_qois)``.
 
     The RMSE is calculated as
 
@@ -1550,21 +2408,274 @@ def _root_mean_squared_error(test_values, surrogate_values):
     where :math:`N` is the total number of scalar response values,
     :math:`R_i` are the reference values, and :math:`\\hat{R}_i` are the
     surrogate predictions.
-
-    :param test_values: Reference response values.
-    :type test_values: array-like
-
-    :param surrogate_values: Surrogate-predicted response values.
-    :type surrogate_values: array-like
-
-    :return: Root mean squared error.
-    :rtype: float
     """
-    test_values = np.asarray(test_values, dtype=float)
-    surrogate_values = np.asarray(surrogate_values, dtype=float)
-    return np.sqrt(np.mean((test_values - surrogate_values) ** 2))
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+
+    return float(np.sqrt(np.mean((test_values - surrogate_values) ** 2)))
 
 
 def _max_error_inf_norm(test_values, surrogate_values):
-    #expects arrays to be sized (n_samples, n_qois)
-    return np.linalg.norm((test_values - surrogate_values).flatten(), ord=np.inf)
+    """
+    Compute the maximum absolute scalar error.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+
+    return float(np.linalg.norm((test_values - surrogate_values).flatten(), ord=np.inf))
+
+
+def _global_r2_score(test_responses, surrogate_values):
+    """
+    Compute a global R2 score over all scalar response values.
+
+    This treats all test samples and QoI locations as one pooled set of scalar
+    observations. The score is defined when at least two scalar values are
+    available.
+    """
+    test_responses, surrogate_values = _prepare_metric_arrays(
+        test_responses,
+        surrogate_values,
+    )
+
+    test_responses = test_responses.ravel()
+    surrogate_values = surrogate_values.ravel()
+
+    if test_responses.size < 2:
+        return np.nan
+
+    return r2_score(test_responses, surrogate_values)
+
+
+def _prepare_metric_arrays(test_values, surrogate_values):
+    """
+    Convert metric inputs to comparable floating-point arrays.
+
+    Metric arrays must have identical shape, except that a one-dimensional array
+    with shape ``(n_samples,)`` is treated as equivalent to a singleton-column
+    array with shape ``(n_samples, 1)``. This accommodates common single-output
+    regressor prediction conventions without allowing arbitrary reshaping based
+    only on total array size.
+
+    Shape normalization beyond this singleton-column case should be performed by
+    the caller, where sample and QoI orientation are known.
+    """
+    test_values = np.asarray(test_values, dtype=float)
+    surrogate_values = np.asarray(surrogate_values, dtype=float)
+
+    test_values, surrogate_values = _match_single_column_and_1d_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+
+    if test_values.shape != surrogate_values.shape:
+        raise RuntimeError(
+            "Metric arrays have incompatible shapes. "
+            f"Reference shape: {test_values.shape}. "
+            f"Prediction shape: {surrogate_values.shape}."
+        )
+
+    return test_values, surrogate_values
+
+
+def _match_single_column_and_1d_metric_arrays(test_values, surrogate_values):
+    """
+    Match the safe singleton-column/1D metric-array convention.
+
+    Some regressors return a single-output prediction with shape ``(n_samples,)``
+    even when the reference data are stored as ``(n_samples, 1)``. These two
+    shapes are semantically equivalent for scalar-output, per-sample metrics.
+
+    This helper intentionally does not perform arbitrary reshaping based only on
+    total array size.
+    """
+    if test_values.shape == surrogate_values.shape:
+        return test_values, surrogate_values
+
+    if (
+        test_values.ndim == 2
+        and test_values.shape[1] == 1
+        and surrogate_values.ndim == 1
+        and surrogate_values.shape[0] == test_values.shape[0]
+    ):
+        surrogate_values = surrogate_values.reshape(test_values.shape)
+        return test_values, surrogate_values
+
+    if (
+        surrogate_values.ndim == 2
+        and surrogate_values.shape[1] == 1
+        and test_values.ndim == 1
+        and test_values.shape[0] == surrogate_values.shape[0]
+    ):
+        test_values = test_values.reshape(surrogate_values.shape)
+        return test_values, surrogate_values
+
+    return test_values, surrogate_values
+
+
+def _mean_absolute_error(test_values, surrogate_values):
+    """
+    Compute mean absolute error between reference values and predictions.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+    return float(np.mean(np.abs(test_values - surrogate_values)))
+
+
+def _sum_absolute_error(test_values, surrogate_values):
+    """
+    Compute sum of absolute errors between reference values and predictions.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+    return float(np.sum(np.abs(test_values - surrogate_values)))
+
+
+def _normalized_root_mean_squared_error(test_values, surrogate_values):
+    """
+    Compute normalized root-mean-squared error.
+
+    The normalization is
+
+    .. math::
+
+        \\sqrt{
+        \\frac{
+            \\sum_i (y_i - \\hat{y}_i)^2
+        }{
+            \\sum_i y_i^2
+        }}
+
+    If the reference norm is zero, this falls back to RMSE.
+    """
+    test_values, surrogate_values = _prepare_metric_arrays(
+        test_values,
+        surrogate_values,
+    )
+
+    residual = test_values - surrogate_values
+    denom = np.sum(test_values ** 2)
+
+    if denom <= 0:
+        return _root_mean_squared_error(test_values, surrogate_values)
+
+    return float(np.sqrt(np.sum(residual ** 2) / denom))
+
+
+def _calculate_response_error_metric(test_values, surrogate_values, metric):
+    """
+    Compute a deterministic response-space error/score metric.
+
+    Supported metrics are:
+
+    * ``"rmse"``
+    * ``"mae"`` or ``"abs"``
+    * ``"sum_abs"``
+    * ``"nrmse"``
+    * ``"max_error"``, ``"max_abs_error"``, or ``"linf"``
+    * ``"r2"`` or ``"score"``
+
+    ``"nlpd"`` is intentionally not handled here because NLPD requires
+    predictive variances, not only deterministic predictions.
+    """
+    check_value_is_nonempty_str(metric, "metric")
+    metric = metric.lower().strip()
+
+    if metric == "rmse":
+        return float(_root_mean_squared_error(test_values, surrogate_values))
+
+    if metric in ("mae", "abs", "mean_abs_error"):
+        return _mean_absolute_error(test_values, surrogate_values)
+
+    if metric == "sum_abs":
+        return _sum_absolute_error(test_values, surrogate_values)
+
+    if metric == "nrmse":
+        return _normalized_root_mean_squared_error(test_values, surrogate_values)
+
+    if metric in ("max_error", "max_abs_error", "linf"):
+        return float(_max_error_inf_norm(test_values, surrogate_values))
+
+    if metric in ("r2", "score"):
+        return float(_global_r2_score(test_values, surrogate_values))
+
+    raise ValueError(
+        "Unsupported response error metric. Supported metrics are "
+        "'rmse', 'mae', 'abs', 'mean_abs_error', 'sum_abs', 'nrmse', "
+        "'max_error', 'max_abs_error', 'linf', 'r2', and 'score'. "
+        f"Received '{metric}'."
+    )
+
+
+def _calculate_nlpd(gpr, input_values, y_true):
+    """
+    Calculate Gaussian negative log predictive density.
+
+    The value returned is the mean scalar NLPD over all supplied samples and
+    outputs:
+
+    .. math::
+
+        \\mathrm{NLPD}
+        =
+        \\frac{1}{2}
+        \\operatorname{mean}
+        \\left[
+            \\log(2\\pi\\sigma^2)
+            +
+            \\frac{(y - \\mu)^2}{\\sigma^2}
+        \\right]
+
+    ``gpr`` must support ``predict(..., return_std=True)``.
+    """
+    variance_floor = 1e-12
+
+    mu, std = gpr.predict(input_values, return_std=True)
+
+    y_true = np.asarray(y_true, dtype=float)
+    mu = np.asarray(mu, dtype=float)
+    std = np.asarray(std, dtype=float)
+
+    if mu.shape != y_true.shape:
+        if mu.size == y_true.size:
+            mu = mu.reshape(y_true.shape)
+        else:
+            raise RuntimeError(
+                "Gaussian Process mean prediction shape is incompatible with "
+                "the supplied true values for NLPD calculation. "
+                f"mu shape: {mu.shape}. y_true shape: {y_true.shape}."
+            )
+
+    if std.shape != y_true.shape:
+        if std.size == y_true.size:
+            std = std.reshape(y_true.shape)
+        elif y_true.ndim == 2 and std.size == y_true.shape[0]:
+            std = np.repeat(std.reshape(-1, 1), y_true.shape[1], axis=1)
+        else:
+            raise RuntimeError(
+                "Gaussian Process standard-deviation prediction shape is "
+                "incompatible with the supplied true values for NLPD "
+                "calculation. "
+                f"std shape: {std.shape}. y_true shape: {y_true.shape}."
+            )
+
+    var = std ** 2
+    var = np.maximum(var, variance_floor)
+
+    residuals = y_true - mu
+
+    nlpd_terms = np.log(2.0 * np.pi * var) + (residuals ** 2) / var
+    return float(0.5 * np.mean(nlpd_terms))
+
+
+def _calculate_rmse(regressor, input_values, y_true):
+    y_pred = regressor.predict(input_values)
+    return _root_mean_squared_error(y_true, y_pred)
