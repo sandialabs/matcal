@@ -160,7 +160,7 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
                                             n_interp, test_function, surrogate_loaded)
         self._confirm_good_test_scores(surrogate_loaded)
         
-    def test_surrogate_for_line_monolythic(self):
+    def test_surrogate_for_line_monolithic(self):
         def test_function(m, b, n_features=None):
             if n_features == None:
                 n_features = np.random.randint(10, 50)
@@ -180,14 +180,14 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
         
         sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, 
                                                      p_high, indep_var, test_function)
-        sur_gen.set_surrogate_details("PCA Monolythic Regressor", "Gaussian Process")
+        sur_gen.set_surrogate_details("PCA Monolithic Regressor", "Gaussian Process")
         surrogate = sur_gen.generate('my_surrogate')
 
         self._confirm_alignment_to_function(p_low, p_high, show_array, probes, 
                                             err_tol, n_interp, test_function, surrogate)
         self._confirm_good_test_scores(surrogate)
 
-    def test_surrogate_for_line_read_from_file_monolythic(self):
+    def test_surrogate_for_line_read_from_file_monolithic(self):
         def test_function(m, b, n_features=None):
             if n_features == None:
                 n_features = np.random.randint(10, 50)
@@ -209,7 +209,7 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
 
         sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, 
                                                      p_low, p_high, indep_var, test_function)
-        sur_gen.set_surrogate_details("PCA Monolythic Regressor", "Gaussian Process")
+        sur_gen.set_surrogate_details("PCA Monolithic Regressor", "Gaussian Process")
         sur_gen.generate('my_surrogate')
         surrogate = matcal_load("my_surrogate.joblib")
 
@@ -238,7 +238,7 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
         
         sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, 
                                                      p_low, p_high, indep_var, test_function)
-        sur_gen.set_surrogate_details("PCA Monolythic Regressor", "Random Forest")
+        sur_gen.set_surrogate_details("PCA Monolithic Regressor", "Random Forest")
         surrogate = sur_gen.generate('my_surrogate')
 
         self._confirm_alignment_to_function(p_low, p_high, show_array, 
