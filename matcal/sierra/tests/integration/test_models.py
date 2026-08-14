@@ -79,7 +79,15 @@ class UniaxialLoadingMaterialPointModelIntegrationTest(MatCalStandardModelIntegr
     UniaxialLoadingMaterialPointModelForTests):
     """"""
 
-      
+
+from matcal.sierra.tests.sierra_sm_models_for_tests import SimpleShearMaterialPointModelForTests
+class SimpleShearMaterialPointModelIntegrationTest(
+    MatCalStandardModelIntegrationTestBase.CommonTests,
+    SimpleShearMaterialPointModelForTests
+):
+    """Integration tests for SimpleShearMaterialPointModel."""
+
+
 class UniaxialTensionModelIntegrationTestBase:
     def __init__():
         pass

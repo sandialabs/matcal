@@ -19,7 +19,8 @@ from matcal.full_field.TwoDimensionalFieldGrid import auto_generate_two_dimensio
 from matcal.sierra.material import Material
 from matcal.sierra.models import (RectangularUniaxialTensionModel, 
     RoundNotchedTensionModel, RoundUniaxialTensionModel,
-    SolidBarTorsionModel, TopHatShearModel, UniaxialLoadingMaterialPointModel, 
+    SimpleShearMaterialPointModel, SolidBarTorsionModel, TopHatShearModel,
+    UniaxialLoadingMaterialPointModel,
     UserDefinedSierraModel, VFMUniaxialTensionConnectedHexModel, VFMUniaxialTensionHexModel)
 from matcal.sierra.simulators import SierraSimulator
 from matcal.sierra.tests.utilities import (write_j2_plasticity_material_file, write_empty_file, 
@@ -196,6 +197,88 @@ class UniaxialLoadingMaterialPointModelForTests(MatcalGeneratedModelForTestsBase
                                         "uniaxial_loading_material_point_0", 
                                         "rate_3.472463365511494e-05_eng_strain_rate", 
                                         "results.csv")
+        return FileData(gold_data_file)
+
+
+class SimpleShearMaterialPointModelForTests(MatcalGeneratedModelForTestsBase):
+    """Test fixture for SimpleShearMaterialPointModel."""
+    
+    _model_class = SimpleShearMaterialPointModel
+    geo_params = {}
+
+    def init_model(self, plasticity=False, coupled=False):
+        """Initialize simple shear material point model."""
+        material = self._get_material(plasticity)
+        model = self._model_class(material, **self.geo_params)
+        mat_props = self.get_material_properties()
+        model.add_constants(
+            elastic_modulus=mat_props["elastic_modulus"],
+            nu=mat_props["nu"],
+            specific_heat=mat_props["specific_heat"],
+            beta_tq=mat_props["beta_tq"],
+            density=mat_props["density"]
+        )
+        if coupled:
+            model.activate_thermal_coupling()
+            model.add_constants(coupling="adiabatic")
+        else:
+            model.add_constants(coupling="uncoupled")
+        return model
+
+    @property
+    def boundary_condition_data_sets(self):
+        """
+        Create boundary condition data sets for simple shear.
+        
+        For simple shear, engineering shear strain gamma = displacement_x / height.
+        With height = 1.0, gamma = displacement_x directly.
+        """
+        # Slow shear rate: 4 hours to gamma = 0.5
+        time_slow = np.linspace(0, 60*60*4, 100)
+        gamma_slow = np.linspace(0, 0.5, 100)
+        shear_rate_slow = gamma_slow[-1] / (time_slow[-1] - time_slow[0])
+        
+        state_slow = State(f"rate_{shear_rate_slow}", temperature=298)
+        state_slow.update_state_variable(STRAIN_RATE_KEY, shear_rate_slow)
+        
+        data_dict_slow = {TIME_KEY: time_slow, ENG_STRAIN_KEY: gamma_slow}
+        eng_strain_data_slow = convert_dictionary_to_data(data_dict_slow)
+        eng_strain_data_slow.set_state(state_slow)
+        
+        # Fast shear rate: 4 seconds to gamma = 0.5
+        time_fast = np.linspace(0, 4, 100)
+        gamma_fast = np.linspace(0, 0.5, 100)
+        shear_rate_fast = gamma_fast[-1] / (time_fast[-1] - time_fast[0])
+        
+        state_fast = State(f"rate_{shear_rate_fast}", temperature=298)
+        state_fast.update_state_variable(STRAIN_RATE_KEY, shear_rate_fast)
+        
+        data_dict_fast = {TIME_KEY: time_fast, ENG_STRAIN_KEY: gamma_fast}
+        eng_strain_data_fast = convert_dictionary_to_data(data_dict_fast)
+        eng_strain_data_fast.set_state(state_fast)
+        
+        # Create data collections
+        eng_strain_dc = DataCollection(
+            "engineering shear strain data",
+            eng_strain_data_slow,
+            eng_strain_data_fast
+        )
+        
+        # Version without time (rate must be in state)
+        eng_strain_dc_no_time = copy.deepcopy(eng_strain_dc)
+        eng_strain_dc_no_time.remove_field(TIME_KEY)
+        
+        return [eng_strain_dc, eng_strain_dc_no_time]
+
+    def _get_gold_data(self):
+        """Get gold/reference data for objective checking."""
+        gold_data_file = os.path.join(
+            self.results_parent_folder,
+            "simple_shear_material_point",
+            "simple_shear_material_point_0",
+            "rate_3.472463365511494e-05",
+            "results.csv"
+        )
         return FileData(gold_data_file)
 
 class UniaxialTensionModelForTestsBase(MatcalGeneratedModelForTestsBase):

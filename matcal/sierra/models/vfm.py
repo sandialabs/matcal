@@ -11,6 +11,7 @@ Internal:
 """
 
 import os
+from typing import ClassVar
 
 from matcal.core.boundary_condition_calculators import BoundaryConditionDeterminationError
 from matcal.core.constants import TIME_KEY
@@ -56,7 +57,7 @@ class _VFMStandardSierraModel(_CoupledStandardSierraModelBase):
     Base class for MatCal VFM models.
     """
 
-    model_type = "VFM"
+    model_type: ClassVar[str] = "VFM"
 
     _death_blocks = ["block_main"]
     _model_blocks = ["block_main"]

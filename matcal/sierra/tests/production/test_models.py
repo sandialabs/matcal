@@ -243,7 +243,87 @@ class UniaxialLoadingMaterialPointModelProductionTests(
             self.assertLess(results_data["engineering_strain"][-1], 0)
             self.assertLess(results_data["true_stress"][-1], 0)
             self.assertLess(results_data["true_strain"][-1], 0)
-      
+
+
+from matcal.sierra.tests.sierra_sm_models_for_tests import (
+    SimpleShearMaterialPointModelForTests)
+class SimpleShearMaterialPointModelProductionTests(
+    MatcalGeneratedModelProductionTestsBase.CommonTests,
+    SimpleShearMaterialPointModelForTests
+):
+    """Production tests for SimpleShearMaterialPointModel."""
+
+    _default_output_field_names = [
+        "time",
+        "displacement",
+        "load",
+        "engineering_strain",
+        "engineering_stress",
+        "true_stress",
+        "true_strain",
+        "log_strain_xx",
+        "log_strain_yy",
+        "log_strain_zz",
+        "cauchy_stress_xx",
+        "cauchy_stress_yy",
+        "cauchy_stress_zz",
+    ]
+
+    _coupled_output_field_names = ["temperature"]
+
+    def setup_model(self, coupled=False):
+        """Set up simple shear model for production testing."""
+        model = self.init_model(plasticity=True, coupled=coupled)
+        SET_PLATFORM_OPTIONS(model)
+        return model
+
+    def test_coupled_under_integrated_element(self):
+        """Simple shear doesn't support composite tet elements."""
+
+    def test_basic_composite_tet(self):
+        """Simple shear doesn't support composite tet elements."""
+
+    def test_basic_death(self):
+        """Test simple shear with element death."""
+        model = self.setup_model(coupled=False)
+        bc_dc = self.boundary_condition_data_sets[0]
+        model.add_boundary_condition_data(bc_dc)
+        model.activate_exodus_output()
+        model.add_element_output_variable("eqps")
+        model.add_element_output_variable("eqdot")
+        model.activate_element_death("eqps", critical_value=0.01)
+        try:
+            model.activate_implicit_dynamics()
+        except AttributeError:
+            pass
+
+        for state in bc_dc.states.values():
+            self._run_model_check_input(model, state)
+            break
+
+    def test_shear_reversal(self):
+        """Test simple shear with reversed loading (negative shear)."""
+        model = self.setup_model()
+        bc_dc = self.boundary_condition_data_sets[0]
+        neg_bc_dc = scale_data_collection(bc_dc, "engineering_stress", -1)
+        neg_bc_dc = scale_data_collection(neg_bc_dc, "engineering_strain", -1)
+
+        model.add_boundary_condition_data(neg_bc_dc)
+
+        for state in bc_dc.states.values():
+            results = model.run(state, self.get_material_parameter_collection())
+            self._check_shear_reversal(results.results_data)
+            self._check_results_data(results.results_data, model, check_objective=True)
+            break
+
+    def _check_shear_reversal(self, results_data):
+        """Check that shear reversal produces negative stresses and strains."""
+        self.assertLess(results_data["engineering_stress"][-1], 0)
+        self.assertLess(results_data["engineering_strain"][-1], 0)
+        self.assertLess(results_data["true_stress"][-1], 0)
+        self.assertLess(results_data["true_strain"][-1], 0)
+
+
 class UniaxialTensionModelProductionTestsBase(ABC):
     def __init__():
         pass

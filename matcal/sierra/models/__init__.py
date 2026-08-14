@@ -9,7 +9,10 @@ Examples:
 """
 
 from .base import UserDefinedSierraModel
-from .material_point import UniaxialLoadingMaterialPointModel
+from .material_point import (
+    UniaxialLoadingMaterialPointModel,
+    SimpleShearMaterialPointModel,
+)
 from .tension import (
     RoundUniaxialTensionModel,
     RectangularUniaxialTensionModel,
@@ -21,6 +24,7 @@ from .vfm import VFMUniaxialTensionHexModel, VFMUniaxialTensionConnectedHexModel
 __all__ = [
     "UserDefinedSierraModel",
     "UniaxialLoadingMaterialPointModel",
+    "SimpleShearMaterialPointModel",
     "RoundUniaxialTensionModel",
     "RectangularUniaxialTensionModel",
     "RoundNotchedTensionModel",
