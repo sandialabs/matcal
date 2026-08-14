@@ -1,14 +1,14 @@
 r"""
-Paper Peaks Verification: Pretrained Random-Sampling Random Forest Surrogate
+Paper Peaks Verification: Fixed-sample Random-Sampling Random Forest Surrogate
 ===========================================================================
 
-This example verifies a pretrained random forest surrogate on the 2D Peaks
+This example verifies a fixed-sample random forest surrogate on the 2D Peaks
 benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 
 part of the verification example set for surrogates. This set of examples is
 meant to demonstrate features and behavior of the surrogates in MatCal. 
 These examples are not meant to be used as templates for user MatCal files.
 
-This is a **pretrained** surrogate example:
+This is a **fixed-sample** surrogate example:
 
 * all training samples are chosen before surrogate construction;
 * samples are independent uniform random samples over the Peaks domain;
@@ -64,7 +64,7 @@ from includes.paper_peaks_verification_common import (
 # User options
 # ------------
 
-WORKING_DIRECTORY = os.path.abspath("paper_peaks_pretrained_random_random_forest")
+WORKING_DIRECTORY = os.path.abspath("paper_peaks_fixed-sample_random_random_forest")
 FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
 
 MAX_TRAINING_SAMPLES = 150
@@ -96,7 +96,7 @@ def train_and_score_random_forest(
     sample_count,
 ):
     """
-    Train and score one pretrained random-sampling random forest surrogate.
+    Train and score one fixed-sample random-sampling random forest surrogate.
     """
     training_samples = samples[:sample_count]
 
@@ -185,7 +185,7 @@ random_samples = make_uniform_random_samples(
 
 
 ###############################################################################
-# Train and score pretrained random forest surrogates.
+# Train and score fixed-sample random forest surrogates.
 # ----------------------------------------------------
 
 rmse_history = []
@@ -196,7 +196,7 @@ training_samples_by_count = {}
 
 for sample_count in SAMPLE_COUNTS:
     print(
-        "\nTraining pretrained random-sampling random forest "
+        "\nTraining fixed-sample random-sampling random forest "
         f"with {sample_count} samples."
     )
 
@@ -232,7 +232,7 @@ max_error_history = np.asarray(max_error_history, dtype=float)
 # ------------------------------
 
 print_convergence_summary(
-    "pretrained random-sampling random forest",
+    "fixed-sample random-sampling random forest",
     sample_counts,
     rmse_history,
     max_error_history,
@@ -247,9 +247,9 @@ plot_convergence_history(
     sample_counts,
     rmse_history,
     max_error_history,
-    method_name="pretrained random-sampling random forest",
+    method_name="fixed-sample random-sampling random forest",
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_random_forest_convergence.png",
+    filename="peaks_fixed-sample_random_random_forest_convergence.png",
     max_sample_count=CONVERGENCE_PLOT_SAMPLE_LIMIT,
 )
 
@@ -263,8 +263,8 @@ plot_function_and_surrogate_error_at_counts(
     training_samples_by_count,
     sample_counts_to_plot=SAMPLE_COUNTS_TO_PLOT,
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_random_forest_error_fields.png",
-    method_name="pretrained random-sampling random forest",
+    filename="peaks_fixed-sample_random_random_forest_error_fields.png",
+    method_name="fixed-sample random-sampling random forest",
     n_grid=150,
 )
 

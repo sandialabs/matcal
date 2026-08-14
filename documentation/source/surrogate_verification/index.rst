@@ -6,15 +6,15 @@ Each example produces a convergence plot and diagnostic plots showing training
 sample locations over the true Peaks function and the corresponding surrogate
 absolute-error field.
 
-``plot_a1_peaks_pretrained_random_gp.py``
-    Builds pretrained Gaussian-process surrogates from nested random training
+``plot_a1_peaks_fixed-sample_random_gp.py``
+    Builds fixed-sample Gaussian-process surrogates from nested random training
     sets.
 
-``plot_a2_peaks_pretrained_random_rbf.py``
-    Builds pretrained RBF surrogates from nested random training sets.
+``plot_a2_peaks_fixed-sample_random_rbf.py``
+    Builds fixed-sample RBF surrogates from nested random training sets.
 
-``plot_a3_peaks_pretrained_random_random_forest.py``
-    Builds pretrained random-forest surrogates from nested random training sets.
+``plot_a3_peaks_fixed-sample_random_random_forest.py``
+    Builds fixed-sample random-forest surrogates from nested random training sets.
 
 ``plot_a4_peaks_adaptive_voronoi_gp.py``
     Builds an adaptive Gaussian-process surrogate using KFCV-Voronoi sampling.
@@ -40,52 +40,52 @@ absolute-error field.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example verifies a pretrained Gaussian process surrogate on the 2D Peaks benchmark function used by voronoi_adaptive_surrogates. This example is  part of the verification example set for surrogates. This set of examples is meant to demonstrate features and behavior of the surrogates in MatCal.  They are not meant to be used as templates for user MatCal files.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example verifies a fixed-sample Gaussian process surrogate on the 2D Peaks benchmark function used by voronoi_adaptive_surrogates. This example is  part of the verification example set for surrogates. This set of examples is meant to demonstrate features and behavior of the surrogates in MatCal.  They are not meant to be used as templates for user MatCal files.">
 
 .. only:: html
 
-  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a1_peaks_pretrained_random_gp_thumb.png
+  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a1_peaks_fixed-sample_random_gp_thumb.png
     :alt:
 
-  :ref:`sphx_glr_surrogate_verification_plot_a1_peaks_pretrained_random_gp.py`
+  :ref:`sphx_glr_surrogate_verification_plot_a1_peaks_fixed-sample_random_gp.py`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Paper Peaks Verification: Pretrained Random-Sampling Gaussian Process Surrogate</div>
+      <div class="sphx-glr-thumbnail-title">Paper Peaks Verification: Fixed-sample Random-Sampling Gaussian Process Surrogate</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example verifies a pretrained radial basis function (RBF) surrogate on the 2D Peaks benchmark function used by voronoi_adaptive_surrogates. This example is  part of the verification example set for surrogates. This set of examples is meant to demonstrate features and behavior of the surrogates in MatCal.  They are not meant to be used as templates for user MatCal files.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example verifies a fixed-sample radial basis function (RBF) surrogate on the 2D Peaks benchmark function used by voronoi_adaptive_surrogates. This example is  part of the verification example set for surrogates. This set of examples is meant to demonstrate features and behavior of the surrogates in MatCal.  They are not meant to be used as templates for user MatCal files.">
 
 .. only:: html
 
-  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a2_peaks_pretrained_random_rbf_thumb.png
+  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a2_peaks_fixed-sample_random_rbf_thumb.png
     :alt:
 
-  :ref:`sphx_glr_surrogate_verification_plot_a2_peaks_pretrained_random_rbf.py`
+  :ref:`sphx_glr_surrogate_verification_plot_a2_peaks_fixed-sample_random_rbf.py`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Paper Peaks Verification: Pretrained Random-Sampling RBF Surrogate</div>
+      <div class="sphx-glr-thumbnail-title">Paper Peaks Verification: Fixed-sample Random-Sampling RBF Surrogate</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example verifies a pretrained random forest surrogate on the 2D Peaks benchmark function used by voronoi_adaptive_surrogates. This example is  part of the verification example set for surrogates. This set of examples is meant to demonstrate features and behavior of the surrogates in MatCal.  These examples are not meant to be used as templates for user MatCal files.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example verifies a fixed-sample random forest surrogate on the 2D Peaks benchmark function used by voronoi_adaptive_surrogates. This example is  part of the verification example set for surrogates. This set of examples is meant to demonstrate features and behavior of the surrogates in MatCal.  These examples are not meant to be used as templates for user MatCal files.">
 
 .. only:: html
 
-  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a3_peaks_pretrained_random_random_forest_thumb.png
+  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a3_peaks_fixed-sample_random_random_forest_thumb.png
     :alt:
 
-  :ref:`sphx_glr_surrogate_verification_plot_a3_peaks_pretrained_random_random_forest.py`
+  :ref:`sphx_glr_surrogate_verification_plot_a3_peaks_fixed-sample_random_random_forest.py`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Paper Peaks Verification: Pretrained Random-Sampling Random Forest Surrogate</div>
+      <div class="sphx-glr-thumbnail-title">Paper Peaks Verification: Fixed-sample Random-Sampling Random Forest Surrogate</div>
     </div>
 
 
@@ -167,9 +167,9 @@ absolute-error field.
 .. toctree::
    :hidden:
 
-   /surrogate_verification/plot_a1_peaks_pretrained_random_gp
-   /surrogate_verification/plot_a2_peaks_pretrained_random_rbf
-   /surrogate_verification/plot_a3_peaks_pretrained_random_random_forest
+   /surrogate_verification/plot_a1_peaks_fixed-sample_random_gp
+   /surrogate_verification/plot_a2_peaks_fixed-sample_random_rbf
+   /surrogate_verification/plot_a3_peaks_fixed-sample_random_random_forest
    /surrogate_verification/plot_a4_peaks_adaptive_voronoi_gp
    /surrogate_verification/plot_a5_peaks_adaptive_voronoi_rbf
    /surrogate_verification/plot_a6_peaks_adaptive_voronoi_random_forest

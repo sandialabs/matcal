@@ -24,26 +24,31 @@ history, or a spatial field sampled at many locations.
 
 MatCal provides two broad surrogate-modeling workflows:
 
-* **Pretrained surrogates**, built from an existing set of model evaluations.
+* **Fixed-sample surrogates**, built from an existing set of model evaluations.
   These are created with :class:`matcal.core.surrogates.SurrogateGenerator`.
 
 * **Adaptive surrogates**, where MatCal chooses new training samples
   iteratively based on surrogate error estimates and sampling rules. These are
   implemented in :mod:`matcal.core.adaptive_surrogates`.
 
-Pretrained Surrogates
+Fixed-Sample Surrogates
 =====================
 
-Pretrained surrogates are built from a fixed set of completed model evaluations.
+Fixed-sample surrogates are built from a fixed set of completed model evaluations.
 The user first runs a sampling study, such as a Halton study, Latin-hypercube
 study, or parameter study, and then passes the resulting
 :class:`matcal.core.study_base.StudyResults` object to
 :class:`matcal.core.surrogates.SurrogateGenerator`.
 
-These surrogates are called "pretrained" here because their training data are
-already available before surrogate construction begins. The surrogate generator
-does not choose new sample points. It only fits a predictive model to the
-supplied training data.
+Fixed-sample surrogates differ from adaptive surrogates in that all training
+samples are selected and evaluated before surrogate construction begins. The
+training samples are determined by the user's initial sampling design, such as
+Latin hypercube sampling, Halton sequences, or uniform parameter grids. Once
+the model evaluations are complete, the surrogate generator fits a predictive
+model to the supplied training data. The surrogate generator does not choose
+new sample points adaptively based on surrogate error or uncertainty. This
+approach is straightforward when a training data set already exists or when
+the sampling design is determined by external requirements.
 
 Response Dimensionality Reduction with PCA
 ------------------------------------------
@@ -164,7 +169,7 @@ so users do not need to manually undo the scaling or PCA reconstruction.
 SurrogateGenerator Implementation Details
 -----------------------------------------
 
-Pretrained surrogates are built with
+Fixed-sample surrogates are built with
 :class:`matcal.core.surrogates.SurrogateGenerator`.
 
 A typical workflow is:
@@ -267,7 +272,7 @@ function. Instead of assuming a fixed polynomial or neural-network form, a GP
 defines a probability distribution over possible functions. The final prediction
 is based on functions that are consistent with the observed training data.
 
-The pretrained PCA/GP surrogate workflow used in MatCal follows the general
+The fixed-sample PCA/GP surrogate workflow used in MatCal follows the general
 approach described in :cite:`pca_gp_surrogates`: high-dimensional response data
 may first be reduced with PCA, then Gaussian-process regressors are trained to
 predict the PCA amplitudes from the model parameters. The predicted amplitudes
@@ -381,7 +386,7 @@ used in adaptive sampling.
 Implementation Details
 ^^^^^^^^^^^^^^^^^^^^^^
 
-MatCal's Gaussian-process pretrained surrogates use
+MatCal's Gaussian-process fixed-sample surrogates use
 ``sklearn.gaussian_process.GaussianProcessRegressor``.
 
 If the user does not provide a kernel, MatCal uses a default kernel of the form
@@ -475,7 +480,7 @@ points.
 Implementation Details
 ^^^^^^^^^^^^^^^^^^^^^^
 
-MatCal implements RBF pretrained surrogates with
+MatCal implements RBF fixed-sample surrogates with
 ``scipy.interpolate.RBFInterpolator`` through a scikit-learn-like wrapper.
 
 The MatCal regressor type is:
@@ -570,7 +575,7 @@ is required.
 Implementation Details
 ^^^^^^^^^^^^^^^^^^^^^^
 
-MatCal's random forest pretrained surrogates use
+MatCal's random forest fixed-sample surrogates use
 ``sklearn.ensemble.RandomForestRegressor``.
 
 The MatCal regressor type is:
@@ -795,7 +800,7 @@ Voronoi adaptive surrogates are implemented by
 
 The internal surrogate model is built using
 :class:`matcal.core.surrogates.SurrogateGenerator`. Therefore, the Voronoi
-adaptive surrogate can use the same pretrained surrogate machinery described
+adaptive surrogate can use the same fixed-sample surrogate machinery described
 above, including:
 
 * Gaussian-process regressors;
@@ -1043,7 +1048,7 @@ PyApprox and packages sparse-grid predictions into the same field-based format
 used by other MatCal surrogates.
 
 Because sparse-grid surrogates are not built with
-:class:`~matcal.core.surrogates.SurrogateGenerator`, the following pretrained
+:class:`~matcal.core.surrogates.SurrogateGenerator`, the following fixed-sample
 surrogate options do not apply:
 
 * ``regressor_type``;
@@ -1055,7 +1060,7 @@ surrogate options do not apply:
 Choosing a Surrogate Workflow
 =============================
 
-Use a pretrained surrogate when:
+Use a fixed-sample surrogate when:
 
 * a training data set already exists;
 * the desired sample locations are known in advance;
@@ -1094,7 +1099,7 @@ for whether a sampling method can discover and refine important local features.
 
 The verification examples include several surrogate workflows:
 
-* pretrained Gaussian-process, RBF, and random-forest surrogates built from
+* fixed-sample Gaussian-process, RBF, and random-forest surrogates built from
   nested random samples;
 * adaptive Voronoi Gaussian-process, RBF, and random-forest surrogates;
 * an adaptive sparse-grid surrogate.
@@ -1134,21 +1139,21 @@ sampling can discover and refine important local features.
      - Best max error, sample count
      - RMSE rate ``p``
      - Max-error rate ``p``
-   * - Pretrained random-sampling GP
+   * - Fixed-sample random-sampling GP
      - 150
      - 5.111100e-01
      - 4.808070e+00
      - 4.393954e+00 at 140
      - 0.7237
      - 0.3678
-   * - Pretrained random-sampling RBF
+   * - Fixed-sample random-sampling RBF
      - 150
      - 5.606465e-01
      - 4.819553e+00
      - 4.819553e+00 at 150
      - 0.3639
      - 0.1775
-   * - Pretrained random-sampling random forest
+   * - Fixed-sample random-sampling random forest
      - 150
      - 1.000573e+00
      - 7.446087e+00
@@ -1186,7 +1191,7 @@ sampling can discover and refine important local features.
 
 For all three surrogate-regressor families tested with random and adaptive
 sampling, the adaptive sampling methods produced lower final validation errors
-than the corresponding pretrained random-sampling examples. The adaptive
+than the corresponding fixed-sample random-sampling examples. The adaptive
 methods also outperformed all of the random-sampling examples in final maximum
 absolute error. This is expected for the Peaks benchmark because the most
 important approximation difficulty is localized, and adaptive methods can use
@@ -1195,23 +1200,23 @@ response information to place new samples in high-error regions.
 Discussion
 ----------
 
-The pretrained random-sampling examples provide a baseline for comparing the
+The fixed-sample random-sampling examples provide a baseline for comparing the
 adaptive methods. They have no knowledge of where the Peaks function
 changes rapidly or where the most important local features are. As a result,
 many samples may be spent in regions that are easy to approximate, while the
 localized high-gradient region remains under-resolved.
 
-Among the pretrained random-sampling cases, the Gaussian-process and RBF
+Among the fixed-sample random-sampling cases, the Gaussian-process and RBF
 surrogates produced similar final maximum errors, with the Gaussian-process
 surrogate giving a somewhat lower final RMSE and faster observed convergence
-rate. The pretrained random-forest surrogate performed worst for this smooth
+rate. The fixed-sample random-forest surrogate performed worst for this smooth
 two-dimensional interpolation problem. This behavior is consistent with the fact
 that random forests are not smooth interpolants; their predictions are assembled
 from decision-tree ensembles and can be less effective for representing smooth
 localized features than Gaussian-process or RBF surrogates.
 
 The adaptive Voronoi methods performed substantially better than the
-pretrained random-sampling methods at the same final sample count of 150. The
+fixed-sample random-sampling methods at the same final sample count of 150. The
 KFCV-Voronoi adaptive sampling method uses cross-validation error to identify
 regions where the surrogate is performing poorly, then uses Voronoi cell
 geometry to place new samples away from existing samples in those important
@@ -1221,8 +1226,8 @@ The adaptive Voronoi Gaussian-process surrogate gave the best overall result in
 this verification set. The adaptive Voronoi RBF surrogate also performed well. 
 
 The adaptive Voronoi random-forest surrogate also improved substantially over
-the pretrained random-sampling random-forest surrogate. 
-Its errors are much lower than the corresponding pretrained random-forest
+the fixed-sample random-sampling random-forest surrogate. 
+Its errors are much lower than the corresponding fixed-sample random-forest
 errors. However, the adaptive Voronoi random-forest surrogate did not match the
 accuracy of the adaptive Voronoi Gaussian-process or RBF surrogates. This is
 consistent with the expected behavior of random forests on a smooth
@@ -1236,7 +1241,7 @@ structure. They tend to perform best when the response is globally smooth or
 when important features can be efficiently represented by the sparse-grid basis.
 The Peaks function has a localized region of strong response variation, so the
 sparse grid must spend samples refining a structured grid representation of a
-local feature. Its best prediction errors were much lower than the pretrained
+local feature. Its best prediction errors were much lower than the fixed-sample
 random-sampling errors, but the sparse-grid run required more samples than the
 adaptive Voronoi runs. This is expected for this type of localized feature: the
 Voronoi adaptive sampling methods can place samples directly in high-error
@@ -1244,7 +1249,7 @@ regions, while the sparse-grid method refines a structured approximation.
 
 Overall, the results demonstrate the expected benefit of adaptive sampling for
 this benchmark. All adaptive sampling methods performed better than all
-pretrained random-sampling examples in final maximum absolute error. The
+fixed-sample random-sampling examples in final maximum absolute error. The
 adaptive Voronoi Gaussian-process and RBF surrogates were especially effective
 because they combined smooth surrogate models with sample placement targeted at
 localized high-error regions.
@@ -1253,7 +1258,7 @@ These results should not be interpreted as a universal ranking of surrogate
 methods. The best surrogate and sampling strategy are highly dependent on the
 function being approximated. A sparse-grid surrogate may be very effective for a
 smooth response with distributed global variation. A random or space-filling
-pretrained design may be adequate when the response is simple or when adaptive
+fixed-sample design may be adequate when the response is simple or when adaptive
 sampling is not possible. Voronoi adaptive sampling is particularly attractive
 when important response features are localized and expensive model evaluations
 should be concentrated in high-error regions. 

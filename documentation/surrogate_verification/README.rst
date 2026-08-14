@@ -4,15 +4,15 @@ Each example produces a convergence plot and diagnostic plots showing training
 sample locations over the true Peaks function and the corresponding surrogate
 absolute-error field.
 
-``plot_a1_peaks_pretrained_random_gp.py``
-    Builds pretrained Gaussian-process surrogates from nested random training
+``plot_a1_peaks_fixed_sample_random_gp.py``
+    Builds fixed-sample Gaussian-process surrogates from nested random training
     sets.
 
-``plot_a2_peaks_pretrained_random_rbf.py``
-    Builds pretrained RBF surrogates from nested random training sets.
+``plot_a2_peaks_fixed_sample_random_rbf.py``
+    Builds fixed-sample RBF surrogates from nested random training sets.
 
-``plot_a3_peaks_pretrained_random_random_forest.py``
-    Builds pretrained random-forest surrogates from nested random training sets.
+``plot_a3_peaks_fixed_sample_random_random_forest.py``
+    Builds fixed-sample random-forest surrogates from nested random training sets.
 
 ``plot_a4_peaks_adaptive_voronoi_gp.py``
     Builds an adaptive Gaussian-process surrogate using KFCV-Voronoi sampling.
