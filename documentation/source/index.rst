@@ -17,12 +17,8 @@ of these chapters also include verification and user examples.
 The final chapter is the User API Documentation that gives standard API 
 documentation for user facing tools.
 
-To run MatCal at Sandia see :ref:`Running MatCal at Sandia`.
-We also allow you to import MatFit. See :ref:`Running MatFit`.
-
 If you have any problems or feedback, feel free to reach out to the MatCal developers 
-by email. Also, email us to be added to the matcal-users-group metagroup for 
-emails about updates and new releases.
+by email. 
 
 
 Active developers
