@@ -1,6 +1,6 @@
 r"""
 Paper Peaks Verification: Fixed-sample Random-Sampling Gaussian Process Surrogate
-==============================================================================
+===============================================================================
 
 This example verifies a fixed-sample Gaussian process surrogate on the 2D Peaks
 benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 

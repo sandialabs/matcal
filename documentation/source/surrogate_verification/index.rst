@@ -6,14 +6,14 @@ Each example produces a convergence plot and diagnostic plots showing training
 sample locations over the true Peaks function and the corresponding surrogate
 absolute-error field.
 
-``plot_a1_peaks_fixed-sample_random_gp.py``
+``plot_a1_peaks_fixed_sample_random_gp.py``
     Builds fixed-sample Gaussian-process surrogates from nested random training
     sets.
 
-``plot_a2_peaks_fixed-sample_random_rbf.py``
+``plot_a2_peaks_fixed_sample_random_rbf.py``
     Builds fixed-sample RBF surrogates from nested random training sets.
 
-``plot_a3_peaks_fixed-sample_random_random_forest.py``
+``plot_a3_peaks_fixed_sample_random_random_forest.py``
     Builds fixed-sample random-forest surrogates from nested random training sets.
 
 ``plot_a4_peaks_adaptive_voronoi_gp.py``
@@ -44,10 +44,10 @@ absolute-error field.
 
 .. only:: html
 
-  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a1_peaks_fixed-sample_random_gp_thumb.png
+  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a1_peaks_fixed_sample_random_gp_thumb.png
     :alt:
 
-  :ref:`sphx_glr_surrogate_verification_plot_a1_peaks_fixed-sample_random_gp.py`
+  :ref:`sphx_glr_surrogate_verification_plot_a1_peaks_fixed_sample_random_gp.py`
 
 .. raw:: html
 
@@ -61,10 +61,10 @@ absolute-error field.
 
 .. only:: html
 
-  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a2_peaks_fixed-sample_random_rbf_thumb.png
+  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a2_peaks_fixed_sample_random_rbf_thumb.png
     :alt:
 
-  :ref:`sphx_glr_surrogate_verification_plot_a2_peaks_fixed-sample_random_rbf.py`
+  :ref:`sphx_glr_surrogate_verification_plot_a2_peaks_fixed_sample_random_rbf.py`
 
 .. raw:: html
 
@@ -78,10 +78,10 @@ absolute-error field.
 
 .. only:: html
 
-  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a3_peaks_fixed-sample_random_random_forest_thumb.png
+  .. image:: /surrogate_verification/images/thumb/sphx_glr_plot_a3_peaks_fixed_sample_random_random_forest_thumb.png
     :alt:
 
-  :ref:`sphx_glr_surrogate_verification_plot_a3_peaks_fixed-sample_random_random_forest.py`
+  :ref:`sphx_glr_surrogate_verification_plot_a3_peaks_fixed_sample_random_random_forest.py`
 
 .. raw:: html
 
@@ -167,9 +167,9 @@ absolute-error field.
 .. toctree::
    :hidden:
 
-   /surrogate_verification/plot_a1_peaks_fixed-sample_random_gp
-   /surrogate_verification/plot_a2_peaks_fixed-sample_random_rbf
-   /surrogate_verification/plot_a3_peaks_fixed-sample_random_random_forest
+   /surrogate_verification/plot_a1_peaks_fixed_sample_random_gp
+   /surrogate_verification/plot_a2_peaks_fixed_sample_random_rbf
+   /surrogate_verification/plot_a3_peaks_fixed_sample_random_random_forest
    /surrogate_verification/plot_a4_peaks_adaptive_voronoi_gp
    /surrogate_verification/plot_a5_peaks_adaptive_voronoi_rbf
    /surrogate_verification/plot_a6_peaks_adaptive_voronoi_random_forest

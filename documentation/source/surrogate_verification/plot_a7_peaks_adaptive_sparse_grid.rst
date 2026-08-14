@@ -28,7 +28,7 @@ meant to demonstrate features and behavior of the surrogates in MatCal.
 These examples are not meant to be used as templates for user MatCal files.
 
 This example uses :class:`matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy`.
-The sparse-grid surrogate is built through PyApprox.
+The sparse-grid surrogate is built through PyApprox :cite:`pyapprox`.
 
 The example produces two figures.
 
@@ -546,7 +546,7 @@ requested diagnostic sample count.
 Plot true function and surrogate error fields.
 ----------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 262-274
+.. GENERATED FROM PYTHON SOURCE LINES 262-275
 
 .. code-block:: Python
 
@@ -563,6 +563,7 @@ Plot true function and surrogate error fields.
 
     print(f"\nFigures saved to: {FIGURE_DIRECTORY}")
     plt.show()
+
 
 
 .. image-sg:: /surrogate_verification/images/sphx_glr_plot_a7_peaks_adaptive_sparse_grid_002.png
@@ -584,7 +585,7 @@ Plot true function and surrogate error fields.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 46.035 seconds)
+   **Total running time of the script:** (2 minutes 30.718 seconds)
 
 
 .. _sphx_glr_download_surrogate_verification_plot_a7_peaks_adaptive_sparse_grid.py:
