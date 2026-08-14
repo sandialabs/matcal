@@ -1,11 +1,12 @@
 ****************************************
 Simple Shear Material Point Model
 ****************************************
+
 MatCal's :class:`~matcal.sierra.models.SimpleShearMaterialPointModel`
 is meant to be used in calibrations that can use a material point 
 model subject to simple shear loading as the simulation of the experiment. 
-This can be a valid model for experiments with simple shear loading conditions,
-such as hat-section shear tests or direct shear tests, where the deformation 
+This can be a valid model for experiments with simple shear loading conditions
+where the deformation 
 is dominated by shear and localization effects are not being characterized.
 The :class:`~matcal.sierra.models.SimpleShearMaterialPointModel` model has most of the MatCal standard 
 model features as described in :ref:`MatCal SIERRA Solid Mechanics Standard Models`. Due to 
@@ -18,6 +19,142 @@ specifics on simulation boundary conditions, and what is output from the model.
    This model follows the same patterns and examples as the
    :ref:`Uniaxial Loading Material Point Model`. Additional examples can be found at
    :ref:`SIERRA/SM Material Point Model Practical Examples`
+
+Simple shear kinematics
+========================
+The simple shear deformation imposed by this model has interesting kinematic properties
+that are important to understand when interpreting results. While the deformation is 
+predominantly shear, it is inherently **isochoric** (volume-preserving) with :math:`J = \det(\mathbf{F}) = 1`,
+and produces small but non-zero normal strains in the X and Z directions at large deformations.
+
+Deformation gradient
+--------------------
+For simple shear in the XZ plane, where the top surface displaces in the X direction
+while the bottom surface remains fixed, the deformation gradient takes the form:
+
+.. math::
+
+   \mathbf{F} = \begin{bmatrix}
+   1 & 0 & \gamma \\
+   0 & 1 & 0 \\
+   0 & 0 & 1
+   \end{bmatrix}
+
+where :math:`\gamma` is the engineering shear strain, defined as the ratio of the 
+X-direction displacement of the top surface to the height of the element:
+
+.. math::
+
+   \gamma = \frac{u_x}{h}
+
+For the unit cube geometry used in this model (:math:`h = 1`), the engineering shear strain
+:math:`\gamma` equals the X-direction displacement directly.
+
+Isochoric deformation
+---------------------
+The determinant of the deformation gradient is always unity:
+
+.. math::
+
+   J = \det(\mathbf{F}) = 1
+
+This confirms that simple shear is an isochoric (volume-preserving) deformation for all
+values of :math:`\gamma`. This property is important for material models that treat 
+volumetric and deviatoric responses differently.
+
+Finite strain measures
+----------------------
+While the deformation gradient appears to have only shear components, finite strain measures
+reveal the development of normal strains at large deformations. The right Cauchy-Green 
+tensor is:
+
+.. math::
+
+   \mathbf{C} = \mathbf{F}^T \mathbf{F} = \begin{bmatrix}
+   1 & 0 & \gamma \\
+   0 & 1 & 0 \\
+   \gamma & 0 & 1 + \gamma^2
+   \end{bmatrix}
+
+The Green-Lagrange strain tensor is:
+
+.. math::
+
+   \mathbf{E} = \frac{1}{2}(\mathbf{C} - \mathbf{I}) = \begin{bmatrix}
+   0 & 0 & \gamma/2 \\
+   0 & 0 & 0 \\
+   \gamma/2 & 0 & \gamma^2/2
+   \end{bmatrix}
+
+Note that :math:`E_{zz} = \gamma^2/2` is a quadratic function of the shear strain, while
+:math:`E_{xx} = E_{yy} = 0` exactly. This shows that the Green-Lagrange measure predicts
+normal strain only in the Z direction.
+
+The logarithmic (Hencky or true) strain tensor, computed as :math:`\boldsymbol{\varepsilon} = \frac{1}{2}\ln(\mathbf{C})`,
+reveals a more complete picture. The right Cauchy-Green tensor :math:`\mathbf{C}` has 
+three eigenvalues:
+
+.. math::
+
+   \lambda_+ &= \frac{2 + \gamma^2 + \gamma\sqrt{4 + \gamma^2}}{2} \\
+   \lambda_- &= \frac{2 + \gamma^2 - \gamma\sqrt{4 + \gamma^2}}{2} \\
+   \lambda_y &= 1
+
+The principal logarithmic strains are then:
+
+.. math::
+
+   \varepsilon_+ &= \frac{1}{2}\ln(\lambda_+) \\
+   \varepsilon_- &= \frac{1}{2}\ln(\lambda_-) \\
+   \varepsilon_y &= 0
+
+where :math:`\varepsilon_+` and :math:`\varepsilon_-` lie in the XZ plane but are rotated 
+from the X and Z coordinate axes. When expressed in the XYZ coordinate system, the 
+logarithmic strain tensor has the general form:
+
+.. math::
+
+   \boldsymbol{\varepsilon}(\gamma) = \begin{bmatrix}
+   \varepsilon_{xx}(\gamma) & 0 & \varepsilon_{xz}(\gamma) \\
+   0 & 0 & 0 \\
+   \varepsilon_{xz}(\gamma) & 0 & \varepsilon_{zz}(\gamma)
+   \end{bmatrix}
+
+where :math:`\varepsilon_{xx}(\gamma) < 0`, :math:`\varepsilon_{zz}(\gamma) > 0`, and 
+:math:`\varepsilon_{xz}(\gamma) > 0` for positive shear. The exact functional forms are 
+obtained through the eigenvalue decomposition and coordinate transformation shown above.
+
+Several important observations:
+
+#. **Isochoric constraint**: :math:`\varepsilon_{xx} + \varepsilon_{yy} + \varepsilon_{zz} = 0`, 
+   consistent with :math:`J = 1`
+#. **Equal and opposite normal strains**: :math:`\varepsilon_{xx} = -\varepsilon_{zz}`, representing 
+   contraction in X and extension in Z
+#. **No Y-direction strain**: :math:`\varepsilon_{yy} = 0`, as expected for simple shear in the XZ plane
+#. **Magnitude of normal strains**: The ratio :math:`|\varepsilon_{xx}|/|\varepsilon_{xz}|` 
+   increases with shear strain. For small strains, normal strains are quadratic in :math:`\gamma`
+   (approximately :math:`\varepsilon_{xx} \approx -\gamma^2/4`), but at :math:`\gamma = 1.0`, 
+   the normal strain magnitude is approximately 50% of the shear strain magnitude.
+
+Implications for material calibration
+--------------------------------------
+The development of normal strains in simple shear has several implications:
+
+#. **Material models with Poisson effects**: For elastic-plastic materials, the normal stresses
+   that develop due to these normal strains will depend on the material's Poisson ratio and 
+   plastic flow rule. This makes simple shear tests valuable for calibrating materials that 
+   exhibit coupling between shear and normal stress components.
+
+#. **Large deformation effects**: At engineering shear strains above :math:`\gamma \approx 0.5`,
+   the normal strain components become significant (>20% of shear strain). This is important
+   when calibrating material models at large strains, as the material response will be influenced
+   by the three-dimensional stress state, not just pure shear.
+
+#. **Output interpretation**: The model outputs both shear components (XZ) and normal components
+   (XX, YY, ZZ) of stress and logarithmic strain, allowing full characterization of this 
+   three-dimensional stress state. Users should expect to see non-zero :math:`\sigma_{xx}` and 
+   :math:`\sigma_{zz}` stresses even though the applied boundary conditions involve only 
+   X-direction displacement.
 
 Material point geometry and mesh generation
 ===========================================
@@ -33,7 +170,7 @@ The boundary conditions are shown graphically in :numref:`simple_shear_material_
 
 .. _simple_shear_material_point_bcs:
 .. figure:: figures/simple_shear_material_point/simple_shear_material_point_model_bcs.*
-   :scale: 15%
+   :scale: 25%
 
    The single element model and boundary conditions for the
    simple shear material point model.
@@ -60,8 +197,12 @@ This method must be supplied a :class:`~matcal.core.data.Data` or
 an "engineering_strain" field for the 
 states of interest for the model. The "engineering_strain" field represents the 
 engineering shear strain (γ), which for a material point with unit height equals the 
-displacement in the shear direction. The data can also optionally include 
-a "time" field. The 
+displacement in the shear direction. Also, the simple shear material point model
+will load the sample in the positive x-direction with positive engineering strains
+and report positive engineering stresses.
+Negative engineering strains will load the sample in the negative x-direction and 
+report negative engineering stresses. The boundary data can also optionally include 
+a "time" field to apply time dependent boundary conditions. The 
 :meth:`~matcal.sierra.models.SimpleShearMaterialPointModel.add_boundary_condition_data` 
 method determines the boundary condition function to be applied 
 to the model according to the following 
@@ -96,12 +237,6 @@ algorithm:
     for complex loading cycles, you may need to use "time" as the independent 
     variable and "engineering_stress" or "true_stress" as the dependent variables because
     it requires monotonically increasing independent variables for interpolation.
-
-.. warning::
-    The simple shear material point model requires that stress and strain values
-    be negative for reversed shear (negative displacement in X direction) and positive 
-    for forward shear tests. Not abiding by this general rule may result in invalid 
-    studies even if the models run and studies complete.
 
 Material point thermal model boundary conditions
 ------------------------------------------------
