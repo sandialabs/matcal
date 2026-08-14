@@ -148,23 +148,14 @@ class SimpleShearMaterialPointModel(_StandardSierraModelWithDeathBase):
     _loading_bc_directions = ["x"]
     _loading_bc_direction_keys = ["component"]
 
-    _fixed_bc_node_sets = ["ns_negative_z"]
-    _fixed_bc_directions = ["x", "y", "z"]
+    _fixed_bc_node_sets = ["ns_negative_z"] * 3 + ["ns_positive_z"] * 2
+    _fixed_bc_directions = ["x", "y", "z", "y", "z"]
 
     def __init__(self, material):
         super().__init__(material=material, executable="adagio")
 
     def _additional_boundary_condition_setup(self, state):
-        """
-        Add additional constraints to fix Y and Z displacements on the top surface.
-        """
-        # Fix Y and Z displacements on the top (loading) surface
-        self._input_file._add_prescribed_displacement_boundary_condition(
-            "sierra_constant_function_zero",
-            ["ns_positive_z"],
-            ["y", "z"],
-            ["component", "component"],
-        )
+        """Additional boundary condition setup for simple shear (none needed)."""
 
     def _get_loading_boundary_condition_displacement_function(self, state, params_by_precedent):
         """

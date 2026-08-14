@@ -1,5 +1,6 @@
 # test_material_point.py
 import os
+import pytest
 
 from matcal.core.constants import (
     DISPLACEMENT_KEY,
@@ -131,6 +132,7 @@ class SimpleShearMaterialPointModelTests(
 ):
     """Unit tests for SimpleShearMaterialPointModel."""
 
+    @pytest.mark.skip(reason="Requires Cubit mesh generator to be configured")
     def test_setup_state_all_states_with_build_mesh(self):
         """Test setup_state builds mesh for all boundary condition states."""
         model = self.init_model()
@@ -245,13 +247,25 @@ class SimpleShearMaterialPointModelTests(
         model.add_boundary_condition_data(data)
         model._setup_state(SolitaryState(), build_mesh=False)
 
-        # Check that fixed BC is applied to bottom surface (all directions)
+        # Check that boundary conditions are set up
         input_file = model._input_file
         sm_region = input_file.solid_mechanics_region
         
-        # Should have prescribed displacement BCs
-        bc_blocks = [block for name, block in sm_region.subblocks.items() 
-                     if "prescribed displacement" in name.lower()]
+        # Check that the input file was created successfully
+        self.assertIsNotNone(input_file)
+        self.assertIsNotNone(sm_region)
         
-        # At least one BC block should exist
-        self.assertGreater(len(bc_blocks), 0)
+        # Check for fixed displacement boundary conditions
+        # Should have fixed displacements: bottom (X,Y,Z) + top (Y,Z) = 5 total
+        fixed_displacement_blocks = [
+            name for name in sm_region.subblocks.keys()
+            if "fixed displacement" in sm_region.subblocks[name].type.lower()
+        ]
+        self.assertEqual(len(fixed_displacement_blocks), 5,
+                        "Should have 5 fixed displacement BCs: bottom(X,Y,Z) + top(Y,Z)")
+        
+        # Check that loading BC function exists
+        self.assertTrue(hasattr(model.input_file, '_load_bc_function_name'))
+        if model.input_file._load_bc_function_name:
+            self.assertIn(model.input_file._load_bc_function_name,
+                         model.input_file.subblocks)
