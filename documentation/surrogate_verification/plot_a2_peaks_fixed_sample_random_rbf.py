@@ -1,14 +1,14 @@
 r"""
-Paper Peaks Verification: Pretrained Random-Sampling RBF Surrogate
+Paper Peaks Verification: Fixed-sample Random-Sampling RBF Surrogate
 ==================================================================
 
-This example verifies a pretrained radial basis function (RBF) surrogate on the
+This example verifies a fixed-sample radial basis function (RBF) surrogate on the
 2D Peaks benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 
 part of the verification example set for surrogates. This set of examples is
 meant to demonstrate features and behavior of the surrogates in MatCal. 
 They are not meant to be used as templates for user MatCal files.
 
-This is a **pretrained** surrogate example:
+This is a **fixed-sample** surrogate example:
 
 * all training samples are chosen before surrogate construction;
 * samples are independent uniform random samples over the Peaks domain;
@@ -67,7 +67,7 @@ from includes.paper_peaks_verification_common import (
 MAX_TRAINING_SAMPLES = 150
 SAMPLE_COUNTS_TO_PLOT = (50, 100, 150)
 
-WORKING_DIRECTORY = os.path.abspath("paper_peaks_pretrained_random_rbf")
+WORKING_DIRECTORY = os.path.abspath("paper_peaks_fixed-sample_random_rbf")
 FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
 
 SAMPLE_COUNTS = tuple(
@@ -94,7 +94,7 @@ def train_and_score_random_rbf(
     sample_count,
 ):
     """
-    Train and score one pretrained random-sampling RBF surrogate.
+    Train and score one fixed-sample random-sampling RBF surrogate.
     """
     training_samples = samples[:sample_count]
 
@@ -194,7 +194,7 @@ random_samples = make_uniform_random_samples(
 
 
 ###############################################################################
-# Train and score the pretrained RBF surrogates.
+# Train and score the fixed-sample RBF surrogates.
 # ----------------------------------------------
 #
 # ``surrogates_by_count`` and ``training_samples_by_count`` are also populated
@@ -207,7 +207,7 @@ surrogates_by_count = {}
 training_samples_by_count = {}
 
 for sample_count in SAMPLE_COUNTS:
-    print(f"\nTraining pretrained random-sampling RBF with {sample_count} samples.")
+    print(f"\nTraining fixed-sample random-sampling RBF with {sample_count} samples.")
 
     surrogate, rmse, max_error = train_and_score_random_rbf(
         parameters,
@@ -241,7 +241,7 @@ max_error_history = np.asarray(max_error_history, dtype=float)
 # ------------------------------
 
 print_convergence_summary(
-    "pretrained random-sampling RBF",
+    "fixed-sample random-sampling RBF",
     sample_counts,
     rmse_history,
     max_error_history,
@@ -258,9 +258,9 @@ plot_convergence_history(
     sample_counts,
     rmse_history,
     max_error_history,
-    method_name="pretrained random-sampling RBF",
+    method_name="fixed-sample random-sampling RBF",
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_rbf_convergence.png",
+    filename="peaks_fixed-sample_random_rbf_convergence.png",
 )
 
 
@@ -276,8 +276,8 @@ plot_function_and_surrogate_error_at_counts(
     training_samples_by_count,
     sample_counts_to_plot=SAMPLE_COUNTS_TO_PLOT,
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_rbf_error_fields.png",
-    method_name="pretrained random-sampling RBF",
+    filename="peaks_fixed-sample_random_rbf_error_fields.png",
+    method_name="fixed-sample random-sampling RBF",
     n_grid=150,
 )
 

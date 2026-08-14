@@ -1006,7 +1006,7 @@ Implementation Details
 Sparse-grid adaptive surrogates are implemented by
 :class:`matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy`.
 
-This workflow uses PyApprox's adaptive sparse-grid functionality rather than
+This workflow uses PyApprox's :cite:`pyapprox` adaptive sparse-grid functionality rather than
 MatCal's PCA/GP surrogate machinery. Therefore, the sparse-grid surrogate does
 not use the ``SurrogateGenerator`` PCA decomposition and does not use MatCal's
 Gaussian-process, RBF, or random forest regressors.

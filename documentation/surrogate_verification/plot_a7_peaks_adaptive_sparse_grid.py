@@ -9,7 +9,7 @@ meant to demonstrate features and behavior of the surrogates in MatCal.
 These examples are not meant to be used as templates for user MatCal files.
 
 This example uses :class:`matcal.core.adaptive_surrogates.SparseGridAdaptiveSurrogateStudy`.
-The sparse-grid surrogate is built through PyApprox.
+The sparse-grid surrogate is built through PyApprox :cite:`pyapprox`.
 
 The example produces two figures.
 
