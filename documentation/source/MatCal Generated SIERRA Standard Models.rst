@@ -7,6 +7,7 @@ with links to their specific documentation.
    :maxdepth: 1
 
    UniaxialLoadingMaterialPointModel
+   SimpleShearMaterialPointModel
    UniaxialTensionModels
    RoundNotchedTensionModel
    SolidBarTorsionModel
@@ -413,4 +414,3 @@ or model constants. The following parameters can be overridden:
 
 .. include:: matcal_model_v_and_v/index.rst
    :start-after: :orphan:   
-
