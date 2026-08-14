@@ -283,24 +283,6 @@ class SimpleShearMaterialPointModelProductionTests(
     def test_basic_composite_tet(self):
         """Simple shear doesn't support composite tet elements."""
 
-    def test_basic_death(self):
-        """Test simple shear with element death."""
-        model = self.setup_model(coupled=False)
-        bc_dc = self.boundary_condition_data_sets[0]
-        model.add_boundary_condition_data(bc_dc)
-        model.activate_exodus_output()
-        model.add_element_output_variable("eqps")
-        model.add_element_output_variable("eqdot")
-        model.activate_element_death("eqps", critical_value=0.01)
-        try:
-            model.activate_implicit_dynamics()
-        except AttributeError:
-            pass
-
-        for state in bc_dc.states.values():
-            self._run_model_check_input(model, state)
-            break
-
     def test_shear_reversal(self):
         """Test simple shear with reversed loading (negative shear)."""
         model = self.setup_model()

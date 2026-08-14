@@ -276,7 +276,7 @@ class SimpleShearMaterialPointModelForTests(MatcalGeneratedModelForTestsBase):
             self.results_parent_folder,
             "simple_shear_material_point",
             "simple_shear_material_point_0",
-            "rate_3.472463365511494e-05",
+            "rate_3.472222222222222e-05",
             "results.csv"
         )
         return FileData(gold_data_file)
