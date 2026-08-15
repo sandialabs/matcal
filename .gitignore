@@ -29,11 +29,3 @@ GITCLEAN/*
 scrap
 *timings.txt
 *__pycache__*
-
-# Codex rules (managed externally via mounted volume)
-.codex/rules
-.codex/rules.backup*
-.codex/rules.local/
-
-# Codex rules setup files (one-time setup helpers)
-codex-rules-setup/
