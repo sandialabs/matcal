@@ -7,6 +7,7 @@ Concrete models in this module:
 """
 
 import numpy as np
+from typing import ClassVar
 
 from matcal.core.boundary_condition_calculators import get_rotation_function_from_data_collection
 from matcal.core.constants import DISPLACEMENT_KEY, ROTATION_KEY, TORQUE_KEY
@@ -24,7 +25,7 @@ class SolidBarTorsionModel(_TensionDerivedModelBase):
     MatCal generated SIERRA/SM solid bar torsion test model.
     """
 
-    model_type = "solid_bar_torsion_model"
+    model_type: ClassVar[str] = "solid_bar_torsion_model"
     _geometry_creator_class = SolidBarTorsionGeometry
 
     _loading_bc_node_sets = ["ns_side_grip"]
@@ -188,7 +189,7 @@ class TopHatShearModel(_SymmetricUniaxiallyLoadedModelContactBase):
     MatCal generated SIERRA/SM top hat shear test model.
     """
 
-    model_type = "top_hat_shear_model"
+    model_type: ClassVar[str] = "top_hat_shear_model"
     _geometry_creator_class = TopHatShearGeometry
 
     _death_blocks = ["localization_section"]

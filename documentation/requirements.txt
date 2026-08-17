@@ -11,3 +11,4 @@ bokeh
 joblib
 chardet
 matplotlib
+pyapprox

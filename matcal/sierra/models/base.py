@@ -15,8 +15,9 @@ from abc import abstractmethod
 from collections import OrderedDict
 import numbers
 import os
+from typing import ClassVar
 
-from matcal.core.boundary_condition_calculators import (    
+from matcal.core.boundary_condition_calculators import (
     format_bc_function_comment_lines,
     get_displacement_function_from_load_displacement_data_collection,
 )
@@ -64,6 +65,7 @@ from matcal.sierra.simulators import SierraSimulator
 from .preprocessors import AddApreproParamFileLinesPreprocessor, DecomposeAndCopyMeshPreprocessor
 
 logger = initialize_matcal_logger(__name__)
+
 
 
 class SierraModelBase(ModelBase):
@@ -147,7 +149,7 @@ class UserDefinedSierraModel(SierraModelBase):
     Use a user-provided SIERRA input deck + mesh + optional include files/dirs.
     """
 
-    model_type = "user_defined_sierra_model"
+    model_type: ClassVar[str] = "user_defined_sierra_model"
 
     def __init__(self, executable, simulation_input_file, simulation_mesh_filename, *other_sources):
         super().__init__(executable=executable)
@@ -1142,5 +1144,3 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
                 acceptable_residual, 
                 "acceptable_relative_residual"
             )
-
-

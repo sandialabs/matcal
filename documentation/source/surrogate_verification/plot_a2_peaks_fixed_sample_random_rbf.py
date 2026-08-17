@@ -1,24 +1,19 @@
 r"""
-Paper Peaks Verification: Pretrained Random-Sampling Random Forest Surrogate
-===========================================================================
+Paper Peaks Verification: Fixed-sample Random-Sampling RBF Surrogate
+==================================================================
 
-This example verifies a pretrained random forest surrogate on the 2D Peaks
-benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 
+This example verifies a fixed-sample radial basis function (RBF) surrogate on the
+2D Peaks benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 
 part of the verification example set for surrogates. This set of examples is
 meant to demonstrate features and behavior of the surrogates in MatCal. 
-These examples are not meant to be used as templates for user MatCal files.
+They are not meant to be used as templates for user MatCal files.
 
-This is a **pretrained** surrogate example:
+This is a **fixed-sample** surrogate example:
 
 * all training samples are chosen before surrogate construction;
 * samples are independent uniform random samples over the Peaks domain;
-* a separate random forest surrogate is trained at each requested sample count;
+* a separate RBF surrogate is trained at each requested sample count;
 * all surrogates are scored on the same fixed validation set.
-
-Random forests can model nonlinear responses, but they are not smooth
-interpolants. Their predictions are assembled from an ensemble of decision
-trees, so their behavior can differ substantially from Gaussian process or RBF
-surrogates.
 
 The example produces two figures.
 
@@ -26,6 +21,12 @@ The example produces two figures.
    versus number of training samples. This is the Sphinx-Gallery thumbnail.
 2. Diagnostic plots at 50, 100, and 150 samples showing the true Peaks function
    and the absolute surrogate error field with training samples overlaid.
+
+The empirical convergence rate is estimated by fitting
+
+.. math::
+
+    E(N) \approx C N^{-p}.
 """
 
 # The convergence plot is the first figure created by this example.
@@ -59,26 +60,23 @@ from includes.paper_peaks_verification_common import (
     run_parameter_study_for_samples,
 )
 
-
 ###############################################################################
 # User options
 # ------------
 
-WORKING_DIRECTORY = os.path.abspath("paper_peaks_pretrained_random_random_forest")
-FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
-
 MAX_TRAINING_SAMPLES = 150
-CONVERGENCE_PLOT_SAMPLE_LIMIT = MAX_TRAINING_SAMPLES
 SAMPLE_COUNTS_TO_PLOT = (50, 100, 150)
+
+WORKING_DIRECTORY = os.path.abspath("paper_peaks_fixed-sample_random_rbf")
+FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
 
 SAMPLE_COUNTS = tuple(
     sorted(set(range(20, MAX_TRAINING_SAMPLES + 1, 20)) | set(SAMPLE_COUNTS_TO_PLOT))
 )
 
-RANDOM_FOREST_SURROGATE_OPTIONS = {
-    "regressor_type": "Random Forest",
-    "n_estimators": 200,
-    "random_state": RANDOM_SEED,
+RBF_SURROGATE_OPTIONS = {
+    "regressor_type": "RBF",
+    "neighbors": 50,
     "decomp_var": 0.99,
 }
 
@@ -87,7 +85,7 @@ RANDOM_FOREST_SURROGATE_OPTIONS = {
 # Training helper
 # ---------------
 
-def train_and_score_random_forest(
+def train_and_score_random_rbf(
     parameters,
     model,
     objective,
@@ -96,7 +94,7 @@ def train_and_score_random_forest(
     sample_count,
 ):
     """
-    Train and score one pretrained random-sampling random forest surrogate.
+    Train and score one fixed-sample random-sampling RBF surrogate.
     """
     training_samples = samples[:sample_count]
 
@@ -120,19 +118,18 @@ def train_and_score_random_forest(
         interpolation_locations=INDEPENDENT_VALUES,
         training_fraction=1.0,
         test_eval_info=validation_results,
-        regressor_type=RANDOM_FOREST_SURROGATE_OPTIONS["regressor_type"],
-        n_estimators=RANDOM_FOREST_SURROGATE_OPTIONS["n_estimators"],
-        random_state=RANDOM_FOREST_SURROGATE_OPTIONS["random_state"],
+        regressor_type=RBF_SURROGATE_OPTIONS["regressor_type"],
+        neighbors=RBF_SURROGATE_OPTIONS["neighbors"],
     )
 
     surrogate_generator.set_fields_of_interest(TARGET_FIELD)
     surrogate_generator.set_PCA_details(
-        decomp_var=RANDOM_FOREST_SURROGATE_OPTIONS["decomp_var"],
+        decomp_var=RBF_SURROGATE_OPTIONS["decomp_var"],
     )
 
     save_name = os.path.join(
         training_directory,
-        f"random_forest_surrogate_{int(sample_count)}",
+        f"random_rbf_surrogate_{int(sample_count)}",
     )
 
     surrogate = surrogate_generator.generate(save_name)
@@ -154,6 +151,12 @@ os.makedirs(FIGURE_DIRECTORY, exist_ok=True)
 ###############################################################################
 # Create the MatCal model components.
 # -----------------------------------
+#
+# The helper functions create:
+#
+# * two bounded parameters, ``x1`` and ``x2``;
+# * a MatCal ``PythonModel`` wrapping the Peaks function;
+# * a ``SimulationResultsSynchronizer`` for the scalar one-point response.
 
 parameters = make_parameters()
 model = make_model()
@@ -161,10 +164,13 @@ objective = make_objective()
 
 
 ###############################################################################
-# Generate or load one fixed validation set.
-# ------------------------------------------
+# Generate one fixed validation set.
+# ----------------------------------
+#
+# Every surrogate is scored on the same validation set so that differences in
+# error are due to training sample count and not due to changing test data.
 
-print("Generating or loading fixed validation set.")
+print("Generating fixed validation set.")
 validation_results = run_fixed_validation_set(
     parameters,
     model,
@@ -176,6 +182,9 @@ validation_results = run_fixed_validation_set(
 ###############################################################################
 # Generate nested random training samples.
 # ----------------------------------------
+#
+# The 100-sample surrogate uses the first 100 samples of the same random sample
+# sequence used by the 150-sample surrogate.
 
 print(f"Generating {MAX_TRAINING_SAMPLES} nested random training samples.")
 random_samples = make_uniform_random_samples(
@@ -185,8 +194,11 @@ random_samples = make_uniform_random_samples(
 
 
 ###############################################################################
-# Train and score pretrained random forest surrogates.
-# ----------------------------------------------------
+# Train and score the fixed-sample RBF surrogates.
+# ----------------------------------------------
+#
+# ``surrogates_by_count`` and ``training_samples_by_count`` are also populated
+# so the 50, 100, and 150 sample diagnostic error-field plots can be made later.
 
 rmse_history = []
 max_error_history = []
@@ -195,12 +207,9 @@ surrogates_by_count = {}
 training_samples_by_count = {}
 
 for sample_count in SAMPLE_COUNTS:
-    print(
-        "\nTraining pretrained random-sampling random forest "
-        f"with {sample_count} samples."
-    )
+    print(f"\nTraining fixed-sample random-sampling RBF with {sample_count} samples.")
 
-    surrogate, rmse, max_error = train_and_score_random_forest(
+    surrogate, rmse, max_error = train_and_score_random_rbf(
         parameters,
         model,
         objective,
@@ -232,7 +241,7 @@ max_error_history = np.asarray(max_error_history, dtype=float)
 # ------------------------------
 
 print_convergence_summary(
-    "pretrained random-sampling random forest",
+    "fixed-sample random-sampling RBF",
     sample_counts,
     rmse_history,
     max_error_history,
@@ -242,29 +251,33 @@ print_convergence_summary(
 ###############################################################################
 # Plot convergence versus number of training samples.
 # ---------------------------------------------------
+#
+# This is figure 1 and is used as the Sphinx-Gallery thumbnail.
 
 plot_convergence_history(
     sample_counts,
     rmse_history,
     max_error_history,
-    method_name="pretrained random-sampling random forest",
+    method_name="fixed-sample random-sampling RBF",
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_random_forest_convergence.png",
-    max_sample_count=CONVERGENCE_PLOT_SAMPLE_LIMIT,
+    filename="peaks_fixed-sample_random_rbf_convergence.png",
 )
 
 
 ###############################################################################
 # Plot true function and surrogate error fields.
 # ----------------------------------------------
+#
+# The first row shows the true Peaks function with samples overlaid. The second
+# row shows the absolute surrogate error field for the corresponding surrogate.
 
 plot_function_and_surrogate_error_at_counts(
     surrogates_by_count,
     training_samples_by_count,
     sample_counts_to_plot=SAMPLE_COUNTS_TO_PLOT,
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_random_forest_error_fields.png",
-    method_name="pretrained random-sampling random forest",
+    filename="peaks_fixed-sample_random_rbf_error_fields.png",
+    method_name="fixed-sample random-sampling RBF",
     n_grid=150,
 )
 

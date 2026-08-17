@@ -1,14 +1,14 @@
 r"""
-Paper Peaks Verification: Pretrained Random-Sampling Gaussian Process Surrogate
-==============================================================================
+Paper Peaks Verification: Fixed-sample Random-Sampling Gaussian Process Surrogate
+===============================================================================
 
-This example verifies a pretrained Gaussian process surrogate on the 2D Peaks
+This example verifies a fixed-sample Gaussian process surrogate on the 2D Peaks
 benchmark function used by :cite:`voronoi_adaptive_surrogates`. This example is 
 part of the verification example set for surrogates. This set of examples is
 meant to demonstrate features and behavior of the surrogates in MatCal. 
 They are not meant to be used as templates for user MatCal files.
 
-This is a **pretrained** surrogate example:
+This is a **fixed-sample** surrogate example:
 
 * all training samples are chosen before surrogate construction;
 * samples are independent uniform random samples over the Peaks domain;
@@ -66,7 +66,7 @@ from includes.paper_peaks_verification_common import (
 # User options
 # ------------
 
-WORKING_DIRECTORY = os.path.abspath("paper_peaks_pretrained_random_gp")
+WORKING_DIRECTORY = os.path.abspath("paper_peaks_fixed-sample_random_gp")
 FIGURE_DIRECTORY = os.path.join(WORKING_DIRECTORY, "figures")
 
 MAX_TRAINING_SAMPLES = 150
@@ -99,7 +99,7 @@ def train_and_score_random_gp(
     sample_count,
 ):
     """
-    Train and score one pretrained random-sampling Gaussian process surrogate.
+    Train and score one fixed-sample random-sampling Gaussian process surrogate.
     """
     training_samples = samples[:sample_count]
 
@@ -189,7 +189,7 @@ random_samples = make_uniform_random_samples(
 
 
 ###############################################################################
-# Train and score pretrained Gaussian process surrogates.
+# Train and score fixed-sample Gaussian process surrogates.
 # -------------------------------------------------------
 
 rmse_history = []
@@ -199,7 +199,7 @@ surrogates_by_count = {}
 training_samples_by_count = {}
 
 for sample_count in SAMPLE_COUNTS:
-    print(f"\nTraining pretrained random-sampling GP with {sample_count} samples.")
+    print(f"\nTraining fixed-sample random-sampling GP with {sample_count} samples.")
 
     surrogate, rmse, max_error = train_and_score_random_gp(
         parameters,
@@ -233,7 +233,7 @@ max_error_history = np.asarray(max_error_history, dtype=float)
 # ------------------------------
 
 print_convergence_summary(
-    "pretrained random-sampling GP",
+    "fixed-sample random-sampling GP",
     sample_counts,
     rmse_history,
     max_error_history,
@@ -248,9 +248,9 @@ plot_convergence_history(
     sample_counts,
     rmse_history,
     max_error_history,
-    method_name="pretrained random-sampling GP",
+    method_name="fixed-sample random-sampling GP",
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_gp_convergence.png",
+    filename="peaks_fixed-sample_random_gp_convergence.png",
     max_sample_count=CONVERGENCE_PLOT_SAMPLE_LIMIT,
 )
 
@@ -264,8 +264,8 @@ plot_function_and_surrogate_error_at_counts(
     training_samples_by_count,
     sample_counts_to_plot=SAMPLE_COUNTS_TO_PLOT,
     figure_directory=FIGURE_DIRECTORY,
-    filename="peaks_pretrained_random_gp_error_fields.png",
-    method_name="pretrained random-sampling GP",
+    filename="peaks_fixed-sample_random_gp_error_fields.png",
+    method_name="fixed-sample random-sampling GP",
     n_grid=150,
 )
 

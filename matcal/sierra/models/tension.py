@@ -8,6 +8,7 @@ Concrete models in this module:
 """
 
 import numpy as np
+from typing import ClassVar
 
 from matcal.core.boundary_condition_calculators import (
     get_displacement_function_from_load_displacement_data_collection,
@@ -161,7 +162,7 @@ class RoundUniaxialTensionModel(_UniaxialTensionModelBase):
     MatCal generated SIERRA/SM uniaxial tension test model with a round cross section.
     """
 
-    model_type = "round_uniaxial_tension_model"
+    model_type: ClassVar[str] = "round_uniaxial_tension_model"
     _geometry_creator_class = RoundUniaxialTensionGeometry
 
     def _add_contraction_output(self):
@@ -200,7 +201,7 @@ class RectangularUniaxialTensionModel(_UniaxialTensionModelBase):
     MatCal generated SIERRA/SM uniaxial tension test model with a rectangular cross section.
     """
 
-    model_type = "rectangular_uniaxial_tension_model"
+    model_type: ClassVar[str] = "rectangular_uniaxial_tension_model"
     _geometry_creator_class = RectangularUniaxialTensionGeometry
 
     def _add_contraction_output(self):
@@ -241,7 +242,7 @@ class RoundNotchedTensionModel(_TensionDerivedModelBase):
     MatCal generated SIERRA/SM notched tension test model with a round cross section.
     """
 
-    model_type = "round_notched_tension_model"
+    model_type: ClassVar[str] = "round_notched_tension_model"
     _geometry_creator_class = RoundNotchedTensionGeometry
 
     @property

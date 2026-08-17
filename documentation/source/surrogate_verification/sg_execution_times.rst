@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**106:28.914** total execution time for 7 files **from surrogate_verification**:
+**06:50.975** total execution time for 7 files **from surrogate_verification**:
 
 .. container::
 
@@ -32,24 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_surrogate_verification_plot_a6_peaks_adaptive_voronoi_random_forest.py` (``plot_a6_peaks_adaptive_voronoi_random_forest.py``)
-     - 42:07.583
+   * - :ref:`sphx_glr_surrogate_verification_plot_a7_peaks_adaptive_sparse_grid.py` (``plot_a7_peaks_adaptive_sparse_grid.py``)
+     - 02:30.718
+     - 0.0
+   * - :ref:`sphx_glr_surrogate_verification_plot_a3_peaks_fixed_sample_random_random_forest.py` (``plot_a3_peaks_fixed_sample_random_random_forest.py``)
+     - 01:31.186
+     - 0.0
+   * - :ref:`sphx_glr_surrogate_verification_plot_a1_peaks_fixed_sample_random_gp.py` (``plot_a1_peaks_fixed_sample_random_gp.py``)
+     - 01:27.062
+     - 0.0
+   * - :ref:`sphx_glr_surrogate_verification_plot_a2_peaks_fixed_sample_random_rbf.py` (``plot_a2_peaks_fixed_sample_random_rbf.py``)
+     - 01:22.010
      - 0.0
    * - :ref:`sphx_glr_surrogate_verification_plot_a4_peaks_adaptive_voronoi_gp.py` (``plot_a4_peaks_adaptive_voronoi_gp.py``)
-     - 34:35.695
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_surrogate_verification_plot_a5_peaks_adaptive_voronoi_rbf.py` (``plot_a5_peaks_adaptive_voronoi_rbf.py``)
-     - 26:59.601
-     - 0.0
-   * - :ref:`sphx_glr_surrogate_verification_plot_a7_peaks_adaptive_sparse_grid.py` (``plot_a7_peaks_adaptive_sparse_grid.py``)
-     - 02:46.035
-     - 0.0
-   * - :ref:`sphx_glr_surrogate_verification_plot_a1_peaks_pretrained_random_gp.py` (``plot_a1_peaks_pretrained_random_gp.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_surrogate_verification_plot_a2_peaks_pretrained_random_rbf.py` (``plot_a2_peaks_pretrained_random_rbf.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_surrogate_verification_plot_a3_peaks_pretrained_random_random_forest.py` (``plot_a3_peaks_pretrained_random_random_forest.py``)
+   * - :ref:`sphx_glr_surrogate_verification_plot_a6_peaks_adaptive_voronoi_random_forest.py` (``plot_a6_peaks_adaptive_voronoi_random_forest.py``)
      - 00:00.000
      - 0.0

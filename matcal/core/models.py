@@ -4,6 +4,7 @@ It also includes the user facing PythonModel.
 """
 
 from abc import ABC, abstractmethod
+from typing import ClassVar
 from itertools import count
 from numbers import Number
 import os
@@ -703,7 +704,7 @@ class PythonModel(ModelBase):
         applied**.  Consequently, any user‑provided constants may override
         study parameters without the usual precedence checks.
     """
-    model_type = "python"
+    model_type: ClassVar[str] = "python"
     _simulator_class = PythonSimulator
     _input_file = None
 
@@ -737,7 +738,7 @@ class PythonModel(ModelBase):
     
 
 class MatCalSurrogateModel(PythonModel):
-    model_type = "matcal_surrogate"
+    model_type: ClassVar[str] = "matcal_surrogate"
     
     """
     A Model class that creates the correct interface between MatCal surrogates 
@@ -788,7 +789,7 @@ class UserExecutableModel(ModelBase):
     :type results_filename: str
 
     """
-    model_type = "user_executable_model"
+    model_type: ClassVar[str] = "user_executable_model"
     _simulator_class = ExecutableSimulator
     _input_file = None
 
