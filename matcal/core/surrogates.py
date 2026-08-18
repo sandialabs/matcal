@@ -4,7 +4,7 @@ from numbers import Integral, Real
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
-from typing import Callable
+from typing import Any, Callable, List, Optional
 
 
 from matcal.core.data import convert_dictionary_to_data
@@ -277,7 +277,7 @@ class SurrogateGenerator:
                 check_value_is_nonempty_str(field, "field_of_interest")
             self._fields_of_interest = fields_of_interest
 
-    def generate(self, save_filename:str=None, preprocessing_function:Callable=None, 
+    def generate(self, save_filename:Optional[str]=None, preprocessing_function:Optional[Callable]=None, 
                  plot_n_worst:int=0)->Callable:
         """
         Generates a surrogate based on the information passed to it upon initialization
@@ -1860,7 +1860,7 @@ def _convert_instances_to_stats(scores):
 class _modal_regressor:
     
     def __init__(self, regressor_type:str, n_inputs, regressor_kwargs):
-        self._mode_regressors = []
+        self._mode_regressors: List[Any] = []
         self._regressor_type = regressor_type
         self._regressor_kwargs = regressor_kwargs
         self._n_inputs = n_inputs
@@ -2197,8 +2197,29 @@ class _MatCalSurrogateWrapper:
         
         For AdaptiveSurrogate, the default surrogate_index="best" is used.
         """
-        results = self._surrogate(**parameters)
+        # Filter parameters to only those the surrogate knows about
+        if hasattr(self._surrogate, '_parameter_scaler'):
+            # MatCalSurrogateBase instances
+            known_params = self._surrogate._parameter_scaler.parameter_order
+            filtered_params = {k: v for k, v in parameters.items() if k in known_params}
+        elif hasattr(self._surrogate, 'param_names'):
+            # AdaptiveSurrogate instances
+            known_params = self._surrogate.param_names
+            filtered_params = {k: v for k, v in parameters.items() if k in known_params}
+        else:
+            # Unknown surrogate type or regular function - pass all parameters
+            filtered_params = parameters
+        
+        results = self._surrogate(**filtered_params)
         return results
+    
+    def __getstate__(self):
+        """Support pickling by returning the surrogate state."""
+        return {'surrogate': self._surrogate}
+    
+    def __setstate__(self, state):
+        """Support unpickling by restoring the surrogate."""
+        self._surrogate = state['surrogate']
 
 
     

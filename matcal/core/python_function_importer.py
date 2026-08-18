@@ -11,23 +11,26 @@ class PythonFunctionImportInputError(RuntimeError):
 
 
 def python_function_importer(python_function, filename=None):
-        
-        if isinstance(python_function, (FunctionType, _MatCalSurrogateWrapper)) and filename is None:
-            picklable_function = _picklable(python_function)
-            if picklable_function:
-                return PythonPicklableFunctionImporter(python_function)
-            else:
-                py_func_import = PythonLocalFunctionImporter(python_function)
-                return py_func_import
-        elif isinstance(python_function, str) and isinstance(filename, str):
-            return PythonFunctionImporter(python_function, filename)
+
+    if isinstance(python_function, _MatCalSurrogateWrapper) and filename is None:
+        # _MatCalSurrogateWrapper instances are always handled by
+        # PythonPicklableFunctionImporter. They don't need to be picklable
+        # since we just store the object reference directly.
+        return PythonPicklableFunctionImporter(python_function)
+    elif isinstance(python_function, FunctionType) and filename is None:
+        if _picklable(python_function):
+            return PythonPicklableFunctionImporter(python_function)
         else:
-            raise PythonFunctionImportInputError("An object using the python function importer can accept only two "
-                                                 "types of input:\n\t(1) a funciton name defined locally in the file "
-                                                 "\n\t (2) a function name defined in a separate file and the "
-                                                 "full path filename where it is defined. \n The function name \"{}\" "
-                                                 "and filename \"{}\" passed is invalid".format(python_function,
-                                                                                                filename))
+            return PythonLocalFunctionImporter(python_function)
+    elif isinstance(python_function, str) and isinstance(filename, str):
+        return PythonFunctionImporter(python_function, filename)
+    else:
+        raise PythonFunctionImportInputError("An object using the python function importer can accept only two "
+                                             "types of input:\n\t(1) a funciton name defined locally in the file "
+                                             "\n\t (2) a function name defined in a separate file and the "
+                                             "full path filename where it is defined. \n The function name \"{}\" "
+                                             "and filename \"{}\" passed is invalid".format(python_function,
+                                                                                            filename))
 
 def _picklable(func):
     import pickle
@@ -102,7 +105,11 @@ class PythonLocalFunctionImporter(PythonFunctionImporter):
     def _get_function_name(python_function):
         getmembers_list_index = 0
         value_index = 1
+
         members_list = inspect.getmembers(python_function, inspect.iscode)
+        if not members_list:
+            return python_function.__name__
+
         function_name_value_tuple = members_list[getmembers_list_index]
         function_code_object = function_name_value_tuple[value_index]
         if function_code_object.co_name == "<lambda>":
@@ -111,12 +118,16 @@ class PythonLocalFunctionImporter(PythonFunctionImporter):
             return function_code_object.co_name
 
     def write_python_function_to_file(self, python_function):
-        function_string = inspect.getsource(python_function)
+        try:
+            function_string = inspect.getsource(python_function)
+        except (OSError, TypeError) as e:
+            raise TypeError(f"Cannot get source code for {python_function}: {e}")
+
         function_string = PythonLocalFunctionImporter.remove_function_leading_white_space(function_string)
         with open(self._filename, 'w') as source_file:
             source_file.write(function_string)
 
-    staticmethod
+    @staticmethod
     def remove_function_leading_white_space(function_string):
         leading_characters_to_remove = len(function_string.split("\n")[0]) - len(function_string.split("\n")[0].lstrip())
         if leading_characters_to_remove > 0:

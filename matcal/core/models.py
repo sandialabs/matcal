@@ -420,10 +420,12 @@ class ModelBase(_ResultsRetriever, _ComputerControllerComponentBase):
     """
     _id_counter = count(0)
 
+    @property
     @abstractmethod
     def model_type(self):
         """"""
 
+    @property
     @abstractmethod
     def _simulator_class(self):
         """"""

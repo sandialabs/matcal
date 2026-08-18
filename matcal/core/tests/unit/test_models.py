@@ -46,7 +46,7 @@ class ModelForTestsBase(ABC):
 
 
 class ModelTestBase(object):
-    def __init__():
+    def __init__(self):
             pass
 
     class CommonTests(MatcalUnitTest):
@@ -1099,7 +1099,7 @@ class TestMatCalSurrogateModelWithRealSurrogate(MatcalUnitTest):
         results = model.run(state, pc)
         
         # Verify result has expected structure
-        self.assertIn("Y", results.results_data)
+        self.assertIn("Y", results.results_data.field_names)
         self.assertEqual(len(results.results_data["Y"]), 100)
         self.assertIsInstance(results, SimulatorResults)
     
@@ -1117,7 +1117,7 @@ class TestMatCalSurrogateModelWithRealSurrogate(MatcalUnitTest):
         # This should not fail even though surrogate doesn't use extra_param
         results = model.run(state, pc)
         
-        self.assertIn("Y", results.results_data)
+        self.assertIn("Y", results.results_data.field_names)
     
     def test_with_actual_surrogate_parameter_values(self):
         """Verify surrogate produces reasonable values."""
@@ -1186,13 +1186,13 @@ class TestMatCalSurrogateModelWithAdaptiveSurrogate(MatcalUnitTest):
         adaptive_sur._surrogate_iteration_records.append({
             "iteration_index": 0,
             "batch_number": 0,
+            "sample_count": 10,
+            "rmse": 0.05,
+            "max_error": 0.1,
+            "r2": 0.95,
             "storage_reason": ["best"],
             "surrogate_stored": True,
         })
-        adaptive_sur._r2_scores.append(0.95)
-        adaptive_sur._max_errors.append(0.1)
-        adaptive_sur._root_mean_squared_errors.append(0.05)
-        adaptive_sur._sample_counts.append(10)
         
         return adaptive_sur
     
@@ -1238,12 +1238,16 @@ class TestMatCalSurrogateModelWithAdaptiveSurrogate(MatcalUnitTest):
         results = model.run(state, pc)
         
         # Verify results
-        self.assertIn("Y", results.results_data)
+        self.assertIn("Y", results.results_data.field_names)
         self.assertEqual(len(results.results_data["Y"]), 100)
         
         # Check values are reasonable (linear function with slope=2, intercept=1)
         y_values = results.results_data["Y"]
-        time_values = results.results_data.get("time", np.linspace(0, 10, 100))
+        # Check if time field exists, otherwise use default
+        if "time" in results.results_data.field_names:
+            time_values = results.results_data["time"]
+        else:
+            time_values = np.linspace(0, 10, 100)
         expected = 2.0 * time_values + 1.0
         self.assertTrue(np.allclose(y_values, expected))
     
@@ -1292,4 +1296,3 @@ class TestMatCalSurrogateModelWithAdaptiveSurrogate(MatcalUnitTest):
         # Study parameter should take precedence
         self.assertEqual(len(call_log), 1)
         self.assertEqual(call_log[0]['value'], 30.0)
-
