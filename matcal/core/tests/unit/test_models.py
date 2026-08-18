@@ -925,3 +925,371 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
         self.assertTrue(len(res.stdout) > 0)
         self.assertEqual(res.return_code, 0)
         self.assertEqual(res.stderr, "")
+
+
+# Additional comprehensive tests for MatCalSurrogateModel
+class TestMatCalSurrogateModelParameterPassing(MatcalUnitTest):
+    """Test that MatCalSurrogateModel correctly passes parameters as kwargs to surrogates."""
+    
+    def setUp(self):
+        super().setUp(__file__)
+    
+    def test_surrogate_receives_parameters_as_kwargs(self):
+        """Verify surrogate is called with parameters as keyword arguments."""
+        call_log = []
+        
+        def mock_surrogate(**params):
+            call_log.append(('kwargs', params))
+            return {"Y": np.zeros(10)}
+        
+        model = MatCalSurrogateModel(mock_surrogate)
+        state = SolitaryState()
+        slope = Parameter("slope", 0, 4, 2)
+        intercept = Parameter("intercept", 0, 2, 1)
+        pc = ParameterCollection("test", slope, intercept)
+        
+        results = model.run(state, pc)
+        
+        # Verify the surrogate was called with kwargs
+        self.assertEqual(len(call_log), 1)
+        self.assertEqual(call_log[0][0], 'kwargs')
+        self.assertIn('slope', call_log[0][1])
+        self.assertIn('intercept', call_log[0][1])
+        self.assertEqual(call_log[0][1]['slope'], 2.0)
+        self.assertEqual(call_log[0][1]['intercept'], 1.0)
+    
+    def test_surrogate_with_state_parameters(self):
+        """Verify state parameters are passed to surrogate."""
+        call_log = []
+        
+        def mock_surrogate(**params):
+            call_log.append(params.copy())
+            return {"Y": np.ones(10) * params.get('state_var', 0)}
+        
+        model = MatCalSurrogateModel(mock_surrogate)
+        state = State("test_state", state_var=5.0)
+        slope = Parameter("slope", 0, 4, 2)
+        pc = ParameterCollection("test", slope)
+        
+        results = model.run(state, pc)
+        
+        # Verify state parameter was passed
+        self.assertEqual(len(call_log), 1)
+        self.assertIn('state_var', call_log[0])
+        self.assertEqual(call_log[0]['state_var'], 5.0)
+        self.assertIn('slope', call_log[0])
+        self.assertEqual(call_log[0]['slope'], 2.0)
+    
+    def test_surrogate_with_model_constants(self):
+        """Verify model constants are passed to surrogate."""
+        call_log = []
+        
+        def mock_surrogate(**params):
+            call_log.append(params.copy())
+            return {"Y": np.ones(10) * params.get('constant_val', 0)}
+        
+        model = MatCalSurrogateModel(mock_surrogate)
+        model.add_constants(constant_val=3.0)
+        
+        state = SolitaryState()
+        slope = Parameter("slope", 0, 4, 2)
+        pc = ParameterCollection("test", slope)
+        
+        results = model.run(state, pc)
+        
+        # Verify model constant was passed
+        self.assertEqual(len(call_log), 1)
+        self.assertIn('constant_val', call_log[0])
+        self.assertEqual(call_log[0]['constant_val'], 3.0)
+    
+    def test_parameter_precedence(self):
+        """
+        Verify parameter precedence: study parameters > model constants > state parameters.
+        """
+        call_log = []
+        
+        def mock_surrogate(**params):
+            call_log.append(params.copy())
+            return {"Y": np.ones(10) * params.get('value', 0)}
+        
+        model = MatCalSurrogateModel(mock_surrogate)
+        model.add_constants(value=10.0)  # Model constant
+        
+        state = State("test_state", value=20.0)  # State parameter
+        value_param = Parameter("value", 0, 100, 30.0)  # Study parameter
+        pc = ParameterCollection("test", value_param)
+        
+        results = model.run(state, pc)
+        
+        # Study parameter should win
+        self.assertEqual(len(call_log), 1)
+        self.assertEqual(call_log[0]['value'], 30.0)
+    
+    def test_model_state_constant_overrides_model_constant(self):
+        """Verify model state-specific constants override general model constants."""
+        call_log = []
+        
+        def mock_surrogate(**params):
+            call_log.append(params.copy())
+            return {"Y": np.ones(10) * params.get('value', 0)}
+        
+        model = MatCalSurrogateModel(mock_surrogate)
+        model.add_constants(value=10.0)  # General model constant
+        
+        state = State("test_state")
+        model.add_state_constants(state, value=15.0)  # State-specific constant
+        
+        value_param = Parameter("other_param", 0, 1, 0.5)
+        pc = ParameterCollection("test", value_param)
+        
+        results = model.run(state, pc)
+        
+        # State constant should override model constant
+        self.assertEqual(len(call_log), 1)
+        self.assertEqual(call_log[0]['value'], 15.0)
+    
+    def test_multiple_parameters_and_constants(self):
+        """Test with multiple design parameters, state parameters, and constants."""
+        call_log = []
+        
+        def mock_surrogate(**params):
+            call_log.append(params.copy())
+            result = params['a'] + params['b'] + params['c'] + params['d']
+            return {"Y": np.ones(10) * result}
+        
+        model = MatCalSurrogateModel(mock_surrogate)
+        model.add_constants(c=3.0)
+        
+        state = State("test_state", d=4.0)
+        a = Parameter("a", 0, 10, 1.0)
+        b = Parameter("b", 0, 10, 2.0)
+        pc = ParameterCollection("test", a, b)
+        
+        results = model.run(state, pc)
+        
+        # All parameters should be present
+        self.assertEqual(len(call_log), 1)
+        params = call_log[0]
+        self.assertEqual(params['a'], 1.0)  # Design parameter
+        self.assertEqual(params['b'], 2.0)  # Design parameter
+        self.assertEqual(params['c'], 3.0)  # Model constant
+        self.assertEqual(params['d'], 4.0)  # State parameter
+        
+        # Verify result
+        self.assertTrue(np.allclose(results.results_data['Y'], 10.0))
+
+
+class TestMatCalSurrogateModelWithRealSurrogate(MatcalUnitTest):
+    """Test MatCalSurrogateModel with actual MatCalSurrogateBase instances."""
+    
+    def setUp(self):
+        super().setUp(__file__)
+    
+    def test_with_actual_surrogate_basic(self):
+        """Test with an actual surrogate generated from a simple function."""
+        # Build a simple surrogate
+        surrogate = build_basic()
+        
+        model = MatCalSurrogateModel(surrogate)
+        state = SolitaryState()
+        slope = Parameter("slope", -1, 3, 1.5)
+        intercept = Parameter("intercept", -1, 3, 0.5)
+        pc = ParameterCollection("test", slope, intercept)
+        
+        results = model.run(state, pc)
+        
+        # Verify result has expected structure
+        self.assertIn("Y", results.results_data)
+        self.assertEqual(len(results.results_data["Y"]), 100)
+        self.assertIsInstance(results, SimulatorResults)
+    
+    def test_with_actual_surrogate_and_state_params(self):
+        """Test actual surrogate with state parameters."""
+        surrogate = build_basic()
+        
+        model = MatCalSurrogateModel(surrogate)
+        state = State("custom_state", extra_param=5.0)
+        
+        slope = Parameter("slope", -1, 3, 1.0)
+        intercept = Parameter("intercept", -1, 3, 0.0)
+        pc = ParameterCollection("test", slope, intercept)
+        
+        # This should not fail even though surrogate doesn't use extra_param
+        results = model.run(state, pc)
+        
+        self.assertIn("Y", results.results_data)
+    
+    def test_with_actual_surrogate_parameter_values(self):
+        """Verify surrogate produces reasonable values."""
+        surrogate = build_basic()
+        
+        model = MatCalSurrogateModel(surrogate)
+        state = SolitaryState()
+        
+        # Test with slope=2, intercept=0 (should give linear relationship)
+        slope = Parameter("slope", -1, 3, 2.0)
+        intercept = Parameter("intercept", -1, 3, 0.0)
+        pc = ParameterCollection("test", slope, intercept)
+        
+        results = model.run(state, pc)
+        
+        # Values should be finite and in a reasonable range
+        y_values = results.results_data["Y"]
+        self.assertTrue(np.all(np.isfinite(y_values)))
+        self.assertTrue(len(y_values) > 0)
+
+
+
+
+class TestMatCalSurrogateModelWithAdaptiveSurrogate(MatcalUnitTest):
+    """Test MatCalSurrogateModel with AdaptiveSurrogate instances."""
+    
+    def setUp(self):
+        super().setUp(__file__)
+    
+    def _create_mock_adaptive_surrogate(self):
+        """Create a mock AdaptiveSurrogate for testing."""
+        from matcal.core.adaptive_surrogates import AdaptiveSurrogate
+        
+        # Minimal setup for AdaptiveSurrogate
+        target_field = "Y"
+        indep_var = "time"
+        indep_vals = np.linspace(0, 10, 100)
+        
+        # Test parameters and responses
+        test_params = np.array([[1.0, 0.5], [2.0, 1.0]])
+        test_responses = np.random.randn(2, 100)
+        
+        param_names = ["slope", "intercept"]
+        bounds = np.array([[0, 4], [0, 2]])
+        
+        adaptive_sur = AdaptiveSurrogate(
+            target_field_name=target_field,
+            indep_variable_name=indep_var,
+            indep_variable_values=indep_vals,
+            test_params=test_params,
+            test_responses=test_responses,
+            param_names=param_names,
+            bounds=bounds,
+        )
+        
+        # Add a mock surrogate to the retained surrogates
+        def mock_surrogate(**params):
+            slope = params.get('slope', 1.0)
+            intercept = params.get('intercept', 0.0)
+            time = np.linspace(0, 10, 100)
+            values = slope * time + intercept
+            return {target_field: values, indep_var: time}
+        
+        # Manually add to stored surrogates
+        adaptive_sur._surrogates[0] = mock_surrogate
+        adaptive_sur._surrogate_iteration_records.append({
+            "iteration_index": 0,
+            "batch_number": 0,
+            "storage_reason": ["best"],
+            "surrogate_stored": True,
+        })
+        adaptive_sur._r2_scores.append(0.95)
+        adaptive_sur._max_errors.append(0.1)
+        adaptive_sur._root_mean_squared_errors.append(0.05)
+        adaptive_sur._sample_counts.append(10)
+        
+        return adaptive_sur
+    
+    def test_adaptive_surrogate_wrapper_calls_with_best(self):
+        """Verify AdaptiveSurrogate is called with default surrogate_index='best'."""
+        call_log = []
+        
+        class MockAdaptiveSurrogate:
+            def __call__(self, *args, surrogate_index="best", batch_evaluate=False, 
+                         transpose=False, **kwargs):
+                call_log.append({
+                    'args': args,
+                    'surrogate_index': surrogate_index,
+                    'batch_evaluate': batch_evaluate,
+                    'transpose': transpose,
+                    'kwargs': kwargs
+                })
+                return {"Y": np.zeros(10)}
+        
+        mock_adaptive = MockAdaptiveSurrogate()
+        model = MatCalSurrogateModel(mock_adaptive)
+        state = SolitaryState()
+        slope = Parameter("slope", 0, 4, 2)
+        pc = ParameterCollection("test", slope)
+        
+        results = model.run(state, pc)
+        
+        # Verify surrogate_index defaults to "best"
+        self.assertEqual(len(call_log), 1)
+        self.assertEqual(call_log[0]['surrogate_index'], "best")
+        self.assertIn('slope', call_log[0]['kwargs'])
+    
+    def test_with_mock_adaptive_surrogate(self):
+        """Test with a minimal mock AdaptiveSurrogate."""
+        adaptive_sur = self._create_mock_adaptive_surrogate()
+        
+        model = MatCalSurrogateModel(adaptive_sur)
+        state = SolitaryState()
+        slope = Parameter("slope", 0, 4, 2.0)
+        intercept = Parameter("intercept", 0, 2, 1.0)
+        pc = ParameterCollection("test", slope, intercept)
+        
+        results = model.run(state, pc)
+        
+        # Verify results
+        self.assertIn("Y", results.results_data)
+        self.assertEqual(len(results.results_data["Y"]), 100)
+        
+        # Check values are reasonable (linear function with slope=2, intercept=1)
+        y_values = results.results_data["Y"]
+        time_values = results.results_data.get("time", np.linspace(0, 10, 100))
+        expected = 2.0 * time_values + 1.0
+        self.assertTrue(np.allclose(y_values, expected))
+    
+    def test_adaptive_surrogate_with_state_parameters(self):
+        """Test AdaptiveSurrogate receives state parameters correctly."""
+        call_log = []
+        
+        class MockAdaptiveSurrogate:
+            def __call__(self, *args, surrogate_index="best", **kwargs):
+                call_log.append(kwargs.copy())
+                return {"Y": np.ones(10) * kwargs.get('state_var', 0)}
+        
+        mock_adaptive = MockAdaptiveSurrogate()
+        model = MatCalSurrogateModel(mock_adaptive)
+        state = State("test_state", state_var=7.0)
+        slope = Parameter("slope", 0, 4, 2.0)
+        pc = ParameterCollection("test", slope)
+        
+        results = model.run(state, pc)
+        
+        # Verify state parameter was passed
+        self.assertEqual(len(call_log), 1)
+        self.assertIn('state_var', call_log[0])
+        self.assertEqual(call_log[0]['state_var'], 7.0)
+        self.assertIn('slope', call_log[0])
+    
+    def test_adaptive_surrogate_parameter_precedence(self):
+        """Test parameter precedence with AdaptiveSurrogate."""
+        call_log = []
+        
+        class MockAdaptiveSurrogate:
+            def __call__(self, *args, surrogate_index="best", **kwargs):
+                call_log.append(kwargs.copy())
+                return {"Y": np.ones(10) * kwargs.get('value', 0)}
+        
+        mock_adaptive = MockAdaptiveSurrogate()
+        model = MatCalSurrogateModel(mock_adaptive)
+        model.add_constants(value=10.0)
+        
+        state = State("test_state", value=20.0)
+        value_param = Parameter("value", 0, 100, 30.0)
+        pc = ParameterCollection("test", value_param)
+        
+        results = model.run(state, pc)
+        
+        # Study parameter should take precedence
+        self.assertEqual(len(call_log), 1)
+        self.assertEqual(call_log[0]['value'], 30.0)
+

@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 import numpy as np
 
 from matcal.core.external_executable import matcal_executable_environment_setup_function_identifier

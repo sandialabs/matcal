@@ -9,7 +9,7 @@ uncertainty quantification. Here we cover how to
 specify model input parameters in MatCal, and how 
 they will be used and passed to models.
 
-In MatCal we have three types of parameters. In order
+In MatCal we have three types of parameters with a four-tier precedence system. In order
 of precedence from a model perspective they are:
 
 #. Study parameters - These are the primary input to the 
@@ -22,14 +22,18 @@ of precedence from a model perspective they are:
    the study parameter value overwrites the other type of parameter 
    value, and the study parameter value is used.
 
+#. Model state-specific constant parameters - These are model parameters
+   assigned to a specific state using 
+   :meth:`~matcal.core.models.PythonModel.add_state_constants`.
+   These override both state parameters and general model constants (below).
+   They are useful when you need different constant values for different experimental
+   conditions while keeping the study parameters the same.
+
 #. Model constant parameters - These are model parameters 
-   that will be passed to models before they are launched but 
-   will be kept constant throughout a study. They can be assigned to the model
-   for all states using :meth:`~matcal.core.models.PythonModel.add_constants`
-   or specifically for a single state using 
-   :meth:`~matcal.core.models.PythonModel.add_state_constants`. 
-   These will overwrite a state parameter described below, if the 
-   same parameter name is used for both a model constant and a state parameter.
+   assigned to all states using :meth:`~matcal.core.models.PythonModel.add_constants`.
+   These override state parameters but are themselves overridden by model state-specific
+   constants and study parameters. They are useful for parameters that should remain
+   constant across all states in a study.
   
 #. State parameters - As covered in :ref:`Data Object Creation and Storage`
    state parameters are meant to represent experimental conditions that 

@@ -738,21 +738,83 @@ class PythonModel(ModelBase):
     
 
 class MatCalSurrogateModel(PythonModel):
+    """
+    A Model class that creates the correct interface between MatCal surrogates
+    and the environment necessary for models within MatCal.
+    
+    This model class wraps MatCal surrogate models and makes them compatible with
+    MatCal's study framework. It supports both fixed-sample surrogates created with
+    :class:`~matcal.core.surrogates.SurrogateGenerator` and adaptive surrogates from
+    :mod:`~matcal.core.adaptive_surrogates`.
+    
+    **Parameter Passing:**
+    
+    The surrogate's ``__call__`` method receives all parameters as keyword arguments
+    following MatCal's standard parameter precedence (state → constants → study parameters).
+    For example, if the study has design parameters ``['E', 'nu']``, state parameters
+    ``['temperature']``, and a model constant ``['density']``, the surrogate will be
+    called as::
+    
+        results = surrogate(E=value1, nu=value2, temperature=value3, density=value4)
+    
+    The surrogate should return a dictionary with field names as keys and arrays
+    of predicted values as values.
+    
+    **Supported Surrogate Types:**
+    
+    * :class:`~matcal.core.surrogates.MatCalMultiModalPCASurrogate` - PCA with
+      multiple regressors (one per mode)
+    * :class:`~matcal.core.surrogates.MatCalMonolithicPCASurrogate` - PCA with
+      single monolithic regressor
+    * :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate` - Base class for
+      adaptive surrogates (Created with :class:`~matcal.core.adaptive_surrogates.VoronoiAdaptiveSurrogateStudy`)
+    * :class:`~matcal.core.adaptive_surrogates.AdaptiveSparseGridSurrogate` - Adaptive
+      surrogate with sparse grid refinement
+    
+    If used with the ``AdaptiveSurrogate`` models, 
+    it automatically selects best retained surrogate by default. 
+    For detailed information about surrogate generation and types, see the
+    :ref:`Surrogates` documentation.
+    
+    .. note::
+        This class extends :class:`~matcal.core.models.PythonModel` and uses an
+        internal wrapper to adapt the surrogate interface to MatCal's model framework.
+        The wrapping is automatic and transparent to users.
+    
+    Example
+    -------
+    
+    .. code-block:: python
+    
+        from matcal import load_matcal
+        from matcal.core.models import MatCalSurrogateModel
+        
+        # Load a previously generated surrogate
+        surrogate = load_matcal("my_surrogate.joblib")
+        
+        # Wrap it as a MatCal model
+        model = MatCalSurrogateModel(surrogate)
+        
+        # Add any model constants if needed
+        model.add_constant("reference_temperature", 293.15)
+        
+        # Use in a calibration study
+        study = OptimizationStudy()
+        study.add_model(model)
+        # ... continue with study setup
+    """
+    
     model_type: ClassVar[str] = "matcal_surrogate"
-    
-    """
-    A Model class that creates the correct interface between MatCal surrogates 
-    and the environment necessary for models within MatCal. This model class 
-    lightly extends the :class:`~matcal.core.models.PythonModel` class. 
-    """
-    
     
     def __init__(self, surrogate:MatCalSurrogateBase):
         """
-        Generates a MatCal model from an instantiated MatCal surrogate model
+        Generates a MatCal model from an instantiated MatCal surrogate.
         
-        :param surrogate: The MatCal surrogate to use as the base for a model
-        :type surrogate: :class:`~matcal.core.surrogate.MatCalSurrogateBase`
+        :param surrogate: The MatCal surrogate to wrap as a model. Can be any
+            surrogate derived from :class:`~matcal.core.surrogates.MatCalSurrogateBase`
+            or :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate`.
+        :type surrogate: :class:`~matcal.core.surrogates.MatCalSurrogateBase` or
+            :class:`~matcal.core.adaptive_surrogates.AdaptiveSurrogate`
         """
         wrapped_surrogate = _MatCalSurrogateWrapper(surrogate)               
         super().__init__(wrapped_surrogate)

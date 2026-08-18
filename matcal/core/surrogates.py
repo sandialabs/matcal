@@ -2188,8 +2188,18 @@ class _MatCalSurrogateWrapper:
         self._surrogate = surrogate
     
     def __call__(self, **parameters):
-        results = self._surrogate(parameters)
-        return results 
+        """
+        Wrapper to make MatCal surrogates compatible with PythonModel interface.
+        
+        PythonModel expects functions that accept parameters as keyword arguments.
+        MatCal surrogates (both MatCalSurrogateBase and AdaptiveSurrogate) accept
+        parameters as keyword arguments directly, so we pass them through.
+        
+        For AdaptiveSurrogate, the default surrogate_index="best" is used.
+        """
+        results = self._surrogate(**parameters)
+        return results
+
 
     
 def _score_recreation(sur_values, source_values):
