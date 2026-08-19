@@ -1124,6 +1124,7 @@ class LaplaceStudy(_LaplaceStudyBase):
         residual_gradients = self._calculate_residual_sensitivities(total_eval_residual_vecs)
         covariance_estimates = self._calculate_covariance(center_resids, residual_gradients)
         output = self._get_parameter_specific_results("residuals_gradient")
+        output.update({"residuals":center_resids})
         output.update(self._get_overall_results(covariance_estimates))
         self._results._set_outcome(output)
         self._log_total_sensitivity_information()
