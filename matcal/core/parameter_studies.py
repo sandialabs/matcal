@@ -1144,7 +1144,7 @@ class LaplaceStudy(_LaplaceStudyBase):
         # the derivative of the residuals where the third index is the repeat #, 
         # the first one is good enough for derivative of the model w.r.t. the parameters. 
         residual_sensitivities = residual_sensitivities.T[0, :, :]
-        np.save("A.npy",residual_sensititivities)
+        np.save("A.npy",residual_sensitivities)
         return residual_sensitivities
 
     def _calculate_covariance(self, center_resids, residual_sensitivities):
@@ -1160,6 +1160,7 @@ class LaplaceStudy(_LaplaceStudyBase):
         )
         covariance_results = OrderedDict()
         covariance_results["estimated_parameter_covariance"] = estimated_covariance
+        np.save("R.npy",center_resids)
         if self._calibrate_covariance:
             fitted_posterior = _fit_posterior(center_resids, residual_sensitivities, 
                                               estimated_covariance, 
