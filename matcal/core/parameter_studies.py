@@ -6,6 +6,7 @@ from abc import abstractmethod
 from collections import OrderedDict
 import numpy as np
 from scipy.stats import qmc
+import traceback
 
 from matcal.core.data import MaxAbsDataConditioner, DataCollectionStatistics
 from matcal.core.logger import initialize_matcal_logger
@@ -795,10 +796,15 @@ def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise_va
     Sigma_y = Sigma_y + noise_variance*np.eye(Sigma_y.shape[0])
     
     print(f"{Sigma_y}")
-    sign, logdet =  np.linalg.slogdet(Sigma_y)
-    print(f"{sign=}")
-    print(f"{logdet=}")
-    logdetSigma_y = sign*logdet
+    with np.errstate(invalid='raise'):
+        try:
+           sign, logdet =  np.linalg.slogdet(Sigma_y)
+           print(f"LOGDET {sign=}",flush=True)
+           print(f"LOGDET {logdet=}",flush=True)
+           logdetSigma_y = sign*logdet
+        except FloatingPointError as e:
+           print(f'Caught NumPy exception: {e}')
+           traceback.print_exc()
     diagSig_y = np.diag(Sig_y)
     invSig= np.diag(1.0/diagSig_y)
 #   invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
@@ -1131,7 +1137,7 @@ class LaplaceStudy(_LaplaceStudyBase):
     def _calculate_residual_sensitivities(self, total_eval_residuals):
         self._finite_difference.set_function_values(total_eval_residuals)
         residual_sensitivities = np.atleast_3d(self._gradient())
-        np.save("AA.npy",residual_sensititivities)
+        np.save("AA.npy",residual_sensitivities)
 ## HERE
         # grab first one from repeats, this is the most populated and since this is 
         # the derivative of the residuals where the third index is the repeat #, 
