@@ -42,31 +42,44 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url ${{ env.TORCH_INDEX_URL }}
-          pip install \
-            joblib \
-            pytest \
-            scipy \
-            scikit-learn \
-            numpy \
-            pytest-cov \
-            anybadge \
-            chardet \
-            exodus_helper \
-            h5py \
-            "pyapprox @ git+https://github.com/sandialabs/pyapprox.git@dev/main#subdirectory=packages/pyapprox" \
-            ruff \
-            black \
-            mypy \
-            jinja2 \
-            mcp \
-            matplotlib \
-            pandas \
-            seaborn \
-            packaging \
-            bokeh
+          python -m pip install -e ".[ci]"
+
+      - name: Debug Python import paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import importlib.util
+          from pathlib import Path
+
+          print("cwd:", Path.cwd())
+          print("PYTHONPATH:", os.environ.get("PYTHONPATH"))
+          print("Python executable:", sys.executable)
+          print("Python version:", sys.version)
+
+          print("sys.path:")
+          for p in sys.path:
+              print("  ", p)
+
+          print("matcal spec:", importlib.util.find_spec("matcal"))
+          print("matcal.core spec:", importlib.util.find_spec("matcal.core"))
+
+          import matcal
+          print("matcal imported from:", matcal.__file__)
+
+          try:
+              import matcal.core
+              print("matcal.core imported from:", matcal.core.__file__)
+          except Exception as exc:
+              print("Failed to import matcal.core")
+              print(type(exc).__name__, exc)
+              raise
+          PY
 
       - name: Run ${{ inputs.stage }} tests
         shell: bash
@@ -91,13 +104,13 @@ jobs:
             # Build pytest command
             if [ "${{ inputs.coverage }}" = "true" ]; then
               if [ "$FIRST" = "true" ]; then
-                CMD="pytest ${TEST_PATH} -v ${COV_FLAG}"
+                CMD="python -m pytest ${TEST_PATH} -v ${COV_FLAG}"
                 FIRST=false
               else
-                CMD="pytest ${TEST_PATH} -v --cov=matcal --cov-append --cov-report=xml --cov-report=term"
+                CMD="python -m pytest ${TEST_PATH} -v --cov=matcal --cov-append --cov-report=xml --cov-report=term"
               fi
             else
-              CMD="pytest ${TEST_PATH} -v"
+              CMD="python -m pytest ${TEST_PATH} -v"
             fi
 
             # Run tests — only the blocking path can fail the job

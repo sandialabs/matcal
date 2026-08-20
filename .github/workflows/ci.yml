@@ -72,7 +72,7 @@ jobs:
       - name: Generate version badge
         run: |
           pip install anybadge
-          VERSION=$(python3 -c "exec(open('matcal/version.py').read()); print(__version__)")
+          VERSION=$(python3 -c "from matcal.version import __version__; print(__version__)")
           echo "Version: ${VERSION}"
           anybadge -l "version" -v "v${VERSION}" -f version-badge.svg -c blue -o
 
