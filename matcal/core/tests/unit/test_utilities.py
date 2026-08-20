@@ -54,12 +54,19 @@ class TestUtilities(MatcalUnitTest):
 
         nontext_fname = "text.bin"
         with open(nontext_fname, "wb") as f:
-            os.urandom(1024)
+            f.write(bytes(range(256)) * 4)
         self.assertFalse(is_text_file(nontext_fname))
 
         folder_name = "subfolder"
         os.mkdir(folder_name)
         self.assertFalse(is_text_file(folder_name))
+
+    def test_is_text_file_empty_file(self):
+        empty_fname = "empty.txt"
+        with open(empty_fname, "wb"):
+            pass
+
+        self.assertTrue(is_text_file(empty_fname))
 
 class TestCheckValidMatCalNameString(MatcalUnitTest):
 

@@ -12,7 +12,6 @@ dependencies = [
     "scipy",
     "scikit-learn",
     "numpy",
-    "chardet",
     "exodus_helper",
     "h5py",
     "pyapprox @ git+https://github.com/sandialabs/pyapprox.git@dev/main#subdirectory=packages/pyapprox",

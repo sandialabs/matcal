@@ -130,10 +130,10 @@ jobs:
           print(f\"{float(root.attrib['line-rate']) * 100:.1f}\")
           ")
           echo "Coverage: ${COVERAGE}%"
-          anybadge -l "coverage" -v "${COVERAGE}%" \
+          anybadge -l "coverage" -v "${COVERAGE}" -s "%" \
             -f coverage-badge.svg \
-            --thresholds="30=red,50=orange,70=yellow,90=green" \
-            -o
+            -o \
+            30=red 50=orange 70=yellow 90=green
 
       - name: Upload coverage report
         if: always() && inputs.coverage
