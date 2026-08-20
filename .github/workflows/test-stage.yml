@@ -23,6 +23,7 @@ on:
 
 env:
   TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+  PYTHONPATH: ${{ github.workspace }}
 
 jobs:
   test:
@@ -60,7 +61,12 @@ jobs:
             black \
             mypy \
             jinja2 \
-            mcp
+            mcp \
+            matplotlib \
+            pandas \
+            seaborn \
+            packaging \
+            bokeh
 
       - name: Run ${{ inputs.stage }} tests
         shell: bash
