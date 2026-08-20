@@ -1,10 +1,14 @@
 from matcal.full_field.data_importer import ImportedTwoDimensionalMesh
 import numpy as np
-import os
 
 from matcal.full_field.TwoDimensionalFieldGrid import GridAxis, MeshSkeleton
-from matcal.full_field.TwoDimensionalFieldGrid import TwoDimensionalFieldGrid, \
-    ContainingElementIdentifier, ElementBins, ElementIdentifierBase
+from matcal.full_field.TwoDimensionalFieldGrid import (
+    TwoDimensionalFieldGrid, 
+    ContainingElementIdentifier,
+    ElementBins, 
+    ElementIdentifierBase, 
+    _vector_area
+)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -66,6 +70,27 @@ class TestMeshSkeleton(MatcalUnitTest):
         self.assert_close_dicts_or_data(goal_surf, test_surf)
         self.assert_close_dicts_or_data(goal_dict, serial)
 
+    def test_vector_area_supports_2d_vectors(self):
+        vector_set = [
+            np.array([
+                [0.0, -0.5],
+                [1.0, 0.0],
+                [0.0, 2.0],
+            ]),
+            np.array([
+                [0.5, 0.0],
+                [0.0, 1.0],
+                [3.0, 0.0],
+            ]),
+        ]
+
+        goal = np.array([
+            0.25,
+            1.0,
+            -6.0,
+        ])
+
+        self.assert_close_arrays(goal, _vector_area(vector_set))
 
 
 class TestTwoDimensionalFieldGrid(MatcalUnitTest):

@@ -1,12 +1,14 @@
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.cubit.cubit_runner import CubitExternalExecutable
+from matcal.cubit.tests.cubit_test_helpers import skip_if_cubit_path_not_registered
 
 
 class TestCubitExternalExecutable(MatcalUnitTest):
 
-    def setUp(self): 
-      super().setUp(__file__)
+    def setUp(self):
+        skip_if_cubit_path_not_registered()
+        super().setUp(__file__)
 
     def _confirm_clean_return(self, cbr_proc):
         self.assertEqual(cbr_proc[-1], 0)
@@ -31,6 +33,7 @@ class TestCubitExternalExecutable(MatcalUnitTest):
         cbr = CubitExternalExecutable([j_file])
         cbr_proc = cbr.run()
         self._confirm_error_return(cbr_proc)
+
 
 def _write_test_journal_file(cmds):
     j_file = "test.jou"
