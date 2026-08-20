@@ -318,6 +318,8 @@ double-processing. All other text files are automatically templated.
 * Custom file types can be registered
 
 
+.. _MatCalSurrogateModel Section:
+
 Surrogate Models
 ----------------
 

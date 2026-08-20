@@ -98,7 +98,7 @@ class _ComputerControllerComponentBase(ABC):
 
     class InvalidCoreUseValueError(RuntimeError):
         def __init__(self, n_cores):
-            message = f"Model must use at least 1 core.\n" + \
+            message = "Model must use at least 1 core.\n" + \
                       f"Requested number of cores was {n_cores}"
             super().__init__(message)
 
@@ -366,7 +366,7 @@ class AdditionalFileCopyPreprocessor(ModelPreprocessorBase):
             _copy_file_or_directory_to_target_directory(template_dir, other_file)
             other_file_for_output = os.path.split(other_file)[-1]
             logger.info(f"\t\t\t{other_file_for_output}...")
-        logger.info(f"")
+        logger.info("")
 
 
 class InputFileCopyPreprocessor(ModelPreprocessorBase):
@@ -376,9 +376,9 @@ class InputFileCopyPreprocessor(ModelPreprocessorBase):
     def process(self, template_dir, input_filename):
         input_name_for_output = os.path.split(input_filename)[-1]
         logger.info(f"\t\tPreparing user supplied input deck \"{input_name_for_output}\"")
-        copied_input = _copy_file_or_directory_to_target_directory(template_dir, 
-                                                                   input_filename)
-        logger.info(f"\t\tInput deck complete.")
+        _copy_file_or_directory_to_target_directory(template_dir,
+                                                    input_filename)
+        logger.info("\t\tInput deck complete.")
 
 
 def _copy_file_or_directory_to_target_directory(target_dir, source):

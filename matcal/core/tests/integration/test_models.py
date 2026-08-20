@@ -15,6 +15,12 @@ from matcal.core.surrogates import SurrogateGenerator
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_adaptive_surrogates import HAS_PYAPPROX
 
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+
 
 python_model_string = """
 m = {{ m }}
@@ -134,14 +140,12 @@ class TestMatCalSurrogateModelIntegration(MatcalUnitTest):
             results._simulation_history["model"].add(sim_result)
         
         # Build surrogate
-        sur_gen = SurrogateGenerator(results, "model")
-        sur_gen.set_surrogate_details(
-            interpolation_field="time",
-            interpolation_locations=np.linspace(0, 10, 100)
-        )
+        sur_gen = SurrogateGenerator(results, interpolation_field="time",
+                                     interpolation_locations=np.linspace(0, 10, 100))
+        sur_gen.set_model_and_state("model")
         sur_gen.set_PCA_details(
-            decomposition_variable=None,
-            reconstruction_tolerance=1e-3
+            decomp_var=0.99,
+            reconstruction_error=1e-3
         )
         
         surrogate = sur_gen.generate("linear_surrogate")
@@ -161,8 +165,8 @@ class TestMatCalSurrogateModelIntegration(MatcalUnitTest):
         results = model.run(state, pc)
         
         # Verify results structure
-        self.assertIn("y", results.results_data)
-        self.assertIn("time", results.results_data)
+        self.assertIn("y", results.results_data.field_names)
+        self.assertIn("time", results.results_data.field_names)
         self.assertEqual(len(results.results_data["y"]), 100)
         
         # Values should be reasonable for slope=2, intercept=1
@@ -191,7 +195,7 @@ class TestMatCalSurrogateModelIntegration(MatcalUnitTest):
         # Should run without error even though surrogate doesn't use extra_param
         results = model.run(state, pc)
         
-        self.assertIn("y", results.results_data)
+        self.assertIn("y", results.results_data.field_names)
     
     def test_surrogate_model_with_model_constants(self):
         """Test MatCalSurrogateModel with model constants."""
@@ -208,7 +212,7 @@ class TestMatCalSurrogateModelIntegration(MatcalUnitTest):
         # Should run without error
         results = model.run(state, pc)
         
-        self.assertIn("y", results.results_data)
+        self.assertIn("y", results.results_data.field_names)
     
     def test_surrogate_model_multiple_evaluations(self):
         """Test multiple evaluations with different parameter values."""
@@ -264,8 +268,8 @@ class TestMatCalSurrogateModelWithAdaptive(MatcalUnitTest):
         study.set_independent_variable("x", np.linspace(0, 5, 50))
         study.set_target_field_name("y")
         study.set_number_of_test_samples(10)
-        study.set_initial_sample_count(15)
-        study.set_max_iterations(3)  # Keep it small for testing
+        study.set_number_of_initial_samples(15)
+        study.set_max_training_samples(20)  # Keep it small for testing
         study.set_test_group_random_seed(42)
         
         study.add_evaluation_set(model_func)
@@ -286,14 +290,15 @@ class TestMatCalSurrogateModelWithAdaptive(MatcalUnitTest):
         results = surrogate_model.run(state, pc)
         
         # Verify results
-        self.assertIn("y", results.results_data)
-        self.assertIn("x", results.results_data)
+        self.assertIn("y", results.results_data.field_names)
+        self.assertIn("x", results.results_data.field_names)
         self.assertEqual(len(results.results_data["y"]), 50)
         
         # Values should be reasonable for quadratic function
         y_values = results.results_data["y"]
         self.assertTrue(np.all(np.isfinite(y_values)))
     
+    @unittest.skipIf(not HAS_TORCH, "torch not installed – SparseGrid requires torch")
     def test_adaptive_surrogate_sparse_grid(self):
         """Test MatCalSurrogateModel with SparseGridAdaptiveSurrogateStudy."""
         # Define parameters
@@ -307,7 +312,7 @@ class TestMatCalSurrogateModelWithAdaptive(MatcalUnitTest):
         study.set_independent_variable("time", np.linspace(0, 10, 100))
         study.set_target_field_name("y")
         study.set_number_of_test_samples(10)
-        study.set_error_stopping_criteria(rmse=1e-3, max_error=1e-2)
+        study.set_error_stopping_criteria(rmse_goal=1e-3, max_abs_error_goal=1e-2)
         study.set_test_group_random_seed(42)
         
         study.add_evaluation_set(model_func)
@@ -327,7 +332,7 @@ class TestMatCalSurrogateModelWithAdaptive(MatcalUnitTest):
         results = surrogate_model.run(state, pc)
         
         # Verify results
-        self.assertIn("y", results.results_data)
+        self.assertIn("y", results.results_data.field_names)
         self.assertEqual(len(results.results_data["y"]), 100)
         
         # Check accuracy - for linear model, surrogate should be very accurate
@@ -352,8 +357,8 @@ class TestMatCalSurrogateModelWithAdaptive(MatcalUnitTest):
         study.set_independent_variable("x", np.linspace(0, 5, 50))
         study.set_target_field_name("y")
         study.set_number_of_test_samples(10)
-        study.set_initial_sample_count(15)
-        study.set_max_iterations(3)
+        study.set_number_of_initial_samples(15)
+        study.set_max_training_samples(20)
         study.set_test_group_random_seed(123)
         
         study.add_evaluation_set(model_func)
@@ -373,7 +378,7 @@ class TestMatCalSurrogateModelWithAdaptive(MatcalUnitTest):
         # Should run without error
         results = surrogate_model.run(state, pc)
         
-        self.assertIn("y", results.results_data)
+        self.assertIn("y", results.results_data.field_names)
 
 
 if __name__ == '__main__':

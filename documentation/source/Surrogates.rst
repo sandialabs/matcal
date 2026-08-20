@@ -22,6 +22,14 @@ condition values. The response :math:`y` may be a single scalar value, but it is
 often a vector-valued response, such as a force-displacement curve, a temperature
 history, or a spatial field sampled at many locations.
 
+.. note::
+
+   Once a surrogate has been built, it can be used directly in any MatCal
+   calibration, optimization, or uncertainty-quantification study by wrapping
+   it with :class:`~matcal.core.models.MatCalSurrogateModel`.  See
+   :ref:`MatCalSurrogateModel Section` in the *MatCal Features and Objects*
+   chapter for a worked example and usage details.
+
 MatCal provides two broad surrogate-modeling workflows:
 
 * **Fixed-sample surrogates**, built from an existing set of model evaluations.

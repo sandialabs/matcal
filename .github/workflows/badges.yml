@@ -1,0 +1,59 @@
+name: Publish Badges
+
+on:
+  workflow_run:
+    workflows: ["CI Tests"]
+    types: [completed]
+    branches: [main, dev/main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish-badges:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion != 'cancelled'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: badges
+          fetch-depth: 0
+
+      - name: Create badges branch if needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout badges 2>/dev/null || git checkout --orphan badges
+
+      - name: Download version badge
+        uses: actions/download-artifact@v4
+        with:
+          name: version-badge
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .
+
+      - name: Download coverage badge
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-badge
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .
+        continue-on-error: true
+
+      - name: Download lint badge
+        uses: actions/download-artifact@v4
+        with:
+          name: lint-badge
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .
+        continue-on-error: true
+
+      - name: Commit and push badges
+        run: |
+          git add *.svg 2>/dev/null || true
+          git diff --cached --quiet && echo "No badge changes" && exit 0
+          git commit -m "Update badges [skip ci]"
+          git push origin badges --force

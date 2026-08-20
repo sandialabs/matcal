@@ -378,9 +378,6 @@ def _generate_mock_eval_hist(params, samples):
             low, high = params[name]
             pc.add(Parameter(name, low, high))
             params_hist[name] = _format_serial(param_spread)
-        n_samples = samples.shape[0]
-        eval_ids = _format_serial(np.arange(n_samples))
-        objs = _format_serial(np.random.uniform(0, 100, n_samples))
         return params_hist, pc    
     
     
@@ -390,10 +387,10 @@ def build_surrogate_from_python_function(py_func, interp_locations, probes, inde
     sur_file = "my_surrogate"
     lhs = qmc.LatinHypercube(params.count)
     samples = qmc.scale(lhs.random(n_samples), params.lower, params.upper)
-    study_results = StudyResults()
+    StudyResults()
     params_hist, param_collect = _generate_mock_eval_hist(params, samples)
     _generate_parameter_evaluations(py_func, samples, params.names, n_samples, results_file)
-    sur_gen = SurrogateGenerator(s2s_info, decomp_var=decomp_var)
+    sur_gen = SurrogateGenerator(None, decomp_var=decomp_var)
     return sur_gen.generate(sur_file)
 
 
@@ -406,11 +403,10 @@ def remove_old_surrogate_files():
 def _generate_parameter_evaluations(function, samples, param_order,
                                         n_samples, filename):
     for sample_idx in range(n_samples):
-        export_name = filename+str(sample_idx)+".json"
         params = {}
         for p_i, p_name in enumerate(param_order):
             params[p_name] = samples[sample_idx, p_i]
-        results = convert_dictionary_to_data(function(**params))
+        convert_dictionary_to_data(function(**params))
 
 
 class PythonModelForTests(ModelForTestsBase):
@@ -422,7 +418,6 @@ class PythonModelForTests(ModelForTestsBase):
 
 
 def build_basic():
-    probes = ['Y']
     indep = 'time'
     interp_loc = np.linspace(0, 10, 100)
     params = _simple_params()
@@ -748,7 +743,6 @@ class ModelProcessorTest(MatcalUnitTest):
         os.mkdir(target_dir)
         file_list = ['test.txt', 'good.txt', 'another_file.txt']
         self._make_mock_files(file_list)
-        computing_info = None
         afcp.process(target_dir, additional_files=file_list)
         for filename in file_list:
             goal_path = f"{target_dir}/{filename}"
@@ -948,7 +942,7 @@ class TestMatCalSurrogateModelParameterPassing(MatcalUnitTest):
         intercept = Parameter("intercept", 0, 2, 1)
         pc = ParameterCollection("test", slope, intercept)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # Verify the surrogate was called with kwargs
         self.assertEqual(len(call_log), 1)
@@ -971,7 +965,7 @@ class TestMatCalSurrogateModelParameterPassing(MatcalUnitTest):
         slope = Parameter("slope", 0, 4, 2)
         pc = ParameterCollection("test", slope)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # Verify state parameter was passed
         self.assertEqual(len(call_log), 1)
@@ -995,7 +989,7 @@ class TestMatCalSurrogateModelParameterPassing(MatcalUnitTest):
         slope = Parameter("slope", 0, 4, 2)
         pc = ParameterCollection("test", slope)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # Verify model constant was passed
         self.assertEqual(len(call_log), 1)
@@ -1019,7 +1013,7 @@ class TestMatCalSurrogateModelParameterPassing(MatcalUnitTest):
         value_param = Parameter("value", 0, 100, 30.0)  # Study parameter
         pc = ParameterCollection("test", value_param)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # Study parameter should win
         self.assertEqual(len(call_log), 1)
@@ -1042,7 +1036,7 @@ class TestMatCalSurrogateModelParameterPassing(MatcalUnitTest):
         value_param = Parameter("other_param", 0, 1, 0.5)
         pc = ParameterCollection("test", value_param)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # State constant should override model constant
         self.assertEqual(len(call_log), 1)
@@ -1218,7 +1212,7 @@ class TestMatCalSurrogateModelWithAdaptiveSurrogate(MatcalUnitTest):
         slope = Parameter("slope", 0, 4, 2)
         pc = ParameterCollection("test", slope)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # Verify surrogate_index defaults to "best"
         self.assertEqual(len(call_log), 1)
@@ -1266,7 +1260,7 @@ class TestMatCalSurrogateModelWithAdaptiveSurrogate(MatcalUnitTest):
         slope = Parameter("slope", 0, 4, 2.0)
         pc = ParameterCollection("test", slope)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # Verify state parameter was passed
         self.assertEqual(len(call_log), 1)
@@ -1291,7 +1285,7 @@ class TestMatCalSurrogateModelWithAdaptiveSurrogate(MatcalUnitTest):
         value_param = Parameter("value", 0, 100, 30.0)
         pc = ParameterCollection("test", value_param)
         
-        results = model.run(state, pc)
+        model.run(state, pc)
         
         # Study parameter should take precedence
         self.assertEqual(len(call_log), 1)

@@ -1,0 +1,139 @@
+name: Test Stage (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: "Test stage name (unit, integration, production)"
+        required: true
+        type: string
+      test-paths:
+        description: "Space-separated list of test directories"
+        required: true
+        type: string
+      blocking-path:
+        description: "The test path whose failure blocks the pipeline"
+        required: true
+        type: string
+      coverage:
+        description: "Whether to collect and report coverage"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url ${{ env.TORCH_INDEX_URL }}
+          pip install \
+            joblib \
+            pytest \
+            scipy \
+            scikit-learn \
+            numpy \
+            pytest-cov \
+            anybadge \
+            chardet \
+            exodus_helper \
+            h5py \
+            "pyapprox @ git+https://github.com/sandialabs/pyapprox.git@dev/main#subdirectory=packages/pyapprox" \
+            ruff \
+            black \
+            mypy \
+            jinja2 \
+            mcp
+
+      - name: Run ${{ inputs.stage }} tests
+        shell: bash
+        run: |
+          BLOCKING_PATH="${{ inputs.blocking-path }}"
+          EXIT_CODE=0
+
+          # Coverage flags (only for first run to initialize, append for rest)
+          COV_FLAG=""
+          COV_APPEND=""
+          if [ "${{ inputs.coverage }}" = "true" ]; then
+            COV_FLAG="--cov=matcal --cov-report=xml --cov-report=term"
+          fi
+
+          FIRST=true
+          for TEST_PATH in ${{ inputs.test-paths }}; do
+            echo ""
+            echo "========================================"
+            echo "Running: $TEST_PATH"
+            echo "========================================"
+
+            # Build pytest command
+            if [ "${{ inputs.coverage }}" = "true" ]; then
+              if [ "$FIRST" = "true" ]; then
+                CMD="pytest ${TEST_PATH} -v ${COV_FLAG}"
+                FIRST=false
+              else
+                CMD="pytest ${TEST_PATH} -v --cov=matcal --cov-append --cov-report=xml --cov-report=term"
+              fi
+            else
+              CMD="pytest ${TEST_PATH} -v"
+            fi
+
+            # Run tests — only the blocking path can fail the job
+            if [ "$TEST_PATH" = "$BLOCKING_PATH" ]; then
+              $CMD
+              EXIT_CODE=$?
+              if [ $EXIT_CODE -ne 0 ]; then
+                echo "::error::Blocking test path '${TEST_PATH}' failed with exit code ${EXIT_CODE}"
+              fi
+            else
+              $CMD || echo "::warning::Non-blocking test path '${TEST_PATH}' failed"
+            fi
+          done
+
+          exit $EXIT_CODE
+
+      - name: Generate coverage badge
+        if: always() && inputs.coverage && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        shell: bash
+        run: |
+          COVERAGE=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          print(f\"{float(root.attrib['line-rate']) * 100:.1f}\")
+          ")
+          echo "Coverage: ${COVERAGE}%"
+          anybadge -l "coverage" -v "${COVERAGE}%" \
+            -f coverage-badge.svg \
+            --thresholds="30=red,50=orange,70=yellow,90=green" \
+            -o
+
+      - name: Upload coverage report
+        if: always() && inputs.coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ inputs.stage }}-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: coverage.xml
+
+      - name: Upload coverage badge
+        if: always() && inputs.coverage && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-badge
+          path: coverage-badge.svg

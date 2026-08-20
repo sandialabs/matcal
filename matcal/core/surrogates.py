@@ -1469,7 +1469,7 @@ def _tune_data_decomposition(source_data, make_log_scale, reconstruction_error_t
             logger.info(f"      Error below tolerance using {kept_modes} modes")
             break
         elif kept_modes == max_modes:
-            message = (f"      Recreation error tolerance not met, but max modes reached, "+
+            message = ("      Recreation error tolerance not met, but max modes reached, "+
                        f"using {max_modes} mode decomposition")
             logger.info(message)
         else:
@@ -1641,7 +1641,7 @@ class MatCalSurrogateBase(ABC):
         for param in param_ranges:
             if param not in valid_params:
                 raise RuntimeError(f"The parameter '{param}' is not a valid "+
-                                   f"parameter for the surrogate. Valid parameters include "+
+                                   "parameter for the surrogate. Valid parameters include "+
                                     f"{valid_params}.")
             range_values = np.asarray(param_ranges[param])
             if range_values.shape != (2,):
@@ -2064,7 +2064,7 @@ def _process_surrogate_args_call(param_names, *args,
 def _all_params_exist_dict(param_names, data_dict):
     for param_name in param_names:
         if param_name not in data_dict:
-            error_message = (f"All required parameters were not passed to the surrogate. "+
+            error_message = ("All required parameters were not passed to the surrogate. "+
                 f"Required parameters include:\n{param_names}\n"+
                 f"Received parameters include:\n{data_dict.keys()}")
             raise RuntimeError(error_message)
@@ -2203,8 +2203,13 @@ class _MatCalSurrogateWrapper:
             known_params = self._surrogate._parameter_scaler.parameter_order
             filtered_params = {k: v for k, v in parameters.items() if k in known_params}
         elif hasattr(self._surrogate, 'param_names'):
-            # AdaptiveSurrogate instances
+            # AdaptiveSurrogate instances (public attribute set by Study)
             known_params = self._surrogate.param_names
+            filtered_params = {k: v for k, v in parameters.items() if k in known_params}
+        elif hasattr(self._surrogate, '_param_names'):
+            # AdaptiveSurrogate instances (private attribute, e.g. when retrieved
+            # directly from study.surrogate rather than created by the study wrapper)
+            known_params = self._surrogate._param_names
             filtered_params = {k: v for k, v in parameters.items() if k in known_params}
         else:
             # Unknown surrogate type or regular function - pass all parameters

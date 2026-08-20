@@ -5,6 +5,7 @@ in MatCal studies.
 """
 
 import os
+import sys
 from matcal.core.object_factory import ObjectCreator, SpecificObjectFactory
 from matcal.core.serializer_wrapper import matcal_load
 import numpy as np
@@ -391,39 +392,38 @@ class CSVDataImporter(DataImporterBase):
             raise InvalidCharacterError(self.filename, invalid_lines)
         
 
-def _is_dos(filename: str)-> bool:
-    unix_report_as_dos = _unix_detect_dos(filename)
-    mac_report_as_dos = _mac_detect_dos(filename)
-    return unix_report_as_dos or mac_report_as_dos
+def _has_dos_newlines(filename: str, chunk_size: int = 8192) -> bool:
+    """Return True if *filename* contains DOS/Windows CRLF (\\r\\n) line endings.
 
-def _mac_detect_dos(filename:str)->bool:
-    dos_newline = "\\r\\n'"
-    with open(filename, 'r', newline=None) as f:
-        #loop to avoid potential header character issues
-        for i in range(2):
-            try:
-                line = f.readline()
-            except Exception:
-                pass
-        new_lines = repr(f.newlines)
-        has_dos = dos_newline in new_lines
-    return has_dos
+    Reads the file in raw-byte chunks so it is memory-efficient on large
+    files and correctly handles a \\r\\n pair that straddles a chunk boundary.
+    """
+    prev = b""
+    with open(filename, "rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                return False
+            data = prev + chunk
+            if b"\r\n" in data:
+                return True
+            prev = chunk[-1:]
+
+
+def _is_dos(filename: str) -> bool:
+    """Return True when *filename* has DOS newlines AND the platform is not Windows.
+
+    DOS line endings are only considered an error on Unix/macOS systems where
+    tools like dos2unix are available to correct them.  On Windows the files
+    are natively compatible so no error is raised.
+    """
+    if sys.platform.startswith("win"):
+        return False
+    return _has_dos_newlines(filename)
 
 
 def _has_invalid_lines(lines: str)->bool:
     return len(lines) > 0
-
-
-def _unix_detect_dos(filename: str) -> bool:
-    unix_report = _get_unix_file_report(filename)
-    return "CRLF" in unix_report.split()
-
-
-def _get_unix_file_report(filename):
-    file_commands = ["file", filename]
-    command_result = subprocess.run(file_commands, stdout=subprocess.PIPE)
-    unix_report = command_result.stdout.decode('utf-8').split(":")[1].strip()
-    return unix_report
 
 
 def _report_invalid_utc_lines(filename: str) ->str:
