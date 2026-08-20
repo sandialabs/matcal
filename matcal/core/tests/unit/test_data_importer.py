@@ -4,10 +4,18 @@ import numpy as np
 from copy import copy
 import csv
 import unittest
+from unittest.mock import patch
 
-from matcal.core.data_importer import (CSVDataImporter, DOSFileError, FileData,
-                                        InvalidCharacterError, _get_unix_file_report, 
-                                        _report_invalid_utc_lines)
+from matcal.core.data_importer import (
+    CSVDataImporter,
+    DOSFileError,
+    FileData,
+    InvalidCharacterError,
+    _has_dos_newlines,
+    _is_dos,
+    _has_invalid_lines,
+    _report_invalid_utc_lines,
+)
 from matcal.core.data_importer import NumpyDataImporter, BatchDataImporter
 from matcal.core.data import convert_dictionary_to_data, Data
 from matcal.core.state import State, SolitaryState
@@ -191,6 +199,7 @@ class CSVDataImporterTest(MatcalUnitTest):
         self.assertListEqual(list(data['U']), [1, 2, 3, 4])
         self.assertListEqual(list(data['F']), [21, 42, 63, 84])
 
+    @patch("matcal.core.data_importer.sys.platform", "linux")
     def test_csv_dos_import_raise_DOSFileError(self):
         dos_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_dos.csv")
         data_importer = CSVDataImporter(dos_file)
@@ -401,34 +410,64 @@ class FileEncodingTest(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
 
-    @unittest.skipIf(is_mac(), "mac defaults do not work for this")
-    def test_return_dos_report(self):
-        dos_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_dos.csv")
-        goal = ["ISO-8859 text, with CRLF line terminators", "CSV text"]     
-        self.assertTrue(_get_unix_file_report(dos_file) in goal)
+    def test_has_dos_newlines_returns_true_for_crlf_file(self):
+        filename = "crlf_test.csv"
+        with open(filename, "wb") as f:
+            f.write(b"time,temp\r\n0,100\r\n1,200\r\n")
 
-    @unittest.skipIf(is_mac(), "mac defaults do not work for this")
-    def test_return_converted_dos_report(self):
-        converted_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_converted.csv")
-        goal = ["ISO-8859 text", "CSV text"]     
-        self.assertTrue(_get_unix_file_report(converted_file) in goal)
+        self.assertTrue(_has_dos_newlines(filename))
 
-    @unittest.skipIf(is_mac(), "mac defaults do not work for this")
-    def test_return_converted_and_cleaned_dos_report(self):
-        unix_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_unix.csv")
-        goal = ["ASCII text", "CSV text"]     
-        self.assertTrue(_get_unix_file_report(unix_file) in goal)
-    
-    @unittest.skipIf(is_mac(), "mac defaults do not work for this")
-    def test_return_ascii_report(self):
-        ascii_file = os.path.join(TEST_REFERENCE_DIR, "x_array.csv")
-        goal = "ASCII text"        
-        self.assertEqual(_get_unix_file_report(ascii_file), goal)
+    def test_has_dos_newlines_returns_false_for_lf_file(self):
+        filename = "lf_test.csv"
+        with open(filename, "wb") as f:
+            f.write(b"time,temp\n0,100\n1,200\n")
 
-    @unittest.skipIf(is_mac(), "mac defaults do not work for this")
+        self.assertFalse(_has_dos_newlines(filename))
+
+    def test_has_dos_newlines_detects_crlf_across_chunk_boundary(self):
+        filename = "chunk_boundary_crlf_test.csv"
+
+        # With chunk_size=4, the first chunk is b"abc\r" and the next starts
+        # with b"\n", so this verifies that _has_dos_newlines correctly handles
+        # CRLF split across chunk boundaries.
+        with open(filename, "wb") as f:
+            f.write(b"abc\r\ndef\n")
+
+        self.assertTrue(_has_dos_newlines(filename, chunk_size=4))
+
+    @patch("matcal.core.data_importer.sys.platform", "linux")
+    def test_is_dos_returns_true_for_crlf_on_non_windows(self):
+        filename = "linux_crlf_test.csv"
+        with open(filename, "wb") as f:
+            f.write(b"time,temp\r\n0,100\r\n")
+
+        self.assertTrue(_is_dos(filename))
+
+    @patch("matcal.core.data_importer.sys.platform", "linux")
+    def test_is_dos_returns_false_for_lf_on_non_windows(self):
+        filename = "linux_lf_test.csv"
+        with open(filename, "wb") as f:
+            f.write(b"time,temp\n0,100\n")
+
+        self.assertFalse(_is_dos(filename))
+
+    @patch("matcal.core.data_importer.sys.platform", "win32")
+    def test_is_dos_returns_false_on_windows_even_for_crlf(self):
+        filename = "windows_crlf_test.csv"
+        with open(filename, "wb") as f:
+            f.write(b"time,temp\r\n0,100\r\n")
+
+        self.assertFalse(_is_dos(filename))
+
+    def test_has_invalid_lines_returns_false_for_empty_string(self):
+        self.assertFalse(_has_invalid_lines(""))
+
+    def test_has_invalid_lines_returns_true_for_nonempty_string(self):
+        self.assertTrue(_has_invalid_lines("2 min,\xb0C,%,%/min\n"))
+
     def test_has_invalid_utc_characters_returns_string(self):
         converted_file = os.path.join(TEST_REFERENCE_DIR, "tga_pmdi_converted.csv")
-        goal = '2 min,\xb0C,%,%/min\n'       
+        goal = '2 min,\xb0C,%,%/min\n'
         self.assertEqual(_report_invalid_utc_lines(converted_file), goal)
 
 

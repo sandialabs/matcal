@@ -26,20 +26,16 @@ env:
   PYTHONPATH: ${{ github.workspace }}
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.11", "3.12", "3.13"]
+  test-primary:
+    name: ${{ inputs.stage }} / ubuntu-latest / py3.12
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
       - name: Install dependencies
         shell: bash
@@ -87,9 +83,7 @@ jobs:
           BLOCKING_PATH="${{ inputs.blocking-path }}"
           EXIT_CODE=0
 
-          # Coverage flags (only for first run to initialize, append for rest)
           COV_FLAG=""
-          COV_APPEND=""
           if [ "${{ inputs.coverage }}" = "true" ]; then
             COV_FLAG="--cov=matcal --cov-report=xml --cov-report=term"
           fi
@@ -101,7 +95,6 @@ jobs:
             echo "Running: $TEST_PATH"
             echo "========================================"
 
-            # Build pytest command
             if [ "${{ inputs.coverage }}" = "true" ]; then
               if [ "$FIRST" = "true" ]; then
                 CMD="python -m pytest ${TEST_PATH} -v ${COV_FLAG}"
@@ -113,7 +106,6 @@ jobs:
               CMD="python -m pytest ${TEST_PATH} -v"
             fi
 
-            # Run tests — only the blocking path can fail the job
             if [ "$TEST_PATH" = "$BLOCKING_PATH" ]; then
               $CMD
               EXIT_CODE=$?
@@ -128,7 +120,7 @@ jobs:
           exit $EXIT_CODE
 
       - name: Generate coverage badge
-        if: always() && inputs.coverage && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        if: always() && inputs.coverage
         shell: bash
         run: |
           COVERAGE=$(python3 -c "
@@ -147,12 +139,89 @@ jobs:
         if: always() && inputs.coverage
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ inputs.stage }}-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: coverage-${{ inputs.stage }}-ubuntu-latest-py3.12
           path: coverage.xml
 
       - name: Upload coverage badge
-        if: always() && inputs.coverage && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        if: always() && inputs.coverage
         uses: actions/upload-artifact@v4
         with:
           name: coverage-badge
           path: coverage-badge.svg
+
+  test-matrix:
+    name: ${{ inputs.stage }} / ${{ matrix.os }} / py${{ matrix.python-version }}
+    needs: test-primary
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url ${{ env.TORCH_INDEX_URL }}
+          python -m pip install -e ".[ci]"
+
+      - name: Run ${{ inputs.stage }} tests
+        shell: bash
+        run: |
+          BLOCKING_PATH="${{ inputs.blocking-path }}"
+          EXIT_CODE=0
+
+          COV_FLAG=""
+          if [ "${{ inputs.coverage }}" = "true" ]; then
+            COV_FLAG="--cov=matcal --cov-report=xml --cov-report=term"
+          fi
+
+          FIRST=true
+          for TEST_PATH in ${{ inputs.test-paths }}; do
+            echo ""
+            echo "========================================"
+            echo "Running: $TEST_PATH"
+            echo "========================================"
+
+            if [ "${{ inputs.coverage }}" = "true" ]; then
+              if [ "$FIRST" = "true" ]; then
+                CMD="python -m pytest ${TEST_PATH} -v ${COV_FLAG}"
+                FIRST=false
+              else
+                CMD="python -m pytest ${TEST_PATH} -v --cov=matcal --cov-append --cov-report=xml --cov-report=term"
+              fi
+            else
+              CMD="python -m pytest ${TEST_PATH} -v"
+            fi
+
+            if [ "$TEST_PATH" = "$BLOCKING_PATH" ]; then
+              $CMD
+              EXIT_CODE=$?
+              if [ $EXIT_CODE -ne 0 ]; then
+                echo "::error::Blocking test path '${TEST_PATH}' failed with exit code ${EXIT_CODE}"
+              fi
+            else
+              $CMD || echo "::warning::Non-blocking test path '${TEST_PATH}' failed"
+            fi
+          done
+
+          exit $EXIT_CODE
+
+      - name: Upload coverage report
+        if: always() && inputs.coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ inputs.stage }}-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: coverage.xml

@@ -9,7 +9,6 @@ import sys
 from matcal.core.object_factory import ObjectCreator, SpecificObjectFactory
 from matcal.core.serializer_wrapper import matcal_load
 import numpy as np
-import subprocess
 import glob
 from abc import ABC, abstractmethod
 import numbers
@@ -426,12 +425,24 @@ def _has_invalid_lines(lines: str)->bool:
     return len(lines) > 0
 
 
-def _report_invalid_utc_lines(filename: str) ->str:
-    print_string = 'print "$. $_" if m/[\x80-\xFF]/'
-    commands = ["perl", "-ne", f"{print_string}" , filename]
-    command_result = subprocess.run(commands, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    b_string = command_result.stdout
-    return b_string.decode('unicode_escape')
+def _report_invalid_utc_lines(filename: str) -> str:
+    """
+    Return lines containing non-ASCII bytes, formatted similarly to the old
+    Perl command:
+
+        perl -ne 'print "$. $_" if m/[\\x80-\\xFF]/'
+
+    The output includes the 1-based line number followed by the original line.
+    """
+    invalid_lines = []
+
+    with open(filename, "rb") as f:
+        for line_number, raw_line in enumerate(f, start=1):
+            if any(byte >= 0x80 for byte in raw_line):
+                line = raw_line.decode("latin-1")
+                invalid_lines.append(f"{line_number} {line}")
+
+    return "".join(invalid_lines)
 
 
 class DOSFileError(RuntimeError):
