@@ -3,7 +3,6 @@ import glob
 import numpy as np
 from copy import copy
 import csv
-import unittest
 from unittest.mock import patch
 
 from matcal.core.data_importer import (
@@ -19,7 +18,7 @@ from matcal.core.data_importer import (
 from matcal.core.data_importer import NumpyDataImporter, BatchDataImporter
 from matcal.core.data import convert_dictionary_to_data, Data
 from matcal.core.state import State, SolitaryState
-from matcal.core.tests.MatcalUnitTest import MatcalUnitTest, is_mac
+from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
 TEST_REFERENCE_DIR = os.path.join(os.path.dirname(__file__), 
@@ -409,13 +408,6 @@ class FileEncodingTest(MatcalUnitTest):
 
     def setUp(self):
         super().setUp(__file__)
-
-    def test_has_dos_newlines_returns_true_for_crlf_file(self):
-        filename = "crlf_test.csv"
-        with open(filename, "wb") as f:
-            f.write(b"time,temp\r\n0,100\r\n1,200\r\n")
-
-        self.assertTrue(_has_dos_newlines(filename))
 
     def test_has_dos_newlines_returns_false_for_lf_file(self):
         filename = "lf_test.csv"

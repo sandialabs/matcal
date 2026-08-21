@@ -440,6 +440,7 @@ def _report_invalid_utc_lines(filename: str) -> str:
         for line_number, raw_line in enumerate(f, start=1):
             if any(byte >= 0x80 for byte in raw_line):
                 line = raw_line.decode("latin-1")
+                line = line.replace("\r\n", "\n").replace("\r", "\n")
                 invalid_lines.append(f"{line_number} {line}")
 
     return "".join(invalid_lines)

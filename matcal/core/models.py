@@ -382,14 +382,16 @@ class InputFileCopyPreprocessor(ModelPreprocessorBase):
 
 
 def _copy_file_or_directory_to_target_directory(target_dir, source):
-    target_filename = os.path.join(target_dir, source.split("/")[-1])
-    if not os.path.exists(target_filename):
-        if os.path.isdir(source):
-            shutil.copytree(source, target_filename)
-        else:
-            shutil.copyfile(source, target_filename)
+    source_path = Path(source)
+    target_path = Path(target_dir) / source_path.name
 
-    return target_filename
+    if not target_path.exists():
+        if source_path.is_dir():
+            shutil.copytree(source_path, target_path)
+        else:
+            shutil.copyfile(source_path, target_path)
+
+    return str(target_path)
 
 
 def _get_mesh_template_folder(template_dir):

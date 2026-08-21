@@ -1,14 +1,23 @@
 from copy import deepcopy
 import os
+import sys
 
-from matcal.core.computing_platforms import (local_computer, 
+from matcal.core.computing_platforms import (
+    local_computer, 
     matcal_computing_platform_function_identifier, 
-    LocalComputingPlatform)
-from matcal.core.external_executable import (ListCommandError, 
-    matcal_external_executable_factory, matcal_executable_environment_setup_function_identifier, 
-    default_environment_command_processor, ExecutableNoEnvironmentSetup, 
-    matcal_platform_environment_setup_identifier, SlurmHPCExecutableEnvironmentSetup, 
-    attempt_to_execute, NonPositiveIntegerError)
+    LocalComputingPlatform
+)
+from matcal.core.external_executable import (
+    ListCommandError, 
+    matcal_external_executable_factory, 
+    matcal_executable_environment_setup_function_identifier, 
+    default_environment_command_processor, 
+    ExecutableNoEnvironmentSetup, 
+    matcal_platform_environment_setup_identifier, 
+    SlurmHPCExecutableEnvironmentSetup, 
+    attempt_to_execute, 
+    NonPositiveIntegerError
+)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -56,14 +65,14 @@ class TestLocalExternalExecutable(MatcalUnitTest):
         self.assertEqual(goal_command, additional_commands)
 
     def test_run_valid_commands(self):
-        var_name = "MYMatcalTestVar"
-        var_val = 23
-        my_env_command = [f'export {var_name}={var_val}', f'echo ${var_name}']
-        valid_runner = matcal_external_executable_factory.create(['ls'], 
-                                                              my_env_command, 
-                                                              local_computer)
+        valid_runner = matcal_external_executable_factory.create(
+            [sys.executable, "-c", "print('matcal executable test')"],
+            None,
+            local_computer,
+        )
         stdout, stderr, process = valid_runner.run()
         self.assertEqual(len(stderr), 0)
+        self.assertEqual(process, 0)
 
     def test_run_invalid_commands(self):
         invalid_command_runner = matcal_external_executable_factory.create(['not_a_VALID_command'],

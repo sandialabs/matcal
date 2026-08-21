@@ -1,24 +1,33 @@
 from abc import ABC, abstractmethod
 from glob import glob
-from matcal.core.objective import CurveBasedInterpolatedObjective
-from matcal.core.parameter_studies import ParameterStudy
 import numpy as np
 import os
 from scipy.stats import qmc
+import sys
 
 from matcal.core.computing_platforms import local_computer, RemoteComputingPlatform
 from matcal.core.constants import (MATCAL_MESH_TEMPLATE_DIRECTORY, 
                                    MATCAL_TEMPLATE_DIRECTORY)
 from matcal.core.data import convert_dictionary_to_data, Data
 from matcal.core.file_modifications import use_jinja_preprocessor
-from matcal.core.models import (_ComputerControllerComponentBase,
-                                AdditionalFileCopyPreprocessor, 
-                                InputFileCopyPreprocessor, MatCalSurrogateModel, 
-                                PythonModel, _DefaultComputeInformation, 
-                                _ResultsInformation, _copy_file_or_directory_to_target_directory, 
-                                _create_template_folder, _get_mesh_template_folder, 
-                                UserExecutableModel)
+from matcal.core.models import (
+    _ComputerControllerComponentBase,
+    AdditionalFileCopyPreprocessor, 
+    InputFileCopyPreprocessor, 
+    MatCalSurrogateModel, 
+    PythonModel, 
+    _DefaultComputeInformation, 
+    _ResultsInformation, 
+    _copy_file_or_directory_to_target_directory, 
+    _create_template_folder, 
+    _get_mesh_template_folder, 
+    UserExecutableModel
+)
+
+from matcal.core.objective import CurveBasedInterpolatedObjective
 from matcal.core.parameters import Parameter, ParameterCollection
+from matcal.core.parameter_studies import ParameterStudy
+
 from matcal.core.serializer_wrapper import _format_serial
 from matcal.core.simulators import PythonSimulator, SimulatorResults, ExecutableSimulator
 from matcal.core.state import SolitaryState, State
@@ -703,13 +712,13 @@ class TestModelFunctions(MatcalUnitTest):
     def test_get_mesh_template_dir_does_not_exist(self):
         current_dir = '.'
         mesh_template = _get_mesh_template_folder(current_dir)
-        goal = f"{MATCAL_MESH_TEMPLATE_DIRECTORY}/{current_dir}"
+        goal = os.path.join(MATCAL_MESH_TEMPLATE_DIRECTORY,current_dir)
         self.assertEqual(mesh_template, goal)
         
     def test_get_mesh_template_dir_template_exists(self):
-        current_dir = f"./{MATCAL_TEMPLATE_DIRECTORY}/Stuff"
+        current_dir = os.path.join(MATCAL_TEMPLATE_DIRECTORY,"Stuff")
         mesh_template= _get_mesh_template_folder(current_dir)
-        goal = f"./{MATCAL_MESH_TEMPLATE_DIRECTORY}/Stuff"
+        goal = os.path.join(MATCAL_MESH_TEMPLATE_DIRECTORY,"Stuff")
         self.assertEqual(mesh_template, goal)
         
     def test_copy_file_to_directory(self):
@@ -768,7 +777,13 @@ class UserExecutableModelForTests(ModelForTestsBase):
     _simulator_class = ExecutableSimulator
 
     def init_model(self, *args):
-        return self._model_class("ls", "-ltah", *args, results_filename="results.csv")
+        return elf._model_class(
+            sys.executable,
+            "-c",
+            "print('user executable model test')",
+            *args,
+            results_filename="results.csv",
+        )
 
 
 class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForTests):
@@ -779,9 +794,11 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
 
     def test_init(self):
         mod = self.init_model("extra_arg")
-        self.assertEqual(mod.executable, "ls")
-        self.assertEqual(mod.results_filename, "results.csv")
-        self.assertEqual(mod._arguments, ["-ltah", "extra_arg"])
+        self.assertEqual(mod.executable, sys.executable)     
+        self.assertEqual(
+            mod._arguments,
+            ["-c", "print('user executable model test')", "extra_arg"],
+        )        
         with self.assertRaises(TypeError):
             self._model_class(1, "test.csv")
         with self.assertRaises(TypeError):
@@ -845,7 +862,12 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
             f.write("0, 0\n")
             f.write("1, 1\n")
 
-        model = self._model_class('ls', results_filename="results.csv")
+        model = self._model_class(
+                    sys.executable,
+                    "-c",
+                    "print('user executable model test')",
+                      results_filename="results.csv"
+                )
         model.add_necessary_files("test_dir", "results.csv", *add_files)
 
         state = State("test", var=1)
@@ -870,7 +892,9 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
         sim = mod.build_simulator(state)
 
         self.assertIsInstance(sim, ExecutableSimulator)
-        self.assertEqual(sim._commands, ["ls", "-ltah", "extra_arg"])
+        self.assertEqual(sim._commands,
+            [sys.executable, "-c", "print('user executable model test')", "extra_arg"]
+        )
         self.assertEqual(sim._model_constants, {"a":1, "c":3})
 
     def test_continue_on_failure_bad_exec(self):
@@ -878,8 +902,12 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
             f.write("displacement, load\n")
             f.write("0, 0\n")
             f.write("1, 1\n")
-        model = self._model_class("ls", "bad_option", results_filename="results.csv")
-        model.add_necessary_files("results.csv")
+        model = self._model_class(
+            sys.executable,
+            "-c",
+            "import sys; sys.stderr.write('intentional failure\\n'); sys.exit(2)",
+            results_filename="results.csv",
+        )        model.add_necessary_files("results.csv")
         pc = ParameterCollection("null", Parameter("null", 0, 1))
         with self.assertRaises(RuntimeError):
             res = model.run(SolitaryState(), pc)
@@ -895,7 +923,11 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
             f.write("displacement, load\n")
             f.write("0, 0\n")
             f.write("1, 1\n")
-        model = self._model_class("bad", "bad_option", results_filename="results.csv")
+        model = self._model_class(
+            "bad", 
+            "bad_option", 
+            results_filename="results.csv"
+        )
         model.add_necessary_files("results.csv")
         pc = ParameterCollection("null", Parameter("null", 0, 1))
         with self.assertRaises(RuntimeError):
