@@ -1,5 +1,7 @@
-import numpy as np
 import glob
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 from matcal.core.calibration_studies import ScipyMinimizeStudy
 from matcal.core.data import convert_dictionary_to_data
@@ -50,6 +52,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
         glob_search = "user_plots/*.pdf"
         plot_files = glob.glob(glob_search)
         self.assertEqual(len(plot_files), 7)
+        plt.close()
         
     def test_different_sim_exp_qois_one_obj(self):
         x = np.linspace(0,1,10)
@@ -73,6 +76,7 @@ class TestMakeStandardPlots(MatcalUnitTest):
         glob_search = "user_plots/*.pdf"
         plot_files = glob.glob(glob_search)
         self.assertEqual(len(plot_files), 3)
+        plt.close()
 
     def test_different_sim_exp_qois_one_obj_scipy(self):
         x = np.linspace(0,1,10)
@@ -93,3 +97,4 @@ class TestMakeStandardPlots(MatcalUnitTest):
         glob_search = "user_plots/*.pdf"
         plot_files = glob.glob(glob_search)
         self.assertEqual(len(plot_files), 3)
+        plt.close()

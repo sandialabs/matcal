@@ -22,4 +22,4 @@ try:
     from site_matcal import *
 except Exception as e:
     print("Warning no site matcal files found. Skipping site module imports...")
-    print(f"Error caught:\n repr({e})")
+    print(f"Error caught:\n {repr(e)}")
