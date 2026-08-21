@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-import os
 from queue import Queue, Empty
+import os
+import shlex
 import subprocess
 from time import sleep
 
@@ -20,6 +21,13 @@ from matcal.core.object_factory import (
 
 
 logger = initialize_matcal_logger(__name__)
+
+
+def _format_command_for_shell(commands):
+    commands = [str(command) for command in commands]
+    if os.name == "nt":
+        return subprocess.list2cmdline(commands)
+    return shlex.join(commands)
 
 
 class ExternalExecutableBase(ABC):
@@ -51,7 +59,7 @@ class ExternalExecutableBase(ABC):
     def nonblocking_run(self):
         additional_env_commands, use_shell = self._setup_environment()
         if use_shell:
-            executable_command = " ".join(str(cmd) for cmd in self._commands)
+            executable_command = _format_command_for_shell(self._commands)
 
             if additional_env_commands:
                 all_commands = additional_env_commands + ";" + executable_command

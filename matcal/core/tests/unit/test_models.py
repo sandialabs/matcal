@@ -777,7 +777,7 @@ class UserExecutableModelForTests(ModelForTestsBase):
     _simulator_class = ExecutableSimulator
 
     def init_model(self, *args):
-        return elf._model_class(
+        return self._model_class(
             sys.executable,
             "-c",
             "print('user executable model test')",
@@ -943,8 +943,9 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
             f.write("0, 0\n")
             f.write("1, 1\n")
         model = self._model_class(
-            "bad", 
-            "bad_option", 
+            sys.executable,
+            "-c",
+            "import sys; sys.stderr.write('intentional failure\\n'); sys.exit(2)",
             results_filename="no_file.csv"
         )
         pc = ParameterCollection("null", Parameter("null", 0, 1))
