@@ -906,8 +906,9 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
             sys.executable,
             "-c",
             "import sys; sys.stderr.write('intentional failure\\n'); sys.exit(2)",
-            results_filename="results.csv",
-        )        model.add_necessary_files("results.csv")
+            results_filename="results.csv"
+        )
+        model.add_necessary_files("results.csv")
         pc = ParameterCollection("null", Parameter("null", 0, 1))
         with self.assertRaises(RuntimeError):
             res = model.run(SolitaryState(), pc)
@@ -941,7 +942,11 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
             f.write("displacement, load\n")
             f.write("0, 0\n")
             f.write("1, 1\n")
-        model = self._model_class("ls", results_filename="no_file.csv")
+        model = self._model_class(
+            "bad", 
+            "bad_option", 
+            results_filename="no_file.csv"
+        )
         pc = ParameterCollection("null", Parameter("null", 0, 1))
         with self.assertRaises(FileNotFoundError):
             res = model.run(SolitaryState(), pc)
