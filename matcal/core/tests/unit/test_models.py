@@ -945,7 +945,7 @@ class TestUserExecutableModel(ModelTestBase.CommonTests, UserExecutableModelForT
         model = self._model_class(
             sys.executable,
             "-c",
-            "import sys; sys.stderr.write('clean exit, no file\\n'); sys.exit(0)",
+            "import sys; sys.stdout.write('clean exit, no file\\n'); sys.exit(0)",
             results_filename="no_file.csv"
         )
         pc = ParameterCollection("null", Parameter("null", 0, 1))

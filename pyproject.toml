@@ -16,7 +16,6 @@ dependencies = [
     "h5py",
     "pyapprox @ git+https://github.com/sandialabs/pyapprox.git@dev/main#subdirectory=packages/pyapprox",
     "jinja2",
-    "mcp",
     "matplotlib",
     "pandas",
     "seaborn",
