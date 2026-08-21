@@ -27,7 +27,7 @@ env:
 
 jobs:
   test-primary:
-    name: ${{ inputs.stage }} / ubuntu-latest / py3.12
+    name: ${{ inputs.stage }} / ubuntu-latest py3.12
     runs-on: ubuntu-latest
 
     steps:
@@ -150,7 +150,7 @@ jobs:
           path: coverage-badge.svg
 
   test-matrix:
-    name: ${{ inputs.stage }} / ${{ matrix.os }} / py${{ matrix.python-version }}
+    name: ${{ inputs.stage }} / ${{ matrix.os }} py${{ matrix.python-version }}
     needs: test-primary
     runs-on: ${{ matrix.os }}
 
