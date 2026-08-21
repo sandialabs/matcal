@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -52,7 +52,7 @@ jobs:
             -f lint-badge.svg -c green -o
 
       - name: Upload lint badge
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: lint-badge
           path: lint-badge.svg
@@ -63,9 +63,9 @@ jobs:
   version-badge:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -78,7 +78,7 @@ jobs:
           anybadge -l "version" -v "v${VERSION}" -f version-badge.svg -c blue -o
 
       - name: Upload version badge
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: version-badge
           path: version-badge.svg

@@ -31,9 +31,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -137,14 +137,14 @@ jobs:
 
       - name: Upload coverage report
         if: always() && inputs.coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-${{ inputs.stage }}-ubuntu-latest-py3.12
           path: coverage.xml
 
       - name: Upload coverage badge
         if: always() && inputs.coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-badge
           path: coverage-badge.svg
@@ -164,9 +164,9 @@ jobs:
             python-version: "3.12"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -221,7 +221,7 @@ jobs:
 
       - name: Upload coverage report
         if: always() && inputs.coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-${{ inputs.stage }}-${{ matrix.os }}-py${{ matrix.python-version }}
           path: coverage.xml

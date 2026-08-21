@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion != 'cancelled'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: badges
           fetch-depth: 0
@@ -26,7 +26,7 @@ jobs:
           git checkout badges 2>/dev/null || git checkout --orphan badges
 
       - name: Download version badge
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: version-badge
           run-id: ${{ github.event.workflow_run.id }}
@@ -34,7 +34,7 @@ jobs:
           path: .
 
       - name: Download coverage badge
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-badge
           run-id: ${{ github.event.workflow_run.id }}
@@ -43,7 +43,7 @@ jobs:
         continue-on-error: true
 
       - name: Download lint badge
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: lint-badge
           run-id: ${{ github.event.workflow_run.id }}
