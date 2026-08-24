@@ -309,61 +309,63 @@ class TestSurrogateGenerator(TestSurrogateGenerator):
     def test_surrogate_for_decay(self):
         time_end = 10
         def test_function(L, A, n_features=None):
-            if n_features == None:
+            if n_features is None:
                 n_features = np.random.randint(75, 150)
             x = np.linspace(0, time_end, n_features)
             l_eff = np.power(10, L)
             y = np.exp(-x * l_eff) * A + 1
-            return {'x':x, 'y':y}
+            return {'x': x, 'y': y}
 
-        n_samples = 300
+        n_samples = 500
         p_names = ['L', 'A']
         p_low = [-1., 1]
         p_high = [0, 10]
         show_array = True
         probes = ['y']
         indep_var = 'x'
-        res_file = "test_results"
         err_tol = 1e-2
 
         n_interp = 200
-        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, 
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low,
                                                      p_high, indep_var, test_function)
-        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        # alpha provides numerical stability for GP on variable-length output
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process",
+                                      alpha=1e-6)
         sur_gen.set_PCA_details(None, reconstruction_error=1e-2)
         surrogate = sur_gen.generate('my_surrogate')
 
-        self._confirm_alignment_to_function(p_low, p_high, show_array, probes, 
+        self._confirm_alignment_to_function(p_low, p_high, show_array, probes,
                                             err_tol, n_interp, test_function, surrogate)
         self._confirm_good_test_scores(surrogate)
 
     def test_surrogate_for_cos_and_line_var_based(self):
         time_end = 10
         def test_function(A, n_features=None):
-            if n_features == None:
+            if n_features is None:
                 n_features = np.random.randint(75, 150)
             x = np.linspace(0, time_end, n_features)
-            y = np.cos(x / 2) * A 
+            y = np.cos(x / 2) * A
             z = A * x + A
-            return {'x':x, 'y':y, 'z':z}
+            return {'x': x, 'y': y, 'z': z}
 
-        n_samples = 100
+        n_samples = 400
         p_names = ['A']
         p_low = [0]
         p_high = [2]
         show_array = True
         probes = ['y', 'z']
         indep_var = 'x'
-        res_file = "test_results"
         err_tol = 1e-2
 
         n_interp = 200
-        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low, 
+        sur_gen = _setup_initial_surrogate_generator(n_samples, p_names, p_low,
                                                      p_high, indep_var, test_function)
-        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process")
+        # alpha provides numerical stability for the GP on this variable-length problem
+        sur_gen.set_surrogate_details("PCA Multiple Regressors", "Gaussian Process",
+                                      alpha=1e-6)
         surrogate = sur_gen.generate('my_surrogate')
 
-        self._confirm_alignment_to_function(p_low, p_high, show_array, probes, 
+        self._confirm_alignment_to_function(p_low, p_high, show_array, probes,
                                             err_tol, n_interp, test_function, surrogate)
         self._confirm_good_test_scores(surrogate)
 

@@ -1,11 +1,10 @@
 import abc
 
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
-
 from matcal.cubit.geometry import (MaterialPointGeometry, RoundUniaxialTensionGeometry, 
     GeometryParameters, RectangularUniaxialTensionGeometry, 
     RoundNotchedTensionGeometry, SolidBarTorsionGeometry, TopHatShearGeometry)
-
+from matcal.cubit.tests.cubit_test_helpers import skip_if_cubit_path_not_registered
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
     RoundUniaxialTensionModelForTests, 
     RectangularUniaxialTensionModelForTests, RoundNotchedTensionModelForTests, 
@@ -22,6 +21,7 @@ class TestUniaxialLoadingMaterialPointGeometry(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_create_mesh(self):
+        skip_if_cubit_path_not_registered()
         geo = self._geometry_class("test_mesh.g", self.params)
         stdout, stderr, return_code = geo.create_mesh()
         self.assert_file_exists("test_mesh.g")

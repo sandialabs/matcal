@@ -21,8 +21,7 @@ BSD licensed packages:
     11.	PyCompadre: https://github.com/sandialabs/compadre/blob/master/LICENSE.md
 
 LGPL licensed packages:
-    1.	chardet: https://github.com/chardet/chardet/blob/main/LICENSE
-    2. dakota: https://github.com/snl-dakota/dakota/blob/devel/LICENSE
+    1. dakota: https://github.com/snl-dakota/dakota/blob/devel/LICENSE
 
 Python Standard Library packages:
 License information for Python Software Foundation License (https://docs.python.org/3/license.html)

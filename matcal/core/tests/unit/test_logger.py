@@ -46,8 +46,8 @@ class MatCalFormaterTest(MatcalUnitTest):
 
     def test_combine_stack_filenames(self):
         stack_filenames, stack_functions = self.formatter._combine_stack_info()
-        self.assertTrue("matcal/core/logger.py" in stack_filenames)
-        self.assertTrue("matcal/core/tests/unit/test_logger.py" in stack_filenames)
+        self.assertIn(os.path.join("matcal","core","logger.py"), stack_filenames)
+        self.assertIn(os.path.join("matcal","core","tests","unit","test_logger.py"), stack_filenames)
 
 
 class MatCalLoggerTest(MatcalUnitTest):

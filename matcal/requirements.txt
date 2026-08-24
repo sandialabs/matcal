@@ -1,5 +1,4 @@
 bokeh>=3.2.1
-chardet>=4.0.0
 exodus_helper>=1.5.6
 h5py>=3.14.0
 Jinja2>=3.1.2

@@ -13,12 +13,12 @@ matcal_cubit_executable_path_identifier = BasicIdentifier()
 def get_cubit_path(version='release'):
     try:
         path = matcal_cubit_executable_path_identifier.identify(version)
-    except KeyError:
+    except KeyError as exc:
         err_str = ("A path to the release cubit executable has not been registered in " +
             "the \'matcal_cubit_executable_path_identifier\'. Import the identifier from "+
             "\'matcal.cubit.cubit_runner\' and assign  " +
             "the appropriate path for \'release\' in a file to setup paths")
-        raise RuntimeError(err_str)
+        raise RuntimeError(err_str) from exc
     return path
 
 

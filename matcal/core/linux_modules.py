@@ -102,6 +102,7 @@ def get_all_loaded_modules():
     out, err = issue_module_commands("list")
     returned_string = err   
     returned_string = returned_string.replace("(default)", "")
+    returned_string = returned_string.split("Key")[0]
     if len(returned_string.split(")")) > 1:
         modules = returned_string.split(")")[1:]
         for module_str in modules:

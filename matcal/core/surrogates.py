@@ -4,7 +4,7 @@ from numbers import Integral, Real
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score
-from typing import Callable
+from typing import Any, Callable, List, Optional
 
 
 from matcal.core.data import convert_dictionary_to_data
@@ -277,7 +277,7 @@ class SurrogateGenerator:
                 check_value_is_nonempty_str(field, "field_of_interest")
             self._fields_of_interest = fields_of_interest
 
-    def generate(self, save_filename:str=None, preprocessing_function:Callable=None, 
+    def generate(self, save_filename:Optional[str]=None, preprocessing_function:Optional[Callable]=None, 
                  plot_n_worst:int=0)->Callable:
         """
         Generates a surrogate based on the information passed to it upon initialization
@@ -1469,7 +1469,7 @@ def _tune_data_decomposition(source_data, make_log_scale, reconstruction_error_t
             logger.info(f"      Error below tolerance using {kept_modes} modes")
             break
         elif kept_modes == max_modes:
-            message = (f"      Recreation error tolerance not met, but max modes reached, "+
+            message = ("      Recreation error tolerance not met, but max modes reached, "+
                        f"using {max_modes} mode decomposition")
             logger.info(message)
         else:
@@ -1641,7 +1641,7 @@ class MatCalSurrogateBase(ABC):
         for param in param_ranges:
             if param not in valid_params:
                 raise RuntimeError(f"The parameter '{param}' is not a valid "+
-                                   f"parameter for the surrogate. Valid parameters include "+
+                                   "parameter for the surrogate. Valid parameters include "+
                                     f"{valid_params}.")
             range_values = np.asarray(param_ranges[param])
             if range_values.shape != (2,):
@@ -1860,7 +1860,7 @@ def _convert_instances_to_stats(scores):
 class _modal_regressor:
     
     def __init__(self, regressor_type:str, n_inputs, regressor_kwargs):
-        self._mode_regressors = []
+        self._mode_regressors: List[Any] = []
         self._regressor_type = regressor_type
         self._regressor_kwargs = regressor_kwargs
         self._n_inputs = n_inputs
@@ -2064,7 +2064,7 @@ def _process_surrogate_args_call(param_names, *args,
 def _all_params_exist_dict(param_names, data_dict):
     for param_name in param_names:
         if param_name not in data_dict:
-            error_message = (f"All required parameters were not passed to the surrogate. "+
+            error_message = ("All required parameters were not passed to the surrogate. "+
                 f"Required parameters include:\n{param_names}\n"+
                 f"Received parameters include:\n{data_dict.keys()}")
             raise RuntimeError(error_message)
@@ -2188,8 +2188,44 @@ class _MatCalSurrogateWrapper:
         self._surrogate = surrogate
     
     def __call__(self, **parameters):
-        results = self._surrogate(parameters)
-        return results 
+        """
+        Wrapper to make MatCal surrogates compatible with PythonModel interface.
+        
+        PythonModel expects functions that accept parameters as keyword arguments.
+        MatCal surrogates (both MatCalSurrogateBase and AdaptiveSurrogate) accept
+        parameters as keyword arguments directly, so we pass them through.
+        
+        For AdaptiveSurrogate, the default surrogate_index="best" is used.
+        """
+        # Filter parameters to only those the surrogate knows about
+        if hasattr(self._surrogate, '_parameter_scaler'):
+            # MatCalSurrogateBase instances
+            known_params = self._surrogate._parameter_scaler.parameter_order
+            filtered_params = {k: v for k, v in parameters.items() if k in known_params}
+        elif hasattr(self._surrogate, 'param_names'):
+            # AdaptiveSurrogate instances (public attribute set by Study)
+            known_params = self._surrogate.param_names
+            filtered_params = {k: v for k, v in parameters.items() if k in known_params}
+        elif hasattr(self._surrogate, '_param_names'):
+            # AdaptiveSurrogate instances (private attribute, e.g. when retrieved
+            # directly from study.surrogate rather than created by the study wrapper)
+            known_params = self._surrogate._param_names
+            filtered_params = {k: v for k, v in parameters.items() if k in known_params}
+        else:
+            # Unknown surrogate type or regular function - pass all parameters
+            filtered_params = parameters
+        
+        results = self._surrogate(**filtered_params)
+        return results
+    
+    def __getstate__(self):
+        """Support pickling by returning the surrogate state."""
+        return {'surrogate': self._surrogate}
+    
+    def __setstate__(self, state):
+        """Support unpickling by restoring the surrogate."""
+        self._surrogate = state['surrogate']
+
 
     
 def _score_recreation(sur_values, source_values):

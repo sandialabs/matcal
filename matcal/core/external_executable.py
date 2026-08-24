@@ -1,18 +1,33 @@
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-import os
 from queue import Queue, Empty
+import os
+import shlex
 import subprocess
 from time import sleep
 
-from matcal.core.computing_platforms import (HPCComputingPlatform, 
-    LocalComputingPlatform, RemoteComputingPlatform, local_computer)
+from matcal.core.computing_platforms import (
+    HPCComputingPlatform, 
+    LocalComputingPlatform, 
+    RemoteComputingPlatform, 
+    local_computer
+)
 from matcal.core.logger import initialize_matcal_logger
-from matcal.core.object_factory import (IdentifierByTestFunction, ObjectCreator, 
-                                       SpecificObjectFactory)
+from matcal.core.object_factory import (
+    IdentifierByTestFunction, 
+    ObjectCreator, 
+    SpecificObjectFactory
+)
 
 
 logger = initialize_matcal_logger(__name__)
+
+
+def _format_command_for_shell(commands):
+    commands = [str(command) for command in commands]
+    if os.name == "nt":
+        return subprocess.list2cmdline(commands)
+    return shlex.join(commands)
 
 
 class ExternalExecutableBase(ABC):
@@ -44,14 +59,22 @@ class ExternalExecutableBase(ABC):
     def nonblocking_run(self):
         additional_env_commands, use_shell = self._setup_environment()
         if use_shell:
-            all_commands = additional_env_commands + " ".join(self._commands)
+            executable_command = _format_command_for_shell(self._commands)
+
+            if additional_env_commands:
+                all_commands = additional_env_commands + ";" + executable_command
+            else:
+                all_commands = executable_command
         else:
             all_commands = additional_env_commands + self._commands
-        self._process = subprocess.Popen(all_commands, stdout=subprocess.PIPE, 
-                                         shell=use_shell, 
-                                         stderr=subprocess.PIPE, text=True, 
-                                         cwd=self._working_directory,
-                                         errors='replace')
+        self._process = subprocess.Popen(
+            all_commands,
+            stdout=subprocess.PIPE, 
+            shell=use_shell, 
+            stderr=subprocess.PIPE, text=True, 
+            cwd=self._working_directory,
+            errors='replace'
+        )
 
     def run(self):
         import concurrent

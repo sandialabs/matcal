@@ -372,7 +372,16 @@ def _make_vector_set(node_set_list, cell_connectivity, node_positions):
 
 
 def _vector_area(vector_set):
-    return np.cross(vector_set[0], vector_set[1])
+    a = np.asarray(vector_set[0])
+    b = np.asarray(vector_set[1])
+
+    if a.shape[-1] != 2 or b.shape[-1] != 2:
+        raise ValueError(
+            "_vector_area expects arrays of 2D vectors with final dimension 2. "
+            f"Received final dimensions {a.shape[-1]} and {b.shape[-1]}."
+        )
+
+    return a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
 
 
 class MeshSkeletonTwoDimensionalMesh(FieldGridBase):

@@ -1,8 +1,54 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "matcal"
+dynamic = ["version"]
+description = "MatCal"
+requires-python = ">=3.11"
+dependencies = [
+    "joblib",
+    "scipy",
+    "scikit-learn",
+    "numpy",
+    "exodus_helper",
+    "h5py",
+    "pyapprox @ git+https://github.com/sandialabs/pyapprox.git@dev/main#subdirectory=packages/pyapprox",
+    "jinja2",
+    "matplotlib",
+    "pandas",
+    "seaborn",
+    "packaging",
+    "bokeh",
+]
+
+[project.optional-dependencies]
+ci = [
+    "pytest",
+    "pytest-cov",
+    "anybadge",
+    "ruff",
+    "black",
+    "mypy",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "matcal.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["matcal*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["matcal"]
+addopts = "-ra"
+
 [flake8]
 max-line-length = 160
 
 [tool.pylint.master]
-# Ignore any directory under */tests/ or */documentation/
 ignore-paths = ["^.*/tests/.*$", "^.*documentation/.*$"]
 
 [tool.pylint.basic]

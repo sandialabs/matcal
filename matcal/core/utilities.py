@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import chardet 
 from collections import OrderedDict
 import copy
 import datetime
@@ -607,17 +606,52 @@ def _get_highest_version_subfolder(folder_path):
 
 
 def is_text_file(file_path):
+    """
+    Return True if file_path appears to be a text file.
+
+    This accepts ASCII, UTF-8, UTF-16, and UTF-32 text and rejects common
+    binary content. Empty files are treated as text files.
+    """
     if not os.path.exists(file_path):
         return False
-    elif os.path.isdir(file_path):
+    if os.path.isdir(file_path):
         return False
-    with open(file_path, 'rb') as file:
+
+    with open(file_path, "rb") as file:
         raw_data = file.read()
-        result = chardet.detect(raw_data)
-        encoding = result['encoding']
-        if encoding is not None:
-            return encoding.lower() in ['ascii', 'utf-8', 'utf-16', 'utf-32']
-        return False
+
+    if raw_data == b"":
+        return True
+
+    encodings = ["utf-8", "utf-16", "utf-32", "ascii"]
+
+    for encoding in encodings:
+        try:
+            text = raw_data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+
+        if _string_looks_like_text(text):
+            return True
+
+    return False
+
+
+def _string_looks_like_text(text):
+    """
+    Return False if text contains many non-printable control characters.
+
+    Allows common whitespace control characters used in text files.
+    """
+    allowed_controls = {"\n", "\r", "\t", "\f", "\b"}
+
+    for char in text:
+        if char in allowed_controls:
+            continue
+        if ord(char) < 32:
+            return False
+
+    return True
 
 
 def get_string_from_text_file(text_filename):

@@ -1,0 +1,227 @@
+name: Test Stage (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: "Test stage name (unit, integration, production)"
+        required: true
+        type: string
+      test-paths:
+        description: "Space-separated list of test directories"
+        required: true
+        type: string
+      blocking-path:
+        description: "The test path whose failure blocks the pipeline"
+        required: true
+        type: string
+      coverage:
+        description: "Whether to collect and report coverage"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  test-primary:
+    name: ${{ inputs.stage }} / ubuntu-latest py3.12
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url ${{ env.TORCH_INDEX_URL }}
+          python -m pip install -e ".[ci]"
+
+      - name: Debug Python import paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import importlib.util
+          from pathlib import Path
+
+          print("cwd:", Path.cwd())
+          print("PYTHONPATH:", os.environ.get("PYTHONPATH"))
+          print("Python executable:", sys.executable)
+          print("Python version:", sys.version)
+
+          print("sys.path:")
+          for p in sys.path:
+              print("  ", p)
+
+          print("matcal spec:", importlib.util.find_spec("matcal"))
+          print("matcal.core spec:", importlib.util.find_spec("matcal.core"))
+
+          import matcal
+          print("matcal imported from:", matcal.__file__)
+
+          try:
+              import matcal.core
+              print("matcal.core imported from:", matcal.core.__file__)
+          except Exception as exc:
+              print("Failed to import matcal.core")
+              print(type(exc).__name__, exc)
+              raise
+          PY
+
+      - name: Run ${{ inputs.stage }} tests
+        shell: bash
+        run: |
+          BLOCKING_PATH="${{ inputs.blocking-path }}"
+          EXIT_CODE=0
+
+          COV_FLAG=""
+          if [ "${{ inputs.coverage }}" = "true" ]; then
+            COV_FLAG="--cov=matcal --cov-report=xml --cov-report=term"
+          fi
+
+          FIRST=true
+          for TEST_PATH in ${{ inputs.test-paths }}; do
+            echo ""
+            echo "========================================"
+            echo "Running: $TEST_PATH"
+            echo "========================================"
+
+            if [ "${{ inputs.coverage }}" = "true" ]; then
+              if [ "$FIRST" = "true" ]; then
+                CMD="python -m pytest ${TEST_PATH} -v ${COV_FLAG}"
+                FIRST=false
+              else
+                CMD="python -m pytest ${TEST_PATH} -v --cov=matcal --cov-append --cov-report=xml --cov-report=term"
+              fi
+            else
+              CMD="python -m pytest ${TEST_PATH} -v"
+            fi
+
+            if [ "$TEST_PATH" = "$BLOCKING_PATH" ]; then
+              $CMD
+              EXIT_CODE=$?
+              if [ $EXIT_CODE -ne 0 ]; then
+                echo "::error::Blocking test path '${TEST_PATH}' failed with exit code ${EXIT_CODE}"
+              fi
+            else
+              $CMD || echo "::warning::Non-blocking test path '${TEST_PATH}' failed"
+            fi
+          done
+
+          exit $EXIT_CODE
+
+      - name: Generate coverage badge
+        if: always() && inputs.coverage
+        shell: bash
+        run: |
+          COVERAGE=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          print(f\"{float(root.attrib['line-rate']) * 100:.1f}\")
+          ")
+          echo "Coverage: ${COVERAGE}%"
+          anybadge -l "coverage" -v "${COVERAGE}" -s "%" \
+            -f coverage-badge.svg \
+            -o \
+            30=red 50=orange 70=yellow 90=green
+
+      - name: Upload coverage report
+        if: always() && inputs.coverage
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-${{ inputs.stage }}-ubuntu-latest-py3.12
+          path: coverage.xml
+
+      - name: Upload coverage badge
+        if: always() && inputs.coverage
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-badge
+          path: coverage-badge.svg
+
+  test-matrix:
+    name: ${{ inputs.stage }} / ${{ matrix.os }} py${{ matrix.python-version }}
+    needs: test-primary
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.12"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url ${{ env.TORCH_INDEX_URL }}
+          python -m pip install -e ".[ci]"
+
+      - name: Run ${{ inputs.stage }} tests
+        shell: bash
+        run: |
+          BLOCKING_PATH="${{ inputs.blocking-path }}"
+          EXIT_CODE=0
+
+          COV_FLAG=""
+          if [ "${{ inputs.coverage }}" = "true" ]; then
+            COV_FLAG="--cov=matcal --cov-report=xml --cov-report=term"
+          fi
+
+          FIRST=true
+          for TEST_PATH in ${{ inputs.test-paths }}; do
+            echo ""
+            echo "========================================"
+            echo "Running: $TEST_PATH"
+            echo "========================================"
+
+            if [ "${{ inputs.coverage }}" = "true" ]; then
+              if [ "$FIRST" = "true" ]; then
+                CMD="python -m pytest ${TEST_PATH} -v ${COV_FLAG}"
+                FIRST=false
+              else
+                CMD="python -m pytest ${TEST_PATH} -v --cov=matcal --cov-append --cov-report=xml --cov-report=term"
+              fi
+            else
+              CMD="python -m pytest ${TEST_PATH} -v"
+            fi
+
+            if [ "$TEST_PATH" = "$BLOCKING_PATH" ]; then
+              $CMD
+              EXIT_CODE=$?
+              if [ $EXIT_CODE -ne 0 ]; then
+                echo "::error::Blocking test path '${TEST_PATH}' failed with exit code ${EXIT_CODE}"
+              fi
+            else
+              $CMD || echo "::warning::Non-blocking test path '${TEST_PATH}' failed"
+            fi
+          done
+
+          exit $EXIT_CODE
+
+      - name: Upload coverage report
+        if: always() && inputs.coverage
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-${{ inputs.stage }}-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: coverage.xml

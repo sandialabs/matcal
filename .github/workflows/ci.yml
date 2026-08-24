@@ -1,0 +1,124 @@
+name: CI Tests
+
+on:
+  push:
+    branches: [main, dev/main]
+  pull_request:
+    branches: [main, dev/main]
+
+env:
+  TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+
+jobs:
+  # ============================================================================
+  # Lint (non-blocking)
+  # ============================================================================
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black
+
+      - name: Lint with ruff
+        id: ruff
+        run: |
+          TOTAL_FILES=$(find . -name "*.py" -not -path "./.git/*" | wc -l)
+          ERRORS=$(ruff check . 2>&1 | grep -cE "^.+:\d+:\d+:" || true)
+          if [ "$TOTAL_FILES" -eq 0 ]; then
+            SCORE="10.00"
+          else
+            SCORE=$(python3 -c "score = max(0, 10 - ($ERRORS / max(1,$TOTAL_FILES)) * 10); print(f'{score:.2f}')")
+          fi
+          echo "score=$SCORE" >> "$GITHUB_OUTPUT"
+          echo "Lint score: $SCORE/10 ($ERRORS issues in $TOTAL_FILES files)"
+          ruff check . || true
+
+      - name: Check formatting with black
+        run: black --check . || true
+
+      - name: Generate lint badge
+        run: |
+          pip install anybadge
+          anybadge -l "lint" -v "${{ steps.ruff.outputs.score }}/10" \
+            -f lint-badge.svg -c green -o
+
+      - name: Upload lint badge
+        uses: actions/upload-artifact@v5
+        with:
+          name: lint-badge
+          path: lint-badge.svg
+
+  # ============================================================================
+  # Version Badge
+  # ============================================================================
+  version-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Generate version badge
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install anybadge
+          VERSION=$(python3 -c "import runpy; print(runpy.run_path('matcal/version.py')['__version__'])")
+          echo "Version: ${VERSION}"
+          anybadge -l "version" -v "v${VERSION}" -f version-badge.svg -c blue -o
+
+      - name: Upload version badge
+        uses: actions/upload-artifact@v5
+        with:
+          name: version-badge
+          path: version-badge.svg
+
+  # ============================================================================
+  # Test stages — reusable matrix with shared setup
+  # ============================================================================
+  unit-tests:
+    uses: ./.github/workflows/test-stage.yml
+    with:
+      stage: unit
+      test-paths: >-
+        matcal/core/tests/unit
+        matcal/exodus/tests/unit
+        matcal/full_field/tests/unit
+        matcal/cubit/tests/unit
+        matcal/dakota/tests/unit
+      blocking-path: matcal/core/tests/unit
+      coverage: true
+
+  integration-tests:
+    needs: unit-tests
+    uses: ./.github/workflows/test-stage.yml
+    with:
+      stage: integration
+      test-paths: >-
+        matcal/core/tests/integration
+        matcal/exodus/tests/integration
+        matcal/full_field/tests/integration
+      blocking-path: matcal/core/tests/integration
+      coverage: false
+
+  production-tests:
+    needs: integration-tests
+    uses: ./.github/workflows/test-stage.yml
+    with:
+      stage: production
+      test-paths: >-
+        matcal/core/tests/production
+        matcal/exodus/tests/production
+        matcal/full_field/tests/production
+      blocking-path: matcal/core/tests/production
+      coverage: false
