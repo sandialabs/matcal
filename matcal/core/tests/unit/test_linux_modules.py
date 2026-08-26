@@ -1,17 +1,22 @@
 from copy import deepcopy
+import sys
+import unittest
 
 from matcal.core.computing_platforms import local_computer
 import matcal.core.constants as matcal_const
 from matcal.core.external_executable import matcal_external_executable_factory
-from matcal.core.linux_modules import (get_all_loaded_modules, 
-                                         issue_module_commands, 
-                                         default_modules_command_does_not_exist, 
-                                         module_command_writer, module_command_executer)
-from matcal.core.linux_modules import (matcal_test_module_identifier, 
-                                       matcal_executable_environment_setup_function_identifier)
+from matcal.core.linux_modules import (
+    get_all_loaded_modules, 
+    issue_module_commands, 
+    default_modules_command_does_not_exist, 
+    module_command_writer, 
+    module_command_executer
+)
+from matcal.core.linux_modules import (
+    matcal_test_module_identifier, 
+    matcal_executable_environment_setup_function_identifier
+)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
-
-import unittest
 
 
 NO_MODULE_COMMANDS = default_modules_command_does_not_exist()
@@ -83,8 +88,11 @@ class TestLocalExternalExecutableModulesSubprocess(MatcalUnitTest):
     
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_setup_environment_valid(self):
-        valid_runner = matcal_external_executable_factory.create(['ls'], 
-            [self._test_module], local_computer)
+        valid_runner = matcal_external_executable_factory.create(
+            [sys.executable, "-c", "pass"], 
+            [self._test_module], 
+            local_computer
+        )
         additional_commands, use_shell = valid_runner._setup_environment()
         self.assertFalse(use_shell)
         self.assertEqual(additional_commands, [])
@@ -98,8 +106,11 @@ class TestLocalExternalExecutableModulesSubprocess(MatcalUnitTest):
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_run_valid_commands(self):
-        valid_runner = matcal_external_executable_factory.create(['ls'], [self._test_module], 
-            local_computer)
+        valid_runner = matcal_external_executable_factory.create(
+            [sys.executable, "-c", "pass"],
+            [self._test_module], 
+            local_computer
+        )
         stdout, stderr, process = valid_runner.run()
         self.assertEqual(len(stderr), 0)
         self.assertEqual(process,  0)
@@ -129,8 +140,11 @@ class TestLocalExternalExecutableModulesShell(MatcalUnitTest):
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_setup_environment_valid(self):
-        valid_runner = matcal_external_executable_factory.create(['ls'], 
-            [ self._test_module], local_computer)
+        valid_runner = matcal_external_executable_factory.create(
+            [sys.executable, "-c", "pass"], 
+            [ self._test_module], 
+            local_computer
+        )
         additional_commands, use_shell = valid_runner._setup_environment()
         goal_commands = "module purge;module load sierra;"
         self.assertTrue(use_shell)
@@ -145,7 +159,11 @@ class TestLocalExternalExecutableModulesShell(MatcalUnitTest):
 
     @unittest.skipIf(NO_MODULE_COMMANDS, "Module commands do not exist")
     def test_run_valid_commands(self):
-        valid_runner = matcal_external_executable_factory.create(['ls'], [ self._test_module], local_computer)
+        valid_runner = matcal_external_executable_factory.create(
+            [sys.executable, "-c", "pass"],
+            [ self._test_module], 
+            local_computer
+        )
         stdout, stderr, process = valid_runner.run()
         self.assertEqual(process, 0)
 

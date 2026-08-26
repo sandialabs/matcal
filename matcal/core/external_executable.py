@@ -30,6 +30,18 @@ def _format_command_for_shell(commands):
     return shlex.join(commands)
 
 
+def _get_shell_command_separator(command_string):
+    stripped_command = command_string.rstrip()
+
+    if not stripped_command:
+        return ""
+
+    if stripped_command.endswith((";", "&&", "||", "|")):
+        return ""
+
+    return ";"
+
+
 class ExternalExecutableBase(ABC):
 
     class ExternalExecutableError(RuntimeError):
@@ -60,9 +72,9 @@ class ExternalExecutableBase(ABC):
         additional_env_commands, use_shell = self._setup_environment()
         if use_shell:
             executable_command = _format_command_for_shell(self._commands)
-
             if additional_env_commands:
-                all_commands = additional_env_commands + ";" + executable_command
+                separator = _get_shell_command_separator(additional_env_commands)
+                all_commands = additional_env_commands + separator + executable_command
             else:
                 all_commands = executable_command
         else:

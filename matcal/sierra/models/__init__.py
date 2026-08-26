@@ -22,14 +22,14 @@ from .shear import SolidBarTorsionModel, TopHatShearModel
 from .vfm import VFMUniaxialTensionHexModel, VFMUniaxialTensionConnectedHexModel
 
 __all__ = [
-    "UserDefinedSierraModel",
-    "UniaxialLoadingMaterialPointModel",
     "SimpleShearMaterialPointModel",
+    "SolidBarTorsionModel",
     "RoundUniaxialTensionModel",
     "RectangularUniaxialTensionModel",
     "RoundNotchedTensionModel",
-    "SolidBarTorsionModel",
     "TopHatShearModel",
+    "UniaxialLoadingMaterialPointModel",
+    "UserDefinedSierraModel",
     "VFMUniaxialTensionHexModel",
     "VFMUniaxialTensionConnectedHexModel",
 ]

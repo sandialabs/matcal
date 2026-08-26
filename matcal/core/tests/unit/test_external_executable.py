@@ -1,6 +1,10 @@
 from copy import deepcopy
 import os
+import shlex
+import subprocess
 import sys
+from unittest.mock import patch
+
 
 from matcal.core.computing_platforms import (
     local_computer, 
@@ -8,15 +12,17 @@ from matcal.core.computing_platforms import (
     LocalComputingPlatform
 )
 from matcal.core.external_executable import (
-    ListCommandError, 
+    attempt_to_execute, 
+    default_environment_command_processor, 
+    _format_command_for_shell,
+    _get_shell_command_separator,
     matcal_external_executable_factory, 
     matcal_executable_environment_setup_function_identifier, 
-    default_environment_command_processor, 
-    ExecutableNoEnvironmentSetup, 
     matcal_platform_environment_setup_identifier, 
+    ExecutableNoEnvironmentSetup, 
+    ListCommandError, 
+    NonPositiveIntegerError,
     SlurmHPCExecutableEnvironmentSetup, 
-    attempt_to_execute, 
-    NonPositiveIntegerError
 )
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
@@ -251,3 +257,100 @@ class TestSlurmHPCEnvironmentSetup(MatcalUnitTest):
         self.assertEqual(os.environ["SLURM_JOB_ID"], "test")
         self.assertEqual(os.environ["SLURM_JOBID"], "test2")
         env_setup.prepare()
+
+
+class TestShellCommandFormattingUtilities(MatcalUnitTest):
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    @patch("matcal.core.external_executable.os.name", "posix")
+    def test_format_command_for_shell_posix_quotes_python_dash_c_command(self):
+        commands = [
+            "python",
+            "-c",
+            "print('user executable model test')",
+        ]
+
+        formatted_command = _format_command_for_shell(commands)
+        goal_command = shlex.join(commands)
+
+        self.assertEqual(formatted_command, goal_command)
+        self.assertIn("python", formatted_command)
+        self.assertIn("-c", formatted_command)
+        self.assertIn("'print(", formatted_command)
+
+    @patch("matcal.core.external_executable.os.name", "posix")
+    def test_format_command_for_shell_posix_quotes_semicolon_in_argument(self):
+        commands = [
+            "python",
+            "-c",
+            "import sys; sys.exit(2)",
+        ]
+
+        formatted_command = _format_command_for_shell(commands)
+        goal_command = shlex.join(commands)
+
+        self.assertEqual(formatted_command, goal_command)
+
+        # The semicolon should be inside a quoted argument, not interpreted as a
+        # shell command separator.
+        self.assertIn("'import sys; sys.exit(2)'", formatted_command)
+
+    @patch("matcal.core.external_executable.os.name", "nt")
+    def test_format_command_for_shell_windows_uses_subprocess_list2cmdline(self):
+        commands = [
+            "python",
+            "-c",
+            "print('user executable model test')",
+        ]
+
+        formatted_command = _format_command_for_shell(commands)
+        goal_command = subprocess.list2cmdline(commands)
+
+        self.assertEqual(formatted_command, goal_command)
+
+    @patch("matcal.core.external_executable.os.name", "posix")
+    def test_format_command_for_shell_converts_non_string_commands_to_strings(self):
+        commands = [
+            "python",
+            "-c",
+            123,
+        ]
+
+        formatted_command = _format_command_for_shell(commands)
+        goal_command = shlex.join(["python", "-c", "123"])
+
+        self.assertEqual(formatted_command, goal_command)
+
+    def test_get_shell_command_separator_returns_empty_for_empty_command_string(self):
+        self.assertEqual(_get_shell_command_separator(""), "")
+        self.assertEqual(_get_shell_command_separator("   "), "")
+
+    def test_get_shell_command_separator_returns_empty_for_trailing_semicolon(self):
+        command_string = "module purge;module load sierra;"
+        self.assertEqual(_get_shell_command_separator(command_string), "")
+
+    def test_get_shell_command_separator_returns_empty_for_trailing_semicolon_with_spaces(self):
+        command_string = "module purge;module load sierra;   "
+        self.assertEqual(_get_shell_command_separator(command_string), "")
+
+    def test_get_shell_command_separator_returns_empty_for_trailing_and_operator(self):
+        command_string = "module purge &&"
+        self.assertEqual(_get_shell_command_separator(command_string), "")
+
+    def test_get_shell_command_separator_returns_empty_for_trailing_or_operator(self):
+        command_string = "echo failed ||"
+        self.assertEqual(_get_shell_command_separator(command_string), "")
+
+    def test_get_shell_command_separator_returns_empty_for_trailing_pipe_operator(self):
+        command_string = "echo value |"
+        self.assertEqual(_get_shell_command_separator(command_string), "")
+
+    def test_get_shell_command_separator_returns_semicolon_when_separator_is_needed(self):
+        command_string = "module purge;module load sierra"
+        self.assertEqual(_get_shell_command_separator(command_string), ";")
+
+    def test_get_shell_command_separator_returns_semicolon_for_single_environment_command(self):
+        command_string = "export MYVAR=1"
+        self.assertEqual(_get_shell_command_separator(command_string), ";")
