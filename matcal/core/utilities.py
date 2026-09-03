@@ -13,7 +13,6 @@ import re
 import shutil
 from time import sleep
 from typing import Optional, Tuple
-from scipy.interpolate import interp1d
 
 from matcal.core.logger import initialize_matcal_logger
 logger = initialize_matcal_logger(__name__)
@@ -528,28 +527,94 @@ def _sort_numerically(l):
     
     
 def _time_interpolate(reference_time, working_time, working_data):
+    """Linearly interpolate *working_data* from *working_time* onto *reference_time*.
+
+    Handles both 1-D arrays and 2-D arrays where the first axis is
+    time.  Duplicate time entries are removed before interpolation.
+    Values beyond the last working time are filled with the last
+    available value (constant extrapolation to the right).
+
+    Parameters
+    ----------
+    reference_time : array_like
+        Target time values to interpolate onto.
+    working_time : array_like
+        Source time values corresponding to *working_data*.
+    working_data : np.ndarray
+        Source data; shape ``(n_time,)`` or ``(n_time, n_spatial)``.
+
+    Returns
+    -------
+    np.ndarray
+        Interpolated data evaluated at *reference_time*.
+    """
     if _is_single_time(working_time):
         return working_data
     else:
-        interp_kind = _determine_interp_kind(working_time)
         _, indices = np.unique(working_time, return_index=True)    
         working_data = working_data[indices]
         working_time = working_time[indices]
-        interp_time_and_space = interp1d(working_time, working_data, bounds_error=False, 
-                            fill_value=working_data[-1], axis=0, kind=interp_kind)(reference_time)
+        reference_time = np.asarray(reference_time)
+        working_data = np.asarray(working_data)
+
+        if working_data.ndim <= 1:
+            interp_time_and_space = np.interp(
+                reference_time, working_time, working_data,
+                right=working_data[-1],
+            )
+        else:
+            n_cols = working_data.shape[1]
+            out = np.empty((reference_time.size, n_cols))
+            for col in range(n_cols):
+                out[:, col] = np.interp(
+                    reference_time, working_time, working_data[:, col],
+                    right=working_data[-1, col],
+                )
+            interp_time_and_space = out
+
         return interp_time_and_space
 
 
-def _determine_interp_kind(working_time):
-    if len(working_time) < 3:
-        interp_kind = 'linear'
-    else:
-        interp_kind = 'quadratic'
-    return interp_kind
-    
-    
 def _is_single_time(working_time):
     return working_time.size < 2
+
+
+def interpolate_fields_in_time(
+    reference_time: np.ndarray,
+    working_time: np.ndarray,
+    field_data: "dict[str, np.ndarray]",
+    fields: "list[str] | None" = None,
+) -> "dict[str, np.ndarray]":
+    """Time-interpolate multiple named fields onto *reference_time*.
+
+    This is a convenience wrapper around :func:`_time_interpolate` that
+    operates on a dictionary of field arrays, removing the need for
+    per-field loops at every call site.
+
+    Parameters
+    ----------
+    reference_time : array_like
+        Target time values.
+    working_time : array_like
+        Source time values.
+    field_data : dict[str, np.ndarray]
+        Mapping of field names to their data arrays.  Each array should
+        have its first axis aligned with *working_time*.
+    fields : list[str] or None
+        Subset of keys from *field_data* to interpolate.  If ``None``,
+        all keys in *field_data* are interpolated.
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Interpolated field arrays keyed by field name.
+    """
+    if fields is None:
+        fields = list(field_data.keys())
+    return {
+        field: _time_interpolate(reference_time, working_time, field_data[field])
+        for field in fields
+    }
 
 
 def _find_smallest_rect(n_parameters):

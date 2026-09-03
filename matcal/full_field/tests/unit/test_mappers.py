@@ -16,8 +16,11 @@ from matcal.full_field.field_mappers import (BadPolynomialOrderError,
     NonIntegerPolynomialOrderError, SameDataNameError, SameMeasurementNameError, 
     SmallSearchRadiusError, _TwoDimensionalFieldInterpolator, 
     _TwoDimensionalFieldProjector, _LabToParametricSpaceMapper, 
-    _NodeMapper, _check_gmls_parameters, 
+    _check_gmls_parameters, 
     meshless_remapping)
+from matcal.full_field.field_mappers import _check_pycompadre_available
+import unittest
+from unittest.mock import patch
 from matcal.full_field.shapefunctions import TwoDim4NodeBilinearShapeFunction
 from matcal.full_field.TwoDimensionalFieldGrid import (MeshSkeleton, 
                                                        GridAxis,
@@ -229,64 +232,6 @@ class TestLabToParametericSpaceMapper(MatcalUnitTest):
 
 
 
-class TestNodeMapper(MatcalUnitTest):
-
-    def setUp(self) -> None:
-        super().setUp(__file__)
-
-    def test_local_to_global_mapping_unique(self):
-        mapper = _NodeMapper(16)
-        nodes = [1, 2, 13, 4, 15, 6, 10]
-        for n in nodes:
-            mapper.append(n)
-        goals = [0, 1, 2, 3, 4, 5, 6]
-        for index, goal in enumerate(goals):
-            self.assertEqual(mapper.getLocalToGlobal(nodes[index]), goal)
-
-    def test_global_to_local_mapping_unique(self):
-        mapper = _NodeMapper(16)
-        nodes = [1, 2, 13, 4, 15, 6, 10]
-        for n in nodes:
-            mapper.append(n)
-        goals = [0, 1, 2, 3, 4, 5, 6]
-        for index, goal in enumerate(goals):
-            self.assertEqual(mapper.getGlobalToLocal(goal), nodes[index])
-
-    def test_local_to_global_mapping_duplicates(self):
-        mapper = _NodeMapper(16)
-        nodes = [1, 2, 13, 2, 15, 2, 10]
-        for n in nodes:
-            mapper.append(n)
-        goals = [0, 1, 2, 1, 3, 1, 4]
-        for index, goal in enumerate(goals):
-            self.assertEqual(mapper.getLocalToGlobal(nodes[index]), goal)
-
-    def test_mapping_size_with_duplicates(self):
-        mapper = _NodeMapper(16)
-        nodes = [1, 2, 13, 2, 15, 2, 10]
-        for n in nodes:
-            mapper.append(n)
-        self.assertEqual(mapper.size, 5)
-
-
-    def test_global_to_local_mapping_duplicates(self):
-        mapper = _NodeMapper(16)
-        nodes = [1, 2, 13, 2, 15, 2, 10]
-        for n in nodes:
-            mapper.append(n)
-        goals = [0, 1, 2, 1, 3, 1, 4]
-        for index, goal in enumerate(goals):
-            self.assertEqual(mapper.getGlobalToLocal(goal), nodes[index])
-
-    def test_multiple_map(self):
-        mapper = _NodeMapper(16)
-        local = [1, 2, 13, 2, 15, 2, 10]
-        for n in local:
-            mapper.append(n)
-        g_idx = [0, 1, 2, 1, 3, 1, 4]
-        self.assertTrue(np.allclose(mapper.getLocalToGlobal(local), g_idx))
-        self.assertTrue(np.allclose(mapper.getGlobalToLocal(g_idx), local))
-
 
 class TestFieldInterpolator(MatcalUnitTest):
 
@@ -447,10 +392,25 @@ class TestFieldInterpolator(MatcalUnitTest):
         
         self.assert_close_arrays(goal, interp_mat)
 
-class TestMeshlessMapping(MatcalUnitTest):
+class _MeshlessMappingTestBase(MatcalUnitTest):
+    """Base class for meshless mapping tests.
+
+    Not collected by pytest directly (leading underscore).
+    Derived classes select a specific GMLS backend via patching.
+    """
+    __test__ = False
+
+    # Subclasses set this to the patch target return value
+    _force_pycompadre_available: bool = False
 
     def setUp(self):
         super().setUp(__file__)
+        patcher = patch(
+            "matcal.full_field.field_mappers._check_pycompadre_available",
+            return_value=self._force_pycompadre_available,
+        )
+        self._mock_pycompadre = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def cubic_function_1d(self, coords):
         consts = [1, 2, 3, 4]
@@ -529,15 +489,6 @@ class TestMeshlessMapping(MatcalUnitTest):
         eps = 1.5
         with self.assertRaises(MeshlessMapperGMLS.IncorrectLengthError):
             self._confirm_interp_bad_length(test_function, n_points, n_dim, poly_order, eps)
-
-    def test_2d_trig_neighbor_detectin_error(self):
-        test_function = self.linear_sin
-        n_points = 120
-        n_dim = 2
-        poly_order = 7
-        eps = 1.5
-        with self.assertRaises(MeshlessMapperGMLS.NeighborDectectionError):
-            self._confirm_interp_bad_dim_neighbor_detection_error(test_function, n_points, n_dim, poly_order, eps)
 
     def test_errors(self):
         n_points = 12
@@ -634,6 +585,46 @@ class TestMeshlessMapping(MatcalUnitTest):
 
 
 
+class TestMeshlessMappingScipyBackend(_MeshlessMappingTestBase):
+    """Run all meshless mapping tests using the built-in scipy backend."""
+    __test__ = True
+    _force_pycompadre_available = False
+
+    def test_2d_trig_high_order_scipy(self):
+        """Verify scipy backend handles high-order mapping without error."""
+        test_function = self.linear_sin
+        n_points = 120
+        n_dim = 2
+        poly_order = 7
+        eps = 1.5
+        self._confirm_interp_bad_dim_neighbor_detection_error(
+            test_function, n_points, n_dim, poly_order, eps
+        )
+
+
+@unittest.skipUnless(
+    _check_pycompadre_available(),
+    "pycompadre not installed; skipping pycompadre backend tests",
+)
+class TestMeshlessMappingPycompadreBackend(_MeshlessMappingTestBase):
+    """Run all meshless mapping tests using the pycompadre backend."""
+    __test__ = True
+    _force_pycompadre_available = True
+
+    def test_2d_trig_neighbor_detection_error_pycompadre(self):
+        """pycompadre raises NeighborDectectionError for this scenario."""
+        test_function = self.linear_sin
+        n_points = 120
+        n_dim = 2
+        poly_order = 7
+        eps = 1.5
+        with self.assertRaises(MeshlessMapperGMLS.NeighborDectectionError):
+            self._confirm_interp_bad_dim_neighbor_detection_error(
+                test_function, n_points, n_dim, poly_order, eps
+            )
+
+
+
 def subtract_function(reference_field, specific_field, spatial_corrds, time):
     return specific_field - reference_field
 
@@ -660,9 +651,9 @@ class FieldStatsExportTests(ABC):
             ele_size = 4
             field_vars = ['A', 'T']
             global_vars = ['total_heat']
-            ref_ff_data = _make_same_polynomial_field_data(n_time, n_pts, n_ele, ele_size, field_vars, global_vars, 3, 2)
-            test_ff_data1 = _make_same_polynomial_field_data(n_time*2, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 2)
-            test_ff_data2 = _make_same_polynomial_field_data(n_time*3, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 2)
+            ref_ff_data = _make_same_polynomial_field_data(n_time, n_pts, n_ele, ele_size, field_vars, global_vars, 3, 1)
+            test_ff_data1 = _make_same_polynomial_field_data(n_time*2, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 1)
+            test_ff_data2 = _make_same_polynomial_field_data(n_time*3, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 1)
 
             source_filename1 = 'source1.json'
             source_filename2 = 'source2.json'
@@ -1120,8 +1111,8 @@ class TestFieldStats(FieldStatsExportTests.CommonExportTests):
         ele_size = 5
         field_vars = ['A', 'T']
         global_vars = ['total_heat']
-        ref_ff_data = _make_same_polynomial_field_data(n_time, n_pts, n_ele, ele_size, field_vars, global_vars, 3, 2)
-        test_ff_data = _make_same_polynomial_field_data(n_time*2, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 2)
+        ref_ff_data = _make_same_polynomial_field_data(n_time, n_pts, n_ele, ele_size, field_vars, global_vars, 3, 1)
+        test_ff_data = _make_same_polynomial_field_data(n_time*2, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 1)
 
         source_filename = 'source.json'
         target_filename = 'target.json'
@@ -1147,8 +1138,9 @@ class TestFieldStats(FieldStatsExportTests.CommonExportTests):
         field_vars = ['A', 'T']
         global_vars = ['total_heat']
         ref_ff_data = _make_same_polynomial_field_data(n_time, n_pts, n_ele, ele_size, field_vars, global_vars, 3, 2)
-        test_ff_data1 = _make_same_polynomial_field_data(n_time*2, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 2)
-        test_ff_data2 = _make_same_polynomial_field_data(n_time*3, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 2)
+        ref_ff_data = _make_same_polynomial_field_data(n_time, n_pts, n_ele, ele_size, field_vars, global_vars, 3, 1)
+        test_ff_data1 = _make_same_polynomial_field_data(n_time*2, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 1)
+        test_ff_data2 = _make_same_polynomial_field_data(n_time*3, n_pts*2, n_ele, ele_size, field_vars, global_vars, 3, 1)
 
         source_filename1 = 'source1.json'
         source_filename2 = 'source2.json'

@@ -7,16 +7,19 @@ and objectives.
 
 from matcal.core.objective import Objective
 from matcal.core.qoi_extractor import (DataSpecificExtractorWrapper, 
+                                       ReferenceKeyedExtractorWrapper,
                                        StateSpecificExtractorWrapper)
 from matcal.core.utilities import check_item_is_correct_type
 
 from matcal.full_field.data_importer import mesh_file_to_skeleton
 from matcal.full_field.qoi_extractor import (ExternalVirtualPowerExtractor, 
                                              FieldTimeInterpolatorExtractor, 
+                                             FlattenFieldDataExtractor,
                                              HWDColocatingExperimentSurfaceExtractor, 
                                              HWDExperimentSurfaceExtractor, 
                                              HWDPolynomialSimulationSurfaceExtractor, 
                                              InternalVirtualPowerExtractor, 
+     MeshlessSimToExpInterpolatorExtractor,
      MeshlessSpaceInterpolatorExtractor)
 from matcal.full_field.TwoDimensionalFieldGrid import MeshSkeleton
 
@@ -24,145 +27,175 @@ from matcal.full_field.TwoDimensionalFieldGrid import MeshSkeleton
 from matcal.core.logger import initialize_matcal_logger
 logger = initialize_matcal_logger(__name__)
 
-# class SimToExpInterpolatedFullFieldObjective(Objective):
-
-#     def __init__(self, fem_mesh_file, fem_surface, time_variable, *dependent_fields):
-#         super().__init__(*dependent_fields)
-#         self._mesh_file = fem_mesh_file
-#         self._mesh_surface = fem_surface
-#         self._time_variable = time_variable
-#         self.set_experiment_qoi_extractor(FlattenFieldDataExtractor())
-
-#     def data_specific_initialization(self, exp_data_collection):
-#         sim_extractor = DataSpecificExtractorWrapperSimToExpObj()
-#         for state in exp_data_collection:
-#             for current_data in exp_data_collection[state]:
-#                 field_extractor = self._create_field_extractor(self._mesh_file, self._mesh_surface, current_data.skeleton, self._time_variable)
-#                 self._number_of_nodes = field_extractor.number_of_nodes_required
-#                 sim_extractor.add(current_data, field_extractor)
-#         self.set_simulation_qoi_extractor(sim_extractor)
-
-#     def _create_field_extractor(self, fem_mesh_file, fem_surface, cloud_skeleton, time_variable):
-#         fem_skeleton = mesh_file_to_skeleton(fem_mesh_file, fem_surface)
-#         field_extractor = FieldInterpolatorExtractor(fem_skeleton, cloud_skeleton.spatial_coords, time_variable)
-#         return field_extractor
-
-#     def _initialize_results(self):
-#         results =  ObjectiveResults(
-#             self._required_fields, self.fields_of_interest)
-#         results.set_as_large_data_sets_objective()
-#         return results
-
 
 class InterpolatedFullFieldObjective(Objective):
+    """Interpolated full-field objective for calibration studies.
+
+    Compares simulation and experimental point-cloud data extracted from
+    2D surfaces using GMLS spatial interpolation and linear time
+    interpolation.
+
+    Two modes of operation are supported:
+
+    1. **Mesh-file mode** (``fem_mesh_file`` is a path string):
+       The simulation target grid is derived from the mesh file at
+       construction time.  Experimental data is interpolated onto the
+       mesh grid (exp → sim direction), and simulation data is
+       node-mapped/time-interpolated for comparison.
+
+    2. **Deferred mode** (``fem_mesh_file=None``):
+       No mesh file is required.  The simulation coordinate grid is
+       discovered from the first simulation result.  Simulation data is
+       interpolated onto the experiment grid (sim → exp direction) with
+       a lazily-constructed GMLS mapper. This eliminates the need for a
+       pre-existing mesh file and avoids node-remapping issues.
     """
-    The InterpolatedFullFieldObjective class handles the calculation 
-    of the residual vector and merit functions when
-    comparing point data extracted from 2D surfaces for a 
-    :class:`~matcal.core.study_base.StudyBase` evaluation set.
-    See :meth:`~matcal.core.study_base.StudyBase.add_evaluation_set`.
-    """
+
     _class_name = "InterpolatedFullFieldObjective"
-    def __init__(self, fem_mesh_file, *dependent_fields, time_variable="time", fem_surface=None):
-        """
-        Specify the geometry and fields of interest for the full-filed objective.
-        For full-field objectives it is expected that each frame of 
-        data is parameterized by an independent time field. 
-        While it does not need to be called time, some field must 
-        characterize the order of each frame of full-field data. 
-        A frame of data consists of the field values 
-        (temperature, displacement, etc.) of all the relevant points for the data set.
-        This method allows the user to specify these fields for the objective. 
-        This objective will interpolate the experimental 
-        data in space on to the simulation data points, and will interpolate 
-        the simulation data in time to align with the 
-        experimental time stamps. 
 
-        This method uses GMLS to interpolate in space. There are two 
-        meta-parameters that define this interpolation, polynomial order 
-        and search radius multiplier. By default these values are 
-        both set to 2, but can me modified. Any modifications should be performed 
-        before any objective evaluations occur, because changes to 
-        these parameters will not back propagate.
+    def __init__(
+        self,
+        fem_mesh_file=None,
+        *dependent_fields: str,
+        time_variable: str = "time",
+        fem_surface: str | None = None,
+    ) -> None:
+        """Initialise the interpolated full-field objective.
 
-        :param fem_mesh_file: file path pointing to the mesh used for simulation. 
-        :type independent_field: str
-
-        :param dependent_fields: the dependent fields for the objective 
-            from as an unpacked list.
-        :type dependent_fields: str
-
-        :param time_variable: The name of the time field used to 
-            parameterize the frames of full-field data
-        :type time_variable: str
-
-        :param fem_surface: the name of the surface to extract the data
-            points off of from a mesh if simulation 
-            returns more than just the required surface. 
-        :type fem_surface: str
+        Parameters
+        ----------
+        fem_mesh_file : str or None
+            Path to the mesh JSON file used for simulation, or ``None``
+            to defer initialisation until the first simulation result is
+            available.
+        *dependent_fields : str
+            Names of the dependent field(s) of interest (e.g. ``"T"``).
+        time_variable : str
+            Name of the time field parameterising frames of data.
+        fem_surface : str or None
+            Surface name to extract from the mesh when the simulation
+            returns more than just the required surface.  Only used in
+            mesh-file mode.
         """
         super().__init__(*dependent_fields)
         self._mesh_file = fem_mesh_file
         self._mesh_surface = fem_surface
         self._time_variable = time_variable
-        self._polynomial_order = 2
-        self._search_radius_multiplier = 2
-        mesh_skeleton = mesh_file_to_skeleton(fem_mesh_file, fem_surface)
-        sim_qoi_extractor = FieldTimeInterpolatorExtractor(mesh_skeleton, 
-                                                           time_variable)
-        self.set_simulation_qoi_extractor(sim_qoi_extractor)
+        self._polynomial_order = 1
+        self._search_radius_multiplier = 2.75
+
+        if fem_mesh_file is not None:
+            self._deferred = False
+            mesh_skeleton = mesh_file_to_skeleton(fem_mesh_file, fem_surface)
+            sim_qoi_extractor = FieldTimeInterpolatorExtractor(
+                mesh_skeleton, time_variable
+            )
+            self.set_simulation_qoi_extractor(sim_qoi_extractor)
+        else:
+            self._deferred = True
+            # Simulation extractor will be created in
+            # data_specific_initialization once experiment coords are known.
+
         self.set_as_large_data_sets_objective()
 
+    def set_interpolation_parameters(
+        self, polynomial_order: int, search_radius_multiplier: float
+    ) -> None:
+        """Set GMLS interpolation meta-parameters.
 
-    def set_interpolation_parameters(self, polynomial_order:int, search_radius_multiplier:float):
-        """
-        Set the interpolation/extrapolation meta-parameters. It is recommend 
-        that if much extrapolation is expected that the polynomial order 
-        used be kept low(<=2).
+        It is recommended that if much extrapolation is expected, the
+        polynomial order be kept low (<=2).
 
-        :param polynomial_order: Value used to indicate the polynomial 
-            order used by GMLS to determine new values.
-        :type polynomial_order: int
-
-        :param search_radius_multiplier: Value used to gather more 
-            points past the minimum required for the determination of a polynomial. 
-            This value should always be greater than 1. Larger values will 
-            tend to smooth out the interpolation while smaller values will allow for
-            sharper changes in value. 
-        :type search_radius_multiplier: float
+        Parameters
+        ----------
+        polynomial_order : int
+            Polynomial order used by GMLS.
+        search_radius_multiplier : float
+            Multiplier past the minimum required neighbours.  Must be
+            greater than 1.  Larger values smooth the interpolation;
+            smaller values allow sharper changes.
         """
         self._polynomial_order = polynomial_order
         self._search_radius_multiplier = search_radius_multiplier
 
-    def data_specific_initialization(self, exp_data_collection):
-        """
-        Public method used by this class to correctly incorporate experimental 
-        data into the initialization of the objective. 
-        This is a method meant for use inside of MatCal and is not intended 
-        to be used by users.
+    def data_specific_initialization(self, exp_data_collection) -> None:
+        """Incorporate experimental data into the objective.
 
-        :param exp_data_collection: the :class:`~matcal.core.data.DataCollection` 
-            containing the relevant experimental data that this 
-            objective will evaluate. 
-        :type exp_data_collection: :class:`~matcal.core.data.DataCollection`
+        In mesh-file mode this creates per-data-set GMLS extractors that
+        interpolate experiment data onto the simulation mesh.
+
+        In deferred mode (no mesh file) this creates a
+        :class:`~matcal.full_field.qoi_extractor.MeshlessSimToExpInterpolatorExtractor`
+        as the simulation extractor and a simple flatten extractor for
+        the experiment side.
+
+        Parameters
+        ----------
+        exp_data_collection : DataCollection
+            Experimental data that this objective will evaluate.
         """
+        if self._deferred:
+            self._init_deferred_extractors(exp_data_collection)
+        else:
+            self._init_mesh_file_extractors(exp_data_collection)
+
+    # ------------------------------------------------------------------
+    # Mesh-file mode helpers (original behaviour)
+    # ------------------------------------------------------------------
+
+    def _init_mesh_file_extractors(self, exp_data_collection) -> None:
+        """Create experiment extractors that interpolate exp → sim grid."""
         exp_extractor = DataSpecificExtractorWrapper()
         for state in exp_data_collection:
             for current_data in exp_data_collection[state]:
-                field_extractor = self._create_field_extractor(self._mesh_file, 
-                                                               self._mesh_surface,
-                                                               current_data.skeleton, 
-                                                               self._time_variable)
+                field_extractor = self._create_field_extractor(
+                    self._mesh_file,
+                    self._mesh_surface,
+                    current_data.skeleton,
+                    self._time_variable,
+                )
                 exp_extractor.add(current_data, field_extractor)
         self.set_experiment_qoi_extractor(exp_extractor)
 
-    def _create_field_extractor(self, fem_mesh_file, fem_surface, cloud_skeleton, time_variable):
+    def _create_field_extractor(
+        self, fem_mesh_file, fem_surface, cloud_skeleton, time_variable
+    ):
         fem_skeleton = mesh_file_to_skeleton(fem_mesh_file, fem_surface)
-        field_extractor = MeshlessSpaceInterpolatorExtractor(cloud_skeleton.spatial_coords[:,:2], 
-                                                             fem_skeleton.spatial_coords[:,:2], 
-                                                             time_variable, self._polynomial_order, 
-                                                             self._search_radius_multiplier)
+        field_extractor = MeshlessSpaceInterpolatorExtractor(
+            cloud_skeleton.spatial_coords[:, :2],
+            fem_skeleton.spatial_coords[:, :2],
+            time_variable,
+            self._polynomial_order,
+            self._search_radius_multiplier,
+        )
         return field_extractor
+
+    # ------------------------------------------------------------------
+    # Deferred mode helpers (no mesh file)
+    # ------------------------------------------------------------------
+
+    def _init_deferred_extractors(self, exp_data_collection) -> None:
+        """Set up extractors for deferred (sim→exp) interpolation.
+
+        Experiment extractor: flattens experiment data (stays on exp grid).
+        Simulation extractor: builds GMLS (sim → exp) on first eval.
+        """
+        # Experiment side: pass-through flatten
+        self.set_experiment_qoi_extractor(FlattenFieldDataExtractor())
+
+        # Simulation side: one extractor per experiment data item
+        sim_extractor = ReferenceKeyedExtractorWrapper()
+        for state in exp_data_collection:
+            for current_data in exp_data_collection[state]:
+                exp_coords = current_data.skeleton.spatial_coords[:, :2]
+                extractor = MeshlessSimToExpInterpolatorExtractor(
+                    target_coords=exp_coords,
+                    time_field=self._time_variable,
+                    poly_order=self._polynomial_order,
+                    search_radius_multiplier=self._search_radius_multiplier,
+                )
+                sim_extractor.add(current_data, extractor)
+        self.set_simulation_qoi_extractor(sim_extractor)
 
 
 class PolynomialHWDObjective(Objective):
@@ -416,5 +449,3 @@ class MechanicalVFMObjective(Objective):
 
     def virtual_velocity_gradient_function(self):
         return self._velocity_gradient_function
-
-

@@ -107,6 +107,28 @@ class DataSpecificExtractorWrapper(_MulticomponentExtractorWrapperBase):
         return f"{state}-{name}"
 
 
+class ReferenceKeyedExtractorWrapper(_MulticomponentExtractorWrapperBase):
+    """Extractor wrapper that dispatches based on reference_data identity.
+
+    Unlike :class:`DataSpecificExtractorWrapper` which looks up the
+    sub-extractor using the *working_data* argument, this wrapper keys
+    on the *reference_data* argument passed to :meth:`calculate`.  This
+    is useful when the simulation extractor needs a different GMLS mapper
+    for each experiment data item (e.g. deferred interpolation mode).
+    """
+
+    def _parse_name(self, data):
+        state = data.state.name
+        name = data.name
+        return f"{state}-{name}"
+
+    def calculate(self, working_data, reference_data, fields):
+        lookup_name = self._parse_name(reference_data)
+        return self._extractors[lookup_name].calculate(
+            working_data, reference_data, fields
+        )
+
+
 class MaxExtractor(QoIExtractorBase):
     """
     The MaxExtractor QoI Extractor will return the field values of all

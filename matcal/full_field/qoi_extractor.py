@@ -4,7 +4,7 @@ data QoI extractors. Most are user facing classes that can
 be added to objectives, however, there a few that 
 are not intended for users.
 """
-from matcal.core.utilities import _time_interpolate
+from matcal.core.utilities import _time_interpolate, interpolate_fields_in_time
 from matcal.full_field.data import FieldData
 import numpy as np
 from abc import abstractmethod
@@ -61,10 +61,6 @@ class MeshlessSpaceInterpolatorExtractor(QoIExtractorBase):
         data_qoi = convert_dictionary_to_data(qoi)
         return data_qoi
 
-    # @property
-    # def number_of_nodes_required(self):
-    #     return self._space_interpolator.number_of_nodes_required
-
     def _extract_data(self, working_data, field, working_nodes):
         data = working_data[field].T
         return data[working_nodes,:]
@@ -85,26 +81,123 @@ class FieldTimeInterpolatorExtractor(QoIExtractorBase):
         return [self._time_field]
 
     def calculate(self, working_data, reference_data, fields):
-        qoi = {}
-
         working_nodes = _get_node_coordinate_mapping(working_data.skeleton, 
                                                      self._old_grid, self._old_grid.subset_name)
         reference_time = reference_data[self._time_field]
         working_time = working_data[self._time_field]
-        
-        for field in fields:
-            data_to_interp = self._extract_data(working_data, field, working_nodes)
-            qoi[field] = _time_interpolate(reference_time, working_time, data_to_interp).flatten()
+
+        field_data = {
+            field: self._extract_data(working_data, field, working_nodes)
+            for field in fields
+        }
+        qoi = interpolate_fields_in_time(
+            reference_time, working_time, field_data
+        )
+        qoi = {field: data.flatten() for field, data in qoi.items()}
         data_qoi = convert_dictionary_to_data(qoi)
         return data_qoi
-
-    # @property
-    # def number_of_nodes_required(self):
-    #     return self._space_interpolator.number_of_nodes_required
 
     def _extract_data(self, working_data, field, working_nodes):
         data = working_data[field]
         return data[:, working_nodes]
+
+
+class MeshlessSimToExpInterpolatorExtractor(QoIExtractorBase):
+    """Simulation QOI extractor that interpolates sim data onto experiment points.
+
+    This extractor uses GMLS to spatially interpolate simulation field data
+    onto the experiment coordinate grid and performs time interpolation to
+    align with experiment time stamps.  The GMLS spatial mapper is
+    constructed on the first call to :meth:`calculate` using the simulation
+    data's skeleton as source coordinates, removing the need for a mesh
+    file at objective construction.
+
+    Parameters
+    ----------
+    target_coords : np.ndarray
+        Experiment spatial coordinates (N_exp, 2).
+    time_field : str
+        Name of the time variable in the data.
+    poly_order : int
+        Polynomial order for the GMLS interpolation.
+    search_radius_multiplier : float
+        Multiplier for the GMLS neighbor search radius.
+    """
+
+    def __init__(
+        self,
+        target_coords: np.ndarray,
+        time_field: str,
+        poly_order: int = 1,
+        search_radius_multiplier: float = 2.75,
+    ) -> None:
+        self._target_coords = np.asarray(target_coords, dtype=float)
+        self._time_field = time_field
+        self._poly_order = poly_order
+        self._search_radius_multiplier = search_radius_multiplier
+        self._space_interpolator: "MeshlessMapperGMLS | None" = None
+
+    @property
+    def required_experimental_data_fields(self) -> list:
+        return [self._time_field]
+
+    def _ensure_mapper(self, source_coords: np.ndarray) -> None:
+        """Build the GMLS mapper on first use."""
+        if self._space_interpolator is None:
+            self._space_interpolator = MeshlessMapperGMLS(
+                self._target_coords,
+                source_coords,
+                self._poly_order,
+                self._search_radius_multiplier,
+            )
+
+    def calculate(self, working_data, reference_data, fields):
+        """Interpolate simulation data onto experiment grid and time-align.
+
+        Parameters
+        ----------
+        working_data : FieldData
+            Simulation output (source).
+        reference_data : FieldData
+            Experiment data used for time stamps.
+        fields : list[str]
+            Field names to extract.
+
+        Returns
+        -------
+        Data
+            Flattened QOI data on the experiment grid.
+        """
+        source_coords = working_data.skeleton.spatial_coords[:, :2]
+        self._ensure_mapper(source_coords)
+
+        reference_time = reference_data[self._time_field]
+        working_time = working_data[self._time_field]
+
+        n_time = len(working_time)
+        n_target = self._target_coords.shape[0]
+
+        spatially_interpolated: dict = {}
+        for field in fields:
+            field_data = working_data[field]
+            interp_spatial = np.zeros((n_time, n_target))
+            for t_idx in range(n_time):
+                interp_spatial[t_idx, :] = (
+                    self._space_interpolator.map(field_data[t_idx, :])
+                )
+            spatially_interpolated[field] = interp_spatial
+
+        qoi = interpolate_fields_in_time(
+            reference_time, working_time, spatially_interpolated
+        )
+        qoi = {field: data.flatten() for field, data in qoi.items()}
+        return convert_dictionary_to_data(qoi)
+
+    def clean_up(self) -> None:
+        """Release GMLS resources."""
+        if self._space_interpolator is not None:
+            self._space_interpolator.finish()
+            self._space_interpolator = None
 
 
 def _default_velocity_function(points, field_data):
@@ -215,7 +308,8 @@ class InternalVirtualPowerExtractor(QoIExtractorBase):
 
     def _interpolate_evaluation_data_to_projection_data(self, reference_time, 
                                                         working_time, internal_power ):
-        return np.interp(reference_time, working_time, internal_power)
+        return _time_interpolate(reference_time, working_time,
+                                 np.asarray(internal_power))
         
     def _form_stress_array(self, data, n_cells):
         stress = np.zeros([n_cells, 2, 2])
@@ -252,16 +346,23 @@ class HWDPolynomialSimulationSurfaceExtractorBASE(QoIExtractorBase):
 
     def calculate(self, working_data:FieldData, reference_data:FieldData, 
                   field_names:list, is_exp:bool=False)->Data:
-        weights = {}
         point_cloud_working = None
+        time_ref = reference_data[self._time_field]
+        time_work = working_data[self._time_field]
+
+        parsed_fields = {
+            name: self._parse_field_data(working_data, name, is_exp)
+            for name in field_names
+        }
+        time_interped = interpolate_fields_in_time(
+            time_ref, time_work, parsed_fields
+        )
+
+        weights = {}
         for name in field_names:
-            time_ref = reference_data[self._time_field]
-            time_work = working_data[self._time_field]
-            field_data_work = self._parse_field_data(working_data, name, is_exp)
-            time_interp_working_data = _time_interpolate(time_ref, time_work, field_data_work)
-            weights[name] = self._get_field_weights(working_data, is_exp, 
+            weights[name] = self._get_field_weights(working_data, is_exp,
                                                     point_cloud_working, 
-                                                    time_interp_working_data, name)
+                                                    time_interped[name], name)
         weights["weight_id"] = np.arange(len(weights[field_names[-1]]))
         qoi_data = convert_dictionary_to_data(weights)
         qoi_data.set_state(working_data.state)
@@ -336,43 +437,6 @@ class HWDPolynomialSimulationSurfaceExtractor(HWDPolynomialSimulationSurfaceExtr
         return field_weights
 
 
-# class HWDColocatingPolynomialSimulationSurfaceExtractor(HWDPolynomialSimulationSurfaceExtractorBASE):
-
-#     def hwd_init(self, poly_order, depth, coords):
-#         self._poly = poly_order
-#         self._depth = depth 
-#         self._thresh = 1e-3
-#         self._hwd = {}
-#         self._max_weights = 0
-#         self._n_weights = {}
-
-#     def __init__(self, *args, **kargs):
-#         super().__init__(*args, **kargs)
-#         self._is_colocated = True
-
-#     def calculate(self, working_data:FieldData, referecne_data:FieldData, field_names:list, is_exp:bool=False)->Data:
-#         return super().calculate(working_data, referecne_data, field_names, is_exp=is_exp)
-
-#     def _get_field_weights(self, working_data, is_exp, point_clould_working, time_interp_working_data, field):
-#         n_time = time_interp_working_data.shape[0]
-#         field_weights = np.zeros(self._max_weights * n_time)
-#         field_weights[:n_time * self._n_weights[field]] = self._hwd[field].map_data(time_interp_working_data.T).T.flatten()
-#         field_weights = self._hwd[field].map_data(time_interp_working_data.T).T.flatten()
-
-#         return field_weights
-
-#     def hwd_complete(self, points, data, fields):
-#         import hwd.hwd as hwd
-#         for field in fields:
-#             last_time_data = data[field][-1, :]
-#             self._hwd[field] = hwd.ReducedTwoDPolynomialROHWD(self._poly, self._depth, self._thresh)
-#             self._hwd[field] = hwd.ReducedTwoDPolynomialHWD(self._poly, self._depth)
-
-#             self._hwd[field].build_compressed_space(points, last_time_data)
-#             self._n_weights[field] = self._hwd[field]._Q.shape[1]
-#             self._max_weights = np.max([self._max_weights, self._n_weights[field]])
-
-
 class HWDExperimentSurfaceExtractor(QoIExtractorBase):
 
     def __init__(self, sim_hwd_extractor):
@@ -445,20 +509,22 @@ class FieldInterpolatorExtractor(QoIExtractorBase):
         return [self._time_field]
 
     def calculate(self, working_data, reference_data, fields):
-        qoi = {}
-
         working_nodes = _get_node_coordinate_mapping(working_data.skeleton, 
                                                      self._old_grid, 
                                                      self._old_grid.subset_name)
         reference_time = reference_data[self._time_field]
         working_time = working_data[self._time_field]
-        
+
+        spatially_interpolated: dict = {}
         for field in fields:
             data_to_interp = self._extract_data(working_data, field, working_nodes)
             space_interp_data = self._space_interpolator.interpolate(data_to_interp)
+            spatially_interpolated[field] = space_interp_data.T
 
-            qoi[field] = _time_interpolate(reference_time, working_time, 
-                                           space_interp_data.T).flatten()
+        qoi = interpolate_fields_in_time(
+            reference_time, working_time, spatially_interpolated
+        )
+        qoi = {field: data.flatten() for field, data in qoi.items()}
         data_qoi = convert_dictionary_to_data(qoi)
         return data_qoi
 

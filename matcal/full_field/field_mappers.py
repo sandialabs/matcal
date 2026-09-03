@@ -3,10 +3,15 @@ from collections import OrderedDict
 import numpy as np
 from scipy import sparse
 from scipy.optimize import root
+from scipy.spatial import cKDTree
 from typing import Callable
 
-from matcal.core.utilities import (check_item_is_correct_type, check_value_is_nonempty_str, 
-                                   _time_interpolate)
+from matcal.core.utilities import (
+    check_item_is_correct_type,
+    check_value_is_nonempty_str,
+    _time_interpolate,
+    interpolate_fields_in_time
+)
 from matcal.full_field.data import FieldData, convert_dictionary_to_field_data
 from matcal.full_field.data_importer import FieldSeriesData
 from matcal.full_field.data_exporter import matcal_field_data_exporter_identifier 
@@ -172,31 +177,6 @@ class _TwoDimensionalFieldProjector(FieldProjectorBase):
         result = sparse.linalg.lsqr(self._matrix, residual.T,atol=1e-12, btol=1e-12)
         return result[0]
 
-class _NodeMapper:
-    def __init__(self, buffer_size):
-        self._gtol = -np.ones(buffer_size, dtype=int)
-        self._ltog = -np.ones(buffer_size, dtype=int)
-        self._item_count = 0
-
-    def append(self, value):
-        if int(value) not in self._gtol:
-            self._gtol[self._item_count] = value
-            self._ltog[value] = self._item_count
-            self._item_count += 1
-
-    def getGlobalToLocal(self, idx):
-        return self._gtol[idx]
-
-    def getLocalToGlobal(self, idx):
-        g = self._ltog[idx]
-        if np.all(g < 0):
-            raise RuntimeError("Indexing Eliminated Node")
-        return g
-
-    @property
-    def size(self):
-        return self._item_count
-
 class _LabToParametricSpaceMapper:
     _shape_function = TwoDim4NodeBilinearShapeFunction()
 
@@ -293,106 +273,376 @@ def _check_gmls_parameters(polynomial_order, epsilon_multiplier):
             raise SmallSearchRadiusError(epsilon_multiplier)
 
 
+def _check_pycompadre_available() -> bool:
+    """Check if pycompadre is importable."""
+    try:
+        import pycompadre  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _poly_basis_nd(points: np.ndarray, order: int) -> np.ndarray:
+    """Build polynomial basis matrix for n-dimensional points.
+
+    Generates all monomials of total degree 0 through *order*.  For
+    example, in 2-D with ``order=2`` the columns correspond to
+    ``[1, x, y, x^2, xy, y^2]``.
+
+    :param points: Coordinates, shape ``(n_points, n_dims)``.
+    :type points: np.ndarray
+
+    :param order: Maximum total polynomial degree.
+    :type order: int
+
+    :return: Basis matrix, shape ``(n_points, n_basis_terms)``.
+    :rtype: np.ndarray
+    """
+    from itertools import combinations_with_replacement
+
+    n_pts, n_dim = points.shape
+    cols: list = []
+    for total_degree in range(order + 1):
+        for combo in combinations_with_replacement(
+            range(n_dim), total_degree
+        ):
+            col = np.ones(n_pts)
+            for dim_idx in combo:
+                col = col * points[:, dim_idx]
+            cols.append(col)
+    return np.column_stack(cols)
+
+
+def _build_gmls_weight_matrix(
+    source_coords: np.ndarray,
+    target_coords: np.ndarray,
+    polynomial_order: int,
+    epsilon_multiplier: float,
+) -> sparse.csr_matrix:
+    """Compute a sparse GMLS interpolation weight matrix.
+
+    Replicates pycompadre's radius-based neighbor search:
+
+    1. For each target, find the minimum number of source neighbors
+       required to determine a polynomial of the given order.
+    2. Determine the radius to the outermost of those minimum
+       neighbors.
+    3. Expand the radius by *epsilon_multiplier* to gather additional
+       support points.
+    4. Solve a local polynomial least-squares problem to obtain
+       interpolation weights.
+
+    The returned sparse matrix ``W`` has shape
+    ``(n_targets, n_sources)`` so that for any source field vector
+    ``f``, the interpolated values at targets are ``W @ f``.
+
+    :param source_coords: Shape ``(n_sources, n_dims)``.
+    :type source_coords: np.ndarray
+
+    :param target_coords: Shape ``(n_targets, n_dims)``.
+    :type target_coords: np.ndarray
+
+    :param polynomial_order: Local polynomial order (>= 1).
+    :type polynomial_order: int
+
+    :param epsilon_multiplier: Radius expansion factor (> 1.0).
+    :type epsilon_multiplier: float
+
+    :return: Sparse weight matrix.
+    :rtype: scipy.sparse.csr_matrix
+    """
+    from math import comb
+
+    n_source = source_coords.shape[0]
+    n_target = target_coords.shape[0]
+    n_dim = source_coords.shape[1]
+
+    # Minimum neighbors = number of polynomial basis terms
+    n_basis = int(comb(n_dim + polynomial_order, polynomial_order))
+
+    tree = cKDTree(source_coords)
+
+    # Query n_basis + 1 neighbors so that when a target coincides
+    # with a source the zero-distance point does not collapse the
+    # search radius.
+    k_query = min(n_basis + 1, n_source)
+    dist_min, _ = tree.query(target_coords, k=k_query)
+    if dist_min.ndim == 1:
+        dist_min = dist_min.reshape(n_target, 1)
+
+    # Base radius = distance to farthest of the k_query neighbors
+    min_radius = dist_min[:, -1].copy()
+
+    # Handle targets coinciding with source points (radius ~ 0)
+    zero_mask = min_radius < 1e-14
+    if np.any(zero_mask):
+        for t_idx in np.where(zero_mask)[0]:
+            nonzero_dists = dist_min[t_idx][
+                dist_min[t_idx] > 1e-14
+            ]
+            if len(nonzero_dists) > 0:
+                min_radius[t_idx] = nonzero_dists[-1]
+            else:
+                k_extra = min(n_source, n_basis * 3)
+                d_extra, _ = tree.query(
+                    target_coords[t_idx], k=k_extra
+                )
+                nonzero_extra = d_extra[d_extra > 1e-14]
+                if len(nonzero_extra) > 0:
+                    min_radius[t_idx] = nonzero_extra[-1]
+                else:
+                    min_radius[t_idx] = 1.0
+
+    # Expand by epsilon_multiplier
+    search_radius = min_radius * epsilon_multiplier
+
+    # Find all source points within expanded radius
+    neighbors_list = tree.query_ball_point(
+        target_coords, search_radius
+    )
+
+    # Evaluation vector: polynomial at origin = [1, 0, 0, ...]
+    p_target = np.zeros(n_basis)
+    p_target[0] = 1.0
+
+    rows: list = []
+    cols_list: list = []
+    data: list = []
+
+    for t_idx in range(n_target):
+        nbr_idx = np.asarray(neighbors_list[t_idx], dtype=int)
+
+        # Fallback to KNN if radius search found too few
+        if len(nbr_idx) < n_basis:
+            _, nbr_idx_knn = tree.query(
+                target_coords[t_idx], k=min(n_basis, n_source)
+            )
+            nbr_idx = np.asarray(nbr_idx_knn, dtype=int).ravel()
+
+        # Shift to target-centered coordinates
+        shifted = source_coords[nbr_idx] - target_coords[t_idx]
+
+        # Local polynomial basis at shifted neighbors
+        P = _poly_basis_nd(shifted, polynomial_order)
+
+        # Weights: w = p_target^T @ (P^T P)^{-1} @ P^T
+        PtP = P.T @ P
+        try:
+            weights = p_target @ np.linalg.solve(PtP, P.T)
+        except np.linalg.LinAlgError:
+            weights = p_target @ np.linalg.lstsq(
+                PtP, P.T, rcond=None
+            )[0]
+
+        for i, w in enumerate(weights):
+            if abs(w) > 1e-15:
+                rows.append(t_idx)
+                cols_list.append(nbr_idx[i])
+                data.append(w)
+
+    return sparse.csr_matrix(
+        (data, (rows, cols_list)), shape=(n_target, n_source)
+    )
+
+
 class MeshlessMapperGMLS:
+    """Meshless mapping between two point clouds using GMLS.
+
+    Pre-computes a sparse interpolation weight matrix from the source
+    and target geometry at construction time.  Subsequent calls to
+    :meth:`map` are cheap sparse matrix-vector multiplies, making this
+    class efficient for repeated mapping of different field values over
+    the same point-cloud pair.
+
+    When *pycompadre* is available it is used for the geometry setup
+    and stencil application; otherwise a pure numpy/scipy GMLS
+    implementation provides equivalent functionality.
+
+    :param target_coords: Coordinates of target points where field
+        values are desired. Shape ``(n_targets, n_dims)``.
+    :type target_coords: np.ndarray
+
+    :param source_coords: Coordinates of source points where field
+        values are known. Shape ``(n_sources, n_dims)``.
+    :type source_coords: np.ndarray
+
+    :param polynomial_order: Order of the local polynomial basis.
+        Must be >= 1 and <= 10.
+    :type polynomial_order: int
+
+    :param epsilon_multiplier: Search radius multiplier for neighbor
+        detection. Must be > 1.05. Larger values include more support
+        points and produce smoother interpolation.
+    :type epsilon_multiplier: float
+
+    :param number_of_batches: Number of batches for pycompadre alpha
+        generation. Ignored when using the numpy/scipy fallback.
+    :type number_of_batches: int
     """
-    Class that performs meshless mapping.
-    """
+
     count = 0
-    default_polynomial_order=1 #: Default value for polynomial order.
-    default_epsilon_multiplier=2.75 #: Default value for search radius multiplier
-    def __init__(self, target_coords, source_coords, polynomial_order=default_polynomial_order, 
-                 epsilon_multiplier=default_epsilon_multiplier, number_of_batches=2):
+    default_polynomial_order: int = 1
+    default_epsilon_multiplier: float = 2.75
+
+    def __init__(
+        self,
+        target_coords: np.ndarray,
+        source_coords: np.ndarray,
+        polynomial_order: int = default_polynomial_order,
+        epsilon_multiplier: float = default_epsilon_multiplier,
+        number_of_batches: int = 2,
+    ) -> None:
         _check_gmls_parameters(polynomial_order, epsilon_multiplier)
         self._increment_total_instances_count()
-        n_dim = target_coords.shape[1]
-        self._n_source_points = source_coords.shape[0]
-        self._kokkos_parser = None
-        self._gmls = None
-        self._helper = None
-        self._initialize_gmls_tool(target_coords, source_coords, 
-                                   polynomial_order, epsilon_multiplier, 
-                                   number_of_batches, n_dim)
 
+        source_coords = np.asarray(source_coords, dtype=float)
+        target_coords = np.asarray(target_coords, dtype=float)
+        if source_coords.ndim > 2:
+            source_coords = source_coords.reshape(
+                -1, source_coords.shape[-1]
+            )
+        if target_coords.ndim > 2:
+            target_coords = target_coords.reshape(
+                -1, target_coords.shape[-1]
+            )
 
+        self._n_source_points: int = source_coords.shape[0]
+        self._weight_matrix: sparse.csr_matrix | None = None
+        self._pycompadre_gmls = None
+        self._pycompadre_helper = None
 
-    def _initialize_gmls_tool(self, target_coords, source_coords, 
-                              polynomial_order, epsilon_multiplier, 
-                              number_of_batches, n_dim):
+        # --- pycompadre path (preferred) ---
+        if _check_pycompadre_available():
+            self._backend = "pycompadre"
+            self._init_pycompadre(
+                source_coords,
+                target_coords,
+                polynomial_order,
+                epsilon_multiplier,
+                number_of_batches,
+            )
+        else:
+            # --- numpy/scipy fallback ---
+            self._backend = "scipy"
+            self._weight_matrix = _build_gmls_weight_matrix(
+                source_coords,
+                target_coords,
+                polynomial_order,
+                epsilon_multiplier,
+            )
+
+    def _init_pycompadre(
+        self,
+        source_coords: np.ndarray,
+        target_coords: np.ndarray,
+        polynomial_order: int,
+        epsilon_multiplier: float,
+        number_of_batches: int,
+    ) -> None:
+        """Initialize the pycompadre GMLS object and generate alphas."""
         import pycompadre
 
-        try:
-            self._kokkos_parser = pycompadre.KokkosParser()
-            self._gmls = pycompadre.GMLS(polynomial_order, n_dim)
-            self._helper = pycompadre.ParticleHelper(self._gmls)
-        except:
-            self.finish()
-            raise self.InitializeError()
-        try:
-            self._helper.generateKDTree(source_coords)
-            self._helper.generateNeighborListsFromKNNSearchAndSet(target_coords, 
-                                                                  polynomial_order, 
-                                                                  n_dim,
-                                                                  epsilon_multiplier)
-        except (Exception, RuntimeError):
-            self.finish()
-            raise self.NeighborDectectionError()
-        try:
-            self._gmls.addTargets(pycompadre.TargetOperation.ScalarPointEvaluation)
-            self._gmls.generateAlphas(number_of_batches, keep_coefficients=False)
-        except Exception:
-            self.finish()
-            raise self.AlphaGenerationError()
+        n_dim = source_coords.shape[1]
+        gmls_obj = pycompadre.GMLS(
+            polynomial_order,
+            n_dim,
+            "QR",
+            "STANDARD",
+        )
+        gmls_obj.setWeightingPower(2)
+        gmls_obj.setWeightingType("power")
 
-    def finish(self):
-        try:
-            del self._gmls
-        except:
-            pass
-        try:
-            del self._helper
-        except:
-            pass
-        if self._one_instance_remains():
-            try:
-                del self._kokkos_parser
-            except:
-                pass
-        self._decrement_total_instances_count()
+        gmls_helper = pycompadre.ParticleHelper(gmls_obj)
+        gmls_helper.setSourceSites(source_coords)
+        gmls_helper.setTargetSites(target_coords)
+        gmls_helper.setEpsilonMultiplier(epsilon_multiplier)
 
-    def _one_instance_remains(self):
-        return __class__.count == 1
+        gmls_helper.generateKDTree()
+        gmls_helper.generateNeighborListsFromKNNSearchAndSet()
 
-    def _increment_total_instances_count(self):
-        __class__.count += 1
+        gmls_obj.addTargets(
+            pycompadre.TargetOperation.ScalarPointEvaluation
+        )
+        gmls_obj.generateAlphas(number_of_batches)
 
-    def _decrement_total_instances_count(self):
-        __class__.count -=1
+        self._pycompadre_gmls = gmls_obj
+        self._pycompadre_helper = gmls_helper
 
-    def map(self, source_value):
-        import pycompadre
+    def map(self, source_value: np.ndarray) -> np.ndarray:
+        """Map field values from source points to target points.
+
+        This is a cheap operation (sparse matrix-vector multiply or
+        pycompadre stencil application) after the geometry has been
+        set up at construction time.
+
+        :param source_value: Scalar field values at source points.
+            Shape ``(n_sources,)``.
+        :type source_value: np.ndarray
+
+        :return: Interpolated field values at target points.
+        :rtype: np.ndarray
+        """
         n_points = source_value.shape[0]
         if n_points != self._n_source_points:
             self.finish()
-            raise self.IncorrectLengthError(self._n_source_points, n_points)
+            raise self.IncorrectLengthError(
+                self._n_source_points, n_points
+            )
         try:
-            map_values = self._helper.applyStencil(source_value, 
-                                                   pycompadre.TargetOperation.ScalarPointEvaluation)
+            if self._backend == "pycompadre":
+                return self._apply_pycompadre(source_value)
+            return self._weight_matrix @ source_value
+        except self.IncorrectLengthError:
+            raise
         except Exception:
             raise self.MappingError()
-        return map_values
-    
+
+    def _apply_pycompadre(
+        self, source_value: np.ndarray
+    ) -> np.ndarray:
+        """Apply the pycompadre stencil to source values."""
+        import pycompadre
+
+        return pycompadre.applyStencil(
+            self._pycompadre_gmls,
+            self._pycompadre_helper,
+            source_value,
+            pycompadre.TargetOperation.ScalarPointEvaluation,
+        )
+
+    def finish(self) -> None:
+        """Release resources held by the mapper."""
+        self._weight_matrix = None
+        self._pycompadre_gmls = None
+        self._pycompadre_helper = None
+        self._decrement_total_instances_count()
+
+    def _one_instance_remains(self) -> bool:
+        return __class__.count == 1
+
+    def _increment_total_instances_count(self) -> None:
+        __class__.count += 1
+
+    def _decrement_total_instances_count(self) -> None:
+        __class__.count -= 1
+
     class NeighborDectectionError(RuntimeError):
 
         def __init__(self):
-            message = "Nearest Neighbor Detection Failure:  Examine point clouds to ensure sufficient support"
+            message = (
+                "Nearest Neighbor Detection Failure: Examine point "
+                "clouds to ensure sufficient support"
+            )
             super().__init__(message)
 
     class InitializeError(RuntimeError):
 
         def __init__(self):
-            message = 'Something went wrong with GMLS initialization'
+            message = (
+                "Something went wrong with GMLS initialization"
+            )
             super().__init__(message)
-    
+
     class AlphaGenerationError(RuntimeError):
         pass
 
@@ -400,9 +650,18 @@ class MeshlessMapperGMLS:
         pass
 
     class IncorrectLengthError(RuntimeError):
-        def __init__(self, source_point_size, passed_point_size):
-            message = f"Initialized point count({source_point_size}) is not equal to the length of the passed value array({passed_point_size})"
+        def __init__(
+            self,
+            source_point_size: int,
+            passed_point_size: int,
+        ):
+            message = (
+                f"Initialized point count({source_point_size}) is "
+                f"not equal to the length of the passed value "
+                f"array({passed_point_size})"
+            )
             super().__init__(message)
+
 
 
 def meshless_remapping(field_data, fields_to_map, target_points,
@@ -439,6 +698,9 @@ def meshless_remapping(field_data, fields_to_map, target_points,
         Recommended values for this parameter are between 1.5 and 3. 
     :type search_radius_multiplier: float  
     """
+    target_points = np.asarray(target_points, dtype=float)
+    if target_points.ndim > 2:
+        target_points = target_points.reshape(-1, target_points.shape[-1])
     mapping_tool = MeshlessMapperGMLS(target_points, field_data.spatial_coords,
                                        polynomial_order, search_radius_multiplier)
     mapped_data = {}
@@ -469,14 +731,14 @@ def _has_information_for_time_interp(target_time, time_field):
 
 
 def _map_in_time(target_time, time_field, mapped_field_data):
-    time_mapped_data = {}
     source_time = mapped_field_data[time_field]
     if source_time.ndim > 1:
         raise BadTimeDataShape(time_field, source_time.ndim)
-    for field in mapped_field_data.field_names:
-        source_data = mapped_field_data[field]
-        target_data = _time_interpolate(target_time, source_time, source_data)
-        time_mapped_data[field] = target_data
+    field_data = {field: mapped_field_data[field]
+                  for field in mapped_field_data.field_names}
+    time_mapped_data = interpolate_fields_in_time(
+        target_time, source_time, field_data
+    )
     time_mapped_data = convert_dictionary_to_field_data(time_mapped_data)
     time_mapped_data.set_spatial_coords(mapped_field_data.spatial_coords)
     return time_mapped_data
@@ -674,13 +936,19 @@ class FullFieldCalculator:
 
     def _get_interp_global_fields(self, data, cur_data_name):
         global_fields_dict = {}
-        for field in data.field_names:
-            if len(np.shape(data[field])) <= 1:
-                interped_global_field = _time_interpolate(self._independent_field_vals, 
-                                  data[self._independent_field_name], 
-                                  data[field])
-                updated_field_name = self._get_mapped_field_name(field, cur_data_name)
-                global_fields_dict[updated_field_name] = interped_global_field
+        global_field_data = {
+            field: data[field]
+            for field in data.field_names
+            if np.asarray(data[field]).ndim <= 1
+        }
+        interped = interpolate_fields_in_time(
+            self._independent_field_vals,
+            data[self._independent_field_name],
+            global_field_data,
+        )
+        for field, values in interped.items():
+            updated_field_name = self._get_mapped_field_name(field, cur_data_name)
+            global_fields_dict[updated_field_name] = values
         return global_fields_dict
 
     def _prepare_export_data(self, dict_to_export):
@@ -752,7 +1020,6 @@ class FullFieldCalculator:
         Return a dictionary of all the additional datasets
         """
         return self._data_sets
-
 
     def _parse_data(self, input_data, position_names):
         if isinstance(input_data, str):

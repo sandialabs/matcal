@@ -41,14 +41,15 @@ class TestInterpolatedFullFieldObjective(MatcalUnitTest):
 
     def test_set_interp_parameters(self):
         iffo, dic_loc, mesh_loc, mesh_sets = self._create_square_objective()
-        self.assertAlmostEqual(iffo.spy_interp_poly_order(), 2)
-        self.assertAlmostEqual(iffo.spy_interp_search_radius(), 2)
+        self.assertAlmostEqual(iffo.spy_interp_poly_order(), 1)
+        self.assertAlmostEqual(iffo.spy_interp_search_radius(), 2.75)
         iffo.set_interpolation_parameters(4, 3)
         self.assertAlmostEqual(iffo.spy_interp_poly_order(), 4)
         self.assertAlmostEqual(iffo.spy_interp_search_radius(), 3)
 
     def test_return_zeros_from_constants(self):
         iffo, dic_loc, mesh_loc, mesh_sets = self._create_square_objective()
+        iffo.set_interpolation_parameters(2, 2.75)
 
         def fun(x, y, ts, s=1):
             out = np.zeros([len(ts),len(x)])
@@ -95,6 +96,7 @@ class TestInterpolatedFullFieldObjective(MatcalUnitTest):
 
     def test_return_unit(self):
         iffo, dic_loc, mesh_loc, mesh_sets = self._create_square_objective()
+        iffo.set_interpolation_parameters(2, 2.75)
 
         def fun(x, y, ts, s=1):
             out = np.zeros([len(ts),len(x)])
@@ -125,6 +127,7 @@ class TestInterpolatedFullFieldObjective(MatcalUnitTest):
 
     def test_return_linear_two_data_sets(self):
         iffo, dic_loc, mesh_loc, mesh_sets = self._create_square_objective()
+        iffo.set_interpolation_parameters(2, 2.75)
 
         def fun(x, y, ts, s=1):
             out = np.zeros([len(ts),len(x)])
@@ -547,10 +550,11 @@ class TestMechanicalVFMObjective(MatcalUnitTest):
                     "first_pk_stress_xy":np.outer((np.zeros(n_cells)), times).T,
                     "first_pk_stress_yx":np.outer((np.zeros(n_cells)), times).T, 
                     "centroid_x":[x_locs]*n_times,
-                    "centroid_y":[y_locs]*n_times}
+                   "centroid_y":[y_locs]*n_times}
         data = convert_dictionary_to_field_data(data_dict, ["x", "y"])
 
         return data
+
 
     @staticmethod
     def make_mock_exo_zero_data_coarse_time():
@@ -621,3 +625,132 @@ class TestMechanicalVFMObjective(MatcalUnitTest):
                     "displacement":times*0.02}
         data = convert_dictionary_to_field_data(data_dict, ["x", "y"])
         return data
+
+
+class TestDeferredInterpolatedFullFieldObjective(MatcalUnitTest):
+    """Unit tests for the deferred (no mesh file) interpolation objective."""
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_deferred_flag_set_when_no_mesh_file(self):
+        """Objective enters deferred mode when fem_mesh_file=None."""
+        iffo = InterpolatedFullFieldObjective(None, "T")
+        self.assertTrue(iffo._deferred)
+
+    def test_non_deferred_flag_with_mesh_file(self):
+        """Objective uses non-deferred mode when mesh file is provided."""
+        input_files = "/".join([
+            self.get_current_files_path(__file__), "input_files"
+        ])
+        mesh_file = f"{input_files}/interpolation_test.json"
+        iffo = InterpolatedFullFieldObjective(mesh_file, "T", fem_surface="DIC")
+        self.assertFalse(iffo._deferred)
+
+    def test_set_interp_parameters_deferred(self):
+        """Interpolation parameters can be set in deferred mode."""
+        iffo = InterpolatedFullFieldObjective(None, "T")
+        iffo.set_interpolation_parameters(4, 3.5)
+        self.assertEqual(iffo._polynomial_order, 4)
+        self.assertAlmostEqual(iffo._search_radius_multiplier, 3.5)
+
+    def test_collocated_zero_residual(self):
+        """Deferred objective returns zero residual for identical data."""
+
+        def fun(x, y, ts, s=1):
+            out = np.zeros([len(ts), len(x)])
+            for t_i, t in enumerate(ts):
+                out[t_i, :] = s + np.power(x, 2) + 2 * y + t
+            return out
+
+        n_pts = 10
+        x = np.linspace(0, 1, n_pts)
+        y = np.linspace(0, 1, n_pts)
+        X, Y = np.meshgrid(x, y)
+        locs = {"x": X.flatten(), "y": Y.flatten()}
+        times = [0, 1, 2]
+
+        exp_raw = {
+            "time": times,
+            "T": fun(locs["x"], locs["y"], times, 0),
+        }
+        exp_raw.update(locs)
+        exp_data = convert_dictionary_to_field_data(exp_raw, ["x", "y"])
+        exp_data.set_name("first")
+        exp_dc = DataCollection("constant", exp_data)
+
+        sim_raw = {
+            "time": times,
+            "T": fun(locs["x"], locs["y"], times, 0),
+        }
+        sim_raw.update(locs)
+        sim_data = convert_dictionary_to_field_data(sim_raw, ["x", "y"])
+        sim_data.set_name("first")
+        sim_dc = DataCollection("constant", sim_data)
+
+        iffo = InterpolatedFullFieldObjective(None, "T")
+        iffo.set_interpolation_parameters(2, 2.75)
+        obj_set = ObjectiveSet(
+           ObjectiveCollection("t", iffo),
+           exp_dc,
+            exp_dc.states,
+            ReturnPassedDataConditioner,
+        )
+
+        results_obj, _ = obj_set.calculate_objective_set_results(sim_dc)
+        residual = results_obj[iffo.name].calibration_residuals
+        obj = results_obj[iffo.name].get_objective()
+
+        self.assertAlmostEqual(np.sum(np.abs(residual)), 0, places=10)
+        self.assertAlmostEqual(obj, 0, places=10)
+
+    def test_non_collocated_smooth_field(self):
+        """Deferred objective handles non-collocated grids with low error."""
+
+        def fun(x, y, ts):
+            out = np.zeros([len(ts), len(x)])
+            for t_i, t in enumerate(ts):
+                out[t_i, :] = np.power(x, 2) + np.power(y, 2) + t
+            return out
+
+        times = [0, 1, 2]
+
+        # Experiment on 12x12 grid
+        n_exp = 12
+        xe = np.linspace(0, 1, n_exp)
+        ye = np.linspace(0, 1, n_exp)
+        Xe, Ye = np.meshgrid(xe, ye)
+        exp_locs = {"x": Xe.flatten(), "y": Ye.flatten()}
+        exp_raw = {"time": times, "T": fun(exp_locs["x"], exp_locs["y"], times)}
+        exp_raw.update(exp_locs)
+        exp_data = convert_dictionary_to_field_data(exp_raw, ["x", "y"])
+        exp_data.set_name("first")
+        exp_dc = DataCollection("constant", exp_data)
+
+        # Simulation on 8x8 grid
+        n_sim = 8
+        xs = np.linspace(0, 1, n_sim)
+        ys = np.linspace(0, 1, n_sim)
+        Xs, Ys = np.meshgrid(xs, ys)
+        sim_locs = {"x": Xs.flatten(), "y": Ys.flatten()}
+        sim_raw = {"time": times, "T": fun(sim_locs["x"], sim_locs["y"], times)}
+        sim_raw.update(sim_locs)
+        sim_data = convert_dictionary_to_field_data(sim_raw, ["x", "y"])
+        sim_data.set_name("first")
+        sim_dc = DataCollection("constant", sim_data)
+
+        iffo = InterpolatedFullFieldObjective(None, "T")
+        iffo.set_interpolation_parameters(2, 2.5)
+        obj_set = ObjectiveSet(
+            ObjectiveCollection("t", iffo),
+            exp_dc,
+            exp_dc.states,
+            ReturnPassedDataConditioner,
+        )
+
+        results_obj, _ = obj_set.calculate_objective_set_results(sim_dc)
+        residual = results_obj[iffo.name].calibration_residuals
+        # For a smooth polynomial field, GMLS with order 2 should give
+        # very low interpolation error
+        max_error = np.max(np.abs(residual))
+        self.assertLess(max_error, 1e-6)
