@@ -1377,9 +1377,9 @@ def _init_gp_surrogate(n_inputs, **kwargs):
 
 
 _regressor_lookup = {
-    "Random Forest":_init_random_forest_surrogate,
-    "Gaussian Process":_init_gp_surrogate, 
-    "RBF": _init_rbf_surrogate
+    "Random Forest": _init_random_forest_surrogate,
+    "Gaussian Process": _init_gp_surrogate,
+    "RBF": _init_rbf_surrogate,
 }
 
 

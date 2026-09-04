@@ -13,18 +13,16 @@ import re
 import shutil
 from time import sleep
 from typing import Optional, Tuple
-from scipy.interpolate import interp1d
 
 from matcal.core.logger import initialize_matcal_logger
+
 logger = initialize_matcal_logger(__name__)
 
 
 class MatcalNameFormatError(RuntimeError):
     def __init__(self, text_string):
         message = "Cannot convert to matcal name format, entry must be"
-        " a nonzero length string. Current type is {" \
-                  "}".format(
-            type(text_string))
+        " a nonzero length string. Current type is {" "}".format(type(text_string))
         super().__init__(message)
 
 
@@ -34,7 +32,7 @@ def matcal_name_format(to_be_formatted):
         if not isinstance(to_be_formatted, str) or len(to_be_formatted) < 1:
             raise MatcalNameFormatError(to_be_formatted)
         check_valid_matcal_name_string(to_be_formatted)
-        formatted_name = to_be_formatted.replace(' ', '_')
+        formatted_name = to_be_formatted.replace(" ", "_")
     else:
         if len(to_be_formatted) < 1:
             raise MatcalNameFormatError(to_be_formatted)
@@ -53,9 +51,11 @@ def remove_directory(dir_path):
             removed = True
         except Exception as e:
             sleep(4)
-            attempts +=1
+            attempts += 1
             if os.path.isdir(dir_path) and attempts >= 10:
-                logger.warning(f"Could not delete directory: {dir_path}... Continuing anyway")
+                logger.warning(
+                    f"Could not delete directory: {dir_path}... Continuing anyway"
+                )
                 logger.warning(f"{repr(e)}")
                 return
 
@@ -66,8 +66,10 @@ class MatCalTypeStringError(RuntimeError):
 
 def check_valid_matcal_name_string(string):
     if "/" in string:
-        raise MatCalTypeStringError(f"The string \"{string}\" is an invalid MatCal name."
-                                    " No backslashes in MatCal name strings.")
+        raise MatCalTypeStringError(
+            f'The string "{string}" is an invalid MatCal name.'
+            " No backslashes in MatCal name strings."
+        )
     return string
 
 
@@ -90,7 +92,7 @@ def make_clean_dir(dir_path):
 
 def set_significant_figures(x, p):
     x = np.asarray(x)
-    x_positive = np.where(np.isfinite(x) & (x != 0), np.abs(x), 10**(p-1))
+    x_positive = np.where(np.isfinite(x) & (x != 0), np.abs(x), 10 ** (p - 1))
     mags = 10 ** (p - 1 - np.floor(np.log10(x_positive)))
     return np.round(x * mags) / mags
 
@@ -128,26 +130,32 @@ class CollectionBase(ABC):
     def _check_name(self, name):
         if not isinstance(name, str):
             raise self.CollectionTypeError(
-                f"Name passed to collection must be an instance of {str}." 
-                f" Passed  {name} which is of type  {type(name)}")
+                f"Name passed to collection must be an instance of {str}."
+                f" Passed  {name} which is of type  {type(name)}"
+            )
         if name == "":
-            raise self.CollectionValueError("Name passed to collection must not be empty.")
+            raise self.CollectionValueError(
+                "Name passed to collection must not be empty."
+            )
 
     def _check_item_is_correct_type(self, item):
         if not isinstance(item, self._collection_type):
             raise self.CollectionTypeError(
                 f"Item passed to collection must be an instance of {self._collection_type}. "
-                 f"But received object  of type  {type(item)}")
+                f"But received object  of type  {type(item)}"
+            )
 
     def add(self, item):
         self._check_item_is_correct_type(item)
         if item.name not in self._items.keys():
             self._items[item.name] = item
         else:
-            raise KeyError(f"The item \"{item.name}\" added to Collection \"{self._name}\""
-                           " is already in the " 
-                         f"collection. Check input.")
-            
+            raise KeyError(
+                f'The item "{item.name}" added to Collection "{self._name}"'
+                " is already in the "
+                f"collection. Check input."
+            )
+
     def get_item_names(self):
         """
         :return: a list of the names of all items added to the collection.
@@ -245,15 +253,17 @@ class CollectionBase(ABC):
             keys_list.append(key)
             item_list.append(item)
 
-        return "name:{}\n value names: {}\n values: {}\n".format(self.name, keys_list, item_list)
+        return "name:{}\n value names: {}\n values: {}\n".format(
+            self.name, keys_list, item_list
+        )
 
     def __eq__(self, other):
-        name_equal = self.name == other.name            
+        name_equal = self.name == other.name
         if len(self._items) != len(other._items):
             return False
 
         for self_key, self_value in self._items.items():
-            if self_key not in other:        
+            if self_key not in other:
                 return False
             if self_value != other[self_key]:
                 return False
@@ -297,17 +307,21 @@ class ContainerCollectionBase(CollectionBase):
             keys_list.append(key)
             item_list.append(item)
 
-        return "name:{}\n value names: {}\n values: {}\n".format(self.name, keys_list, item_list)
+        return "name:{}\n value names: {}\n values: {}\n".format(
+            self.name, keys_list, item_list
+        )
 
     def __eq__(self, other):
-        names_equal = (self.name == other.name)
+        names_equal = self.name == other.name
         keys_equal = self._check_for_equal_keys(other)
         if not keys_equal:
             return False
         lengths_equal = self._check_for_equal_lengths(other)
         containers_equal = self._check_containers_equal(other)
 
-        all_components_equal = (names_equal and lengths_equal and keys_equal and containers_equal)
+        all_components_equal = (
+            names_equal and lengths_equal and keys_equal and containers_equal
+        )
 
         return all_components_equal
 
@@ -320,7 +334,7 @@ class ContainerCollectionBase(CollectionBase):
             for element in self_list:
                 element_found = False
                 for element_other in other[key]:
-                    
+
                     if self._check_if_elements_equal(element, element_other):
                         element_found = True
                 if not element_found:
@@ -357,7 +371,7 @@ class ContainerCollectionBase(CollectionBase):
         if len(self._items) != len(other):
             equal_lengths = False
         return equal_lengths
-    
+
 
 def get_current_time_string():
     return str(datetime.datetime.now())
@@ -369,7 +383,7 @@ def introspect_caller(call_depth=0) -> Tuple[str, Optional[str], Optional[str]]:
     # Index 1 = the *direct* caller of introspect_caller
     # Index 2 = the function *that contains* the call (i.e. the callee)
     stack = inspect.stack()
-    caller_info = stack[2+call_depth]          # FrameInfo for direct caller
+    caller_info = stack[2 + call_depth]  # FrameInfo for direct caller
     caller_class: Optional[str] = None
     locals_ = caller_info.frame.f_locals
     if "self" in locals_:
@@ -379,18 +393,21 @@ def introspect_caller(call_depth=0) -> Tuple[str, Optional[str], Optional[str]]:
     caller_name = caller_info.function
     del stack
     if caller_class is not None:
-        caller_name = caller_class+"."+caller_name
+        caller_name = caller_class + "." + caller_name
     return caller_name
 
 
-def check_item_is_correct_type(item, desired_type, passed_parameter_name, 
-                               error=TypeError, call_depth=0):
+def check_item_is_correct_type(
+    item, desired_type, passed_parameter_name, error=TypeError, call_depth=0
+):
     parent_call_name = introspect_caller(call_depth)
     if not isinstance(item, desired_type):
-        error_msg =  (f"The parameter \"{passed_parameter_name}\" "+
-                      f"passed to \"{parent_call_name}\" " 
-                      + f"must be an instance of {desired_type}.\nBut received object " +
-                        f" of type {type(item)}.")
+        error_msg = (
+            f'The parameter "{passed_parameter_name}" '
+            + f'passed to "{parent_call_name}" '
+            + f"must be an instance of {desired_type}.\nBut received object "
+            + f" of type {type(item)}."
+        )
         raise error(error_msg)
     return True
 
@@ -398,47 +415,56 @@ def check_item_is_correct_type(item, desired_type, passed_parameter_name,
 def check_value_is_positive(value, value_name, call_depth=0):
     parent_call_name = introspect_caller(call_depth)
     if value <= 0:
-        raise ValueError(f"A positive value must be input for \"{value_name}\" in " +
-                         f" \"{parent_call_name}\". Received a " +
-                          f"value of {value}.")
+        raise ValueError(
+            f'A positive value must be input for "{value_name}" in '
+            + f' "{parent_call_name}". Received a '
+            + f"value of {value}."
+        )
     return True
 
 
 def check_value_is_nonnegative(value, value_name, call_depth=0):
     parent_call_name = introspect_caller(call_depth)
     if value < 0:
-        raise ValueError(f"A non-negative value must be input for \"{value_name}\" in " +
-                         f" \"{parent_call_name}\". Received a " +
-                          f"value of {value}.")
+        raise ValueError(
+            f'A non-negative value must be input for "{value_name}" in '
+            + f' "{parent_call_name}". Received a '
+            + f"value of {value}."
+        )
     return True
 
 
-def check_value_is_between_values(value, lower_bound, upper_bound, 
-                                  value_name, closed=False, call_depth=0):
+def check_value_is_between_values(
+    value, lower_bound, upper_bound, value_name, closed=False, call_depth=0
+):
     parent_call_name = introspect_caller(call_depth)
     if closed:
         not_between = value < lower_bound or value > upper_bound
-        msg = (f"A value greater than or equal to {lower_bound} and less than " +
-               f"or equal to {upper_bound} must be input for the " +
-               f"\"{value_name}\" parameter, but received a value " +
-               f"of {value} in function call: \"{parent_call_name}\".")
+        msg = (
+            f"A value greater than or equal to {lower_bound} and less than "
+            + f"or equal to {upper_bound} must be input for the "
+            + f'"{value_name}" parameter, but received a value '
+            + f'of {value} in function call: "{parent_call_name}".'
+        )
     else:
         not_between = value <= lower_bound or value >= upper_bound
-        msg = (f"A value greater than {lower_bound} and less than "
-               f"{upper_bound} must be input for the "
-               f"\"{value_name}\" parameter, but received a value "
-               f"of {value} in function call:\n\"{parent_call_name}\".")
+        msg = (
+            f"A value greater than {lower_bound} and less than "
+            f"{upper_bound} must be input for the "
+            f'"{value_name}" parameter, but received a value '
+            f'of {value} in function call:\n"{parent_call_name}".'
+        )
     if not_between:
         raise ValueError(msg)
     return True
 
 
 def check_value_is_positive_integer(value, value_name, call_depth=0):
-    check_item_is_correct_type(value, Integral, value_name, call_depth=call_depth+1)
-    check_value_is_positive(value, value_name, call_depth=call_depth+1)
+    check_item_is_correct_type(value, Integral, value_name, call_depth=call_depth + 1)
+    check_value_is_positive(value, value_name, call_depth=call_depth + 1)
     return True
 
- 
+
 def check_value_is_positive_integer_or_none(value, name, *args, **kwargs):
     if value is None:
         return
@@ -446,126 +472,210 @@ def check_value_is_positive_integer_or_none(value, name, *args, **kwargs):
 
 
 def check_value_is_positive_real(value, value_name, call_depth=0):
-    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth+1)
-    check_value_is_positive(value, value_name, call_depth=call_depth+1)
+    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth + 1)
+    check_value_is_positive(value, value_name, call_depth=call_depth + 1)
     return True
 
 
 def check_value_is_nonnegative_integer(value, value_name, call_depth=0):
-    check_item_is_correct_type(value, Integral, value_name, call_depth=call_depth+1)
-    check_value_is_nonnegative(value, value_name, call_depth=call_depth+1)
+    check_item_is_correct_type(value, Integral, value_name, call_depth=call_depth + 1)
+    check_value_is_nonnegative(value, value_name, call_depth=call_depth + 1)
     return True
 
 
 def check_value_is_nonnegative_real(value, value_name, call_depth=0):
-    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth+1)
-    check_value_is_nonnegative(value, value_name, call_depth=call_depth+1)
+    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth + 1)
+    check_value_is_nonnegative(value, value_name, call_depth=call_depth + 1)
     return True
 
 
-def check_value_is_array_like_of_reals(values, values_name, top_level=True, call_depth=0):
+def check_value_is_array_like_of_reals(
+    values, values_name, top_level=True, call_depth=0
+):
     parent_call_name = introspect_caller(call_depth)
     valid_array_like = (list, tuple, np.ndarray)
     if isinstance(values, valid_array_like):
         for idx, val in enumerate(values):
-            check_value_is_array_like_of_reals(val, values_name+f"[{idx}]", 
-                                               top_level=False, call_depth=call_depth+1)
+            check_value_is_array_like_of_reals(
+                val,
+                values_name + f"[{idx}]",
+                top_level=False,
+                call_depth=call_depth + 1,
+            )
         if len(values) < 1:
-            raise ValueError(f"The \"{values_name}\" argument must have a least "
-                             f"one value. The container passed to "
-                              f"\"{parent_call_name}\" is empty.")
+            raise ValueError(
+                f'The "{values_name}" argument must have a least '
+                f"one value. The container passed to "
+                f'"{parent_call_name}" is empty.'
+            )
     elif not top_level and not isinstance(values, valid_array_like):
-        check_item_is_correct_type(values, Real, values_name, call_depth=call_depth+1)
+        check_item_is_correct_type(values, Real, values_name, call_depth=call_depth + 1)
     elif top_level and not isinstance(values, valid_array_like):
-        raise TypeError(f"\"{parent_call_name}\" expected an array-like "
-                         f"object for \"{values_name}\". Received objective of "
-                         f" type \"{type(values)}\"")
+        raise TypeError(
+            f'"{parent_call_name}" expected an array-like '
+            f'object for "{values_name}". Received objective of '
+            f' type "{type(values)}"'
+        )
     return True
 
 
-def check_value_is_real_between_values(value, lower_bound, upper_bound, value_name,
-                                        closed=False, call_depth=0):
-    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth+1)
-    check_value_is_between_values(value, lower_bound, upper_bound, 
-                                  value_name, closed, call_depth=call_depth+1)
+def check_value_is_real_between_values(
+    value, lower_bound, upper_bound, value_name, closed=False, call_depth=0
+):
+    check_item_is_correct_type(value, Real, value_name, call_depth=call_depth + 1)
+    check_value_is_between_values(
+        value, lower_bound, upper_bound, value_name, closed, call_depth=call_depth + 1
+    )
     return True
-    
+
 
 def check_value_is_nonempty_str(value, value_name, call_depth=0):
-    parent_call_name = introspect_caller(call_depth)  
-    check_item_is_correct_type(value, str, value_name, call_depth=call_depth+1)
+    parent_call_name = introspect_caller(call_depth)
+    check_item_is_correct_type(value, str, value_name, call_depth=call_depth + 1)
     if len(value) < 1:
-        raise ValueError(f"The argument \"{value_name}\" in "
-                         f"\"{parent_call_name}\" must be at least"
-                            " of length 1.")
+        raise ValueError(
+            f'The argument "{value_name}" in '
+            f'"{parent_call_name}" must be at least'
+            " of length 1."
+        )
     return True
 
 
 def check_value_is_bool(value, value_name, call_depth=0):
-    check_item_is_correct_type(value, bool, value_name, call_depth=call_depth+1)
+    check_item_is_correct_type(value, bool, value_name, call_depth=call_depth + 1)
     return True
-    
+
 
 def _tryint(s):
     try:
         return int(s)
     except:
         return s
-    
+
 
 def _alphanum_key(s):
-    """ Turn a string into a list of string and number chunks.
-        "z23a" -> ["z", 23, "a"]
+    """Turn a string into a list of string and number chunks.
+    "z23a" -> ["z", 23, "a"]
     """
-    return [ _tryint(c) for c in re.split('([0-9]+)', s) ]
+    return [_tryint(c) for c in re.split("([0-9]+)", s)]
 
 
 def _sort_numerically(l):
-    """ Sort the given list in the way that humans expect.
-    """
+    """Sort the given list in the way that humans expect."""
     l.sort(key=_alphanum_key)
     return l
-    
-    
+
+
 def _time_interpolate(reference_time, working_time, working_data):
+    """Linearly interpolate *working_data* from *working_time* onto *reference_time*.
+
+    Handles both 1-D arrays and 2-D arrays where the first axis is
+    time.  Duplicate time entries are removed before interpolation.
+    Values beyond the last working time are filled with the last
+    available value (constant extrapolation to the right).
+
+    Parameters
+    ----------
+    reference_time : array_like
+        Target time values to interpolate onto.
+    working_time : array_like
+        Source time values corresponding to *working_data*.
+    working_data : np.ndarray
+        Source data; shape ``(n_time,)`` or ``(n_time, n_spatial)``.
+
+    Returns
+    -------
+    np.ndarray
+        Interpolated data evaluated at *reference_time*.
+    """
     if _is_single_time(working_time):
         return working_data
     else:
-        interp_kind = _determine_interp_kind(working_time)
-        _, indices = np.unique(working_time, return_index=True)    
+        _, indices = np.unique(working_time, return_index=True)
         working_data = working_data[indices]
         working_time = working_time[indices]
-        interp_time_and_space = interp1d(working_time, working_data, bounds_error=False, 
-                            fill_value=working_data[-1], axis=0, kind=interp_kind)(reference_time)
+        reference_time = np.asarray(reference_time)
+        working_data = np.asarray(working_data)
+
+        if working_data.ndim <= 1:
+            interp_time_and_space = np.interp(
+                reference_time,
+                working_time,
+                working_data,
+                right=working_data[-1],
+            )
+        else:
+            n_cols = working_data.shape[1]
+            out = np.empty((reference_time.size, n_cols))
+            for col in range(n_cols):
+                out[:, col] = np.interp(
+                    reference_time,
+                    working_time,
+                    working_data[:, col],
+                    right=working_data[-1, col],
+                )
+            interp_time_and_space = out
+
         return interp_time_and_space
 
 
-def _determine_interp_kind(working_time):
-    if len(working_time) < 3:
-        interp_kind = 'linear'
-    else:
-        interp_kind = 'quadratic'
-    return interp_kind
-    
-    
 def _is_single_time(working_time):
     return working_time.size < 2
 
 
+def interpolate_fields_in_time(
+    reference_time: np.ndarray,
+    working_time: np.ndarray,
+    field_data: dict[str, np.ndarray],
+    fields: list[str] | None = None,
+) -> dict[str, np.ndarray]:
+    """Time-interpolate multiple named fields onto *reference_time*.
+
+    This is a convenience wrapper around :func:`_time_interpolate` that
+    operates on a dictionary of field arrays, removing the need for
+    per-field loops at every call site.
+
+    Parameters
+    ----------
+    reference_time : array_like
+        Target time values.
+    working_time : array_like
+        Source time values.
+    field_data : dict[str, np.ndarray]
+        Mapping of field names to their data arrays.  Each array should
+        have its first axis aligned with *working_time*.
+    fields : list[str] or None
+        Subset of keys from *field_data* to interpolate.  If ``None``,
+        all keys in *field_data* are interpolated.
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Interpolated field arrays keyed by field name.
+    """
+    if fields is None:
+        fields = list(field_data.keys())
+    return {
+        field: _time_interpolate(reference_time, working_time, field_data[field])
+        for field in fields
+    }
+
+
 def _find_smallest_rect(n_parameters):
-    short_axis_length = int(np.floor(np.power(n_parameters, 1/2)))
+    short_axis_length = int(np.floor(np.power(n_parameters, 1 / 2)))
     if short_axis_length < 1:
         raise RuntimeError(f"Error finding plot dimension with {n_parameters}")
     long_axis_length = copy.deepcopy(short_axis_length)
-    
+
     def _total_spaces(x, y):
-        return x*y
+        return x * y
+
     while _total_spaces(short_axis_length, long_axis_length) < n_parameters:
         long_axis_length += 1
-    return short_axis_length,long_axis_length
+    return short_axis_length, long_axis_length
 
 
-def _sort_workdirs(input_dirs:list)-> list:
+def _sort_workdirs(input_dirs: list) -> list:
     dir_numbers = _strip_workdir_numbers(input_dirs)
     order = np.argsort(dir_numbers).flatten()
     return list(np.array(input_dirs)[order])
@@ -574,7 +684,7 @@ def _sort_workdirs(input_dirs:list)-> list:
 def _strip_workdir_numbers(dir_list: list) -> list:
     numbers = []
     for d in dir_list:
-        numbers.append(int(d.split('.')[1]))
+        numbers.append(int(d.split(".")[1]))
     return numbers
 
 
@@ -587,12 +697,12 @@ def _convert_list_of_files_to_abs_path_list(files_list):
 
 def _get_highest_version_subfolder(folder_path):
     subfolders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
-    
-    version_pattern = re.compile(r'(\d+\.\d+\.\d+)')
-    
+
+    version_pattern = re.compile(r"(\d+\.\d+\.\d+)")
+
     highest_version = None
     highest_version_folder = None
-    
+
     for subfolder in subfolders:
         folder_name = os.path.basename(subfolder)
         match = version_pattern.search(folder_name)
@@ -601,7 +711,7 @@ def _get_highest_version_subfolder(folder_path):
             if highest_version is None or folder_version > highest_version:
                 highest_version = folder_version
                 highest_version_folder = subfolder
-    
+
     return highest_version_folder
 
 

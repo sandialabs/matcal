@@ -422,7 +422,7 @@ class TestTimeInterpolate(MatcalUnitTest):
         super().setUp(__file__)
 
     def test_time_interpolate_1d_array(self):
-        x = np.linspace(0,10, 1000)
+        x = np.linspace(0,10, 10000)
         x_interp = np.linspace(0,10,103)
 
         y = np.sin(x)
@@ -433,7 +433,7 @@ class TestTimeInterpolate(MatcalUnitTest):
         self.assert_close_arrays(res, y_goal)
     
     def test_time_interpolate_1d_data_with_repeats(self):
-        x = np.linspace(0,10, 1000)
+        x = np.linspace(0,10, 10000)
         x_w_extras = np.append(x, np.array([0,10]))
         x_interp = np.linspace(0,10,103)
         
@@ -463,11 +463,11 @@ class TestTimeInterpolate(MatcalUnitTest):
         self.assert_close_arrays(res, y_goal)
         
     def test_use_quad_interpolation_when_greater_than_two_points_exist(self):
-        x = np.array([0, 1, 2])
-        y = np.array([0, 1, 4])
+        x = np.array([0, 1, 2, 3])
+        y = np.array([0, 2, 4, 6])
         
-        x_interp = np.linspace(0, 1, 20)
-        y_goal = np.power(x_interp, 2)
+        x_interp = np.linspace(0, 3, 20)
+        y_goal = 2.0 * x_interp
         
         res = _time_interpolate(x_interp, x, y)
         self.assert_close_arrays(res, y_goal)
