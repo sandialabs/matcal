@@ -612,13 +612,13 @@ class TestMeshlessMappingPycompadreBackend(_MeshlessMappingTestBase):
     _force_pycompadre_available = True
 
     def test_2d_trig_neighbor_detection_error_pycompadre(self):
-        """pycompadre raises NeighborDectectionError for this scenario."""
+        """pycompadre raises NeighborDetectionError for this scenario."""
         test_function = self.linear_sin
         n_points = 120
         n_dim = 2
         poly_order = 7
         eps = 1.5
-        with self.assertRaises(MeshlessMapperGMLS.NeighborDectectionError):
+        with self.assertRaises(MeshlessMapperGMLS.NeighborDetectionError):
             self._confirm_interp_bad_dim_neighbor_detection_error(
                 test_function, n_points, n_dim, poly_order, eps
             )

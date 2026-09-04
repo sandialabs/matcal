@@ -135,7 +135,7 @@ class MeshlessSimToExpInterpolatorExtractor(QoIExtractorBase):
         self._time_field = time_field
         self._poly_order = poly_order
         self._search_radius_multiplier = search_radius_multiplier
-        self._space_interpolator: "MeshlessMapperGMLS | None" = None
+        self._space_interpolator: MeshlessMapperGMLS | None = None
 
     @property
     def required_experimental_data_fields(self) -> list:
@@ -198,7 +198,6 @@ class MeshlessSimToExpInterpolatorExtractor(QoIExtractorBase):
         if self._space_interpolator is not None:
             self._space_interpolator.finish()
             self._space_interpolator = None
-
 
 def _default_velocity_function(points, field_data):
     h = np.max(field_data.spatial_coords[:,1])-np.min(field_data.spatial_coords[:,1])

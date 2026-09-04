@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from itertools import combinations_with_replacement
+from math import comb
 import numpy as np
 from scipy import sparse
 from scipy.optimize import root
@@ -9,7 +11,6 @@ from typing import Callable
 from matcal.core.utilities import (
     check_item_is_correct_type,
     check_value_is_nonempty_str,
-    _time_interpolate,
     interpolate_fields_in_time
 )
 from matcal.full_field.data import FieldData, convert_dictionary_to_field_data
@@ -298,8 +299,6 @@ def _poly_basis_nd(points: np.ndarray, order: int) -> np.ndarray:
     :return: Basis matrix, shape ``(n_points, n_basis_terms)``.
     :rtype: np.ndarray
     """
-    from itertools import combinations_with_replacement
-
     n_pts, n_dim = points.shape
     cols: list = []
     for total_degree in range(order + 1):
@@ -351,8 +350,6 @@ def _build_gmls_weight_matrix(
     :return: Sparse weight matrix.
     :rtype: scipy.sparse.csr_matrix
     """
-    from math import comb
-
     n_source = source_coords.shape[0]
     n_target = target_coords.shape[0]
     n_dim = source_coords.shape[1]
@@ -480,7 +477,6 @@ class MeshlessMapperGMLS:
     :type number_of_batches: int
     """
 
-    count = 0
     default_polynomial_order: int = 1
     default_epsilon_multiplier: float = 2.75
 
@@ -493,7 +489,6 @@ class MeshlessMapperGMLS:
         number_of_batches: int = 2,
     ) -> None:
         _check_gmls_parameters(polynomial_order, epsilon_multiplier)
-        self._increment_total_instances_count()
 
         source_coords = np.asarray(source_coords, dtype=float)
         target_coords = np.asarray(target_coords, dtype=float)
@@ -524,6 +519,10 @@ class MeshlessMapperGMLS:
         else:
             # --- numpy/scipy fallback ---
             self._backend = "scipy"
+            logger.info(
+                "pycompadre is not available; using numpy/scipy GMLS "
+                "fallback. This may be slower for large point clouds."
+            )
             self._weight_matrix = _build_gmls_weight_matrix(
                 source_coords,
                 target_coords,
@@ -615,18 +614,9 @@ class MeshlessMapperGMLS:
         self._weight_matrix = None
         self._pycompadre_gmls = None
         self._pycompadre_helper = None
-        self._decrement_total_instances_count()
 
-    def _one_instance_remains(self) -> bool:
-        return __class__.count == 1
 
-    def _increment_total_instances_count(self) -> None:
-        __class__.count += 1
-
-    def _decrement_total_instances_count(self) -> None:
-        __class__.count -= 1
-
-    class NeighborDectectionError(RuntimeError):
+    class NeighborDetectionError(RuntimeError):
 
         def __init__(self):
             message = (
@@ -634,6 +624,9 @@ class MeshlessMapperGMLS:
                 "clouds to ensure sufficient support"
             )
             super().__init__(message)
+
+    # Backward-compatible alias for the corrected spelling.
+    NeighborDectectionError = NeighborDetectionError
 
     class InitializeError(RuntimeError):
 

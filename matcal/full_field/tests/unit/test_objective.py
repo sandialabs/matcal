@@ -200,7 +200,8 @@ class TestPolynomialHWDObjective(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
 
-    def test_get_zero_for_same_data(self):
+    def test_get_zero_for_same_data_colocated(self):
+        """Colocation path: pass FieldData as target_coords."""
         max_depth = 1
         max_poly = 2
         time_var = 'time'
@@ -211,13 +212,13 @@ class TestPolynomialHWDObjective(MatcalUnitTest):
         dc_all =DataCollection('all', data1)
         dc_all_copy = deepcopy(dc_all)
 
-        hwdo = PolynomialHWDObjective(dep_var, max_depth, max_poly)
+        hwdo = PolynomialHWDObjective(data1, dep_var, max_depth=max_depth, polynomial_order=max_poly)
         hwdo.data_specific_initialization(dc_all)
-        results = hwdo.calculate(dc_all, dc_all, dc_all_copy, dc_all_copy)
-        resudial  = results.flattened_calibration_residuals
-        self.assert_close_arrays(np.zeros_like(resudial), resudial)
+        results_obj, results_qoi = hwdo.calculate(dc_all, dc_all, dc_all_copy, dc_all_copy)
+        residual = results_obj.calibration_residuals
+        self.assert_close_arrays(np.zeros_like(residual), residual)
 
-    def test_get_zero_for_same_data(self):
+    def test_get_zero_for_same_data_none_target_coords(self):
         max_depth = 1
         max_poly = 2
         time_var = 'time'
@@ -262,8 +263,8 @@ class TestPolynomialHWDObjective(MatcalUnitTest):
 
         results_obj, results_qoi  = ob_set.calculate_objective_set_results(dc_sim)
         results = results_obj[hwdo.name]
-        resudial  = results.calibration_residuals
-        self.assert_close_arrays(np.zeros_like(resudial), resudial)
+        residual  = results.calibration_residuals
+        self.assert_close_arrays(np.zeros_like(residual), residual)
 
     def test_get_zero_for_same_data_different_time_and_location_two_states(self):
         max_depth = 1
@@ -303,8 +304,8 @@ class TestPolynomialHWDObjective(MatcalUnitTest):
 
         results_obj, results_qoi = ob_set.calculate_objective_set_results(dc_sim)
         results = results_obj[hwdo.name]
-        resudial  = results.calibration_residuals
-        self.assert_close_arrays(np.zeros_like(resudial), resudial)
+        residual  = results.calibration_residuals
+        self.assert_close_arrays(np.zeros_like(residual), residual)
 
     def get_random_points(self, n_points, n_dim):
         p_array = np.random.uniform(0, 1, [n_points, n_dim])

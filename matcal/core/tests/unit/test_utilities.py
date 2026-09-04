@@ -2,7 +2,8 @@
 import numpy as np
 import os
 
-from matcal.core.utilities import (_convert_list_of_files_to_abs_path_list, 
+from matcal.core.utilities import (interpolate_fields_in_time,
+                                   _convert_list_of_files_to_abs_path_list, 
                                    _get_highest_version_subfolder, 
                                    is_text_file)
 from matcal.core.utilities import (matcal_name_format, check_valid_matcal_name_string, 
@@ -255,3 +256,83 @@ class TestBasicUtilities(MatcalUnitTest):
             
         with self.assertRaises(TypeError):
             test_func()
+
+
+class TestInterpolateFieldsInTime(MatcalUnitTest):
+    """Unit tests for :func:`interpolate_fields_in_time`."""
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_basic_multi_field(self):
+        """Two fields are correctly interpolated onto a new time grid."""
+        ref_time = np.array([0.0, 1.0, 2.0])
+        work_time = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+        field_a = np.array([0.0, 0.5, 1.0, 1.5, 2.0])  # identity with time
+        field_b = np.array([10.0, 10.0, 10.0, 10.0, 10.0])  # constant
+        field_data = {"a": field_a, "b": field_b}
+
+        result = interpolate_fields_in_time(ref_time, work_time, field_data)
+
+        self.assertEqual(set(result.keys()), {"a", "b"})
+        np.testing.assert_allclose(result["a"], [0.0, 1.0, 2.0])
+        np.testing.assert_allclose(result["b"], [10.0, 10.0, 10.0])
+
+    def test_fields_subset(self):
+        """Only the requested subset of fields is interpolated."""
+        ref_time = np.array([0.0, 1.0])
+        work_time = np.array([0.0, 1.0])
+        field_data = {
+            "a": np.array([1.0, 2.0]),
+            "b": np.array([3.0, 4.0]),
+        }
+
+        result = interpolate_fields_in_time(
+            ref_time, work_time, field_data, fields=["a"]
+        )
+
+        self.assertEqual(list(result.keys()), ["a"])
+        np.testing.assert_allclose(result["a"], [1.0, 2.0])
+
+    def test_none_fields_uses_all_keys(self):
+        """Passing fields=None (default) returns all dict keys."""
+        ref_time = np.array([0.0])
+        work_time = np.array([0.0])
+        field_data = {
+            "x": np.array([5.0]),
+            "y": np.array([6.0]),
+            "z": np.array([7.0]),
+        }
+
+        result = interpolate_fields_in_time(ref_time, work_time, field_data)
+
+        self.assertEqual(set(result.keys()), {"x", "y", "z"})
+
+    def test_empty_dict_returns_empty(self):
+        """An empty field_data dict with fields=None returns an empty dict."""
+        ref_time = np.array([0.0, 1.0])
+        work_time = np.array([0.0, 1.0])
+
+        result = interpolate_fields_in_time(ref_time, work_time, {})
+
+        self.assertEqual(result, {})
+
+    def test_explicit_missing_field_raises_key_error(self):
+        """Requesting a field not in field_data raises KeyError."""
+        ref_time = np.array([0.0])
+        work_time = np.array([0.0])
+
+        with self.assertRaises(KeyError):
+            interpolate_fields_in_time(
+                ref_time, work_time, {}, fields=["missing"]
+            )
+
+    def test_single_time_passthrough(self):
+        """When working_time has one entry, data passes through unchanged."""
+        ref_time = np.array([0.0, 1.0, 2.0])
+        work_time = np.array([5.0])
+        field_data = {"val": np.array([42.0])}
+
+        result = interpolate_fields_in_time(ref_time, work_time, field_data)
+
+        np.testing.assert_allclose(result["val"], [42.0])

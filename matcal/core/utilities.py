@@ -582,9 +582,9 @@ def _is_single_time(working_time):
 def interpolate_fields_in_time(
     reference_time: np.ndarray,
     working_time: np.ndarray,
-    field_data: "dict[str, np.ndarray]",
-    fields: "list[str] | None" = None,
-) -> "dict[str, np.ndarray]":
+    field_data: dict[str, np.ndarray],
+    fields: list[str] | None = None,
+) -> dict[str, np.ndarray]:
     """Time-interpolate multiple named fields onto *reference_time*.
 
     This is a convenience wrapper around :func:`_time_interpolate` that
