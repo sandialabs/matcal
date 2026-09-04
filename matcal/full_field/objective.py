@@ -1,30 +1,35 @@
 """
-The objective module contains the classes related to objectives. 
-This includes the metric functions, the base objectives, specialized 
+The objective module contains the classes related to objectives.
+This includes the metric functions, the base objectives, specialized
 objectives, objective sets. User facing classes only include metric functions
 and objectives.
 """
 
 from matcal.core.objective import Objective
-from matcal.core.qoi_extractor import (DataSpecificExtractorWrapper, 
-                                       ReferenceKeyedExtractorWrapper,
-                                       StateSpecificExtractorWrapper)
+from matcal.core.qoi_extractor import (
+    DataSpecificExtractorWrapper,
+    ReferenceKeyedExtractorWrapper,
+    StateSpecificExtractorWrapper,
+)
 from matcal.core.utilities import check_item_is_correct_type
 
 from matcal.full_field.data_importer import mesh_file_to_skeleton
-from matcal.full_field.qoi_extractor import (ExternalVirtualPowerExtractor, 
-                                             FieldTimeInterpolatorExtractor, 
-                                             FlattenFieldDataExtractor,
-                                             HWDColocatingExperimentSurfaceExtractor, 
-                                             HWDExperimentSurfaceExtractor, 
-                                             HWDPolynomialSimulationSurfaceExtractor, 
-                                             InternalVirtualPowerExtractor, 
-     MeshlessSimToExpInterpolatorExtractor,
-     MeshlessSpaceInterpolatorExtractor)
+from matcal.full_field.qoi_extractor import (
+    ExternalVirtualPowerExtractor,
+    FieldTimeInterpolatorExtractor,
+    FlattenFieldDataExtractor,
+    HWDColocatingExperimentSurfaceExtractor,
+    HWDExperimentSurfaceExtractor,
+    HWDPolynomialSimulationSurfaceExtractor,
+    InternalVirtualPowerExtractor,
+    MeshlessSimToExpInterpolatorExtractor,
+    MeshlessSpaceInterpolatorExtractor,
+)
 from matcal.full_field.TwoDimensionalFieldGrid import MeshSkeleton
 
 
 from matcal.core.logger import initialize_matcal_logger
+
 logger = initialize_matcal_logger(__name__)
 
 
@@ -55,7 +60,7 @@ class InterpolatedFullFieldObjective(Objective):
 
     def __init__(
         self,
-        fem_mesh_file=None,
+        fem_mesh_file: str | None = None,
         *dependent_fields: str,
         time_variable: str = "time",
         fem_surface: str | None = None,
@@ -86,7 +91,9 @@ class InterpolatedFullFieldObjective(Objective):
 
         if fem_mesh_file is not None:
             self._deferred = False
-            mesh_skeleton = mesh_file_to_skeleton(fem_mesh_file, fem_surface)
+            mesh_skeleton = mesh_file_to_skeleton(
+                fem_mesh_file, fem_surface  # type: ignore[arg-type]
+            )
             sim_qoi_extractor = FieldTimeInterpolatorExtractor(
                 mesh_skeleton, time_variable
             )
@@ -200,80 +207,89 @@ class InterpolatedFullFieldObjective(Objective):
 
 class PolynomialHWDObjective(Objective):
     """
-    The PolynomialHWDObjective class handles the calculation of 
+    The PolynomialHWDObjective class handles the calculation of
     the residual vector and merit functions when
-    comparing point data extracted from 2D surfaces for a study evaluation set. 
+    comparing point data extracted from 2D surfaces for a study evaluation set.
     See :meth:`~matcal.core.study_base.StudyBase.add_evaluation_set`.
 
-    PolynomialHWDObjective defines its objective in a latent space. 
-    The latent space represents the raw point data 
-    by weights of different basis modes. These modes represent different 
+    PolynomialHWDObjective defines its objective in a latent space.
+    The latent space represents the raw point data
+    by weights of different basis modes. These modes represent different
     patterns the data can take over
-    different parts of the domain. This method can support compression of 
-    the full-field data, allowing it to have 
-    a much smaller memory foot print than may be required by other methods. 
+    different parts of the domain. This method can support compression of
+    the full-field data, allowing it to have
+    a much smaller memory foot print than may be required by other methods.
 
-    These modes are formed by performing a QR factorization on a moment matrix. 
+    These modes are formed by performing a QR factorization on a moment matrix.
     This factorization provides a basis matrix(Q)
-    and a change of basis matrix(R). These matrices are used to convert the raw 
-    data tot the latent space and to map different latent spaces to each other. 
+    and a change of basis matrix(R). These matrices are used to convert the raw
+    data tot the latent space and to map different latent spaces to each other.
 
-    This method generates its moment matrix by generating polynomials across 
-    different tiers of subdividing the spatial domain. 
-    each tier is a binary split of the last tier, creating a domain decomposition 
-    tree, where depth d of the tree has 2^d subdivisions within it. 
+    This method generates its moment matrix by generating polynomials across
+    different tiers of subdividing the spatial domain.
+    each tier is a binary split of the last tier, creating a domain decomposition
+    tree, where depth d of the tree has 2^d subdivisions within it.
     The deeper the tree the more local information can be captured by the objective.
 
-    Currently the default behavior for this objective involves a colocation 
-    step of the experimental data to the simulation data points. 
-    This step may not be necessary in the future as partitioning 
+    Currently the default behavior for this objective involves a colocation
+    step of the experimental data to the simulation data points.
+    This step may not be necessary in the future as partitioning
     methods for HWD become better.
     """
+
     _class_name = "PolynomialHWDObjective"
-    def __init__(self, target_coords,  *dependent_fields,  time_variable:str="time", max_depth:int=6, polynomial_order:int=8):        
+
+    def __init__(
+        self,
+        target_coords,
+        *dependent_fields,
+        time_variable: str = "time",
+        max_depth: int = 6,
+        polynomial_order: int = 8,
+    ):
         """
         Specify the geometry and fields of interest for the full-filed objective.
-        For full-field objectives it is expected that each frame 
-        of data is parameterized by an independent time field. 
-        While it does not need to be called time, some field must 
-        characterize the order of each frame of full-field data. 
-        A frame of data consists of the field values 
-        (temperature, displacement, etc.) of all the 
+        For full-field objectives it is expected that each frame
+        of data is parameterized by an independent time field.
+        While it does not need to be called time, some field must
+        characterize the order of each frame of full-field data.
+        A frame of data consists of the field values
+        (temperature, displacement, etc.) of all the
         relevant points for the data set.
-        This method allows the user to specify these fields for the objective. 
-        This objective will use polynomial HWD to compare 
+        This method allows the user to specify these fields for the objective.
+        This objective will use polynomial HWD to compare
         experimental data and simulation data in a latent space.
         To align the data points in time the simulation
-        data will interpolated in time to match the experimental time stamps. 
+        data will interpolated in time to match the experimental time stamps.
 
-        There are two meta-parameters that define the latent 
+        There are two meta-parameters that define the latent
         space definition, polynomial order and maximum tree depth.
-        polynomial order changes the polynomial order used to 
+        polynomial order changes the polynomial order used to
         generate the moment matrix, and the maximum tree depth dictates how
-        deep of a binary tree can be generated for a given domain. 
+        deep of a binary tree can be generated for a given domain.
 
-        :param target_coords: two-dimensional array containing 
-            the points to be colocated to to generate a 
-            more consistent set of basis modes. If None is passed 
-            colocation will be skipped. non-colocated HWD 
-            is still in beta at this time an may have unpredictable performance. 
+        :param target_coords: two-dimensional array containing
+            the points to be colocated to to generate a
+            more consistent set of basis modes. If None is passed
+            colocation will be skipped. non-colocated HWD
+            is still in beta at this time an may have unpredictable performance.
         :type independent_field: numpy.array or None
 
         :param dependent_fields: the dependent fields for the objective.
         :type dependent_fields: list(str)
 
-        :param time_variable: The name of the time field 
+        :param time_variable: The name of the time field
             used to parameterize the frames of full-field data
         :type time_variable: str
 
-        :param max_depth: Specify the maximum depth of binary tree to make. 
+        :param max_depth: Specify the maximum depth of binary tree to make.
             Value must be 0 or greater.
-            Note that the number of subdivisions grow geometrically, 
-            and that depths greater than 7 can 
-            take a long time to process. 
+            Note that the number of subdivisions grow geometrically,
+            and that depths greater than 7 can
+            take a long time to process.
         :type fem_surface: int
 
-        :param polynomial_order: Specify the order of polynomial used 
+        :param polynomial_order: Specify the order of polynomial used
             to generate the moment matrix. value must be 0 or greater.
         :type polynomial_order: int
         """
@@ -285,30 +301,34 @@ class PolynomialHWDObjective(Objective):
         self._target_coords = None
         self._colocate_exp_data = False
         if target_coords is None:
-            logger.info("WARNING:: Using not co-located HWD, this is pre-beta. "
-                        "Pass a mesh file to use co-location.")
+            logger.info(
+                "WARNING:: Using not co-located HWD, this is pre-beta. "
+                "Pass a mesh file to use co-location."
+            )
         else:
-            self._set_colocation(target_coords, max_depth=max_depth, 
-                                 polynomial_order=polynomial_order)
+            self._set_colocation(
+                target_coords, max_depth=max_depth, polynomial_order=polynomial_order
+            )
         self.set_as_large_data_sets_objective()
 
-    def _set_colocation(self, target_coords, max_depth:int=6, 
-                        polynomial_order:int=8):
+    def _set_colocation(
+        self, target_coords, max_depth: int = 6, polynomial_order: int = 8
+    ):
         self._target_coords = target_coords
         self._polynomial_order = polynomial_order
-        self._max_depth  = max_depth
+        self._max_depth = max_depth
         self._colocate_exp_data = True
 
     def data_specific_initialization(self, exp_data_collection):
         """
-        Public method used by this class to correctly incorporate experimental 
-        data into the initialization of the objective. 
-        This is a method meant for use inside of MatCal and 
+        Public method used by this class to correctly incorporate experimental
+        data into the initialization of the objective.
+        This is a method meant for use inside of MatCal and
         is not intended to be used by users.
 
-        :param exp_data_collection: the :class:`~matcal.core.data.DataCollection` 
-            containing the relevant experimental data that this 
-            objective will evaluate. 
+        :param exp_data_collection: the :class:`~matcal.core.data.DataCollection`
+            containing the relevant experimental data that this
+            objective will evaluate.
         :type exp_data_collection: :class:`~matcal.core.data.DataCollection`
         """
         sim_extractor = StateSpecificExtractorWrapper()
@@ -326,24 +346,29 @@ class PolynomialHWDObjective(Objective):
         self.set_experiment_qoi_extractor(exp_extractor)
 
     def _set_up_mapping(self, first_data):
-        state_sim_field_extractor = HWDPolynomialSimulationSurfaceExtractor(first_data.skeleton, 
-                                                                            self._max_depth, 
-                                                                            self._polynomial_order, 
-                                                                            self._time_variable)
+        state_sim_field_extractor = HWDPolynomialSimulationSurfaceExtractor(
+            first_data.skeleton,
+            self._max_depth,
+            self._polynomial_order,
+            self._time_variable,
+        )
         self._add_surface(state_sim_field_extractor)
-        state_exp_field_extractor = HWDExperimentSurfaceExtractor(state_sim_field_extractor)
-        return state_sim_field_extractor,state_exp_field_extractor
+        state_exp_field_extractor = HWDExperimentSurfaceExtractor(
+            state_sim_field_extractor
+        )
+        return state_sim_field_extractor, state_exp_field_extractor
 
     def _set_up_colocated(self, first_data):
         sim_skeleton = self._get_simulation_points()
-        state_sim_field_extractor = HWDPolynomialSimulationSurfaceExtractor(sim_skeleton, 
-                                                                            self._max_depth, 
-                                                                            self._polynomial_order, 
-                                                                            self._time_variable)
+        state_sim_field_extractor = HWDPolynomialSimulationSurfaceExtractor(
+            sim_skeleton, self._max_depth, self._polynomial_order, self._time_variable
+        )
         self._add_surface(state_sim_field_extractor)
-        state_exp_field_extractor = HWDColocatingExperimentSurfaceExtractor(state_sim_field_extractor,
-                                                                            first_data.skeleton.spatial_coords[:,:2], 
-                                                                            sim_skeleton.spatial_coords[:,:2])
+        state_exp_field_extractor = HWDColocatingExperimentSurfaceExtractor(
+            state_sim_field_extractor,
+            first_data.skeleton.spatial_coords[:, :2],
+            sim_skeleton.spatial_coords[:, :2],
+        )
         return state_sim_field_extractor, state_exp_field_extractor
 
     def _add_surface(self, state_sim_field_extractor):
@@ -358,9 +383,11 @@ class PolynomialHWDObjective(Objective):
                 sim_skeleton.spatial_coords = self._target_coords.spatial_coords[sp, :]
             else:
                 sim_skeleton.spatial_coords = self._target_coords.spatial_coords
-            
+
         else:
-            sim_skeleton = mesh_file_to_skeleton(self._target_coords, self._surface_name)
+            sim_skeleton = mesh_file_to_skeleton(
+                self._target_coords, self._surface_name
+            )
         return sim_skeleton
 
     def extract_data_from_mesh_surface(self, surface_name):
@@ -369,37 +396,38 @@ class PolynomialHWDObjective(Objective):
 
 class MechanicalVFMObjective(Objective):
     """
-    The MechanicalVFMObjective class handles the calculation of 
+    The MechanicalVFMObjective class handles the calculation of
     the residual vector and merit functions when
     calibrating a material model using the :ref:`Virtual Fields Method`
-    and full-field displacement data from 
+    and full-field displacement data from
     an experiment. It must be combined with one of MatCal's
     VFM models which require a :class:`~matcal.full_field.data.FieldData` class
-    object for the boundary condition data. 
+    object for the boundary condition data.
     The data passed to :meth:`~matcal.core.study_base.StudyBase.add_evaluation_set`
     along with this type of objective can be of type :class:`~matcal.full_field.data.FieldData`
-    or :class:`~matcal.core.data.Data` since the external virtual power 
+    or :class:`~matcal.core.data.Data` since the external virtual power
     calculation only uses global data.
-    For the internal virtual power calculation, the virtual field 
+    For the internal virtual power calculation, the virtual field
     functions used are
 
     .. math::
-        
+
         \\mathbf{v}^*_X=\\cos\\frac{\\pi\\bar{Y}}{h}
 
 
     .. math::
-        
+
         \\mathbf{v}^*_Y=\\frac{2\\bar{Y}+h}{2h}
 
-    where :math:`Y` is the direction of loading, 
-    :math:`\\bar{Y}` is the centered position 
-    of the current point of interest 
-    in the reference configuration, 
-    and :math:`h` is the total height of 
+    where :math:`Y` is the direction of loading,
+    :math:`\\bar{Y}` is the centered position
+    of the current point of interest
+    in the reference configuration,
+    and :math:`h` is the total height of
     the data.
 
     """
+
     _class_name = "MechanicalVFMObjective"
 
     def __init__(self, time_field="time", load_field="load"):
@@ -407,7 +435,7 @@ class MechanicalVFMObjective(Objective):
         Optionally specify the time and load field names
         that are required to be in the experiment :class:`~matcal.full_field.data.FieldData`
         class for this objective.
-        These are assumed to be "time" and "load" by default. 
+        These are assumed to be "time" and "load" by default.
 
         :param time_field: the name of the time field in the data.
         :type independent_field: str
@@ -418,10 +446,10 @@ class MechanicalVFMObjective(Objective):
         :raises Objective.TypeError: If the wrong types are passed into the constructor.
         """
 
-        super().__init__('virtual_power')
+        super().__init__("virtual_power")
         check_item_is_correct_type(time_field, str, "time_field")
         check_item_is_correct_type(load_field, str, "load_field")
-        
+
         self._time_field = time_field
         self._load_field = load_field
         self._setup_qoi_extractors()
@@ -429,19 +457,19 @@ class MechanicalVFMObjective(Objective):
 
     def _setup_qoi_extractors(self):
         self.set_experiment_qoi_extractor(
-            ExternalVirtualPowerExtractor(self._time_field, 
-                                          self._load_field))
+            ExternalVirtualPowerExtractor(self._time_field, self._load_field)
+        )
 
         self.set_simulation_qoi_extractor(
-            InternalVirtualPowerExtractor(self._time_field))
+            InternalVirtualPowerExtractor(self._time_field)
+        )
 
     def _confirm_simulation_fields(self, simulation_data):
-        required_fields = ['virtual_power']
-        self._check_required_fields_are_in_data(
-            simulation_data, required_fields)
+        required_fields = ["virtual_power"]
+        self._check_required_fields_are_in_data(simulation_data, required_fields)
 
     def _confirm_experiment_fields(self, exp_data):
-        required_fields = ['virtual_power']
+        required_fields = ["virtual_power"]
         self._check_required_fields_are_in_data(exp_data, required_fields)
 
     def virtual_velocity_function(self):
