@@ -788,14 +788,22 @@ def _to_theta(variances, correlation_coefficients, clip=True):
     return theta
 
 
-def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise_variance):
+def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise_variance, inverse_method="pseudoinverse"):
     if noise_variance == 0.0:
         noise_variance = _small
     variances, correlation_coefficients = _from_theta(theta, residual_sensitivities.shape[1])
     Sigma_y = _pushed_forward_variances(variances,correlation_coefficients,residual_sensitivities)
     Sigma_y = Sigma_y + noise_variance*np.eye(Sigma_y.shape[0])
+
+## get eignvalues of Sigma_y?
+    U, d, Vh = np.linalg.svd(Sigma_y)
+    print(f"{noise_variance=}")
+    print(f"singular values {d=}")
     
-    print(f"{Sigma_y}")
+
+    np.save("singular_values.npy",d)
+    np.save("Sigma_y.npy",Sigma_y)
+    print(f"Sigma_y\n{Sigma_y}",flush=True)
     with np.errstate(invalid='raise'):
         try:
            sign, logdet =  np.linalg.slogdet(Sigma_y)
@@ -805,9 +813,19 @@ def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise_va
         except FloatingPointError as e:
            print(f'Caught NumPy exception: {e}')
            traceback.print_exc()
-    diagSig_y = np.diag(Sig_y)
-    invSig= np.diag(1.0/diagSig_y)
-#   invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
+           logdetSigma_y = np.sum(np.log(d[d > noise_variance]))
+           print(f"log_det(Sigma_y) {logdetSigma_y=}",flush=True)
+#          exit()
+    ## diagonal approx
+    if   inverse_method[:4] == "diag":
+        diagSig_y = np.diag(Sigma_y)
+        invSigma= np.diag(1.0/diagSig_y)
+    ## pseudo inverse
+    elif inverse_method[:4] == "pseu":
+        invSigma= np.linalg.pinv(Sigma_y,hermitian=True)
+    ## solve
+    else:
+        invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
     mse = np.einsum("ki,ij,kj",residuals,invSigma,residuals) 
     n_repeats = residuals.shape[0]
     logp = -0.5*( logdetSigma_y + mse/n_repeats)
@@ -1030,192 +1048,6 @@ class _LaplaceStudyBase(ParameterStudy):
     def _get_overall_results(self):
         """"""
 
-class LaplaceStudy(_LaplaceStudyBase):
-    """
-    Use the MatCal :class:`~matcal.core.parameter_studies.LaplaceStudy` to evaluate the gradient of the 
-    calibration residuals
-    at an optimal point in parameter space. The residual gradient can then be used to form a modified Laplace 
-    approximation to estimate the parameter covariance matrix for use in uncertainty quantification. We perform this
-    assuming uncertainty is due to model form error. 
-    """
-    study_class = "LaplaceStudy"
-    _laplace_results_key = "laplace results"
-
-    def __init__(self, *parameters):
-        super().__init__(*parameters)
-        self._calibrate_covariance = True
-        self.set_noise_estimate()
-        
-    def _get_finite_difference_evaluation_points(self):
-        return self._finite_difference.compute_gradient_evaluation_points()
-
-    def add_evaluation_set(self, model, objectives, data=None, 
-                           states=None, data_conditioner_class=MaxAbsDataConditioner):
-        super().add_evaluation_set(model, objectives, data, states, data_conditioner_class)
-        for eval_set in self._evaluation_sets.values():
-            for obj_set in eval_set.objective_sets:
-                for obj_name in obj_set.objectives:
-                    obj = obj_set.objectives[obj_name]
-                    more_than_one_qoi = self._check_obj_qois_for_more_than_one_qoi(obj_set, 
-                                                                                   obj_name)
-                    objs_invalid = more_than_one_qoi and not obj.has_independent_field()
-                    self._raise_error_if_objs_invalid(objs_invalid)
-
-    def set_noise_estimate(self, noise_estimate=0.0):
-        """
-        Set the estimate for the noise in the data. 
-        Currently only a single value is accepted for all data.
-        This is the expected standard deviation of the noise.
-
-        :param noise_estimate: value for the noise estimate, must be non-negative
-        :type noise_estimate: float
-        """
-        check_value_is_nonnegative_real(noise_estimate, "noise_estimate")
-        self._noise_variance=noise_estimate**2
-
-    def set_calibrate_covariance(self, calibrate_covariance=True):
-        """
-        By default, the laplace study will attempt to improve the 
-        covariance through a calibraiton. Optionally, turn this off or back on.
-
-        :param calibrate_covariance: flag to turn the covariance calibration process off or on
-        :type calibrate_covariance: bool
-        """
-        self._calibrate_covariance = calibrate_covariance
-
-    def update_laplace_estimate(self, noise_estimate):
-        """Update the laplace study covariance estimate after with an 
-        updated noise estimate."""
-        if self._results is None:
-            raise RuntimeError("Study has not been run yet. Use the \'launch\' method " +
-                "for the first study run. ")
-        self.set_noise_estimate(noise_estimate)
-        self._study_specific_postprocessing()
-        return self._results
-
-    def _log_total_sensitivity_information(self):
-        super()._log_total_sensitivity_information()
-        if self._calibrate_covariance:
-            logger.info("Calibrated parameter covariance:")
-            fit_sigma = (self._results.outcome["fitted_parameter_covariance"])
-            logger.info(str(repr(fit_sigma)))
-            logger.info("\n")
-
-    def _check_obj_qois_for_more_than_one_qoi(self, obj_set, obj_name):
-        more_than_one_qoi = False
-        conditioned_exp_qois = obj_set.conditioned_experiment_qoi_collection[obj_name]
-        for state in conditioned_exp_qois:
-            for data in conditioned_exp_qois[state]:
-                if data.length > 1:
-                    more_than_one_qoi = True
-        return more_than_one_qoi
-
-    def _raise_error_if_objs_invalid(self, objs_invalid):
-        if objs_invalid:
-            raise ValueError(f"The {LaplaceStudy.study_class}Study"
-                            " only accepts residuals/objectives of length 1 or" 
-                            " objectives with independent fields variables"
-                            " so that repeat data can be compared at common" 
-                            " independent variable locations.")
-
-    def _study_specific_postprocessing(self):
-        total_eval_residual_vecs = self._extract_residual_information_for_processing()
-        center_resids = total_eval_residual_vecs[self._get_center_eval_index()].T
-        residual_gradients = self._calculate_residual_sensitivities(total_eval_residual_vecs)
-        covariance_estimates = self._calculate_covariance(center_resids, residual_gradients)
-        output = self._get_parameter_specific_results("residuals_gradient")
-        output.update({"residuals":center_resids})
-        output.update(self._get_overall_results(covariance_estimates))
-        self._results._set_outcome(output)
-        self._log_total_sensitivity_information()
-    
-    def _get_overall_results(self, covariance_estimates):
-        results = OrderedDict()
-        results["parameter_order"] = self._parameter_collection.get_item_names()
-        results.update(covariance_estimates)
-        return results
-
-    def _calculate_residual_sensitivities(self, total_eval_residuals):
-        self._finite_difference.set_function_values(total_eval_residuals)
-        residual_sensitivities = np.atleast_3d(self._gradient())
-        np.save("AA.npy",residual_sensitivities)
-## HERE
-        # grab first one from repeats, this is the most populated and since this is 
-        # the derivative of the residuals where the third index is the repeat #, 
-        # the first one is good enough for derivative of the model w.r.t. the parameters. 
-        residual_sensitivities = residual_sensitivities.T[0, :, :]
-        np.save("A.npy",residual_sensitivities)
-        return residual_sensitivities
-
-    def _calculate_covariance(self, center_resids, residual_sensitivities):
-        estimated_covariance = _estimate_parameter_covariance(
-            center_resids,
-            residual_sensitivities,
-            self._noise_variance,
-            method=self._initial_covariance_method,
-            rcond=self._initial_covariance_rcond,
-            regularization=self._initial_covariance_regularization,
-            project_to_psd=self._initial_covariance_project_to_psd,
-            min_eigenvalue=self._initial_covariance_min_eigenvalue
-        )
-        covariance_results = OrderedDict()
-        covariance_results["estimated_parameter_covariance"] = estimated_covariance
-        np.save("R.npy",center_resids)
-        if self._calibrate_covariance:
-            fitted_posterior = _fit_posterior(center_resids, residual_sensitivities, 
-                                              estimated_covariance, 
-                                         self._noise_variance)
-            covariance_results["fitted_parameter_covariance"] = fitted_posterior
-        else:
-            logger.info("Skipping covariance calibration by user request.\n")
-
-        return covariance_results
-    
-    def _extract_residual_information_for_processing(self):
-        residual_matrices=[]
-        for eval_index in range(self._results.number_of_evaluations):
-            eval_sub_residual_matrices = []
-            for model, eval_set in self._evaluation_sets.items():
-                for obj_set in eval_set.objective_sets:
-                    for obj_name in obj_set.objectives:
-                        resids_dc = self._get_raw_residuals(model.name, obj_name, eval_index)
-                        if obj_set.objectives[obj_name].has_independent_field():
-                            indep_field = obj_set.objectives[obj_name].independent_field
-                            exp_dc = obj_set.data_collection
-                            new_resids = self._get_interpolated_responses(resids_dc, exp_dc, 
-                                                                          indep_field)
-                        else:
-                            new_resids = self._get_single_response_set(resids_dc)
-                        eval_sub_residual_matrices += new_resids
-            _combine_array_method = _combine_array_list_into_zero_padded_single_array
-            total_residual_matrix = _combine_array_method(eval_sub_residual_matrices)
-            residual_matrices.append(np.atleast_2d(total_residual_matrix))
-        return residual_matrices
-    
-    def _get_interpolated_responses(self, residuals_dc, exp_dc, indep_field):
-        data_stats = DataCollectionStatistics()
-        combined_interpolated_residuals = []
-        for state in residuals_dc:
-            register_data_method = data_stats._interpolate_state_data_to_common_independent_variable
-            interpolated_resids = register_data_method(indep_field, residuals_dc, state, exp_dc)
-            interpolated_resids.pop(indep_field)
-            for field in interpolated_resids:
-                combined_interpolated_residuals.append(np.atleast_2d(interpolated_resids[field]).T)
-
-        return combined_interpolated_residuals
-
-    def _get_single_response_set(self, response_dc):
-        combined_responses = []
-        for state in response_dc:
-            for field in response_dc.state_common_field_names(state):
-                combined_resids_current_field = []
-                for data in response_dc[state]:
-                    if data.length > 1:
-                        raise RuntimeError(f"Error in {LaplaceStudy.study_class}Study."
-                                            " Contact MatCal support")
-                    combined_resids_current_field.append(data[field][0])
-                combined_responses.append(np.atleast_2d(combined_resids_current_field))
-        return combined_responses
    
 
 def sample_multivariate_normal(nsamples, mean, covariance_matrix, seed=None, param_names=None):
@@ -1291,6 +1123,43 @@ def _create_samples_dict_from_samples_array( samples, param_names=None):
     return samples_dict
 
 
+
+def _get_total_scaled_covariance(inverse_hessian, std_dev_estimate):
+    cov = inverse_hessian
+    scale = 2*std_dev_estimate*std_dev_estimate
+    return scale*cov
+
+
+def _package_parameter_specific_results(param_collect, sens_info):
+    out = OrderedDict()
+    for sens_key, sens_val in sens_info.items():
+        for param_i, param_key in enumerate(param_collect.keys()):
+            if isinstance(sens_val, (list, np.ndarray)):
+                out_name = f"{sens_key}:{param_key}"
+                out[out_name] = sens_val[param_i]
+    return out
+
+
+def _combine_array_list_into_zero_padded_single_array(arrays):
+    max_shape = [0,0]
+    num_resids = 0
+    for array in arrays:
+        current_shape = array.shape
+        max_shape[0] = np.max((max_shape[0], current_shape[0]))
+        max_shape[1] = np.max((max_shape[1], current_shape[1]))
+        num_resids += current_shape[0]
+    
+    combined_array = np.zeros((num_resids, max_shape[1]))
+    current_eval_set_row = 0
+    from copy import deepcopy
+    for array in arrays:
+        start_row = current_eval_set_row
+        end_row = current_eval_set_row+array.shape[0]
+        end_col = array.shape[1]
+        combined_array[start_row:end_row, 0:end_col] = deepcopy(array)
+        current_eval_set_row = end_row
+    return combined_array
+
 class ClassicLaplaceStudy(_LaplaceStudyBase):
     """
     Use the MatCal :class:`~matcal.core.parameter_studies.ClassicLaplaceStudy` 
@@ -1365,40 +1234,568 @@ class ClassicLaplaceStudy(_LaplaceStudyBase):
         return C
   
 
-def _get_total_scaled_covariance(inverse_hessian, std_dev_estimate):
-    cov = inverse_hessian
-    scale = 2*std_dev_estimate*std_dev_estimate
-    return scale*cov
+class LaplaceStudy(_LaplaceStudyBase):
+    """
+    Use the MatCal :class:`~matcal.core.parameter_studies.LaplaceStudy` to evaluate the gradient of the 
+    calibration residuals
+    at an optimal point in parameter space. The residual gradient can then be used to form a modified Laplace 
+    approximation to estimate the parameter covariance matrix for use in uncertainty quantification. We perform this
+    assuming uncertainty is due to model form error. 
 
+    This class can also compute an objective Hessian from the residual finite
+    differences. By default, the objective Hessian uses the Gauss-Newton form
 
-def _package_parameter_specific_results(param_collect, sens_info):
-    out = OrderedDict()
-    for sens_key, sens_val in sens_info.items():
-        for param_i, param_key in enumerate(param_collect.keys()):
-            if isinstance(sens_val, (list, np.ndarray)):
-                out_name = f"{sens_key}:{param_key}"
-                out[out_name] = sens_val[param_i]
-    return out
+        H = 2 J.T @ J
 
+    where J is the residual/model gradient with respect to parameters.
 
-def _combine_array_list_into_zero_padded_single_array(arrays):
-    max_shape = [0,0]
-    num_resids = 0
-    for array in arrays:
-        current_shape = array.shape
-        max_shape[0] = np.max((max_shape[0], current_shape[0]))
-        max_shape[1] = np.max((max_shape[1], current_shape[1]))
-        num_resids += current_shape[0]
-    
-    combined_array = np.zeros((num_resids, max_shape[1]))
-    current_eval_set_row = 0
-    from copy import deepcopy
-    for array in arrays:
-        start_row = current_eval_set_row
-        end_row = current_eval_set_row+array.shape[0]
-        end_col = array.shape[1]
-        combined_array[start_row:end_row, 0:end_col] = deepcopy(array)
-        current_eval_set_row = end_row
-    return combined_array
+    If set_use_hessian(True) is called, the study evaluates the larger nested
+    finite-difference Hessian stencil and computes the full residual-based
+    Hessian of the sum-of-squares objective
 
+        H = 2 * (J.T @ J + sum_k r_k H_k)
 
+    where r_k is residual k and H_k is the parameter Hessian of residual k.
+    """
+    study_class = "LaplaceStudy"
+    _laplace_results_key = "laplace results"
+
+    def __init__(self, *parameters):
+        super().__init__(*parameters)
+        # If True use lin.alg. estimate to start a fitting
+        self._calibrate_covariance = True
+
+        # If False, only gradient finite-difference points are evaluated and the
+        # reported objective Hessian is the Gauss-Newton approximation:
+        #
+        #     H = 2 J.T @ J
+        #
+        # If True, Hessian finite-difference points are evaluated and the
+        # reported objective Hessian is:
+        #
+        #     H = 2 * (J.T @ J + sum_k r_k H_k)
+        #
+        # The Hessian point set is nested: it includes the central-difference
+        # gradient point set, so the same evaluations provide both J and H_k.
+        self._use_hessian = False
+
+        self.set_noise_estimate()
+
+    def set_use_hessian(self, use_hessian=True, **kwargs):
+        """
+        Set whether the LaplaceStudy should use the full residual Hessian
+        contribution when forming the objective Hessian.
+
+        If False, the objective Hessian is approximated using the Gauss-Newton
+        form
+
+            H = 2 J.T @ J
+
+        If True, the full residual-based Hessian is used
+
+            H = 2 * (J.T @ J + sum_k r_k H_k)
+
+        where J is the residual sensitivity matrix, r_k is residual k, and H_k
+        is the Hessian of residual k with respect to the parameters.
+
+        Setting this to True causes the study to evaluate the larger nested
+        finite-difference Hessian point set. The gradient is still computed from
+        the subset of those same evaluations.
+
+        :param use_hessian: whether to use the full residual Hessian contribution
+        :type use_hessian: bool
+        """
+
+        # Accept the misspelled keyword from the prompt as a convenience:
+        #
+        #     set_use_hessian(use_hesssian=True)
+        #
+        # while keeping the correctly spelled API:
+        #
+        #     set_use_hessian(use_hessian=True)
+        if "use_hesssian" in kwargs:
+            use_hessian = kwargs.pop("use_hesssian")
+
+        if kwargs:
+            unexpected = ", ".join(kwargs.keys())
+            raise TypeError(f"Unexpected keyword argument(s): {unexpected}")
+
+        check_value_is_bool(use_hessian, "use_hessian")
+        self._use_hessian = use_hessian
+
+        # If the parameter center has already been set, rebuild the parameter
+        # evaluation list so launch() will run the correct finite-difference
+        # point set.
+        if self._center is not None:
+            self._setup_finite_difference()
+
+    def _get_finite_difference_evaluation_points(self):
+        """
+        Return the finite-difference evaluation points required by this study.
+
+        If self._use_hessian is False, only the central-difference gradient
+        stencil is used.
+
+        If self._use_hessian is True, the Hessian stencil is used. The Hessian
+        stencil is nested and includes the central-difference gradient stencil.
+        """
+        if getattr(self, "_use_hessian", False):
+            return self._finite_difference.compute_hessian_evaluation_points()
+        else:
+            return self._finite_difference.compute_gradient_evaluation_points()
+
+    def add_evaluation_set(self, model, objectives, data=None, 
+                           states=None, data_conditioner_class=MaxAbsDataConditioner):
+        super().add_evaluation_set(model, objectives, data, states, data_conditioner_class)
+        for eval_set in self._evaluation_sets.values():
+            for obj_set in eval_set.objective_sets:
+                for obj_name in obj_set.objectives:
+                    obj = obj_set.objectives[obj_name]
+                    more_than_one_qoi = self._check_obj_qois_for_more_than_one_qoi(obj_set, 
+                                                                                   obj_name)
+                    objs_invalid = more_than_one_qoi and not obj.has_independent_field()
+                    self._raise_error_if_objs_invalid(objs_invalid)
+
+    def set_noise_estimate(self, noise_estimate=0.0):
+        """
+        Set the estimate for the noise in the data. 
+        Currently only a single value is accepted for all data.
+        This is the expected standard deviation of the noise.
+
+        :param noise_estimate: value for the noise estimate, must be non-negative
+        :type noise_estimate: float
+        """
+        check_value_is_nonnegative_real(noise_estimate, "noise_estimate")
+        self._noise_variance = noise_estimate**2
+
+    def set_calibrate_covariance(self, calibrate_covariance=True):
+        """
+        By default, the laplace study will attempt to improve the 
+        covariance through a calibraiton. Optionally, turn this off or back on.
+
+        :param calibrate_covariance: flag to turn the covariance calibration process off or on
+        :type calibrate_covariance: bool
+        """
+        check_value_is_bool(calibrate_covariance, "calibrate_covariance")
+        self._calibrate_covariance = calibrate_covariance
+
+    def update_laplace_estimate(self, noise_estimate):
+        """Update the laplace study covariance estimate after with an 
+        updated noise estimate."""
+        if self._results is None:
+            raise RuntimeError("Study has not been run yet. Use the \'launch\' method " +
+                "for the first study run. ")
+        self.set_noise_estimate(noise_estimate)
+        self._study_specific_postprocessing()
+        return self._results
+
+    def _log_total_sensitivity_information(self):
+        super()._log_total_sensitivity_information()
+        if self._calibrate_covariance:
+            logger.info("Calibrated parameter covariance:")
+            fit_sigma = self._results.outcome["fitted_parameter_covariance"]
+            logger.info(str(repr(fit_sigma)))
+            logger.info("\n")
+
+        if "objective_hessian" in self._results.outcome:
+            logger.info("Objective Hessian:")
+            logger.info(str(repr(self._results.outcome["objective_hessian"])))
+            logger.info("\n")
+            logger.info("Objective Hessian type:")
+            logger.info(str(self._results.outcome["objective_hessian_type"]))
+            logger.info("\n")
+
+    def _check_obj_qois_for_more_than_one_qoi(self, obj_set, obj_name):
+        more_than_one_qoi = False
+        conditioned_exp_qois = obj_set.conditioned_experiment_qoi_collection[obj_name]
+        for state in conditioned_exp_qois:
+            for data in conditioned_exp_qois[state]:
+                if data.length > 1:
+                    more_than_one_qoi = True
+        return more_than_one_qoi
+
+    def _raise_error_if_objs_invalid(self, objs_invalid):
+        if objs_invalid:
+            raise ValueError(f"The {LaplaceStudy.study_class}Study"
+                            " only accepts residuals/objectives of length 1 or" 
+                            " objectives with independent fields variables"
+                            " so that repeat data can be compared at common" 
+                            " independent variable locations.")
+
+    def _study_specific_postprocessing(self):
+        total_eval_residual_vecs = self._extract_residual_information_for_processing()
+
+        center_resids = total_eval_residual_vecs[self._get_center_eval_index()].T
+
+        residual_gradients = self._calculate_residual_sensitivities(
+            total_eval_residual_vecs
+        )
+
+        objective_hessian = self._calculate_objective_hessian(
+            center_resids,
+            residual_gradients
+        )
+
+        covariance_estimates = self._calculate_covariance(
+            center_resids,
+            residual_gradients
+        )
+
+        output = self._get_parameter_specific_results("residuals_gradient")
+        output.update({"residuals": center_resids})
+        output.update({"objective_hessian": objective_hessian})
+        output.update({
+            "objective_hessian_type": (
+                "full_residual_hessian" if self._use_hessian else "gauss_newton"
+            )
+        })
+        output.update(self._get_overall_results(covariance_estimates))
+
+        self._results._set_outcome(output)
+        self._log_total_sensitivity_information()
+
+    def _get_overall_results(self, covariance_estimates):
+        results = OrderedDict()
+        results["parameter_order"] = self._parameter_collection.get_item_names()
+        results.update(covariance_estimates)
+        return results
+
+    def _calculate_residual_sensitivities(self, total_eval_residuals):
+        self._finite_difference.set_function_values(total_eval_residuals)
+
+        residual_sensitivities = np.atleast_3d(self._gradient())
+
+        np.save("AA.npy", residual_sensitivities)  # DEBUG
+
+        # Grab first one from repeats. This is the most populated and since this is 
+        # the derivative of the residuals where the third index is the repeat #, 
+        # the first one is good enough for derivative of the model w.r.t. the parameters.
+        residual_sensitivities = residual_sensitivities.T[0, :, :]
+
+        np.save("A0.npy", residual_sensitivities)  # DEBUG
+
+        return residual_sensitivities
+
+    def _calculate_objective_hessian(self, center_resids, residual_sensitivities):
+        """
+        Calculate the Hessian of the residual sum-of-squares objective.
+
+        If self._use_hessian is False, this returns the Gauss-Newton Hessian
+
+            H = 2 J.T @ J
+
+        If self._use_hessian is True, this returns the full residual-based
+        objective Hessian
+
+            H = 2 * (J.T @ J + sum_k r_k H_k)
+
+        where H_k is the Hessian of residual k with respect to the parameters.
+
+        For repeated data, this implementation uses the mean residual over
+        repeats in the second-order residual term. This is consistent with a
+        mean-over-repeats sum-of-squares objective.
+        """
+        objective_hessian = self._calculate_gauss_newton_objective_hessian(
+            residual_sensitivities
+        )
+
+        if self._use_hessian:
+            residual_hessians = self._calculate_residual_hessians()
+
+            center_residual_vector = (
+                self._get_center_residual_vector_for_objective_hessian(
+                    center_resids
+                )
+            )
+
+            second_order_hessian = (
+                self._calculate_second_order_residual_hessian_term(
+                    center_residual_vector,
+                    residual_hessians
+                )
+            )
+
+            objective_hessian = objective_hessian + second_order_hessian
+
+        return _symmetrize_matrix(objective_hessian)
+
+    def _calculate_gauss_newton_objective_hessian(self, residual_sensitivities):
+        """
+        Calculate the Gauss-Newton approximation to the residual sum-of-squares
+        objective Hessian.
+
+        For the objective
+
+            Phi(theta) = r(theta).T r(theta)
+
+        the Gauss-Newton Hessian is
+
+            H_GN = 2 J.T J
+
+        If you instead define the objective as
+
+            Phi(theta) = 0.5 r(theta).T r(theta)
+
+        then divide this Hessian by 2.
+        """
+        J = np.asarray(residual_sensitivities, dtype=float)
+
+        if J.ndim != 2:
+            raise RuntimeError(
+                "Unexpected residual sensitivity shape in LaplaceStudy: "
+                f"{J.shape}. Expected shape is n_residuals x n_parameters."
+            )
+
+        return _symmetrize_matrix(2.0 * J.T @ J)
+
+    def _calculate_residual_hessians(self):
+        """
+        Calculate residual Hessians from the FiniteDifference object.
+
+        The raw FiniteDifference hessian has shape
+
+            n_parameters x n_parameters x n_residuals x n_repeats
+
+        when residuals have repeated observations.
+
+        The residual sensitivities already use the first repeat because the
+        derivative of the model residual with respect to the parameters should
+        be independent of the repeat. We do the same here.
+
+        Returns an array with shape
+
+            n_residuals x n_parameters x n_parameters
+        """
+        if not self._use_hessian:
+            raise RuntimeError(
+                "Residual Hessians were requested, but this LaplaceStudy was "
+                "not configured to evaluate Hessian points. Call "
+                "set_use_hessian(True) before launch()."
+            )
+
+        residual_hessians = np.asarray(self._finite_difference.hessian())
+
+        if residual_hessians.ndim == 4:
+            # Shape:
+            #
+            #     n_parameters x n_parameters x n_residuals x n_repeats
+            #
+            # Use the first repeat, consistent with
+            # _calculate_residual_sensitivities().
+            residual_hessians = residual_hessians[:, :, :, 0]
+
+        elif residual_hessians.ndim == 3:
+            # Shape:
+            #
+            #     n_parameters x n_parameters x n_residuals
+            pass
+
+        elif residual_hessians.ndim == 2:
+            # Scalar residual case:
+            #
+            #     n_parameters x n_parameters
+            #
+            # Convert to:
+            #
+            #     n_parameters x n_parameters x 1
+            residual_hessians = residual_hessians[:, :, np.newaxis]
+
+        else:
+            raise RuntimeError(
+                "Unexpected residual Hessian shape in LaplaceStudy: "
+                f"{residual_hessians.shape}"
+            )
+
+        # Convert from:
+        #
+        #     n_parameters x n_parameters x n_residuals
+        #
+        # to:
+        #
+        #     n_residuals x n_parameters x n_parameters
+        residual_hessians = np.moveaxis(residual_hessians, -1, 0)
+
+        return residual_hessians
+
+    def _get_center_residual_vector_for_objective_hessian(self, center_resids):
+        """
+        Return the residual vector used in the second-order Hessian correction.
+
+        center_resids has shape
+
+            n_repeats x n_residuals
+
+        for repeated data.
+
+        This method uses the mean residual over repeats, which corresponds to a
+        mean-over-repeats objective. If the desired objective is instead the raw
+        sum over repeats, replace np.mean(center_resids, axis=0) with
+        np.sum(center_resids, axis=0).
+        """
+        center_resids = np.asarray(center_resids, dtype=float)
+
+        if center_resids.ndim == 1:
+            return center_resids
+
+        if center_resids.ndim == 2:
+            return np.mean(center_resids, axis=0)
+
+        raise RuntimeError(
+            "Unexpected center residual shape in LaplaceStudy: "
+            f"{center_resids.shape}"
+        )
+
+    def _calculate_second_order_residual_hessian_term(self,
+                                                     center_residual_vector,
+                                                     residual_hessians):
+        """
+        Calculate the second-order residual contribution to the objective
+        Hessian
+
+            2 * sum_k r_k H_k
+
+        where residual_hessians[k, :, :] is H_k.
+        """
+        center_residual_vector = np.asarray(center_residual_vector, dtype=float)
+        residual_hessians = np.asarray(residual_hessians, dtype=float)
+
+        if residual_hessians.ndim != 3:
+            raise RuntimeError(
+                "Unexpected residual Hessian shape in LaplaceStudy: "
+                f"{residual_hessians.shape}. Expected shape is "
+                "n_residuals x n_parameters x n_parameters."
+            )
+
+        if center_residual_vector.ndim != 1:
+            raise RuntimeError(
+                "Unexpected center residual vector shape in LaplaceStudy: "
+                f"{center_residual_vector.shape}. Expected a one-dimensional "
+                "residual vector."
+            )
+
+        if residual_hessians.shape[0] != center_residual_vector.shape[0]:
+            raise RuntimeError(
+                "Residual Hessian/residual size mismatch in LaplaceStudy. "
+                f"Residual Hessians have {residual_hessians.shape[0]} "
+                f"residual entries, while the center residual vector has "
+                f"{center_residual_vector.shape[0]} entries."
+            )
+
+        return _symmetrize_matrix(
+            2.0 * np.einsum(
+                "k,kij->ij",
+                center_residual_vector,
+                residual_hessians
+            )
+        )
+
+    def _calculate_covariance(self, center_resids, residual_sensitivities):
+        estimated_covariance = _estimate_parameter_covariance(
+            center_resids,
+            residual_sensitivities,
+            self._noise_variance,
+            method=self._initial_covariance_method,
+            rcond=self._initial_covariance_rcond,
+            regularization=self._initial_covariance_regularization,
+            project_to_psd=self._initial_covariance_project_to_psd,
+            min_eigenvalue=self._initial_covariance_min_eigenvalue
+        )
+
+        covariance_results = OrderedDict()
+        covariance_results["estimated_parameter_covariance"] = estimated_covariance
+
+        np.save("R.npy", center_resids) # DEBUG
+
+        if self._calibrate_covariance:
+            fitted_posterior = _fit_posterior(
+                center_resids,
+                residual_sensitivities,
+                estimated_covariance,
+                self._noise_variance
+            )
+            covariance_results["fitted_parameter_covariance"] = fitted_posterior
+        else:
+            logger.info("Skipping covariance calibration by user request.\n")
+
+        return covariance_results
+
+    def _extract_residual_information_for_processing(self):
+        residual_matrices = []
+
+        for eval_index in range(self._results.number_of_evaluations):
+            eval_sub_residual_matrices = []
+
+            for model, eval_set in self._evaluation_sets.items():
+                for obj_set in eval_set.objective_sets:
+                    for obj_name in obj_set.objectives:
+                        resids_dc = self._get_raw_residuals(
+                            model.name,
+                            obj_name,
+                            eval_index
+                        )
+
+                        if obj_set.objectives[obj_name].has_independent_field():
+                            indep_field = obj_set.objectives[obj_name].independent_field
+                            exp_dc = obj_set.data_collection
+                            new_resids = self._get_interpolated_responses(
+                                resids_dc,
+                                exp_dc,
+                                indep_field
+                            )
+                        else:
+                            new_resids = self._get_single_response_set(resids_dc)
+
+                        eval_sub_residual_matrices += new_resids
+
+            _combine_array_method = _combine_array_list_into_zero_padded_single_array
+            total_residual_matrix = _combine_array_method(eval_sub_residual_matrices)
+            residual_matrices.append(np.atleast_2d(total_residual_matrix))
+
+        return residual_matrices
+
+    def _get_interpolated_responses(self, residuals_dc, exp_dc, indep_field):
+        data_stats = DataCollectionStatistics()
+        combined_interpolated_residuals = []
+
+        for state in residuals_dc:
+            register_data_method = (
+                data_stats._interpolate_state_data_to_common_independent_variable
+            )
+
+            interpolated_resids = register_data_method(
+                indep_field,
+                residuals_dc,
+                state,
+                exp_dc
+            )
+
+            interpolated_resids.pop(indep_field)
+
+            for field in interpolated_resids:
+                combined_interpolated_residuals.append(
+                    np.atleast_2d(interpolated_resids[field]).T
+                )
+
+        return combined_interpolated_residuals
+
+    def _get_single_response_set(self, response_dc):
+        combined_responses = []
+
+        for state in response_dc:
+            for field in response_dc.state_common_field_names(state):
+                combined_resids_current_field = []
+
+                for data in response_dc[state]:
+                    if data.length > 1:
+                        raise RuntimeError(
+                            f"Error in {LaplaceStudy.study_class}Study."
+                            " Contact MatCal support"
+                        )
+
+                    combined_resids_current_field.append(data[field][0])
+
+                combined_responses.append(
+                    np.atleast_2d(combined_resids_current_field)
+                )
+
+        return combined_responses
