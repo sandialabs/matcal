@@ -29,3 +29,8 @@ GITCLEAN/*
 scrap
 *timings.txt
 *__pycache__*
+
+# Binary / generated artifacts
+*.joblib
+*.core
+.DS_Store
