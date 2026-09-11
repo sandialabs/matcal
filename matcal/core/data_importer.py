@@ -1,34 +1,50 @@
 """
-The classes and functions in this module are intended 
-to import data into MatCal from external sources for use 
+The classes and functions in this module are intended
+to import data into MatCal from external sources for use
 in MatCal studies.
 """
 
+import ast
+import glob
+import numbers
 import os
 import sys
-from matcal.core.object_factory import ObjectCreator, SpecificObjectFactory
-from matcal.core.serializer_wrapper import matcal_load
-import numpy as np
-import glob
 from abc import ABC, abstractmethod
-import numbers
+from typing import Optional
+
+import numpy as np
+
+_scipy_import_error_msg = ""
+try:
+    from scipy import io as scipy_io
+except ImportError as _scipy_import_error:
+    scipy_io = None
+    _scipy_import_error_msg = str(_scipy_import_error)
 
 from matcal.core.state import SolitaryState, State
 from matcal.core.data import Data, DataCollection, convert_dictionary_to_data
+from matcal.core.object_factory import ObjectCreator, SpecificObjectFactory
+from matcal.core.serializer_wrapper import matcal_load
 from matcal.core.utilities import set_significant_figures
 
 from matcal.core.logger import initialize_matcal_logger
+
 logger = initialize_matcal_logger(__name__)
 
 
 # This function is named with camelcase to look like a class. We want it to look like a class to keep the
 # MatCal UI consistent since users generally only interface with classes. In the future, this can be refactored
 # to be a factory class potentially using the __new__ method.
-def FileData(filename:str, state:State=None, file_type:str=None, 
-             import_strings:bool=False, drop_NaNs:bool=False, 
-             *args, **kwargs) -> Data:
+def FileData(
+    filename: str,
+    state: Optional[State] = None,
+    file_type: Optional[str] = None,
+    import_strings: bool = False,
+    drop_NaNs: bool = False,
+    **kwargs,
+) -> Data:
     """
-    A function used to import a MatCal :class:`~matcal.core.data.Data` object 
+    A function used to import a MatCal :class:`~matcal.core.data.Data` object
     from a file. The user needs to use
     this function to load experimental data from a file into MatCal
 
@@ -40,39 +56,54 @@ def FileData(filename:str, state:State=None, file_type:str=None,
 
     :param file_type: optional file type passed by the user. MatCal will attempt
         to guess the file type based on the
-        file extension. MatCal recognizes "csv", "npy" and "mat" file types 
-        and only accepts these strings as input for 
+        file extension. MatCal recognizes "csv", "npy" and "mat" file types
+        and only accepts these strings as input for
         this parameter.
     :type file_type: str
 
-    :param import_strings: A boolean to allow MatCal to read in string data 
+    :param import_strings: A boolean to allow MatCal to read in string data
         fields. By default it is set to False and
         will error out if any data cannot be converted to numeric values.
     :type import_strings: bool
 
-    :param drop_NaNs: A boolean to allow MatCal to read in string data fields 
-        with NaNs by dropping any rows that contain
-        a NaN.
+    :param drop_NaNs: If True, any row containing a NaN or Inf in a numeric
+        column is dropped before the data is returned. String columns are
+        unaffected.
 
-    :type import_strings: bool
+    :type drop_NaNs: bool
+
+    :param kwargs: additional keyword arguments forwarded to the underlying importer
+        (e.g. :class:`~matcal.core.data_importer.CSVDataImporter`). For CSV files
+        this includes ``comments`` (a single string, e.g. ``"#"``), ``usecols``,
+        ``skip_footer``, ``converters``, ``missing_values``, ``filling_values``,
+        and ``delimiter``.
 
     :return: a populated :class:`~matcal.core.data.Data` object.
     """
     _check_filename_type(filename)
     file_type = _get_file_type(filename, file_type)
-    return _import_data(filename, state=state, file_type=file_type, 
-                        import_strings=import_strings, drop_NaNs=drop_NaNs, 
-                        *args, **kwargs)
+    return _import_data(
+        filename,
+        state=state,
+        file_type=file_type,
+        import_strings=import_strings,
+        drop_NaNs=drop_NaNs,
+        **kwargs,
+    )
 
 
-def _import_data(filename, state=None, file_type=None, *args, **kwargs):
+def _import_data(filename, state=None, file_type=None, **kwargs):
     try:
-        importer = matcal_probe_data_importer_factory.create(file_type, filename, 
-                                                         *args, **kwargs)
-    except KeyError:
-        raise KeyError("Data file \"{}\" of type \"{}\" is not a supported file type." \
-                       " MatCal supports the following data types:\n{}".format(filename, file_type,
-                                                                          list(matcal_probe_data_importer_factory.keys())))
+        importer = matcal_probe_data_importer_factory.create(
+            file_type, filename, **kwargs
+        )
+    except KeyError as exc:
+        raise KeyError(
+            'Data file "{}" of type "{}" is not a supported file type.'
+            " MatCal supports the following data types:\n{}".format(
+                filename, file_type, list(matcal_probe_data_importer_factory.keys())
+            )
+        ) from exc
 
     data = importer.load()
     if state is not None:
@@ -82,84 +113,103 @@ def _import_data(filename, state=None, file_type=None, *args, **kwargs):
 
 class DataImporterBase(ABC):
 
-    def __init__(self, filename: str, import_strings:bool=False, 
-                 drop_NaNs:bool=False, **kwargs):
+    def __init__(
+        self,
+        filename: str,
+        import_strings: bool = False,
+        drop_NaNs: bool = False,
+        **kwargs,
+    ):
         _check_filename_type(filename)
         self._check_file_exists(filename)
         self._filename = filename
         self._import_strings = import_strings
         self._import_options = self._parse_passed_options(**kwargs)
         self._drop_NaNs = drop_NaNs
-        self._rows_with_NaNs = []
 
-    def _check_file_exists(self, filename):
+    def _check_file_exists(self, filename: str) -> None:
+        if os.path.isdir(filename):
+            raise FileNotFoundError(
+                f'"{filename}" is a directory, not a file. Check input.'
+            )
         if not os.path.isfile(filename):
             raise FileNotFoundError(
-                f'The file \"{filename}\" cannot be found to be imported. Check input.')
+                f'The file "{filename}" cannot be found to be imported. Check input.'
+            )
 
     def _inspect_data_and_clean(self, data):
         self._check_file_not_empty(data)
         self._check_file_data_format(data)
         if self._drop_NaNs:
             data = self._drop_NaNs_from_data(data)
+            self._check_file_not_empty(data)
 
         return data
 
-    def _parse_passed_options(self, **kwargs):
+    def _parse_passed_options(self, **kwargs):  # pylint: disable=unused-argument
         return {}
 
     def _check_file_not_empty(self, data):
         if not data.size:
-            raise ValueError("Empty data file: \"{}\"".format(self._filename))
+            raise ValueError('Empty data file: "{}"'.format(self._filename))
 
     def _check_file_data_format(self, data):
         for col in data.dtype.names:
             self._check_data_is_interpretable(data[col], col)
             if not self._drop_NaNs:
                 self._check_data_is_finite(data[col], col)
-               
+
     def _check_data_is_interpretable(self, data, column):
         if not self._is_data_interpretable(data):
             raise TypeError(self._get_uninterpretable_data_error_message(data, column))
 
     def _is_data_interpretable(self, data):
-        return (self._is_number_subclass(data) or 
-               (data.dtype.kind in ["U", "S"] and self._import_strings))
+        return self._is_number_subclass(data) or (
+            data.dtype.kind in ["U", "S"] and self._import_strings
+        )
 
     def _is_data_entry_interpretable(self, data_value):
         is_numeric = isinstance(data_value, numbers.Number)
         is_numeric_string = False
         if not is_numeric and not self._import_strings and isinstance(data_value, str):
-            is_numeric_string = np.char.isnumeric(data_value) or data_value.lower() in ["inf", "nan"]
+            try:
+                float(data_value)
+                is_numeric_string = True
+            except (ValueError, TypeError):
+                is_numeric_string = False
         return is_numeric or is_numeric_string
 
     def _check_data_is_finite(self, data, column):
         if self._is_number_subclass(data):
-            if not (np.isfinite(data).all() == True):
-                raise TypeError(self._get_nonfinte_data_error_message(data, column))
+            if not np.isfinite(data).all():
+                raise ValueError(self._get_nonfinite_data_error_message(data, column))
 
     def _is_number_subclass(self, data):
-        import numbers
-        return (issubclass(data.dtype.type, numbers.Integral) or 
-                issubclass(data.dtype.type, numbers.Real))
+        return issubclass(data.dtype.type, numbers.Integral) or issubclass(
+            data.dtype.type, numbers.Real
+        )
 
     def _drop_NaNs_from_data(self, data):
-        NaN_rows_to_drop = []
+        nan_rows = []
         for col in data.dtype.names:
-            NaN_rows_to_drop += list(self._get_where_data_not_finite(data[col])[0])
-        NaN_rows_to_drop = list(set(NaN_rows_to_drop))
-        warning_mssg = "The rows with the following indices were removed on import because NaNs/INFs were found and \"drop_NaNs\" was set to \"True\".\n"
-        warning_mssg += f"{NaN_rows_to_drop}"
-        warning_mssg += "\nThe data contained in these rows were:\n"
-        warning_mssg += np.array2string(data[NaN_rows_to_drop])
-        if NaN_rows_to_drop:
-            data = np.delete(data, NaN_rows_to_drop, axis=0)
-            logger.warning(warning_mssg)
+            if self._is_number_subclass(data[col]):
+                nan_rows += list(self._get_where_data_not_finite(data[col]))
+        nan_rows = sorted(set(nan_rows))
+        if nan_rows:
+            warning_mssg = (
+                "The rows with the following indices were removed on import because "
+                'NaNs/INFs were found and "drop_NaNs" was set to "True".\n'
+                f"{nan_rows}\nThe data contained in these rows were:\n"
+                f"{np.array2string(data[nan_rows])}"
+            )
+            logger.warning("%s", warning_mssg)
+            data = np.delete(data, nan_rows, axis=0)
         return data
 
     def _get_invalid_data_error_message(self, data, column, bad_data_locs):
-        error_msg = 'The file \"{}\" has data for \"{}\" that is invalid.\n'.format(
-                        self._filename, column)
+        error_msg = 'The file "{}" has data for "{}" that is invalid.\n'.format(
+            self._filename, column
+        )
         error_msg += "The data has entries:\n"
         error_msg += np.array2string(data[bad_data_locs])
         error_msg += "\nFor row indices:\n"
@@ -167,69 +217,80 @@ class DataImporterBase(ABC):
         return error_msg
 
     def _get_uninterpretable_data_error_message(self, data, column):
-        err_str = self._get_invalid_data_error_message(data, column,
-                                                       self._get_where_data_not_interpretable(data))
-        err_str += ('\nData must be a valid type: int or float! '
-                    'Note: strings importable with \'import_strings\' argument only.\n')
+        err_str = self._get_invalid_data_error_message(
+            data, column, self._get_where_data_not_interpretable(data)
+        )
+        err_str += (
+            "\nData must be a valid type: int or float! "
+            "Note: strings importable with 'import_strings' argument only.\n"
+        )
         return err_str
 
-    def _get_nonfinte_data_error_message(self, data, column):
-        err_message = self._get_invalid_data_error_message(data, column, 
-                                                           self._get_where_data_not_finite(data))
+    def _get_nonfinite_data_error_message(self, data, column):
+        err_message = self._get_invalid_data_error_message(
+            data, column, self._get_where_data_not_finite(data)
+        )
         err_message += "\nData must be finite!\n"
         return err_message
 
     def _get_where_data_not_interpretable(self, data):
-        are_data_interpretable = np.vectorize(self._is_data_entry_interpretable, otypes=[bool])
-        return np.atleast_1d(np.where(~are_data_interpretable(data)))
+        are_data_interpretable = np.vectorize(
+            self._is_data_entry_interpretable, otypes=[bool]
+        )
+        return np.where(~are_data_interpretable(data))[0]
 
     def _get_where_data_not_finite(self, data):
-        return np.atleast_1d(np.where(~np.isfinite(data)))
+        return np.where(~np.isfinite(data))[0]
 
     @abstractmethod
-    def load(self, **opts):
-        """"""
+    def load(self):
+        """Load data from the file and return a Data object."""
 
     @property
     def filename(self):
         return self._filename
 
     def __eq__(self, other):
-        equal_filename = self.filename == other.filename
-
-        return equal_filename
+        if not isinstance(other, DataImporterBase):
+            return NotImplemented
+        return self.filename == other.filename
 
 
 def _get_file_type(filename, file_type):
     if file_type is None:
-        file_type = filename.split(".")[-1]
+        _, ext = os.path.splitext(filename)
+        if not ext:
+            raise ValueError(
+                f'Cannot determine file type from "{filename}": no extension found. '
+                "Specify the file_type argument explicitly."
+            )
+        file_type = ext.lstrip(".")
     _check_file_type_is_string(file_type)
     file_type = file_type.lower()
-
     return file_type
 
 
 def _check_file_type_is_string(file_type):
-    try:
-        assert isinstance(file_type, str)
-    except AssertionError:
-        raise TypeError("The file type passed to a data importer must be a string. Received "
-                                      "variable of type {}".format(type(file_type)))
+    if not isinstance(file_type, str):
+        raise TypeError(
+            "The file type passed to a data importer must be a string. Received "
+            "variable of type {}".format(type(file_type))
+        )
 
 
 def _check_filename_type(filename):
-    try:
-        assert isinstance(filename, str)
-    except AssertionError:
-        raise TypeError("The filename passed to a data importer must be a string. Received "
-                                      "variable of type '{}'".format(type(filename)))
+    if not isinstance(filename, str):
+        raise TypeError(
+            "The filename passed to a data importer must be a string. Received "
+            "variable of type '{}'".format(type(filename))
+        )
 
 
 class CSVDataImporter(DataImporterBase):
     """
-    Class for reading in data from a CSV file. This uses the NumPy "genfromtxt" 
+    Class for reading in data from a CSV file. This uses the NumPy "genfromtxt"
     function to read data in from CSV
-    files. It assumes that the columns have headers so that MatCal can identify 
+    files. It assumes that the columns have headers so that MatCal can identify
     what information is being read in and
     make appropriate comparisons between simulations and experiments. This is wrapped by
     :func:`~matcal.core.data_importer.FileData`.
@@ -237,8 +298,9 @@ class CSVDataImporter(DataImporterBase):
     .. note::
         This accepts the following keyword arguments that are valid in Numpy "genfromtxt":
 
-        #. comments
-        #. uscols
+        #. comments — a single string specifying the comment character(s) (e.g. ``"#"``).
+           Lists and tuples are not supported.
+        #. usecols
         #. skip_footer
         #. converters
         #. missing_values
@@ -253,54 +315,72 @@ class CSVDataImporter(DataImporterBase):
         :rtype: :class:`~matcal.core.data.Data`
         """
         data, state_dict = self._read_data_from_file()
-        state = self._intiailize_state(state_dict)
+        state = self._initialize_state(state_dict)
         data = self._inspect_data_and_clean(data)
         return Data(data, state, os.path.abspath(self._filename))
 
     def _read_data_from_file(self):
         self._check_for_dos()
-        try:
-            nskip, state_dict = self.read_csv_header()
-            nskip = self._skip_leading_comments(nskip)
-            csv_options = self._create_import_options(nskip)
-            data = np.genfromtxt(self._filename, **csv_options)
-        except Exception as err:
-            error_msg = f"Error occurred while reading data file {self._filename}:\n {repr(err)}"
-            logger.error(error_msg)
-            raise err       
+        nskip, state_dict = self._read_csv_header()
+        nskip = self._skip_leading_comments(nskip)
+        csv_options = self._create_import_options(nskip)
+        data = np.genfromtxt(self._filename, **csv_options)
         return data, state_dict
 
     def _create_import_options(self, nskip):
-        opt = {'skip_header': nskip, 'delimiter': ",", 'names': True, 'dtype': None,
-                'encoding': None, 'excludelist': None, 'autostrip': True, 'deletechars': "",
-                'comments':"#"}
+        opt = {
+            "skip_header": nskip,
+            "delimiter": ",",
+            "names": True,
+            "dtype": None,
+            "encoding": None,
+            "excludelist": None,
+            "autostrip": True,
+            "deletechars": "",
+            "comments": "#",
+        }
         opt.update(self._import_options)
         return opt
 
     def _parse_passed_options(self, **kwargs):
-        options = ['comments', 'usecols', 'skip_footer', 'converters', 
-                   'missing_values', 'filling_values', "delimiter"]
+        options = [
+            "comments",
+            "usecols",
+            "skip_footer",
+            "converters",
+            "missing_values",
+            "filling_values",
+            "delimiter",
+        ]
         option_dict = {}
         for name in options:
-            if name in kwargs.keys():
+            if name in kwargs:
                 option_dict[name] = kwargs[name]
+        if "comments" in option_dict and not isinstance(option_dict["comments"], str):
+            raise TypeError(
+                "comments must be a single string (e.g. comments='#'). "
+                f"Received type {type(option_dict['comments']).__name__}."
+            )
         return option_dict
 
-    def _intiailize_state(self, state_dict):
+    def _initialize_state(self, state_dict):
         state = SolitaryState()
         if state_dict is not None:
             state = self._get_state_from_header_state_dict(state_dict)
-            logger.debug("Set state \"{0}\" with state variables {1} from {2}".format(state.name, state_dict,
-                                                                                      self._filename))
+            logger.debug(
+                'Set state "%s" with state variables %s from %s',
+                state.name,
+                state_dict,
+                self._filename,
+            )
         return state
 
-    def read_csv_header(self):
+    def _read_csv_header(self):
         nskip = 0
-        with open(self._filename) as fh:
+        with open(self._filename, encoding="utf-8") as fh:
             line = fh.readline().strip()
             state_dict = self._get_state_variables_from_file_header(line)
             if state_dict is not None:
-                line = fh.readline().strip()
                 nskip += 1
         return nskip, state_dict
 
@@ -308,11 +388,15 @@ class CSVDataImporter(DataImporterBase):
         if self._does_not_have_comments():
             return nskip
         found_no_comment = False
-        with open(self._filename) as fh:
-            for i in range(nskip):
-                line = fh.readline().strip()
+        with open(self._filename, encoding="utf-8") as fh:
+            for _ in range(nskip):
+                fh.readline()
             while not found_no_comment:
-                line = fh.readline().strip()
+                line = fh.readline()
+                if not line:
+                    # EOF reached — no non-comment line found; return as-is
+                    break
+                line = line.strip()
                 if self._line_is_not_comment(line):
                     found_no_comment = True
                 else:
@@ -320,22 +404,26 @@ class CSVDataImporter(DataImporterBase):
         return nskip
 
     def _line_is_not_comment(self, line):
-        line_is_not_comment = line[0] != self._import_options['comments']
-        return line_is_not_comment
+        if not line:
+            return True
+        return not line.startswith(self._import_options["comments"])
 
     def _does_not_have_comments(self):
-        does_not_have_comments = 'comments' not in self._import_options.keys()
+        does_not_have_comments = "comments" not in self._import_options
         return does_not_have_comments
 
     def _get_state_variables_from_file_header(self, line):
         state_dict = {}
         if self._has_state_information(line):
             try:
-                for name, value in eval(line).items():
+                for name, value in ast.literal_eval(line).items():
                     state_dict[name] = self._process_value(value)
-            except Exception as e:
-                self._throw_state_dict_format_error(line, str(repr(e)))
-                raise e
+            except (ValueError, SyntaxError) as e:
+                raise ValueError(
+                    f"A dict-like line was detected on the first line of "
+                    f'"{self._filename}" but could not be parsed as a state '
+                    f"dictionary.\nLine content: {line!r}\nParse error: {e!r}"
+                ) from e
         if len(state_dict) == 0:
             state_dict = None
         return state_dict
@@ -344,21 +432,15 @@ class CSVDataImporter(DataImporterBase):
         has_state_information = "{" in line and "}" in line
         return has_state_information
 
-    def _throw_state_dict_format_error(self, line, exception=None):
-        err_str = ("A dict-like line was detected on the first line of the file."+
-                   " However it could not be processed as a dictionary." +
-                   f" The provided line is:\n{line}\n\n")
-        if exception is not None:
-            err_str += (f"The following exception was thrown parsing the line:\n{exception}\n\n")
-        logger.error(err_str)
-    
     def _process_value(self, value):
-        if isinstance(value, (numbers.Real, numbers.Integral)):
+        if isinstance(value, numbers.Real):
             return float(value)
-        elif isinstance(value, str) and value.isnumeric():
-            return float(value)
-        else:
-            return value.strip()
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return value.strip()
+        return value
 
     def _get_state_from_header_state_dict(self, state_dict):
         state_name = self._create_state_name_from_state_dict(state_dict)
@@ -382,14 +464,14 @@ class CSVDataImporter(DataImporterBase):
         else:
             formatted_item += "{0:12.6e}_".format(float(v))
         return formatted_item
-    
+
     def _check_for_dos(self):
         if _is_dos(self.filename):
             raise DOSFileError(self.filename)
         invalid_lines = _report_invalid_utc_lines(self.filename)
         if _has_invalid_lines(invalid_lines):
             raise InvalidCharacterError(self.filename, invalid_lines)
-        
+
 
 def _has_dos_newlines(filename: str, chunk_size: int = 8192) -> bool:
     """Return True if *filename* contains DOS/Windows CRLF (\\r\\n) line endings.
@@ -421,7 +503,7 @@ def _is_dos(filename: str) -> bool:
     return _has_dos_newlines(filename)
 
 
-def _has_invalid_lines(lines: str)->bool:
+def _has_invalid_lines(lines: str) -> bool:
     return len(lines) > 0
 
 
@@ -448,8 +530,10 @@ def _report_invalid_utc_lines(filename: str) -> str:
 
 class DOSFileError(RuntimeError):
     def __init__(self, filename: str):
-        message = (f"{filename}: is a DOS file. Please convert it to"
-                   " numbers a unix type file with a tool like dos2unix\n")
+        message = (
+            f"{filename}: is a DOS file. Please convert it to"
+            " a Unix-type file with a tool like dos2unix.\n"
+        )
         super().__init__(message)
 
 
@@ -461,45 +545,48 @@ class InvalidCharacterError(RuntimeError):
 
 class NumpyDataImporter(DataImporterBase):
     """
-       Class for reading in data from a numpy ".npy" file. 
-       This uses the np.load() function to read data in
-       from numpy files. Since field names are required for MatCal, 
-       it assumes that a structured array or record is
-       saved in the file. If there are no field names, 
-       it will fail to load the file. This is wrapped by
-       :func:`~matcal.core.data_importer.FileData`.
-       """
+    Class for reading in data from a numpy ".npy" file.
+    This uses the np.load() function to read data in
+    from numpy files. Since field names are required for MatCal,
+    it assumes that a structured array or record is
+    saved in the file. If there are no field names,
+    it will fail to load the file. This is wrapped by
+    :func:`~matcal.core.data_importer.FileData`.
+    """
 
     def load(self):
         """
-        Loads the Numpy "npy" data.
+        Loads the Numpy "npy" data. The file must contain a structured array
+        with named numeric columns. Object-dtype arrays (which require pickle)
+        are not supported.
 
-        :raises FileNotFoundError: If the data file is not found.
- 
+        :raises TypeError: If the numpy file does not contain a structured array
+            with named columns.
+
         :return:  A data set object built from the NPY file.
         :rtype: :class:`~matcal.core.data.Data`
         """
 
-        data = np.load(self._filename)  # NOTE assumes pickled dict
-        data = self._inspect_data_and_clean(data)
-        data = Data(data, name=os.path.abspath(self._filename))
-        if data.field_names is None:
-            raise TypeError("The numpy file \"{}\" has no field names. "
-                            "MatCal can only load a structured or "
-                            "record array with named columns.".format(self._filename))
-
-        return data
+        raw = np.load(self._filename, allow_pickle=False)
+        if raw.dtype.names is None:
+            raise TypeError(
+                'The numpy file "{}" has no field names. '
+                "MatCal can only load a structured or "
+                "record array with named columns.".format(self._filename)
+            )
+        data = self._inspect_data_and_clean(raw)
+        return Data(data, name=os.path.abspath(self._filename))
 
 
 class MatlabDataImporter(DataImporterBase):
     """
-       Class for reading in data from a Matlab ".mat" file. This uses the 
-       scipy.io.loadmat() function to read data in
-       from the files. Since field names are required for MatCal, it assumes 
-       that the data are stored in a format of
-       1d vectors with each variable name being the field name. 
-       This is wrapped by :func:`~matcal.core.data_importer.FileData`.
-       """
+    Class for reading in data from a Matlab ".mat" file. This uses the
+    scipy.io.loadmat() function to read data in
+    from the files. Since field names are required for MatCal, it assumes
+    that the data are stored in a format of
+    1d vectors with each variable name being the field name.
+    This is wrapped by :func:`~matcal.core.data_importer.FileData`.
+    """
 
     def load(self):
         data_dictionary = self._create_flattened_data_from_mat_file(self._filename)
@@ -509,8 +596,13 @@ class MatlabDataImporter(DataImporterBase):
         return data
 
     def _create_flattened_data_from_mat_file(self, filename):
-        from scipy import io
-        data_dictionary = io.loadmat(filename)
+        if scipy_io is None:
+            raise ImportError(
+                "scipy is required to load .mat files. "
+                f"Install it with: pip install scipy\n"
+                f"Original error: {_scipy_import_error_msg}"
+            )
+        data_dictionary = scipy_io.loadmat(filename)
         data_dictionary = self._flatten_dictionary(data_dictionary)
         return data_dictionary
 
@@ -522,13 +614,7 @@ class MatlabDataImporter(DataImporterBase):
         return flat_dict
 
     def _is_field_data_key(self, key):
-        front = key[:2]
-        back = key[-2:]
-        format_string = "__"
-        if front != format_string and back != format_string:
-            return True
-        else:
-            return False
+        return key[:2] != "__" and key[-2:] != "__"
 
 
 class BatchDataImporter:
@@ -544,8 +630,7 @@ class BatchDataImporter:
     """
 
     class BatchDataImporterStateError(Exception):
-        def __init__(self, *args):
-            super().__init__(*args)
+        pass
 
     def __init__(self, filenames, **filedata_kwargs):
         """
@@ -560,6 +645,7 @@ class BatchDataImporter:
         self._filenames = self._set_batch_filenames(filenames)
         self._datas = []
         self._state_vars = None
+        self._batch_cache = None
 
         # forwarded into FileData(...) calls
         self._filedata_kwargs = dict(filedata_kwargs)
@@ -571,6 +657,10 @@ class BatchDataImporter:
         self._fixed_state_params = {}
         self._fixed_state_name = None
 
+        # set during _collect(); declared here to satisfy pylint
+        self._has_any_file_state: bool = False
+        self._fixed_only_state_name: Optional[str] = None
+
     def set_state_precision(self, precision: int = 6):
         """
         Set the number of significant figures used when reconciling unique states across the batch.
@@ -580,14 +670,15 @@ class BatchDataImporter:
         states that match for all parameters
         at this precision are combined.
 
-        :param precision: non-negative integer significant-figure precision
+        :param precision: positive integer significant-figure precision (must be >= 1)
         :type precision: int
         """
         if not isinstance(precision, numbers.Integral):
             raise TypeError("state_precision must be an integer")
-        if precision < 0:
-            raise ValueError("state_precision must be non-negative")
+        if precision < 1:
+            raise ValueError("state_precision must be at least 1")
         self._state_precision = int(precision)
+        self._batch_cache = None
 
     def _any_file_has_state(self) -> bool:
         # true if ANY dataset has non-empty state params
@@ -596,7 +687,7 @@ class BatchDataImporter:
                 return True
         return False
 
-    def set_fixed_state_parameters(self, name: str = None, **fixed_states):
+    def set_fixed_state_parameters(self, name: Optional[str] = None, **fixed_states):
         """
         Set fixed/additional state variables applied to every imported dataset during
         reconciliation.
@@ -623,7 +714,7 @@ class BatchDataImporter:
         for k, v in fixed_states.items():
             if not isinstance(k, str):
                 raise TypeError("Fixed state parameter names must be strings")
-            if not (isinstance(v, str) or isinstance(v, numbers.Real)):
+            if not isinstance(v, (str, numbers.Real)):
                 raise TypeError(
                     f"Fixed state parameter '{k}' must be a string or a real number. "
                     f"Received type {type(v)}"
@@ -631,34 +722,39 @@ class BatchDataImporter:
 
         self._fixed_state_params = dict(fixed_states)
         self._fixed_state_name = name
+        self._batch_cache = None
 
     def _set_batch_filenames(self, filenames):
         filename_list = []
         if not isinstance(filenames, list) and isinstance(filenames, str):
             filename_list = self._get_filenames_from_pattern(filenames)
         elif isinstance(filenames, list):
+            if len(filenames) == 0:
+                raise ValueError(
+                    "BatchDataImporter requires at least one filename. "
+                    "An empty list was passed."
+                )
             filename_list = filenames
         else:
-            raise TypeError("BatchDataImporter only takes a list of filenames "
-                            "or a regular expression for "
-                            f"finding file names. \"{filenames}\" is not a valid option.")
+            raise TypeError(
+                "BatchDataImporter only takes a list of filenames "
+                "or a regular expression for "
+                f'finding file names. "{filenames}" is not a valid option.'
+            )
 
         for filename in filename_list:
-            self._check_filename_type(filename)
+            _check_filename_type(filename)
         return filename_list
 
     def _get_filenames_from_pattern(self, filenames_list):
         pattern = filenames_list
         filenames_list = sorted(glob.glob(pattern))
         if len(filenames_list) == 0:
-            raise FileNotFoundError(f"The pattern \"{pattern}\" passed to "
-                                    "the BatchDataImporter matched no files")
+            raise FileNotFoundError(
+                f'The pattern "{pattern}" passed to '
+                "the BatchDataImporter matched no files"
+            )
         return filenames_list
-
-    def _check_filename_type(self, filename):
-        if not isinstance(filename, str):
-            raise TypeError("The filename passed to the BatchDataImporter must be a string."
-            f" Received variable of type '{type(filename)}'")
 
     def _get_new_state_with_specified_precision(self, state):
         """
@@ -673,40 +769,6 @@ class BatchDataImporter:
 
         return self._create_precision_rounded_state(state)
 
-    def _create_state_when_no_file_state(self):
-        """
-        Handle the case where no per-file state exists (SolitaryState).
-        Returns either a SolitaryState (if no fixed state params) or a fixed-only State.
-        """
-        if not self._fixed_state_params:
-            return SolitaryState()
-
-        state_name = self._select_fixed_only_state_name()
-        # params are applied later in reconciliation via new_state.update(...)
-        return State(state_name, **{})
-
-    def _select_fixed_only_state_name(self) -> str:
-        """
-        Select the state name to use for a fixed-only batch state.
-
-        If a user fixed-state name was provided, it is only used when NO imported file
-        contains state information. If state information exists, log a warning and ignore it.
-        """
-        default_name = "batch_fixed_state"
-
-        if self._fixed_state_name is None:
-            return default_name
-
-        if self._any_file_has_state():
-            logger.warning(
-                "BatchDataImporter fixed state name '%s' was ignored because state "
-                "information was found in at least one imported file.",
-                self._fixed_state_name
-            )
-            return default_name
-
-        return self._fixed_state_name
-
     def _create_precision_rounded_state(self, state):
         """
         Create a new State whose numeric parameters are rounded to the configured
@@ -714,7 +776,9 @@ class BatchDataImporter:
         the rounded values.
         """
         precision = self._state_precision
-        new_state_name, params = self._round_state_params_and_build_name(state, precision)
+        new_state_name, params = self._round_state_params_and_build_name(
+            state, precision
+        )
         return State(new_state_name, **params)
 
     def _round_state_params_and_build_name(self, state, precision: int):
@@ -727,7 +791,9 @@ class BatchDataImporter:
 
         for name, value in state.params.items():
             updated_value = self._round_state_param_value(value, precision)
-            new_state_name = self._update_new_state_name(precision, name, new_state_name, updated_value)
+            new_state_name = self._update_new_state_name(
+                precision, name, new_state_name, updated_value
+            )
             params[name] = updated_value
 
         return new_state_name.rstrip("_"), params
@@ -739,22 +805,21 @@ class BatchDataImporter:
         Non-numeric values are returned unchanged.
         """
         if isinstance(value, numbers.Real):
-            # historical behavior: precision+1 passed to set_significant_figures
-            return set_significant_figures(value, precision + 1)
+            return set_significant_figures(value, precision)
         return value
 
     @staticmethod
-    def _update_new_state_name(precision, state_parameter_name, state_name, updated_value):
-        if precision == 0:
-            fmt = str(precision + 6) + "." + str(precision + 1) + "e"
-        else:
-            fmt = str(precision + 6) + "." + str(precision) + "e"
+    def _update_new_state_name(
+        precision, state_parameter_name, state_name, updated_value
+    ):
+        fmt = str(precision + 6) + "." + str(precision) + "e"
         if isinstance(updated_value, str):
             fmt = "s"
         state_name += "{0}_{1:{2}}_".format(state_parameter_name, updated_value, fmt)
         return state_name
 
     def _reconcile_states(self):
+        self._state_vars = None
         states = self._get_original_states()
         self._verify_all_data_sets_have_the_same_state_variables(states)
         updated_states_data_collection = DataCollection("reconciled states data")
@@ -763,13 +828,27 @@ class BatchDataImporter:
 
     def _populate_updated_state_data_collection(self, updated_states_data_collection):
         for data in self._datas:
+            original_is_solitary = isinstance(data.state, SolitaryState)
             new_state = self._get_new_state_with_specified_precision(data.state)
+            # Apply fixed params to *new* states that came from file state
+            # headers (not from SolitaryState, which already incorporates them).
+            if (
+                self._fixed_state_params
+                and not original_is_solitary
+                and new_state.name not in updated_states_data_collection.state_names
+            ):
+                new_state.update(self._fixed_state_params)
+                rebuilt_name = ""
+                precision = self._state_precision
+                for pname, pvalue in new_state.params.items():
+                    rounded = self._round_state_param_value(pvalue, precision)
+                    rebuilt_name = self._update_new_state_name(
+                        precision, pname, rebuilt_name, rounded
+                    )
+                new_state = State(rebuilt_name.rstrip("_"), **new_state.params)
             if new_state.name in updated_states_data_collection.state_names:
                 data.set_state(updated_states_data_collection.states[new_state.name])
             else:
-                # Apply fixed params (if any) to *new* states only
-                if self._fixed_state_params:
-                    new_state.update(self._fixed_state_params)
                 data.set_state(new_state)
             updated_states_data_collection.add(data)
 
@@ -781,8 +860,8 @@ class BatchDataImporter:
             else:
                 if self._state_vars != current_state_vars:
                     raise self.BatchDataImporterStateError(
-                        "The file \"{}\" has the state variables: {} \nExpected the "
-                        "following state varaibles:\n {}. Check input and "
+                        'The file "{}" has the state variables: {} \nExpected the '
+                        "following state variables:\n {}. Check input and "
                         "files.".format(data_file, current_state_vars, self._state_vars)
                     )
 
@@ -794,7 +873,7 @@ class BatchDataImporter:
 
     @property
     def states(self):
-        return self._states
+        return self.batch.states
 
     @property
     def filenames(self):
@@ -808,7 +887,9 @@ class BatchDataImporter:
 
         # decide once per batch
         self._has_any_file_state = self._any_file_has_state()
-        self._fixed_only_state_name = self._compute_fixed_only_state_name(self._has_any_file_state)
+        self._fixed_only_state_name = self._compute_fixed_only_state_name(
+            self._has_any_file_state
+        )
 
     def _compute_fixed_only_state_name(self, has_any_file_state: bool) -> str:
         default_name = "batch_fixed_state"
@@ -819,7 +900,7 @@ class BatchDataImporter:
             logger.warning(
                 "BatchDataImporter fixed state name '%s' was ignored because state "
                 "information was found in at least one imported file.",
-                self._fixed_state_name
+                self._fixed_state_name,
             )
             return default_name
 
@@ -828,10 +909,7 @@ class BatchDataImporter:
     def _create_state_when_no_file_state(self):
         if not self._fixed_state_params:
             return SolitaryState()
-        state_name = self._fixed_only_state_name
-        if state_name is None:
-            state_name = "batch_fixed_state"        
-        return State(state_name, **{})
+        return State(self._fixed_only_state_name, **self._fixed_state_params)
 
     @property
     def batch(self):
@@ -844,12 +922,17 @@ class BatchDataImporter:
         :meth:`~matcal.core.data_importer.BatchDataImporter.set_fixed_state_parameters`.
 
         Data with similar states are combined into single states according to the configured
-        state precision 
+        state precision
         (see :meth:`~matcal.core.data_importer.BatchDataImporter.set_state_precision`).
+
+        The result is cached and reused on subsequent accesses. The cache is
+        invalidated when :meth:`set_state_precision` or
+        :meth:`set_fixed_state_parameters` is called.
         """
-        self._collect()
-        data_collection = self._reconcile_states()
-        return data_collection
+        if self._batch_cache is None:
+            self._collect()
+            self._batch_cache = self._reconcile_states()
+        return self._batch_cache
 
 
 class JSONProbeDataImporter(DataImporterBase):
@@ -865,21 +948,25 @@ class JSONProbeDataImporter(DataImporterBase):
 class ProbeDataImporterFactory(SpecificObjectFactory):
     pass
 
+
 class CSVProbeImporterCreator(ObjectCreator):
 
     def __call__(self, *args, **kwargs):
         return CSVDataImporter(*args, **kwargs)
-    
+
+
 class NumpyProbeImporterCreator(ObjectCreator):
 
     def __call__(self, *args, **kwargs):
         return NumpyDataImporter(*args, **kwargs)
-    
+
+
 class MatlabProbeImporterCreator(ObjectCreator):
 
     def __call__(self, *args, **kwargs):
         return MatlabDataImporter(*args, **kwargs)
-    
+
+
 class JSONProbeImporterCreator(ObjectCreator):
 
     def __call__(self, *args, **kwargs):
@@ -887,7 +974,7 @@ class JSONProbeImporterCreator(ObjectCreator):
 
 
 matcal_probe_data_importer_factory = ProbeDataImporterFactory()
-matcal_probe_data_importer_factory.register_creator('csv', CSVProbeImporterCreator())
-matcal_probe_data_importer_factory.register_creator('npy', NumpyProbeImporterCreator())
-matcal_probe_data_importer_factory.register_creator('mat', MatlabProbeImporterCreator())
-matcal_probe_data_importer_factory.register_creator('json', JSONProbeImporterCreator())
+matcal_probe_data_importer_factory.register_creator("csv", CSVProbeImporterCreator())
+matcal_probe_data_importer_factory.register_creator("npy", NumpyProbeImporterCreator())
+matcal_probe_data_importer_factory.register_creator("mat", MatlabProbeImporterCreator())
+matcal_probe_data_importer_factory.register_creator("json", JSONProbeImporterCreator())
