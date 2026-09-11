@@ -1,9 +1,13 @@
 Full-field Interpolation and Extrapolation
 ==========================================
-For full-field interpolation and extrapolation, we use the python implementation 
-of the Compadre Toolkit :cite:p:`compadre_toolkit,pycompadre_sand`. From the 
-Compadre Toolkit, we use the generalized moving least squares method (GMLS)
-to interpolate and extrapolate from one point cloud to another.
+For full-field interpolation and extrapolation, MatCal uses a generalized 
+moving least squares method (GMLS) to interpolate and extrapolate from one 
+point cloud to another. When available, MatCal delegates to the python 
+implementation of the Compadre Toolkit, *pycompadre* 
+:cite:p:`compadre_toolkit,pycompadre_sand`. When *pycompadre* is not 
+installed, MatCal provides a built-in numpy/scipy GMLS implementation that 
+produces equivalent results using the same radius-based neighbor search and 
+local polynomial least-squares approach.
 Usually, we are using this tool to map fields from the experiment 
 data cloud to a computational discretization. This workflow was chosen as 
 our default operation in order 
@@ -90,11 +94,25 @@ to avoid extrapolating.
 
 MatCal's GMLS Implementation
 ----------------------------
-MatCal interpolates using Compadre's python implementation pycompadre. 
-Compadre leverages the advantages of the Kokkos library to perform the 
-calculations necessary for GMLS in a scalable parallel fashion.  
-MatCal wraps the various tools used by pycompadre, so that there is a 
-limited need to understand the implementation details of Compadre by the rest of the code. 
+MatCal provides two interchangeable GMLS backends selected automatically at 
+runtime:
+
+#. **pycompadre (preferred)** — When the ``pycompadre`` package is installed, 
+   MatCal delegates to Compadre's python interface.  Compadre leverages the 
+   Kokkos library to perform the calculations necessary for GMLS in a 
+   scalable parallel fashion.
+#. **Built-in numpy/scipy fallback** — When ``pycompadre`` is not available, 
+   MatCal uses a pure numpy/scipy implementation that replicates the same 
+   radius-based neighbor search and local polynomial least-squares workflow.  
+   This fallback pre-computes a sparse interpolation weight matrix from the 
+   source and target geometry so that subsequent field applications are cheap 
+   sparse matrix-vector multiplies.
+
+Both backends produce equivalent interpolation results for the same input 
+parameters.  The user-facing API is identical regardless of which backend is 
+active — no code changes are required when switching between environments with 
+or without ``pycompadre``.
+
 The main tools of interest that use GMLS are the function 
 :func:`~matcal.full_field.field_mappers.meshless_remapping` 
 and :class:`~matcal.full_field.objective.InterpolatedFullFieldObjective`. 
