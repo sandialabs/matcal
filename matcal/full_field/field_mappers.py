@@ -624,8 +624,6 @@ class MeshlessMapperGMLS:
                 "QR",
                 "STANDARD",
             )
-            gmls_obj.setWeightingPower(2)
-            gmls_obj.setWeightingType("power")
 
             gmls_helper = pycompadre.ParticleHelper(gmls_obj)
         except Exception:
@@ -641,7 +639,7 @@ class MeshlessMapperGMLS:
 
         try:
             gmls_obj.addTargets(pycompadre.TargetOperation.ScalarPointEvaluation)
-            gmls_obj.generateAlphas(number_of_batches)
+            gmls_obj.generateAlphas(number_of_batches, keep_coefficients=False)
         except Exception:
             raise self.AlphaGenerationError()
 
