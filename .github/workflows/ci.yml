@@ -85,6 +85,9 @@ jobs:
 
   # ============================================================================
   # Test stages — reusable matrix with shared setup
+  #
+  # Pull requests:  py3.13 on ubuntu only (fast feedback)
+  # Post-merge push: full matrix (py3.11-3.13 x ubuntu/macos/windows)
   # ============================================================================
   unit-tests:
     uses: ./.github/workflows/test-stage.yml
@@ -98,6 +101,7 @@ jobs:
         matcal/dakota/tests/unit
       blocking-path: matcal/core/tests/unit
       coverage: true
+      run-full-matrix: ${{ github.event_name == 'push' }}
 
   integration-tests:
     needs: unit-tests
@@ -110,6 +114,7 @@ jobs:
         matcal/full_field/tests/integration
       blocking-path: matcal/core/tests/integration
       coverage: false
+      run-full-matrix: ${{ github.event_name == 'push' }}
 
   production-tests:
     needs: integration-tests
@@ -122,3 +127,4 @@ jobs:
         matcal/full_field/tests/production
       blocking-path: matcal/core/tests/production
       coverage: false
+      run-full-matrix: ${{ github.event_name == 'push' }}

@@ -16,8 +16,8 @@ try:
     import matplotlib.pyplot as plt
     from matplotlib.figure import Figure
 except ImportError:
-    plt = None
-    Figure = None
+    plt = None  # type: ignore[assignment]
+    Figure = None  # type: ignore[assignment, misc]
 
 from matcal.core.state import SolitaryState, State, StateCollection
 from matcal.core.utilities import (
@@ -284,7 +284,7 @@ class Data(np.ndarray):
         self.dtype.names = field_names
         return self
 
-    def __eq__(self, value) -> np.ndarray:  # pylint: disable=useless-parent-delegation
+    def __eq__(self, value) -> np.ndarray:  # type: ignore[override]  # pylint: disable=useless-parent-delegation
         return super().__eq__(value)
 
     def __reduce__(self):

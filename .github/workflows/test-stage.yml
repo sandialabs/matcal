@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: false
+      run-full-matrix:
+        description: "Run the full Python 3.11-3.13 OS matrix (false = py3.13 only)"
+        required: false
+        type: boolean
+        default: false
 
 env:
   TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
@@ -27,7 +32,7 @@ env:
 
 jobs:
   test-primary:
-    name: ${{ inputs.stage }} / ubuntu-latest py3.12
+    name: ${{ inputs.stage }} / ubuntu-latest py3.13
     runs-on: ubuntu-latest
 
     steps:
@@ -35,7 +40,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install dependencies
         shell: bash
@@ -139,7 +144,7 @@ jobs:
         if: always() && inputs.coverage
         uses: actions/upload-artifact@v5
         with:
-          name: coverage-${{ inputs.stage }}-ubuntu-latest-py3.12
+          name: coverage-${{ inputs.stage }}-ubuntu-latest-py3.13
           path: coverage.xml
 
       - name: Upload coverage badge
@@ -151,6 +156,7 @@ jobs:
 
   test-matrix:
     name: ${{ inputs.stage }} / ${{ matrix.os }} py${{ matrix.python-version }}
+    if: inputs.run-full-matrix
     needs: test-primary
     runs-on: ${{ matrix.os }}
 
@@ -161,7 +167,7 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
         exclude:
           - os: ubuntu-latest
-            python-version: "3.12"
+            python-version: "3.13"
 
     steps:
       - uses: actions/checkout@v5
