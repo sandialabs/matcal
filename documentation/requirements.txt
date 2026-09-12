@@ -11,4 +11,4 @@ bokeh
 joblib
 chardet
 matplotlib
-pyapprox
+pyapprox @ git+https://github.com/sandialabs/pyapprox.git@dev/main#subdirectory=packages/pyapprox
