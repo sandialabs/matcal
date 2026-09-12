@@ -49,6 +49,12 @@ jobs:
           pip install torch --index-url ${{ env.TORCH_INDEX_URL }}
           python -m pip install -e ".[ci]"
 
+      - name: Install pycompadre (optional)
+        shell: bash
+        continue-on-error: true
+        run: |
+          pip install pycompadre || echo "::warning::pycompadre install failed; tests will use scipy fallback"
+
       - name: Debug Python import paths
         shell: bash
         run: |
@@ -182,6 +188,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url ${{ env.TORCH_INDEX_URL }}
           python -m pip install -e ".[ci]"
+
+      - name: Install pycompadre (optional)
+        shell: bash
+        continue-on-error: true
+        run: |
+          pip install pycompadre || echo "::warning::pycompadre install failed; tests will use scipy fallback"
 
       - name: Run ${{ inputs.stage }} tests
         shell: bash

@@ -488,6 +488,38 @@ def _build_gmls_weight_matrix(
     return sparse.csr_matrix((data, (rows, cols_list)), shape=(n_target, n_source))
 
 
+class _KokkosLifecycleManager:
+    """Ensure the Kokkos execution space stays alive for the entire process.
+
+    pycompadre internally relies on Kokkos.  Some builds expose a
+    ``KokkosParser`` object whose destruction finalizes Kokkos.  Once
+    Kokkos is finalized it **cannot** be re-initialized in the same
+    process, so any subsequent pycompadre usage would crash with
+    "Constructing View and initializing data with uninitialized
+    execution space".
+
+    This singleton creates a ``KokkosParser`` on first use and holds
+    it for the remainder of the process lifetime, preventing premature
+    Kokkos finalization.
+    """
+
+    _kokkos_parser = None
+    _initialized: bool = False
+
+    @classmethod
+    def ensure_initialized(cls) -> None:
+        """Initialize Kokkos (via ``KokkosParser``) if not already done."""
+        if cls._initialized:
+            return
+        cls._initialized = True
+        try:
+            import pycompadre
+            if hasattr(pycompadre, "KokkosParser"):
+                cls._kokkos_parser = pycompadre.KokkosParser()
+        except Exception:
+            pass
+
+
 class MeshlessMapperGMLS:
     """Meshless mapping between two point clouds using GMLS.
 
@@ -551,6 +583,7 @@ class MeshlessMapperGMLS:
         # --- pycompadre path (preferred) ---
         if _check_pycompadre_available():
             self._backend = "pycompadre"
+            _KokkosLifecycleManager.ensure_initialized()
             self._init_pycompadre(
                 source_coords,
                 target_coords,
@@ -584,25 +617,33 @@ class MeshlessMapperGMLS:
         import pycompadre
 
         n_dim = source_coords.shape[1]
-        gmls_obj = pycompadre.GMLS(
-            polynomial_order,
-            n_dim,
-            "QR",
-            "STANDARD",
-        )
-        gmls_obj.setWeightingPower(2)
-        gmls_obj.setWeightingType("power")
+        try:
+            gmls_obj = pycompadre.GMLS(
+                polynomial_order,
+                n_dim,
+                "QR",
+                "STANDARD",
+            )
+            gmls_obj.setWeightingPower(2)
+            gmls_obj.setWeightingType("power")
 
-        gmls_helper = pycompadre.ParticleHelper(gmls_obj)
-        gmls_helper.setSourceSites(source_coords)
-        gmls_helper.setTargetSites(target_coords)
-        gmls_helper.setEpsilonMultiplier(epsilon_multiplier)
+            gmls_helper = pycompadre.ParticleHelper(gmls_obj)
+        except Exception:
+            raise self.InitializeError()
 
-        gmls_helper.generateKDTree()
-        gmls_helper.generateNeighborListsFromKNNSearchAndSet()
+        try:
+            gmls_helper.generateKDTree(source_coords)
+            gmls_helper.generateNeighborListsFromKNNSearchAndSet(
+                target_coords, polynomial_order, n_dim, epsilon_multiplier,
+            )
+        except Exception:
+            raise self.NeighborDetectionError()
 
-        gmls_obj.addTargets(pycompadre.TargetOperation.ScalarPointEvaluation)
-        gmls_obj.generateAlphas(number_of_batches)
+        try:
+            gmls_obj.addTargets(pycompadre.TargetOperation.ScalarPointEvaluation)
+            gmls_obj.generateAlphas(number_of_batches)
+        except Exception:
+            raise self.AlphaGenerationError()
 
         self._pycompadre_gmls = gmls_obj
         self._pycompadre_helper = gmls_helper
@@ -638,9 +679,7 @@ class MeshlessMapperGMLS:
         """Apply the pycompadre stencil to source values."""
         import pycompadre
 
-        return pycompadre.applyStencil(
-            self._pycompadre_gmls,
-            self._pycompadre_helper,
+        return self._pycompadre_helper.applyStencil(
             source_value,
             pycompadre.TargetOperation.ScalarPointEvaluation,
         )
