@@ -10,4 +10,10 @@ pandas>=2.3.1
 scikit_learn>=1.7.2
 scipy>=1.16.1
 seaborn>=0.13.2
-pyapprox
+pyapprox @ git+https://github.com/sandialabs/pyapprox.git@dev/main#subdirectory=packages/pyapprox
+
+# Optional: enables the pycompadre GMLS backend for full-field meshless
+# interpolation. Without it, a pure numpy/scipy fallback is used.
+# Install with: pip install pycompadre
+# Or via the optional extra: pip install matcal[pycompadre]
+# pycompadre

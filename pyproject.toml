@@ -24,6 +24,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pycompadre = [
+    "pycompadre",
+]
 ci = [
     "pytest",
     "pytest-cov",

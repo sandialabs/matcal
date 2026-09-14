@@ -762,16 +762,23 @@ class TestMeshlessMappingPycompadreBackend(_MeshlessMappingTestBase):
     _force_pycompadre_available = True
 
     def test_2d_trig_neighbor_detection_error_pycompadre(self):
-        """pycompadre raises NeighborDetectionError for this scenario."""
-        test_function = self.linear_sin
-        n_points = 120
+        """Verify pycompadre wraps neighbor errors as NeighborDetectionError.
+
+        A 7th-order polynomial in 2D requires C(9,7)=36 basis terms,
+        so at least 36 source neighbors per target.  With only 30
+        source points total and a tight search radius (eps=1.5),
+        pycompadre cannot find sufficient support and raises during
+        neighbor list construction.  The error must be wrapped as
+        ``NeighborDetectionError``.
+        """
+        np.random.seed(123456)
         n_dim = 2
         poly_order = 7
         eps = 1.5
+        source_coords = np.random.uniform(0, 1, [30, n_dim])
+        target_coords = np.random.uniform(0, 1, [10, n_dim])
         with self.assertRaises(MeshlessMapperGMLS.NeighborDetectionError):
-            self._confirm_interp_bad_dim_neighbor_detection_error(
-                test_function, n_points, n_dim, poly_order, eps
-            )
+            MeshlessMapperGMLS(target_coords, source_coords, poly_order, eps)
 
 
 def subtract_function(reference_field, specific_field, spatial_corrds, time):
