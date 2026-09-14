@@ -39,6 +39,8 @@ MatCal provides two broad surrogate-modeling workflows:
   iteratively based on surrogate error estimates and sampling rules. These are
   implemented in :mod:`matcal.core.adaptive_surrogates`.
 
+.. include:: pretrained_surrogates_includes.rst
+
 Fixed-Sample Surrogates
 =====================
 

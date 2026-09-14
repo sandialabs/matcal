@@ -38,6 +38,40 @@ with open("site_includes.rst", 'w') as f:
         for rst in rsts_to_include:
             f.write(f'\t{rst}\n')
     
+# Pre-trained (site-specific) surrogate documentation. The "Pre-trained
+# Surrogates" section of Surrogates.rst includes the generated file below. When
+# the site_matcal pre-trained surrogate artifacts are present, we emit the
+# descriptive content; otherwise the include is left empty so the section does
+# not appear in a standalone (non-site) build.
+_pretrained_surrogate_dir = os.path.join(
+    "..", "..", "..", "site_matcal", "sandia", "pretrained_surrogates",
+    "hosford_aluminum")
+_pretrained_surrogate_doc = os.path.join(
+    "..", "..", "..", "site_matcal", "documentation",
+    "pretrained_surrogates.rst")
+_have_pretrained_surrogates = (
+    os.path.exists(os.path.join(_pretrained_surrogate_dir, "uniaxial_tension",
+                                "aluminum_hosford_tension_sg_surrogate.joblib"))
+    or os.path.exists(os.path.join(_pretrained_surrogate_dir, "top_hat_shear",
+                                   "aluminum_hosford_top_hat_shear_sg_surrogate.joblib"))
+    or os.path.exists(_pretrained_surrogate_doc))
+with open("pretrained_surrogates_includes.rst", "w") as f:
+    if _have_pretrained_surrogates and os.path.exists(_pretrained_surrogate_doc):
+        shutil.copyfile(_pretrained_surrogate_doc,
+                        os.path.join(os.getcwd(), "pretrained_surrogates.rst"))
+        f.write(".. include:: pretrained_surrogates.rst\n")
+
+# Site-specific sphinx-gallery examples for the pre-trained surrogates. These
+# only exist when site_matcal is available; the gallery directory is added to
+# the sphinx_gallery_conf below only when the example scripts are present so a
+# standalone (non-site) build is unaffected.
+_pretrained_surrogate_examples_src = os.path.join(
+    "..", "..", "..", "site_matcal", "documentation",
+    "pretrained_surrogate_examples")
+_build_pretrained_surrogate_gallery = (
+    _have_pretrained_surrogates
+    and os.path.exists(os.path.join(_pretrained_surrogate_examples_src,
+                                    "README.rst")))
 # -- Project information -----------------------------------------------------
 
 project = 'MatCal Users Guide'
@@ -112,6 +146,11 @@ sphinx_gallery_conf = {
     'nested_sections': False,
 #    'filename_pattern': '/plot_6061',
 }
+
+# Append the site-specific pre-trained surrogate example gallery when present.
+if _build_pretrained_surrogate_gallery:
+    sphinx_gallery_conf['examples_dirs'].append(_pretrained_surrogate_examples_src)
+    sphinx_gallery_conf['gallery_dirs'].append('pretrained_surrogate_examples')
 
 
 # way to exclude exceptions
