@@ -61,6 +61,15 @@ with open("pretrained_surrogates_includes.rst", "w") as f:
                         os.path.join(os.getcwd(), "pretrained_surrogates.rst"))
         f.write(".. include:: pretrained_surrogates.rst\n")
 
+# Make site_matcal importable for autodoc when it is available, so the
+# pre-trained surrogate classes and their methods can be documented and
+# cross-referenced. The parent of site_matcal (the repository root) is added to
+# sys.path. This is a no-op for a standalone (non-site) build.
+_site_matcal_parent = os.path.abspath(os.path.join("..", "..", ".."))
+if _have_pretrained_surrogates and os.path.isdir(
+        os.path.join(_site_matcal_parent, "site_matcal")):
+    sys.path.insert(0, _site_matcal_parent)
+
 # Site-specific sphinx-gallery examples for the pre-trained surrogates. These
 # only exist when site_matcal is available; the gallery directory is added to
 # the sphinx_gallery_conf below only when the example scripts are present so a
