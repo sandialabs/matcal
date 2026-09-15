@@ -514,6 +514,7 @@ class _KokkosLifecycleManager:
         cls._initialized = True
         try:
             import pycompadre
+
             if hasattr(pycompadre, "KokkosParser"):
                 cls._kokkos_parser = pycompadre.KokkosParser()
         except Exception:
@@ -553,6 +554,13 @@ class MeshlessMapperGMLS:
     :param number_of_batches: Number of batches for pycompadre alpha
         generation. Ignored when using the numpy/scipy fallback.
     :type number_of_batches: int
+
+    :param backend: Explicitly select the computation backend.
+        ``"pycompadre"`` uses the pycompadre library (must be installed),
+        ``"scipy"`` uses the built-in numpy/scipy GMLS implementation,
+        and ``None`` (default) automatically selects pycompadre when
+        available, falling back to scipy otherwise.
+    :type backend: str or None
     """
 
     default_polynomial_order: int = 1
@@ -565,8 +573,15 @@ class MeshlessMapperGMLS:
         polynomial_order: int = default_polynomial_order,
         epsilon_multiplier: float = default_epsilon_multiplier,
         number_of_batches: int = 2,
+        backend: str | None = None,
     ) -> None:
         _check_gmls_parameters(polynomial_order, epsilon_multiplier)
+
+        if backend is not None and backend not in ("pycompadre", "scipy"):
+            raise ValueError(
+                f"Unknown backend {backend!r}. "
+                "Must be 'pycompadre', 'scipy', or None."
+            )
 
         source_coords = np.asarray(source_coords, dtype=float)
         target_coords = np.asarray(target_coords, dtype=float)
@@ -580,8 +595,17 @@ class MeshlessMapperGMLS:
         self._pycompadre_gmls = None
         self._pycompadre_helper = None
 
-        # --- pycompadre path (preferred) ---
-        if _check_pycompadre_available():
+        use_pycompadre = backend == "pycompadre" or (
+            backend is None and _check_pycompadre_available()
+        )
+
+        if backend == "pycompadre" and not _check_pycompadre_available():
+            raise ImportError(
+                "backend='pycompadre' was requested but pycompadre " "is not installed."
+            )
+
+        if use_pycompadre:
+            # --- pycompadre path ---
             self._backend = "pycompadre"
             _KokkosLifecycleManager.ensure_initialized()
             self._init_pycompadre(
@@ -592,12 +616,13 @@ class MeshlessMapperGMLS:
                 number_of_batches,
             )
         else:
-            # --- numpy/scipy fallback ---
+            # --- numpy/scipy path ---
             self._backend = "scipy"
-            logger.info(
-                "pycompadre is not available; using numpy/scipy GMLS "
-                "fallback. This may be slower for large point clouds."
-            )
+            if backend is None:
+                logger.info(
+                    "pycompadre is not available; using numpy/scipy GMLS "
+                    "fallback. This may be slower for large point clouds."
+                )
             self._weight_matrix = _build_gmls_weight_matrix(
                 source_coords,
                 target_coords,
@@ -632,7 +657,10 @@ class MeshlessMapperGMLS:
         try:
             gmls_helper.generateKDTree(source_coords)
             gmls_helper.generateNeighborListsFromKNNSearchAndSet(
-                target_coords, polynomial_order, n_dim, epsilon_multiplier,
+                target_coords,
+                polynomial_order,
+                n_dim,
+                epsilon_multiplier,
             )
         except Exception:
             raise self.NeighborDetectionError()
@@ -734,6 +762,7 @@ def meshless_remapping(
     search_radius_multiplier=MeshlessMapperGMLS.default_epsilon_multiplier,
     target_time=None,
     time_field=None,
+    backend=None,
 ):
     """
     Stand alone function for performing meshless interpolation between two point clouds.
@@ -764,6 +793,12 @@ def meshless_remapping(
         a given polynomial order is reached. Higher values will include more points and in-general have a greater smoothing effect.
         Recommended values for this parameter are between 1.5 and 3.
     :type search_radius_multiplier: float
+
+    :param backend: Explicitly select the computation backend.
+        ``"pycompadre"`` uses the pycompadre library, ``"scipy"`` uses
+        the built-in numpy/scipy GMLS implementation, and ``None``
+        (default) automatically selects pycompadre when available.
+    :type backend: str or None
     """
     target_points = np.asarray(target_points, dtype=float)
     if target_points.ndim > 2:
@@ -773,6 +808,7 @@ def meshless_remapping(
         field_data.spatial_coords,
         polynomial_order,
         search_radius_multiplier,
+        backend=backend,
     )
     mapped_data = {}
 

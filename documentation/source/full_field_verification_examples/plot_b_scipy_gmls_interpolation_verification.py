@@ -3,15 +3,14 @@ Built-in GMLS Interpolation Verification (numpy/scipy Backend)
 ==============================================================
 In this example, we use an analytical function
 to test and verify MatCal's built-in numpy/scipy GMLS
-implementation, which serves as a fallback when
-*pycompadre* is not available.
+implementation by explicitly selecting the ``"scipy"`` backend.
 
 The built-in implementation uses the same radius-based neighbor
 search and local polynomial least-squares approach as pycompadre,
 but relies only on numpy, scipy, and their ``cKDTree`` and sparse
 matrix utilities.  This example follows the same verification
 procedure as :ref:`sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py`
-to demonstrate that the fallback backend produces equivalent
+to demonstrate that the scipy backend produces equivalent
 results.
 
 The verification procedure:
@@ -52,7 +51,6 @@ from matcal import *
 from matcal.full_field.field_mappers import (
     MeshlessMapperGMLS,
     _build_gmls_weight_matrix,
-    _check_pycompadre_available,
 )
 import numpy as np
 import matplotlib.pyplot as plt
@@ -60,19 +58,15 @@ import matplotlib.pyplot as plt
 # %%
 # Confirm which backend is active
 # --------------------------------
-# This example is designed to exercise the built-in scipy
-# fallback.  We print the active backend for transparency.
-if _check_pycompadre_available():
-    print("NOTE: pycompadre IS available. MeshlessMapperGMLS will "
-          "use the pycompadre backend in this environment.")
-else:
-    print("pycompadre is NOT available. MeshlessMapperGMLS will "
-          "use the built-in numpy/scipy GMLS backend.")
+# This example explicitly selects ``backend="scipy"`` so that the
+# built-in numpy/scipy GMLS implementation is exercised regardless of
+# whether pycompadre is installed.
+print("This example explicitly uses backend='scipy' for all GMLS calls.")
 
 # %%
 # Define measurement domain
 # --------------------------
-# The domain is about 15 mm high (6 inches) and 7.6 mm wide (3 inches).
+# The domain is about 152 mm high (6 inches) and 76 mm wide (3 inches).
 # The measured grid has 400 points in each dimension (x, y).
 H = 6 * 0.0254
 W = 3 * 0.0254
@@ -170,12 +164,13 @@ search_radius_mults.append(5.0)
 # %%
 # Run the parameter study using MeshlessMapperGMLS
 # --------------------------------------------------
-# Here we use the :class:`~matcal.full_field.field_mappers.MeshlessMapperGMLS`
-# class directly.  This class automatically selects the scipy fallback
-# when pycompadre is not installed.  We also demonstrate using the
-# low-level :func:`~matcal.full_field.field_mappers._build_gmls_weight_matrix`
-# helper for the first parameter combination to show the sparse
-# weight matrix directly.
+# Here we call :func:`~matcal.full_field.field_mappers.meshless_remapping`
+# with ``backend="scipy"`` to ensure the built-in numpy/scipy GMLS
+# implementation is used, even when pycompadre is installed.  We also
+# demonstrate using the low-level
+# :func:`~matcal.full_field.field_mappers._build_gmls_weight_matrix`
+# helper at the end of this example to show the sparse weight matrix
+# directly.
 #
 # Error measures:
 #
@@ -202,6 +197,7 @@ for poly_order in polynomial_orders:
             sim_truth_data.spatial_coords,
             poly_order,
             search_rad_mult,
+            backend="scipy",
         )
         error_field = mapped_data["val"] - sim_truth_data["val"]
         error_fields_by_search_rad.append(error_field)
