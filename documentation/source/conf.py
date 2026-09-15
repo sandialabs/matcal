@@ -70,6 +70,26 @@ if _have_pretrained_surrogates and os.path.isdir(
         os.path.join(_site_matcal_parent, "site_matcal")):
     sys.path.insert(0, _site_matcal_parent)
 
+# API reference for the site-specific pre-trained surrogate model classes. This
+# is included from "User API Documentation.rst" and is only populated when
+# site_matcal is available, so a standalone (non-site) build is unaffected.
+_pretrained_api_module = (
+    "site_matcal.sandia.pretrained_surrogates.hosford_aluminum.surrogate_models")
+_pretrained_api_classes = [
+    "HosfordAluminumTensionSurrogateModel",
+    "HosfordAluminumTopHatShearSurrogateModel",
+]
+with open("pretrained_surrogates_api_includes.rst", "w") as f:
+    if _have_pretrained_surrogates and os.path.isdir(
+            os.path.join(_site_matcal_parent, "site_matcal")):
+        f.write("Pre-trained Surrogates (site_matcal)\n")
+        f.write("====================================\n\n")
+        for class_name in _pretrained_api_classes:
+            f.write(f".. autoclass:: {_pretrained_api_module}.{class_name}\n")
+            f.write("   :members: use_imperial_units, use_SI_units, "
+                    "unit_system, parameter_bounds, surrogate\n")
+            f.write("   :show-inheritance:\n\n")
+
 # Site-specific sphinx-gallery examples for the pre-trained surrogates. These
 # only exist when site_matcal is available; the gallery directory is added to
 # the sphinx_gallery_conf below only when the example scripts are present so a
