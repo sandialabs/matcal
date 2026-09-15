@@ -30,7 +30,7 @@ history, or a spatial field sampled at many locations.
    :ref:`MatCalSurrogateModel Section` in the *MatCal Features and Objects*
    chapter for a worked example and usage details.
 
-MatCal provides two broad surrogate-modeling workflows:
+MatCal provides three surrogate-modeling workflows:
 
 * **Fixed-sample surrogates**, built from an existing set of model evaluations.
   These are created with :class:`matcal.core.surrogates.SurrogateGenerator`.
@@ -38,6 +38,11 @@ MatCal provides two broad surrogate-modeling workflows:
 * **Adaptive surrogates**, where MatCal chooses new training samples
   iteratively based on surrogate error estimates and sampling rules. These are
   implemented in :mod:`matcal.core.adaptive_surrogates`.
+
+* **Pre-trained surrogates**, ready-to-use surrogate models that have already
+  been trained on a specific model, geometry, and material. These are only
+  included in ``site_matcal`` installations and are described at the end of this
+  chapter.
 
 Fixed-Sample Surrogates
 =====================
@@ -1472,3 +1477,5 @@ To use these examples as templates for a new study:
 #. Keep the common-test-set pattern if comparing multiple surrogate approaches.
    The test set should be independent of the validation points used for plotting
    example error curves.
+
+.. include:: pretrained_surrogates_includes.rst

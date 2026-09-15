@@ -170,12 +170,24 @@ function calls or other criteria.
 Registration Location
 -------------
 To get MatCal to register custom and site specific tools, MatCal looks for an 
-"__init__.py" file inside of a "matcal/site_matcal". you will need to create this
-directory and file. It is also recommended that any custom code development occur 
-inside 'site_matcal' as much as possible. When MatCal is importing, it will 
-use the "__init__.py" file to know what to expose inside the "site_matcal" directory. 
+importable Python package named ``site_matcal``. Any custom or site specific code 
+should live inside this package, and it is recommended that as much custom code 
+development as possible occur inside ``site_matcal``. When ``import matcal`` runs, 
+MatCal checks whether ``site_matcal`` is available on the Python path. If it is 
+not, MatCal continues with its built-in defaults. If it is, MatCal imports it and 
+then calls the package's ``register()`` function to populate its factories with the 
+site specific capabilities.
 
-An simple example "__init__.py" file can look like:
+The ``site_matcal`` package can be made importable either by installing it (it is 
+a normal Python package with its own ``pyproject.toml``) or by adding it to the 
+``PYTHONPATH``. If you install it, MatCal picks it up automatically.
+
+.. code-block:: bash
+
+    # From within the site_matcal directory
+    python -m pip install .
+
+A simple example ``site_matcal/__init__.py`` file can look like:
 
 .. code-block:: python 
 
@@ -185,22 +197,60 @@ An simple example "__init__.py" file can look like:
     from .mysite import *
     __all__ += mysite.__all__
 
-In this example the file 'mysite.py' is imported and all functions and classes within 
-'mysite' is exposed. Files can also be run in these the __init__.py files. This
-is how MatCal registers all of the various options for its factories. For example
+    def register():
+        mysite.register()
+
+    __all__ += ["register"]
+
+In this example the subpackage ``mysite`` is imported and all of its public 
+functions and classes are exposed. Importantly, the top level ``register()`` 
+function delegates to each site subpackage's own ``register()``. This is the 
+single entry point MatCal calls after importing ``site_matcal``.
+
+Explicit registration entry point
+++++++++++++++++++++++++++++++++++
+Rather than performing factory registration as an import side effect (i.e. at the 
+top level of a module that runs when it is imported), MatCal expects registration 
+to be done inside a ``register()`` function. This has several advantages:
+
+#. Failures during registration are attributable and happen at a controlled point,
+   instead of being buried inside an import.
+#. Registration can be triggered explicitly from tests to populate the factories
+   in a controlled manner.
+#. Registration order is explicit rather than implicit in module import order.
+
+A ``register()`` function should be idempotent so that it is safe to call more 
+than once. A common pattern is to guard it with a module level flag. All of the 
+``register(...)``/``set_default(...)`` calls go inside this function, while the 
+imports and helper function/class definitions remain at module level:
 
 .. code-block:: python 
 
-    __all__ = []
+    # Content of mysite/register_factories.py (imported by mysite/__init__.py)
 
-    from . import mysite
-    from .mysite import *
-    __all__ += mysite.__all__
+    from matcal.core.mesh_modifications import matcal_mesh_decomposer_identifier
+    # ... other imports and helper definitions at module level ...
 
-    import site_matcal.register_factories
+    _REGISTERED = False
 
-modifies the initial example to run the file 'register_factories.py'. It is in 
-this type of file that all of the factory registration is recommended to be done. 
+    def register():
+        global _REGISTERED
+        if _REGISTERED:
+            return
+
+        matcal_mesh_decomposer_identifier.register('e', MyDecomposer)
+        # ... all other factory registration calls ...
+
+        _REGISTERED = True
+
+The ``mysite/__init__.py`` then exposes this ``register`` function so the top 
+level ``site_matcal.register()`` can reach it:
+
+.. code-block:: python
+
+    from .register_factories import register
+
+    __all__ = ["register"]
 
 What to Register
 -------------
@@ -356,6 +406,63 @@ a dictionary of parameters to record the results.
     matcal_parameter_reporter_identifier.register(make_csv_default, record_as_csv)    
 
             
+
+
+Monkey Patching Site Specific Behavior
+-------------
+Most site specific behavior can and should be handled through MatCal's factories, 
+as described above. The factory pattern keeps the core of MatCal "open to extension, 
+closed to modification" so that your customizations survive upgrades to MatCal.
+
+However, not every behavior in MatCal is exposed through a factory. Occasionally a 
+site needs to change the internals of an existing MatCal class, such as the exact 
+command line used to launch a solver, when no factory hook exists for it. In these 
+cases you can *monkey patch* the method: define a replacement function in your 
+``site_matcal`` package and reassign it onto the class.
+
+For example, suppose a site named ``mysite`` runs a locally built ``sierra-my-patch`` 
+executable rather than the standard ``sierra`` command. The command that 
+:class:`~matcal.sierra.simulators.SierraSimulator` builds is produced by its 
+``_get_commands`` method, which is not exposed through a factory. You can replace 
+it with your own implementation:
+
+.. code-block:: python
+
+    def mysite_sierra_simulator_get_commands(self):
+        return [
+            "sierra-my-patch",
+            "-i",
+            self._input_filename,
+            "-j",
+            str(self._compute_information.number_of_cores),
+        ]
+
+
+    from matcal.sierra.simulators import SierraSimulator
+
+    SierraSimulator._get_commands = mysite_sierra_simulator_get_commands
+
+Place this code inside your site's ``register()`` function (or a module imported by 
+it) so that the patch is applied at the same controlled point as the rest of your 
+site registration. Because the assignment happens on the class object, it takes 
+effect for every ``SierraSimulator`` instance created afterward.
+
+A few cautions when monkey patching:
+
+#. **Prefer a factory when one exists.** Monkey patching reaches into MatCal's 
+   internals, so it is more fragile than factory registration and more likely to 
+   break when MatCal is upgraded. Only patch methods that have no factory hook.
+#. **Match the original signature.** The replacement function must accept the same 
+   arguments (including ``self``) and return the same type of value as the method 
+   it replaces, and it may rely on the same instance attributes (e.g. 
+   ``self._input_filename``).
+#. **Keep it discoverable.** Because a patch silently changes behavior, keep all 
+   patches together in your site package and comment on why the patch is needed so 
+   future maintainers can re-evaluate it against newer MatCal versions.
+#. **Consider requesting a factory.** If your site repeatedly needs to patch the 
+   same method, that is a good signal that MatCal should expose a factory hook for 
+   it. Please file an issue so the capability can be added to the core.
+
 
 
 Installing Dakota

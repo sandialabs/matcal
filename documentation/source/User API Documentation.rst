@@ -39,3 +39,5 @@ User API Documentation
    matcal.sierra.input_file_writer
    matcal.sierra.material
    matcal.sierra.models
+
+.. include:: pretrained_surrogates_api_includes.rst

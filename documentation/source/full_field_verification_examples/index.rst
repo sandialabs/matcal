@@ -42,6 +42,23 @@ for each MatCal update.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The built-in implementation uses the same radius-based neighbor search and local polynomial least-squares approach as pycompadre, but relies only on numpy, scipy, and their cKDTree and sparse matrix utilities.  This example follows the same verification procedure as sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py to demonstrate that the fallback backend produces equivalent results.">
+
+.. only:: html
+
+  .. image:: /full_field_verification_examples/images/thumb/sphx_glr_plot_b_scipy_gmls_interpolation_verification_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_full_field_verification_examples_plot_b_scipy_gmls_interpolation_verification.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Built-in GMLS Interpolation Verification (numpy/scipy Backend)</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="#.  We evaluate the function on a set of points over a     a predetermined domain. This will      be referred to as our measurement grid and is     meant to be representative of experimental data. #.  We add noise with a normal distribution to the      data generated in the previous step. The noise      has a maximum amplitude of 2.5% of the function      maximum value to represent the noise present      in measured data. #.  We create a separate domain with the same number of points      from the measured grid that is unstructured and evaluate the function      at these points without noise. This is      to be used as the truth      value of the function and this set of      points will be referred to as the simulation      cloud.  #.  We loop over different input options to the HWD      algorithm and evaluate the accuracy of the method     against the truth data with five measures of error:     (1) the normalized maximum percent error of the weights produced      by the HWD tool, (2) the a normalized L2 norm of these      weights, (3) the maximum percent error      of the function reconstructed on the simulation cloud      using the experimental grid HWD weights     HWD, (4) the normalized L2 norm      of this function and (5) plots of the reconstructed function     data error for a subset of the      input options studied for the HWD algorithm.">
 
 .. only:: html
@@ -119,6 +136,7 @@ for each MatCal update.
    :hidden:
 
    /full_field_verification_examples/plot_a_interpolation_methods_verification
+   /full_field_verification_examples/plot_b_scipy_gmls_interpolation_verification
    /full_field_verification_examples/plot_hwd_methods_verification_not_collocated
    /full_field_verification_examples/plot_hwd_methods_verification_not_collocated_X_specimen
    /full_field_verification_examples/plot_j_hwd_methods_verification

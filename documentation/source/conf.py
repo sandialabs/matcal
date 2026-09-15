@@ -27,17 +27,88 @@ sys.path.insert(0, os.path.abspath("../../"))
 from matcal.version import __version__
 
 site_docs_path = os.path.join("..", "..", "..", "site_matcal", "documentation")
+# ``pretrained_surrogates.rst`` is surfaced under the "Pre-trained Surrogates"
+# section of Surrogates.rst (via pretrained_surrogates_includes.rst below), so it
+# must NOT also be added to the top-level site toctree; otherwise it would appear
+# both in the main table of contents and under the Surrogates page.
+_site_toctree_exclude = {"pretrained_surrogates"}
 rsts_to_include = []
 if os.path.exists(site_docs_path):
     for filename in glob(os.path.join(site_docs_path, "*.rst")):
         shutil.copyfile(filename, os.path.join(os.getcwd(), os.path.basename(filename)))
-        rsts_to_include.append(os.path.splitext(os.path.basename(filename))[0])
+        rst_name = os.path.splitext(os.path.basename(filename))[0]
+        if rst_name in _site_toctree_exclude:
+            continue
+        rsts_to_include.append(rst_name)
 with open("site_includes.rst", 'w') as f:
     if rsts_to_include:
         f.write('.. toctree::\n\t:maxdepth: 3\n\n')
         for rst in rsts_to_include:
             f.write(f'\t{rst}\n')
     
+# Pre-trained (site-specific) surrogate documentation. The "Pre-trained
+# Surrogates" section of Surrogates.rst includes the generated file below. When
+# the site_matcal pre-trained surrogate artifacts are present, we emit the
+# descriptive content; otherwise the include is left empty so the section does
+# not appear in a standalone (non-site) build.
+_pretrained_surrogate_dir = os.path.join(
+    "..", "..", "..", "site_matcal", "sandia", "pretrained_surrogates",
+    "hosford_aluminum")
+_pretrained_surrogate_doc = os.path.join(
+    "..", "..", "..", "site_matcal", "documentation",
+    "pretrained_surrogates.rst")
+_have_pretrained_surrogates = (
+    os.path.exists(os.path.join(_pretrained_surrogate_dir, "uniaxial_tension",
+                                "aluminum_hosford_tension_sg_surrogate.joblib"))
+    or os.path.exists(os.path.join(_pretrained_surrogate_dir, "top_hat_shear",
+                                   "aluminum_hosford_top_hat_shear_sg_surrogate.joblib"))
+    or os.path.exists(_pretrained_surrogate_doc))
+with open("pretrained_surrogates_includes.rst", "w") as f:
+    if _have_pretrained_surrogates and os.path.exists(_pretrained_surrogate_doc):
+        shutil.copyfile(_pretrained_surrogate_doc,
+                        os.path.join(os.getcwd(), "pretrained_surrogates.rst"))
+        f.write(".. include:: pretrained_surrogates.rst\n")
+
+# Make site_matcal importable for autodoc when it is available, so the
+# pre-trained surrogate classes and their methods can be documented and
+# cross-referenced. The parent of site_matcal (the repository root) is added to
+# sys.path. This is a no-op for a standalone (non-site) build.
+_site_matcal_parent = os.path.abspath(os.path.join("..", "..", ".."))
+if _have_pretrained_surrogates and os.path.isdir(
+        os.path.join(_site_matcal_parent, "site_matcal")):
+    sys.path.insert(0, _site_matcal_parent)
+
+# API reference for the site-specific pre-trained surrogate model classes. This
+# is included from "User API Documentation.rst" and is only populated when
+# site_matcal is available, so a standalone (non-site) build is unaffected.
+_pretrained_api_module = (
+    "site_matcal.sandia.pretrained_surrogates.hosford_aluminum.surrogate_models")
+_pretrained_api_classes = [
+    "HosfordAluminumTensionSurrogateModel",
+    "HosfordAluminumTopHatShearSurrogateModel",
+]
+with open("pretrained_surrogates_api_includes.rst", "w") as f:
+    if _have_pretrained_surrogates and os.path.isdir(
+            os.path.join(_site_matcal_parent, "site_matcal")):
+        f.write("Pre-trained Surrogates (site_matcal)\n")
+        f.write("====================================\n\n")
+        for class_name in _pretrained_api_classes:
+            f.write(f".. autoclass:: {_pretrained_api_module}.{class_name}\n")
+            f.write("   :members: use_imperial_units, use_SI_units, "
+                    "unit_system, parameter_bounds, surrogate\n")
+            f.write("   :show-inheritance:\n\n")
+
+# Site-specific sphinx-gallery examples for the pre-trained surrogates. These
+# only exist when site_matcal is available; the gallery directory is added to
+# the sphinx_gallery_conf below only when the example scripts are present so a
+# standalone (non-site) build is unaffected.
+_pretrained_surrogate_examples_src = os.path.join(
+    "..", "..", "..", "site_matcal", "documentation",
+    "pretrained_surrogate_examples")
+_build_pretrained_surrogate_gallery = (
+    _have_pretrained_surrogates
+    and os.path.exists(os.path.join(_pretrained_surrogate_examples_src,
+                                    "README.rst")))
 # -- Project information -----------------------------------------------------
 
 project = 'MatCal Users Guide'
@@ -112,6 +183,11 @@ sphinx_gallery_conf = {
     'nested_sections': False,
 #    'filename_pattern': '/plot_6061',
 }
+
+# Append the site-specific pre-trained surrogate example gallery when present.
+if _build_pretrained_surrogate_gallery:
+    sphinx_gallery_conf['examples_dirs'].append(_pretrained_surrogate_examples_src)
+    sphinx_gallery_conf['gallery_dirs'].append('pretrained_surrogate_examples')
 
 
 # way to exclude exceptions
