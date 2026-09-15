@@ -27,11 +27,19 @@ sys.path.insert(0, os.path.abspath("../../"))
 from matcal.version import __version__
 
 site_docs_path = os.path.join("..", "..", "..", "site_matcal", "documentation")
+# ``pretrained_surrogates.rst`` is surfaced under the "Pre-trained Surrogates"
+# section of Surrogates.rst (via pretrained_surrogates_includes.rst below), so it
+# must NOT also be added to the top-level site toctree; otherwise it would appear
+# both in the main table of contents and under the Surrogates page.
+_site_toctree_exclude = {"pretrained_surrogates"}
 rsts_to_include = []
 if os.path.exists(site_docs_path):
     for filename in glob(os.path.join(site_docs_path, "*.rst")):
         shutil.copyfile(filename, os.path.join(os.getcwd(), os.path.basename(filename)))
-        rsts_to_include.append(os.path.splitext(os.path.basename(filename))[0])
+        rst_name = os.path.splitext(os.path.basename(filename))[0]
+        if rst_name in _site_toctree_exclude:
+            continue
+        rsts_to_include.append(rst_name)
 with open("site_includes.rst", 'w') as f:
     if rsts_to_include:
         f.write('.. toctree::\n\t:maxdepth: 3\n\n')
