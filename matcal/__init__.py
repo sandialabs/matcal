@@ -19,7 +19,13 @@ from .sierra import *
 __all__ += sierra.__all__
 
 from .core.logger import initialize_matcal_logger as _initialize_matcal_logger
-_logger = _initialize_matcal_logger(__name__)
+# Use a dedicated child logger (matcal.__init__) with its own stream handlers for
+# messages emitted here. We deliberately do NOT attach handlers to the top-level
+# "matcal" logger: it is the ancestor of every matcal.* module logger, and those
+# module loggers already carry the matcal stream handlers and propagate to their
+# ancestors. Attaching handlers to "matcal" would cause every matcal log record
+# to be emitted twice.
+_logger = _initialize_matcal_logger(__name__ + ".__init__")
 import importlib.util as _importlib_util
 if _importlib_util.find_spec("site_matcal") is None:
     # No site_matcal package on the path. This is expected for a standalone
