@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**04:38.388** total execution time for 6 files **from full_field_verification_examples**:
+**03:17.003** total execution time for 6 files **from full_field_verification_examples**:
 
 .. container::
 
@@ -32,10 +32,10 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_full_field_verification_examples_plot_b_scipy_gmls_interpolation_verification.py` (``plot_b_scipy_gmls_interpolation_verification.py``)
-     - 04:38.388
-     - 0.0
    * - :ref:`sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py` (``plot_a_interpolation_methods_verification.py``)
+     - 03:17.003
+     - 0.0
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_b_scipy_gmls_interpolation_verification.py` (``plot_b_scipy_gmls_interpolation_verification.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_full_field_verification_examples_plot_hwd_methods_verification_not_collocated.py` (``plot_hwd_methods_verification_not_collocated.py``)
