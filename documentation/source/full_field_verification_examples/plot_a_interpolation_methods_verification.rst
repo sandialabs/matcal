@@ -60,12 +60,11 @@ as our test function:
 
 To begin we import the libraries and tools we will be using to perform this study.
 
-# sphinx_gallery_thumbnail_number = 2
-
-.. GENERATED FROM PYTHON SOURCE LINES 47-55
+.. GENERATED FROM PYTHON SOURCE LINES 45-54
 
 .. code-block:: Python
 
+    # sphinx_gallery_thumbnail_number = 2
     from matcal import *
     import numpy as np
     import matplotlib.pyplot as plt
@@ -81,13 +80,13 @@ To begin we import the libraries and tools we will be using to perform this stud
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 56-59
+.. GENERATED FROM PYTHON SOURCE LINES 55-58
 
 First, we defined the domain for our measured grid using numpy tools.
-The domain is about 15 mm high (6 inches) and 7.6 mm wide (3 inches). 
+The domain is about 152 mm high (6 inches) and 76 mm wide (3 inches). 
 The measured grid has 400 points in each dimension (x, y). 
 
-.. GENERATED FROM PYTHON SOURCE LINES 59-68
+.. GENERATED FROM PYTHON SOURCE LINES 58-67
 
 .. code-block:: Python
 
@@ -107,7 +106,7 @@ The measured grid has 400 points in each dimension (x, y).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 69-79
+.. GENERATED FROM PYTHON SOURCE LINES 68-78
 
 Next, we will define our test function. We are interested 
 in generating a function that is representative 
@@ -120,7 +119,7 @@ of three sinusoids and a linear function that is multiplied
 by a smooth function that approximates a dirac. This 
 function is defined below: 
 
-.. GENERATED FROM PYTHON SOURCE LINES 79-88
+.. GENERATED FROM PYTHON SOURCE LINES 78-87
 
 .. code-block:: Python
 
@@ -140,7 +139,7 @@ function is defined below:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 89-94
+.. GENERATED FROM PYTHON SOURCE LINES 88-93
 
 We now evaluate the function on the measured grid and add
 noise to it with a maximum amplitude of 2.5% of the maximum 
@@ -148,7 +147,7 @@ value of the function on the measured grid. We
 then plot the function with the added noise to verify 
 we are producing the behavior we desire.
 
-.. GENERATED FROM PYTHON SOURCE LINES 94-109
+.. GENERATED FROM PYTHON SOURCE LINES 93-108
 
 .. code-block:: Python
 
@@ -179,14 +178,14 @@ we are producing the behavior we desire.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 110-114
+.. GENERATED FROM PYTHON SOURCE LINES 109-113
 
 With the measured data defined, we now create the simulation grid 
 and the truth data for the simulation grid. As stated previously, the
 simulation grid has 75% of the points of the measured grid and 
 is defined on a 5% larger domain in both directions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 114-121
+.. GENERATED FROM PYTHON SOURCE LINES 113-120
 
 .. code-block:: Python
 
@@ -204,14 +203,14 @@ is defined on a 5% larger domain in both directions.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 122-126
+.. GENERATED FROM PYTHON SOURCE LINES 121-125
 
 With the measured data and truth simulation data created, 
 we need to prepare the data to be used with the MatCal's
 interface to the Compadre GMLS tool. To do so, we convert
 the data to MatCal's field data class.
 
-.. GENERATED FROM PYTHON SOURCE LINES 126-136
+.. GENERATED FROM PYTHON SOURCE LINES 125-135
 
 .. code-block:: Python
 
@@ -232,7 +231,7 @@ the data to MatCal's field data class.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 137-162
+.. GENERATED FROM PYTHON SOURCE LINES 136-161
 
 Now we can create a set of input parameters to 
 evaluate using our test data sets. The two input 
@@ -260,7 +259,7 @@ mapped data to the known truth data on the simulation grid.
 We start by specifying the input parameters of interest 
 and importing the GMLS tool from MatCal.
 
-.. GENERATED FROM PYTHON SOURCE LINES 162-166
+.. GENERATED FROM PYTHON SOURCE LINES 161-165
 
 .. code-block:: Python
 
@@ -275,7 +274,7 @@ and importing the GMLS tool from MatCal.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 167-205
+.. GENERATED FROM PYTHON SOURCE LINES 166-204
 
 Now we can loop over the parameters, map the 
 measured function onto the simulation grid and
@@ -316,7 +315,7 @@ computational cost for these mappings is expensive
 for the higher order polynomials and large
 search radius multipliers.
 
-.. GENERATED FROM PYTHON SOURCE LINES 205-231
+.. GENERATED FROM PYTHON SOURCE LINES 204-230
 
 .. code-block:: Python
 
@@ -353,13 +352,13 @@ search radius multipliers.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 232-235
+.. GENERATED FROM PYTHON SOURCE LINES 231-234
 
 With the error fields calculated, we can now create two heat maps 
 showing how our two error measures change as the polynomial order 
 and search radius multiplier are varied. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 235-254
+.. GENERATED FROM PYTHON SOURCE LINES 234-253
 
 .. code-block:: Python
 
@@ -406,7 +405,7 @@ and search radius multiplier are varied.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 255-282
+.. GENERATED FROM PYTHON SOURCE LINES 254-281
 
 The results are somewhat expected. From the :math:`e_{max}`
 measure, we can see that linear polynomials do well at 
@@ -436,7 +435,7 @@ set of mapping parameters used.
    but the level of noise was more clearly visualized with the
    power norm and a gamma of 0.3.
 
-.. GENERATED FROM PYTHON SOURCE LINES 282-310
+.. GENERATED FROM PYTHON SOURCE LINES 281-309
 
 .. code-block:: Python
 
@@ -480,7 +479,7 @@ set of mapping parameters used.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 311-360
+.. GENERATED FROM PYTHON SOURCE LINES 310-359
 
 From these plots, four conclusions are clear. 
 
@@ -535,7 +534,7 @@ but the search radius can be increase significantly.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 17.003 seconds)
+   **Total running time of the script:** (2 minutes 41.344 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_a_interpolation_methods_verification.py:

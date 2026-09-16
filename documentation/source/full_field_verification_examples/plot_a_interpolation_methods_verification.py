@@ -41,9 +41,8 @@ as our test function:
     input options studied for the GMLS algorithm.
 
 To begin we import the libraries and tools we will be using to perform this study.
-
-# sphinx_gallery_thumbnail_number = 2
 '''
+# sphinx_gallery_thumbnail_number = 2
 from matcal import *
 import numpy as np
 import matplotlib.pyplot as plt
@@ -54,7 +53,7 @@ import matplotlib.pyplot as plt
 
 #%%
 # First, we defined the domain for our measured grid using numpy tools.
-# The domain is about 15 mm high (6 inches) and 7.6 mm wide (3 inches). 
+# The domain is about 152 mm high (6 inches) and 76 mm wide (3 inches). 
 # The measured grid has 400 points in each dimension (x, y). 
 H = 6*0.0254
 W = 3*0.0254

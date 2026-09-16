@@ -42,7 +42,7 @@ for each MatCal update.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The built-in implementation uses the same radius-based neighbor search and local polynomial least-squares approach as pycompadre, but relies only on numpy, scipy, and their cKDTree and sparse matrix utilities.  This example follows the same verification procedure as sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py to demonstrate that the fallback backend produces equivalent results.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The built-in implementation uses the same radius-based neighbor search and local polynomial least-squares approach as pycompadre, but relies only on numpy, scipy, and their cKDTree and sparse matrix utilities.  This example follows the same verification procedure as sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py to demonstrate that the scipy backend produces equivalent results.">
 
 .. only:: html
 

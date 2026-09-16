@@ -1,3 +1,6 @@
+import numpy as np
+from matcal import FileData
+from matcal.exodus.mesh_modifications import extract_exodus_mesh
 
 exp_file_data = FileData("XR4-Data_0254_3.51900e+00.csv")
 exp_file_data = exp_file_data.remove_field("Z0")

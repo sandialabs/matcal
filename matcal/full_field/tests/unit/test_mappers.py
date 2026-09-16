@@ -484,22 +484,32 @@ class _MeshlessMappingTestBase(MatcalUnitTest):
     """Base class for meshless mapping tests.
 
     Not collected by pytest directly (leading underscore).
-    Derived classes select a specific GMLS backend via patching.
+    Derived classes select a specific GMLS backend.
     """
 
     __test__ = False
 
-    # Subclasses set this to the patch target return value
+    # Subclasses may set this to explicitly pass ``backend=`` to the
+    # mapper.  When *None* (default), the old patching behaviour is
+    # used so that the pycompadre backend tests still work correctly
+    # even when invoked via the mock.
+    _backend: str | None = None
+
+    # Legacy patching knob -- only used when ``_backend`` is *None*.
     _force_pycompadre_available: bool = False
 
     def setUp(self):
         super().setUp(__file__)
-        patcher = patch(
-            "matcal.full_field.field_mappers._check_pycompadre_available",
-            return_value=self._force_pycompadre_available,
-        )
-        self._mock_pycompadre = patcher.start()
-        self.addCleanup(patcher.stop)
+        # When an explicit backend is requested we skip the mock
+        # entirely so that the ``backend=`` code-path in the
+        # constructor is exercised end-to-end.
+        if self._backend is None:
+            patcher = patch(
+                "matcal.full_field.field_mappers._check_pycompadre_available",
+                return_value=self._force_pycompadre_available,
+            )
+            self._mock_pycompadre = patcher.start()
+            self.addCleanup(patcher.stop)
 
     def cubic_function_1d(self, coords):
         consts = [1, 2, 3, 4]
@@ -637,6 +647,7 @@ class _MeshlessMappingTestBase(MatcalUnitTest):
             polynomial_order=2,
             target_time=target_time,
             time_field="time",
+            backend=self._backend,
         )
 
         self.assert_close_arrays(target_goal_vals, target_map_vals["Z"])
@@ -648,7 +659,12 @@ class _MeshlessMappingTestBase(MatcalUnitTest):
         source_vals = test_function(source_coords)
         target_goal_vals = test_function(target_coords)
 
-        mapper = MeshlessMapperGMLS(target_coords, source_coords, poly_order, eps)
+        kwargs = {}
+        if self._backend is not None:
+            kwargs["backend"] = self._backend
+        mapper = MeshlessMapperGMLS(
+            target_coords, source_coords, poly_order, eps, **kwargs
+        )
         target_map_vals = mapper.map(source_vals)
         mapper.finish()
         self.assert_close_arrays(target_goal_vals, target_map_vals)
@@ -662,7 +678,12 @@ class _MeshlessMappingTestBase(MatcalUnitTest):
         source_vals = test_function(source_coords)
         target_goal_vals = test_function(target_coords)
 
-        mapper = MeshlessMapperGMLS(target_coords, source_coords, poly_order, eps)
+        kwargs = {}
+        if self._backend is not None:
+            kwargs["backend"] = self._backend
+        mapper = MeshlessMapperGMLS(
+            target_coords, source_coords, poly_order, eps, **kwargs
+        )
         target_map_vals = mapper.map(target_goal_vals)
         mapper.finish()
 
@@ -695,7 +716,12 @@ class _MeshlessMappingTestBase(MatcalUnitTest):
         )
 
         target_map_vals = meshless_remapping(
-            source_data, ["Z"], target_data.spatial_coords, poly_order, eps
+            source_data,
+            ["Z"],
+            target_data.spatial_coords,
+            poly_order,
+            eps,
+            backend=self._backend,
         )
         self.assert_close_arrays(target_goal_vals, target_map_vals["Z"])
 
@@ -728,16 +754,25 @@ class _MeshlessMappingTestBase(MatcalUnitTest):
         )
 
         target_map_vals = meshless_remapping(
-            source_data, ["Z"], target_data.spatial_coords, poly_order, eps
+            source_data,
+            ["Z"],
+            target_data.spatial_coords,
+            poly_order,
+            eps,
+            backend=self._backend,
         )
         self.assert_close_arrays(target_goal_vals, target_map_vals["Z"])
 
 
 class TestMeshlessMappingScipyBackend(_MeshlessMappingTestBase):
-    """Run all meshless mapping tests using the built-in scipy backend."""
+    """Run all meshless mapping tests using the built-in scipy backend.
+
+    Uses the explicit ``backend="scipy"`` parameter so that the scipy
+    code-path is exercised even when pycompadre is installed.
+    """
 
     __test__ = True
-    _force_pycompadre_available = False
+    _backend = "scipy"
 
     def test_2d_trig_high_order_scipy(self):
         """Verify scipy backend handles high-order mapping without error."""
@@ -779,6 +814,163 @@ class TestMeshlessMappingPycompadreBackend(_MeshlessMappingTestBase):
         target_coords = np.random.uniform(0, 1, [10, n_dim])
         with self.assertRaises(MeshlessMapperGMLS.NeighborDetectionError):
             MeshlessMapperGMLS(target_coords, source_coords, poly_order, eps)
+
+
+class TestMeshlessMappingBackendParameter(MatcalUnitTest):
+    """Tests for the ``backend`` parameter on MeshlessMapperGMLS and meshless_remapping."""
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_coords(self):
+        n_dim = 2
+        source_coords = np.random.uniform(0, 1, [50, n_dim])
+        target_coords = np.random.uniform(0, 1, [10, n_dim])
+        return source_coords, target_coords
+
+    def test_invalid_backend_raises_value_error(self):
+        source, target = self._make_coords()
+        with self.assertRaises(ValueError):
+            MeshlessMapperGMLS(target, source, backend="invalid")
+
+    def test_backend_none_selects_automatically(self):
+        """backend=None should select a backend without error."""
+        source, target = self._make_coords()
+        mapper = MeshlessMapperGMLS(target, source, backend=None)
+        self.assertIn(mapper._backend, ("pycompadre", "scipy"))
+        mapper.finish()
+
+    def test_backend_scipy_forces_scipy(self):
+        """backend='scipy' must use the scipy path even when pycompadre is available."""
+        source, target = self._make_coords()
+        mapper = MeshlessMapperGMLS(target, source, backend="scipy")
+        self.assertEqual(mapper._backend, "scipy")
+        self.assertIsNotNone(mapper._weight_matrix)
+        mapper.finish()
+
+    def test_backend_scipy_produces_correct_results(self):
+        """Verify that backend='scipy' produces accurate interpolation."""
+        n_dim = 2
+        source_coords = np.random.uniform(0, 1, [200, n_dim])
+        target_coords = np.random.uniform(0, 1, [20, n_dim])
+        source_vals = source_coords[:, 0] + 2 * source_coords[:, 1]
+        target_goal = target_coords[:, 0] + 2 * target_coords[:, 1]
+
+        mapper = MeshlessMapperGMLS(
+            target_coords, source_coords, 2, 2.0, backend="scipy"
+        )
+        mapped = mapper.map(source_vals)
+        mapper.finish()
+        self.assert_close_arrays(target_goal, mapped)
+
+    @unittest.skipUnless(
+        _check_pycompadre_available(),
+        "pycompadre not installed",
+    )
+    def test_backend_pycompadre_forces_pycompadre(self):
+        """backend='pycompadre' must use the pycompadre path."""
+        source, target = self._make_coords()
+        mapper = MeshlessMapperGMLS(target, source, backend="pycompadre")
+        self.assertEqual(mapper._backend, "pycompadre")
+        mapper.finish()
+
+    def test_backend_pycompadre_missing_raises_import_error(self):
+        """Requesting pycompadre when it's not importable should raise ImportError."""
+        source, target = self._make_coords()
+        with patch(
+            "matcal.full_field.field_mappers._check_pycompadre_available",
+            return_value=False,
+        ):
+            with self.assertRaises(ImportError):
+                MeshlessMapperGMLS(target, source, backend="pycompadre")
+
+    def test_meshless_remapping_backend_scipy(self):
+        """meshless_remapping should forward backend='scipy' correctly."""
+        n_dim = 2
+        source_coords = np.random.uniform(0, 1, [200, n_dim])
+        target_coords = np.random.uniform(0, 1, [20, n_dim])
+        source_vals = source_coords[:, 0] + 2 * source_coords[:, 1]
+        target_goal = target_coords[:, 0] + 2 * target_coords[:, 1]
+
+        source_data_dict = {
+            "X": source_coords[:, 0],
+            "Y": source_coords[:, 1],
+            "Z": source_vals.reshape(1, -1),
+        }
+        source_data = convert_dictionary_to_field_data(
+            source_data_dict, coordinate_names=["X", "Y"]
+        )
+
+        mapped = meshless_remapping(
+            source_data,
+            ["Z"],
+            target_coords,
+            polynomial_order=2,
+            search_radius_multiplier=2.0,
+            backend="scipy",
+        )
+        self.assert_close_arrays(target_goal, mapped["Z"])
+
+    def test_meshless_remapping_backend_invalid_raises(self):
+        """meshless_remapping should raise ValueError for invalid backend."""
+        n_dim = 2
+        source_coords = np.random.uniform(0, 1, [50, n_dim])
+        target_coords = np.random.uniform(0, 1, [10, n_dim])
+        source_vals = source_coords[:, 0]
+
+        source_data_dict = {
+            "X": source_coords[:, 0],
+            "Y": source_coords[:, 1],
+            "Z": source_vals.reshape(1, -1),
+        }
+        source_data = convert_dictionary_to_field_data(
+            source_data_dict, coordinate_names=["X", "Y"]
+        )
+
+        with self.assertRaises(ValueError):
+            meshless_remapping(
+                source_data,
+                ["Z"],
+                target_coords,
+                backend="bogus",
+            )
+
+    def test_finish_clears_state(self):
+        """After finish(), internal resources should be released."""
+        source, target = self._make_coords()
+        mapper = MeshlessMapperGMLS(target, source, backend="scipy")
+        self.assertIsNotNone(mapper._weight_matrix)
+        mapper.finish()
+        self.assertIsNone(mapper._weight_matrix)
+        self.assertIsNone(mapper._pycompadre_gmls)
+        self.assertIsNone(mapper._pycompadre_helper)
+
+    def test_3d_target_coords_reshaped(self):
+        """3-D target_coords should be reshaped to 2-D automatically."""
+        n_dim = 2
+        source_coords = np.random.uniform(0, 1, [50, n_dim])
+        # Provide target_coords with 3 dimensions: (2, 5, 2) -> should flatten to (10, 2)
+        target_coords = np.random.uniform(0, 1, [2, 5, n_dim])
+        source_vals = source_coords[:, 0] + source_coords[:, 1]
+
+        mapper = MeshlessMapperGMLS(
+            target_coords, source_coords, 1, 2.0, backend="scipy"
+        )
+        mapped = mapper.map(source_vals)
+        mapper.finish()
+        self.assertEqual(mapped.shape[0], 10)
+
+    def test_backend_none_fallback_logs_info(self):
+        """When backend=None and pycompadre unavailable, an info log should be emitted."""
+        source, target = self._make_coords()
+        with patch(
+            "matcal.full_field.field_mappers._check_pycompadre_available",
+            return_value=False,
+        ):
+            with self.assertLogs("matcal.full_field.field_mappers", level="INFO") as cm:
+                mapper = MeshlessMapperGMLS(target, source, backend=None)
+                mapper.finish()
+        self.assertTrue(any("numpy/scipy GMLS" in msg for msg in cm.output))
 
 
 def subtract_function(reference_field, specific_field, spatial_corrds, time):

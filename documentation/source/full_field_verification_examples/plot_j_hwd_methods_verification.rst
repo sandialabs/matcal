@@ -71,7 +71,7 @@ To begin we import the libraries and tools we will be using to perform this stud
 .. GENERATED FROM PYTHON SOURCE LINES 42-45
 
 First, we defined the domain for our measured grid using NumPy tools.
-The domain is about 15 mm high (6 inches) and 7.6 mm wide (3 inches). 
+The domain is about 152 mm high (6 inches) and 76 mm wide (3 inches). 
 The measured grid has 300 points in each dimension (x, y).
 
 .. GENERATED FROM PYTHON SOURCE LINES 45-54
@@ -677,7 +677,7 @@ colocated HWD is the default HWD method in MatCal.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (109 minutes 39.874 seconds)
+   **Total running time of the script:** (113 minutes 13.640 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_j_hwd_methods_verification.py:
