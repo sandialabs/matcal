@@ -22,15 +22,14 @@ Built-in GMLS Interpolation Verification (numpy/scipy Backend)
 ==============================================================
 In this example, we use an analytical function
 to test and verify MatCal's built-in numpy/scipy GMLS
-implementation, which serves as a fallback when
-*pycompadre* is not available.
+implementation by explicitly selecting the ``"scipy"`` backend.
 
 The built-in implementation uses the same radius-based neighbor
 search and local polynomial least-squares approach as pycompadre,
 but relies only on numpy, scipy, and their ``cKDTree`` and sparse
 matrix utilities.  This example follows the same verification
 procedure as :ref:`sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py`
-to demonstrate that the fallback backend produces equivalent
+to demonstrate that the scipy backend produces equivalent
 results.
 
 The verification procedure:
@@ -65,17 +64,14 @@ The verification procedure:
 
 To begin we import the libraries and tools we will be using.
 
-# sphinx_gallery_thumbnail_number = 2
-
-.. GENERATED FROM PYTHON SOURCE LINES 51-60
+.. GENERATED FROM PYTHON SOURCE LINES 49-57
 
 .. code-block:: Python
 
+    # sphinx_gallery_thumbnail_number = 2
     from matcal import *
     from matcal.full_field.field_mappers import (
-        MeshlessMapperGMLS,
         _build_gmls_weight_matrix,
-        _check_pycompadre_available,
     )
     import numpy as np
     import matplotlib.pyplot as plt
@@ -87,45 +83,14 @@ To begin we import the libraries and tools we will be using.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 61-65
-
-Confirm which backend is active
---------------------------------
-This example is designed to exercise the built-in scipy
-fallback.  We print the active backend for transparency.
-
-.. GENERATED FROM PYTHON SOURCE LINES 65-72
-
-.. code-block:: Python
-
-    if _check_pycompadre_available():
-        print("NOTE: pycompadre IS available. MeshlessMapperGMLS will "
-              "use the pycompadre backend in this environment.")
-    else:
-        print("pycompadre is NOT available. MeshlessMapperGMLS will "
-              "use the built-in numpy/scipy GMLS backend.")
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    NOTE: pycompadre IS available. MeshlessMapperGMLS will use the pycompadre backend in this environment.
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 73-77
+.. GENERATED FROM PYTHON SOURCE LINES 58-62
 
 Define measurement domain
 --------------------------
-The domain is about 15 mm high (6 inches) and 7.6 mm wide (3 inches).
+The domain is about 152 mm high (6 inches) and 76 mm wide (3 inches).
 The measured grid has 400 points in each dimension (x, y).
 
-.. GENERATED FROM PYTHON SOURCE LINES 77-86
+.. GENERATED FROM PYTHON SOURCE LINES 62-71
 
 .. code-block:: Python
 
@@ -145,7 +110,7 @@ The measured grid has 400 points in each dimension (x, y).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 87-93
+.. GENERATED FROM PYTHON SOURCE LINES 72-78
 
 Define the test function
 -------------------------
@@ -154,7 +119,7 @@ verification example: an additive combination of sinusoids
 and a linear function multiplied by a smooth approximation
 to a Dirac delta.
 
-.. GENERATED FROM PYTHON SOURCE LINES 93-106
+.. GENERATED FROM PYTHON SOURCE LINES 78-91
 
 .. code-block:: Python
 
@@ -178,12 +143,12 @@ to a Dirac delta.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 107-109
+.. GENERATED FROM PYTHON SOURCE LINES 92-94
 
 Evaluate the function and add noise
 -------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 109-130
+.. GENERATED FROM PYTHON SOURCE LINES 94-115
 
 .. code-block:: Python
 
@@ -220,12 +185,12 @@ Evaluate the function and add noise
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 131-133
+.. GENERATED FROM PYTHON SOURCE LINES 116-118
 
 Create simulation grid and truth data
 ----------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 133-140
+.. GENERATED FROM PYTHON SOURCE LINES 118-125
 
 .. code-block:: Python
 
@@ -243,12 +208,12 @@ Create simulation grid and truth data
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 141-143
+.. GENERATED FROM PYTHON SOURCE LINES 126-128
 
 Prepare data for MatCal's mapping tools
 ------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 143-161
+.. GENERATED FROM PYTHON SOURCE LINES 128-146
 
 .. code-block:: Python
 
@@ -277,14 +242,14 @@ Prepare data for MatCal's mapping tools
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 162-166
+.. GENERATED FROM PYTHON SOURCE LINES 147-151
 
 Parameter study setup
 ----------------------
 We study polynomial orders 1 through 3 with search radius
 multipliers from 1.5 to 4.0 (plus 5.0).
 
-.. GENERATED FROM PYTHON SOURCE LINES 166-170
+.. GENERATED FROM PYTHON SOURCE LINES 151-155
 
 .. code-block:: Python
 
@@ -299,16 +264,17 @@ multipliers from 1.5 to 4.0 (plus 5.0).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-189
+.. GENERATED FROM PYTHON SOURCE LINES 156-175
 
-Run the parameter study using MeshlessMapperGMLS
---------------------------------------------------
-Here we use the :class:`~matcal.full_field.field_mappers.MeshlessMapperGMLS`
-class directly.  This class automatically selects the scipy fallback
-when pycompadre is not installed.  We also demonstrate using the
-low-level :func:`~matcal.full_field.field_mappers._build_gmls_weight_matrix`
-helper for the first parameter combination to show the sparse
-weight matrix directly.
+Run the parameter study using ``meshless_remapping``
+----------------------------------------------------
+Here we call :func:`~matcal.full_field.field_mappers.meshless_remapping`
+with ``backend="scipy"`` to ensure the built-in numpy/scipy GMLS
+implementation is used, even when pycompadre is installed.  We also
+demonstrate using the low-level
+:func:`~matcal.full_field.field_mappers._build_gmls_weight_matrix`
+helper at the end of this example to show the sparse weight matrix
+directly.
 
 Error measures:
 
@@ -320,7 +286,7 @@ Error measures:
 
    e_{max} = 100\frac{\lVert f^h_s-f_s\rVert_{\infty}}{\max\left(f_s\right)}
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-227
+.. GENERATED FROM PYTHON SOURCE LINES 175-214
 
 .. code-block:: Python
 
@@ -340,6 +306,7 @@ Error measures:
                 sim_truth_data.spatial_coords,
                 poly_order,
                 search_rad_mult,
+                backend="scipy",
             )
             error_field = mapped_data["val"] - sim_truth_data["val"]
             error_fields_by_search_rad.append(error_field)
@@ -369,12 +336,12 @@ Error measures:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 228-230
+.. GENERATED FROM PYTHON SOURCE LINES 215-217
 
 Visualize error measures as heatmaps
 ---------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 230-261
+.. GENERATED FROM PYTHON SOURCE LINES 217-248
 
 .. code-block:: Python
 
@@ -433,7 +400,7 @@ Visualize error measures as heatmaps
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 262-271
+.. GENERATED FROM PYTHON SOURCE LINES 249-259
 
 From these heatmaps, we observe the same trends as the pycompadre
 verification:
@@ -443,16 +410,17 @@ verification:
 - Higher search radius multipliers increase smoothing and reduce
   noise sensitivity.
 - The built-in scipy backend reproduces the same accuracy patterns
-  as pycompadre for all tested parameter combinations.
+  as pycompadre for all tested parameter combinations; however, 
+  errors are higher in the higher polynomial/lower radius regions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 273-277
+.. GENERATED FROM PYTHON SOURCE LINES 261-265
 
 Visualize error fields
 ------------------------
 We plot the absolute percent error fields for each parameter
 combination to visualize spatial error distribution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 277-322
+.. GENERATED FROM PYTHON SOURCE LINES 265-310
 
 .. code-block:: Python
 
@@ -513,7 +481,7 @@ combination to visualize spatial error distribution.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 323-343
+.. GENERATED FROM PYTHON SOURCE LINES 311-331
 
 Observations
 -------------
@@ -536,7 +504,7 @@ the same default parameters (polynomial order 1, search radius
 multiplier 2.75) provide a good balance between speed and
 accuracy for both interpolation and extrapolation tasks.
 
-.. GENERATED FROM PYTHON SOURCE LINES 345-351
+.. GENERATED FROM PYTHON SOURCE LINES 333-339
 
 Direct sparse weight matrix demonstration
 -------------------------------------------
@@ -545,7 +513,7 @@ building the sparse weight matrix directly using
 :func:`~matcal.full_field.field_mappers._build_gmls_weight_matrix`.
 This shows the sparse structure of the interpolation operator.
 
-.. GENERATED FROM PYTHON SOURCE LINES 351-375
+.. GENERATED FROM PYTHON SOURCE LINES 339-363
 
 .. code-block:: Python
 
@@ -593,7 +561,7 @@ This shows the sparse structure of the interpolation operator.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (4 minutes 38.388 seconds)
+   **Total running time of the script:** (9 minutes 55.554 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_b_scipy_gmls_interpolation_verification.py:

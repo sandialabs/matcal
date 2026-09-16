@@ -41,9 +41,8 @@ as our test function:
     input options studied for the GMLS algorithm.
 
 To begin we import the libraries and tools we will be using to perform this study.
-
-# sphinx_gallery_thumbnail_number = 2
 '''
+# sphinx_gallery_thumbnail_number = 2
 from matcal import *
 import numpy as np
 import matplotlib.pyplot as plt

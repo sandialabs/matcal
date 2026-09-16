@@ -45,23 +45,14 @@ The verification procedure:
 
 To begin we import the libraries and tools we will be using.
 
-# sphinx_gallery_thumbnail_number = 2
 '''
+# sphinx_gallery_thumbnail_number = 2
 from matcal import *
 from matcal.full_field.field_mappers import (
-    MeshlessMapperGMLS,
     _build_gmls_weight_matrix,
 )
 import numpy as np
 import matplotlib.pyplot as plt
-
-# %%
-# Confirm which backend is active
-# --------------------------------
-# This example explicitly selects ``backend="scipy"`` so that the
-# built-in numpy/scipy GMLS implementation is exercised regardless of
-# whether pycompadre is installed.
-print("This example explicitly uses backend='scipy' for all GMLS calls.")
 
 # %%
 # Define measurement domain
@@ -162,8 +153,8 @@ search_radius_mults = list(np.linspace(1.5, 4, 11))
 search_radius_mults.append(5.0)
 
 # %%
-# Run the parameter study using MeshlessMapperGMLS
-# --------------------------------------------------
+# Run the parameter study using ``meshless_remapping``
+# ----------------------------------------------------
 # Here we call :func:`~matcal.full_field.field_mappers.meshless_remapping`
 # with ``backend="scipy"`` to ensure the built-in numpy/scipy GMLS
 # implementation is used, even when pycompadre is installed.  We also
@@ -263,7 +254,8 @@ plt.show()
 # - Higher search radius multipliers increase smoothing and reduce
 #   noise sensitivity.
 # - The built-in scipy backend reproduces the same accuracy patterns
-#   as pycompadre for all tested parameter combinations.
+#   as pycompadre for all tested parameter combinations; however, 
+#   errors are higher in the higher polynomial/lower radius regions.
 
 # %%
 # Visualize error fields
