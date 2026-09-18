@@ -1,0 +1,60 @@
+# Complex VFM shell mesh
+# Geometry: 6 x 3 x 0.1 m plate with four circular holes
+# Hole radius: 1 m at centres (+/-1.5, 0) and (0, +/-1.8)
+#
+# This produces TWO meshes at different resolutions:
+#   - fine_complex_vfm.g   (element size 0.075, for gold simulation)
+#   - coarse_complex_vfm.g (element size 0.125, for VFM model input)
+#
+# Both are 2D surface meshes extracted from the front face
+# of the 3D geometry, matching the approach used for DIC
+# surface data in a VFM workflow.
+
+# L = {L = 3.0}
+# W = {W = 6.0}
+# D = {D = 0.1}
+
+reset
+brick x {W} y {L} z {D}
+webcut volume 1 with cylinder radius 1 axis z center 1.5 0 0
+webcut volume 1 with cylinder radius 1 axis z center -1.5 0 0
+del vol 2 3
+webcut volume 1 with cylinder radius 1 axis z center 0 1.8 0
+webcut volume 1 with cylinder radius 1 axis z center 0 -1.8 0
+del vol 4 5
+
+sideset 1 add surface with z_coord > {0.99999*D/2}
+sideset 1 name "dicsurface"
+
+nodeset 1 add surface with y_coord < {0.99999*-L/2}
+nodeset 1 name "bottom_nodes"
+
+nodeset 2 add surface with y_coord > {0.99999*L/2}
+nodeset 2 name "top_nodes"
+
+nodeset 3 add vertex with y_coord > {0.99999*L/2} and x_coord > {0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 3 name "fixed_x_node_set"
+
+nodeset 4 add vertex with y_coord > {0.99999*L/2} and x_coord > {0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 4 add vertex with y_coord > {0.99999*L/2} and x_coord < {-0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 4 add vertex with y_coord < {-0.99999*L/2} and x_coord < {-0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 4 name "fixed_z_node_set"
+
+# Fine mesh for gold simulation
+vol all size 0.075
+mesh vol all
+block 1 add surf in sideset 1
+block 1 name "block_main"
+
+set exodus netcdf4 off
+set large exodus file on
+export mesh "fine_complex_vfm.g" overwrite
+
+# Coarse mesh for VFM model
+del block 1
+del mesh vol all propagate
+vol all size 0.125
+mesh vol all
+block 1 add surf in sideset 1
+block 1 name "block_main"
+export mesh "coarse_complex_vfm.g" overwrite
