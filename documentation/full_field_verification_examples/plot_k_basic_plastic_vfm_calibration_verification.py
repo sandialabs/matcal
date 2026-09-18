@@ -200,9 +200,11 @@ if not os.path.exists(gold_results_filename):
     input_path = os.path.join(gold_files_dir, "rectangle_vfm_gold.i")
     mat_path = os.path.join(gold_files_dir, material_filename)
 
+    inc_path = os.path.join(gold_files_dir, "make_fine_solid_rect_mesh.inc")
+
     gold_model = UserDefinedSierraModel(
         "adagio", input_path, solid_mesh_filename,
-        "make_fine_solid_rect_mesh.inc", mat_path
+        inc_path, mat_path
     )
     gold_model.set_number_of_cores(4)
     gold_model.add_constants(**goal_constants)
