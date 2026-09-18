@@ -8,13 +8,14 @@ experiments are often performed on specimens with complex
 geometries — dogbone profiles, notches, or cutouts — and the 
 VFM implementation must correctly handle arbitrary shapes.
 
-The specimen is a 6 m × 3 m × 0.1 m plate with four 
+The specimen is a 15 cm × 8 cm × 1.6 mm plate 
+(approximately 6 in × 3 in × 1/16 in) with four 
 circular holes:
 
-* Two holes of radius 1 m centred at :math:`(\pm 1.5, 0)` 
-  on the horizontal centreline.
-* Two holes of radius 1 m centred at :math:`(0, \pm 1.8)` 
-  on the vertical centreline.
+* Two holes of radius 2.5 cm centered at 
+  :math:`(\pm 3.8, 0)` cm on the horizontal centreline.
+* Two holes of radius 2.5 cm centered at 
+  :math:`(0, \pm 4.6)` cm on the vertical centreline.
 
 This creates a cross-like reduced-section gauge region 
 that concentrates deformation and produces a heterogeneous 
@@ -120,11 +121,10 @@ with open(os.path.join(gold_files_dir, material_filename), "w") as mf:
 #   of the complex-shape specimen. It uses a shell 
 #   section and references a 2D surface mesh.
 # * ``complex_vfm_mesh.jou`` — a Cubit journal that 
-#   creates the 6 × 3 × 0.1 m geometry with four 
-#   circular holes and produces two 2D surface meshes:
-#   a fine mesh (element size 0.075) named 
-#   ``fine_complex_vfm.g`` for the gold simulation and 
-#   a coarser mesh (element size 0.125) named 
+#   creates the 15 × 8 cm geometry (in SI metres) with 
+#   four circular holes and produces two 2D surface 
+#   meshes: a fine mesh named ``fine_complex_vfm.g`` for 
+#   the gold simulation and a coarser mesh named 
 #   ``coarse_complex_vfm.g``. Both include boundary 
 #   condition nodesets and the ``dicsurface`` sideset.
 
@@ -208,7 +208,7 @@ if not os.path.exists(gold_results_filename):
 # %%
 # With the gold data generated, we load it and filter out 
 # time steps beyond 8.5 s. This removes data from the 
-# post-peak regime where significant plastic localisation 
+# post-peak regime where significant plastic localization 
 # may violate the plane-stress assumption required by the 
 # VFM formulation. We also rename the displacement fields 
 # to the short names expected by the VFM model.
@@ -232,7 +232,7 @@ field_data.rename_field("displacement_y", "V")
 #   values are needed because the experimental data mesh 
 #   and the VFM model mesh are of similar coarseness; the 
 #   wider support radius prevents degenerate mappings when 
-#   neighbouring data points are far apart relative to the 
+#   neighboring data points are far apart relative to the 
 #   element size.
 #
 # * ``set_number_of_time_steps(400)`` — the VFM model 
@@ -268,7 +268,7 @@ vfm_model.set_number_of_time_steps(400)
 # We define the calibration parameters with bounds that 
 # bracket the true values. The initial guesses are set 
 # approximately 2.5% above the mid-point of the search 
-# range to give the optimiser a realistic, non-trivial 
+# range to give the optimizer a realistic, non-trivial 
 # starting point.
 
 vfm_objective = MechanicalVFMObjective()
@@ -323,7 +323,7 @@ print(
 )
 
 # %%
-# We plot the convergence of the normalised parameter 
+# We plot the convergence of the normalized parameter 
 # values over the calibration iterations.
 
 import matplotlib.pyplot as plt
@@ -340,9 +340,9 @@ for param_name, goal in [
     iterations = range(len(values))
     ax.plot(iterations, [v / goal for v in values], label=param_name)
 
-ax.axhline(1.0, color="k", linestyle="--", linewidth=0.8, label="goal (normalised)")
+ax.axhline(1.0, color="k", linestyle="--", linewidth=0.8, label="goal (normalized)")
 ax.set_xlabel("Iteration")
-ax.set_ylabel("Normalised parameter value")
+ax.set_ylabel("Normalized parameter value")
 ax.set_title("VFM Calibration Convergence — Complex Shape Specimen")
 ax.legend()
 plt.tight_layout()
@@ -355,4 +355,4 @@ plt.show()
 # geometries. This verification demonstrates that the 
 # ``set_mapping_parameters`` option is essential when the 
 # VFM model mesh and the field data have similar 
-# discretisation densities.
+# discretization densities.

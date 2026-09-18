@@ -1,6 +1,6 @@
 #end_time = {end_time = 10.0}
 #start_time = {start_time = 0.0}
-#{end_displacement = 0.02}
+#{end_displacement = 0.007}
 #time_step = {time_step = (end_time-start_time)/300}
 begin sierra vfm_complex_model
 

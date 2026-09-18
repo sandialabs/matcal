@@ -172,7 +172,7 @@ if not os.path.exists(solid_mesh_filename):
 # :class:`~matcal.sierra.models.UserDefinedSierraModel`.
 # We pass all material constants — including the known 
 # goal parameter values — so that the simulation reflects 
-# the true material behaviour we want to recover during 
+# the true material behavior we want to recover during 
 # calibration. The Sierra input deck includes the 
 # material file via an Aprepro ``{include(...)}`` 
 # directive; MatCal writes all constant and parameter 
@@ -284,7 +284,7 @@ vfm_model.use_under_integrated_element()
 # :class:`~matcal.full_field.objective.MechanicalVFMObjective`.
 # We define the three calibration parameters with search 
 # bounds that bracket the true values and initial guesses 
-# that are displaced from the goal to give the optimiser 
+# that are displaced from the goal to give the optimizer 
 # a realistic starting point.
 
 vfm_objective = MechanicalVFMObjective()
@@ -298,7 +298,7 @@ b = Parameter("b", 0, 10, 5.0 + 0.001 * np.random.uniform(0, 1))
 # set up, we create a 
 # :class:`~matcal.dakota.local_calibration_studies.GradientCalibrationStudy`
 # and launch the calibration. The study uses a gradient-based
-# optimiser with a tight convergence tolerance to drive 
+# optimizer with a tight convergence tolerance to drive 
 # the residual to near zero.
 
 calibration = GradientCalibrationStudy(yield_stress, A, b)
@@ -340,7 +340,7 @@ print(f"b:             goal = {b_goal:.4e}, "
 # %%
 # We also plot the calibration convergence history to 
 # show how quickly the gradient method converges to the 
-# correct parameter values. The normalised parameter 
+# correct parameter values. The normalized parameter 
 # values are plotted so that all three parameters can be 
 # compared on the same axis.
 
@@ -358,9 +358,9 @@ for param_name, goal in [
     iterations = range(len(values))
     ax.plot(iterations, [v / goal for v in values], label=param_name)
 
-ax.axhline(1.0, color="k", linestyle="--", linewidth=0.8, label="goal (normalised)")
+ax.axhline(1.0, color="k", linestyle="--", linewidth=0.8, label="goal (normalized)")
 ax.set_xlabel("Iteration")
-ax.set_ylabel("Normalised parameter value")
+ax.set_ylabel("Normalized parameter value")
 ax.set_title("VFM Calibration Convergence — Rectangular Specimen")
 ax.legend()
 plt.tight_layout()

@@ -1,26 +1,31 @@
 # Complex VFM shell mesh
-# Geometry: 6 x 3 x 0.1 m plate with four circular holes
-# Hole radius: 1 m at centres (+/-1.5, 0) and (0, +/-1.8)
+# Geometry: ~15 cm x 8 cm x 1.6 mm plate with four circular holes
+# (6 in x 3 in x 1/16 in, all dimensions in SI metres)
+# Hole radius: 0.0254 m (1 in)
+#   centres at (+/-0.0381, 0) and (0, +/-0.04572) m
 #
 # This produces TWO meshes at different resolutions:
-#   - fine_complex_vfm.g   (element size 0.075, for gold simulation)
-#   - coarse_complex_vfm.g (element size 0.125, for VFM model input)
+#   - fine_complex_vfm.g   (element size ~1.9 mm, for gold simulation)
+#   - coarse_complex_vfm.g (element size ~3.2 mm, for VFM model input)
 #
 # Both are 2D surface meshes extracted from the front face
 # of the 3D geometry, matching the approach used for DIC
 # surface data in a VFM workflow.
 
-# L = {L = 3.0}
-# W = {W = 6.0}
-# D = {D = 0.1}
+# W = {W = 6.0*0.0254}
+# L = {L = 3.0*0.0254}
+# D = {D = 0.0625*0.0254}
+# R = {R = 1.0*0.0254}
+# cx = {cx = 1.5*0.0254}
+# cy = {cy = 1.8*0.0254}
 
 reset
 brick x {W} y {L} z {D}
-webcut volume 1 with cylinder radius 1 axis z center 1.5 0 0
-webcut volume 1 with cylinder radius 1 axis z center -1.5 0 0
+webcut volume 1 with cylinder radius {R} axis z center {cx} 0 0
+webcut volume 1 with cylinder radius {R} axis z center {-cx} 0 0
 del vol 2 3
-webcut volume 1 with cylinder radius 1 axis z center 0 1.8 0
-webcut volume 1 with cylinder radius 1 axis z center 0 -1.8 0
+webcut volume 1 with cylinder radius {R} axis z center 0 {cy} 0
+webcut volume 1 with cylinder radius {R} axis z center 0 {-cy} 0
 del vol 4 5
 
 sideset 1 add surface with z_coord > {0.99999*D/2}
@@ -41,7 +46,8 @@ nodeset 4 add vertex with y_coord < {-0.99999*L/2} and x_coord < {-0.99999*W/2} 
 nodeset 4 name "fixed_z_node_set"
 
 # Fine mesh for gold simulation
-vol all size 0.075
+# mesh_size = {mesh_size = W/80}
+vol all size {mesh_size}
 mesh vol all
 block 1 add surf in sideset 1
 block 1 name "block_main"
@@ -53,7 +59,8 @@ export mesh "fine_complex_vfm.g" overwrite
 # Coarse mesh for VFM model
 del block 1
 del mesh vol all propagate
-vol all size 0.125
+# coarse_mesh_size = {coarse_mesh_size = W/48}
+vol all size {coarse_mesh_size}
 mesh vol all
 block 1 add surf in sideset 1
 block 1 name "block_main"
