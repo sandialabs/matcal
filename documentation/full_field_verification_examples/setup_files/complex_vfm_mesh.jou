@@ -1,16 +1,12 @@
 # Complex VFM shell mesh
 # Geometry: ~15 cm x 8 cm x 1.6 mm plate with four circular holes
-# (6 in x 3 in x 1/16 in, all dimensions in SI metres)
+# (6 in x 3 in x 1/16 in, all dimensions in SI meters)
 # Hole radius: 0.0254 m (1 in)
-#   centres at (+/-0.0381, 0) and (0, +/-0.04572) m
+#   centers at (+/-0.0381, 0) and (0, +/-0.04572) m
 #
-# This produces TWO meshes at different resolutions:
-#   - fine_complex_vfm.g   (element size ~1.9 mm, for gold simulation)
-#   - coarse_complex_vfm.g (element size ~3.2 mm, for VFM model input)
-#
-# Both are 2D surface meshes extracted from the front face
-# of the 3D geometry, matching the approach used for DIC
-# surface data in a VFM workflow.
+# Produces a single 2D surface mesh extracted from the
+# front face of the 3D geometry. The same mesh is used
+# for both the gold Sierra simulation and the VFM model.
 
 # W = {W = 6.0*0.0254}
 # L = {L = 3.0*0.0254}
@@ -45,7 +41,6 @@ nodeset 4 add vertex with y_coord > {0.99999*L/2} and x_coord < {-0.99999*W/2} a
 nodeset 4 add vertex with y_coord < {-0.99999*L/2} and x_coord < {-0.99999*W/2} and z_coord > {D/2*0.99999}
 nodeset 4 name "fixed_z_node_set"
 
-# Fine mesh for gold simulation
 # mesh_size = {mesh_size = W/80}
 vol all size {mesh_size}
 mesh vol all
@@ -54,14 +49,4 @@ block 1 name "block_main"
 
 set exodus netcdf4 off
 set large exodus file on
-export mesh "fine_complex_vfm.g" overwrite
-
-# Coarse mesh for VFM model
-del block 1
-del mesh vol all propagate
-# coarse_mesh_size = {coarse_mesh_size = W/48}
-vol all size {coarse_mesh_size}
-mesh vol all
-block 1 add surf in sideset 1
-block 1 name "block_main"
-export mesh "coarse_complex_vfm.g" overwrite
+export mesh "complex_vfm_mesh.g" overwrite

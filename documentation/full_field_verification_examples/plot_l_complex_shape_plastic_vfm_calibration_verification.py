@@ -31,11 +31,10 @@ isotropic hardening used in the rectangular verification:
 
 We generate synthetic displacement field data by running 
 a Sierra simulation at known parameter values and then 
-calibrate MatCal's VFM model to those data. A successful 
-verification recovers the input parameters to within 1% 
-relative error - a relaxed tolerance compared to the 
-rectangular case because the complex geometry introduces 
-greater mapping and plane-stress approximation errors.
+calibrate MatCal's VFM model to those data. By using 
+the same mesh for both the gold simulation and the VFM 
+model, we eliminate interpolation error and isolate the 
+accuracy of the VFM formulation itself.
 
 We begin by importing the required MatCal tools and 
 defining the known goal parameter values.
@@ -104,12 +103,11 @@ with open(os.path.join(gold_files_dir, material_filename), "w") as mf:
 #   of the complex-shape specimen. It uses a shell 
 #   section and references a 2D surface mesh.
 # * ``complex_vfm_mesh.jou`` - a Cubit journal that 
-#   creates the 15 × 8 cm geometry (in SI metres) with 
-#   four circular holes and produces two 2D surface 
-#   meshes: a fine mesh named ``fine_complex_vfm.g`` for 
-#   the gold simulation and a coarser mesh named 
-#   ``coarse_complex_vfm.g``. Both include boundary 
-#   condition nodesets and the ``dicsurface`` sideset.
+#   creates the 15 x 8 cm geometry (in SI meters) with 
+#   four circular holes and produces a single 2D surface 
+#   mesh named ``complex_vfm_mesh.g``. The same mesh is 
+#   used for both the gold simulation and the VFM model, 
+#   eliminating interpolation error between meshes.
 
 setup_files = [
     "complex_vfm_gold.i",
@@ -123,18 +121,17 @@ for fname in setup_files:
         shutil.copy(src, dst)
 
 # %%
-# Next, we generate the complex-shape surface meshes by 
+# Next, we generate the complex-shape surface mesh by 
 # running the Cubit journal. The journal creates a 
 # brick, performs four cylindrical webcuts to form the 
 # holes, and extracts the front face as a 2D surface 
-# mesh at two resolutions. The fine mesh is used for the 
-# gold Sierra simulation and the VFM model receives the 
-# same mesh (or the coarser one) as the surface on which 
-# displacement data are mapped.
+# mesh. The same mesh is used for both the gold Sierra 
+# simulation and as the VFM model input, so there is 
+# no interpolation between different discretizations.
 
 from matcal.sierra.tests.utilities import run_cubit_with_commands, read_file_lines
 
-shell_mesh_filename = os.path.join(gold_files_dir, "fine_complex_vfm.g")
+shell_mesh_filename = os.path.join(gold_files_dir, "complex_vfm_mesh.g")
 
 if not os.path.exists(shell_mesh_filename):
     init_dir = os.getcwd()
@@ -193,23 +190,14 @@ field_data.rename_field("displacement_y", "V")
 # We now build the VFM model. For complex geometries, a 
 # 2D surface mesh file path is passed directly to the VFM 
 # model rather than using an auto-generated rectangular 
-# skeleton. Here we pass the same fine shell mesh that was 
-# used for the gold simulation.
+# skeleton. Here we pass the same shell mesh that was 
+# used for the gold simulation so that the data points 
+# and model nodes are collocated, eliminating any 
+# interpolation error.
 #
-# Two VFM-specific settings deserve attention here:
-#
-# * ``set_mapping_parameters(2, 1.1)`` - the GMLS mapping
-#   order and support radius multiplier. These non-default 
-#   values are needed because the experimental data mesh 
-#   and the VFM model mesh are of similar coarseness; the 
-#   wider support radius prevents degenerate mappings when 
-#   neighboring data points are far apart relative to the 
-#   element size.
-#
-# * ``set_number_of_time_steps(400)`` - the VFM model 
-#   resamples the field data onto a finer time grid to 
-#   improve the virtual power integration accuracy across 
-#   the loading history.
+# ``set_number_of_time_steps(400)`` resamples the field 
+# data onto a finer time grid to improve the virtual 
+# power integration accuracy across the loading history.
 
 mat = Material("matcal_test",
                os.path.join(gold_files_dir, material_filename),
@@ -224,9 +212,7 @@ vfm_model.add_constants(
 vfm_model.set_number_of_cores(8)
 vfm_model.add_boundary_condition_data(field_data)
 vfm_model.set_displacement_field_names("U", "V")
-vfm_model.set_mapping_parameters(3, 1.5)
 vfm_model.set_number_of_time_steps(400)
-vfm_model.set_convergence_tolerance(1e-14)
 
 # %%
 # We define the calibration parameters with bounds that 
@@ -311,10 +297,8 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# The calibrated parameters recover the goal values to 
-# within the 1% relative error tolerance, confirming that 
-# MatCal's VFM tools work correctly for complex specimen 
-# geometries. This verification demonstrates that the 
-# ``set_mapping_parameters`` option is essential when the 
-# VFM model mesh and the field data have similar 
-# discretization densities.
+# The calibrated parameters recover the goal values, 
+# confirming that MatCal's VFM tools work correctly for 
+# complex specimen geometries. Using the same mesh for 
+# both the gold simulation and the VFM model eliminates 
+# interpolation error and ensures an accurate verification.
