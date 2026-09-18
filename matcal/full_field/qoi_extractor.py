@@ -289,15 +289,19 @@ class InternalVirtualPowerExtractor(QoIExtractorBase):
         self,
         time_field,
         _velocity_gradient_function=_default_velocity_gradient_function,
+        thickness=None,
     ):
         self._time_field = time_field
         self._velocity_gradient_function = _velocity_gradient_function
+        self._thickness = thickness
         self._stress_fields = [
             "first_pk_stress_xx",
             "first_pk_stress_yy",
             "first_pk_stress_xy",
             "first_pk_stress_yx",
         ]
+        if self._thickness is not None:
+            self._stress_fields.append("first_pk_stress_zz")
 
     @property
     def required_experimental_data_fields(self) -> list:
@@ -330,9 +334,12 @@ class InternalVirtualPowerExtractor(QoIExtractorBase):
                 working_data
             )
             stress_array = self._form_stress_array(working_data[timestep], n_cells)
-            internal_power.append(
-                np.einsum("ijk,ijk", stress_array, virtual_velocity_gradient)
-            )
+            power = np.einsum("ijk,ijk", stress_array, virtual_velocity_gradient)
+            if self._thickness is not None:
+                power += self._calculate_z_virtual_power(
+                    working_data[timestep], working_data, n_cells
+                )
+            internal_power.append(power)
         interp_internal_power = self._interpolate_evaluation_data_to_projection_data(
             reference_data[self._time_field], working_data["time"], internal_power
         )
@@ -361,6 +368,40 @@ class InternalVirtualPowerExtractor(QoIExtractorBase):
         stress[:, 1, 0] = data[self._stress_fields[3]]
         stress[:, 1, 1] = data[self._stress_fields[1]]
         return stress
+
+    def _calculate_z_virtual_power(self, timestep_data, working_data, n_cells):
+        """Calculate the z-direction virtual work contribution.
+
+        The VFM hex mesh has front face at z=0 (free) and back
+        face at z=-t_mesh (fixed in z), where t_mesh is the
+        model mesh thickness (t for the disconnected hex model,
+        t/2 for the connected hex model with half-symmetry).
+
+        The z virtual velocity is linear through the thickness,
+        satisfying v*_z = 0 at the fixed back face:
+
+            v*_z = (z + t_mesh) / t_mesh
+
+        giving a constant gradient: dv*_z/dz = 1/t_mesh.
+
+        For the disconnected model: dv*_z/dz = 1/t, V_e = full.
+        For the connected model:    dv*_z/dz = 2/t, V_e = half,
+            but the connected model reports volume as 2*V_half.
+
+        In both cases, sum_e(V_reported * P_zz / t_full) gives
+        the correct z virtual power for the full specimen.
+        """
+        if "volume" in working_data.field_names:
+            volumes = working_data[0]["volume"]
+        elif (
+            "element_thickness" in working_data.field_names
+            and "element_area" in working_data.field_names
+        ):
+            volumes = (
+                working_data[0]["element_thickness"] * working_data[0]["element_area"]
+            )
+        p_zz = timestep_data["first_pk_stress_zz"]
+        return np.sum(volumes * p_zz / self._thickness)
 
 
 class HWDPolynomialSimulationSurfaceExtractorBASE(QoIExtractorBase):

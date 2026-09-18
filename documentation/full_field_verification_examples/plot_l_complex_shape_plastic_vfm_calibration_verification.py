@@ -30,11 +30,12 @@ isotropic hardening used in the rectangular verification:
     \sigma_y + A\left(1 - \exp\left(-b\,\epsilon_p\right)\right)
 
 We generate synthetic displacement field data by running 
-a Sierra simulation at known parameter values and then 
-calibrate MatCal's VFM model to those data. By using 
-the same mesh for both the gold simulation and the VFM 
-model, we eliminate interpolation error and isolate the 
-accuracy of the VFM formulation itself.
+a full 3D Sierra simulation (with half-thickness symmetry) 
+at known parameter values and then calibrate MatCal's VFM 
+model to the surface displacement data. The 3D gold 
+simulation captures the true through-thickness material 
+response, providing a more realistic verification target 
+than a shell model.
 
 We begin by importing the required MatCal tools and 
 defining the known goal parameter values.
@@ -100,14 +101,16 @@ with open(os.path.join(gold_files_dir, material_filename), "w") as mf:
 #
 # * ``complex_vfm_gold.i`` - the Sierra/Adagio input 
 #   deck for a quasi-static uniaxial tension simulation 
-#   of the complex-shape specimen. It uses a shell 
-#   section and references a 2D surface mesh.
+#   of the complex-shape specimen. It uses a full 3D 
+#   solid section (hex8 elements) and outputs surface 
+#   displacement fields on the front face via the 
+#   ``dicsurface`` sideset.
 # * ``complex_vfm_mesh.jou`` - a Cubit journal that 
 #   creates the 15 x 8 cm geometry (in SI meters) with 
-#   four circular holes and produces a single 2D surface 
-#   mesh named ``complex_vfm_mesh.g``. The same mesh is 
-#   used for both the gold simulation and the VFM model, 
-#   eliminating interpolation error between meshes.
+#   four circular holes and produces two meshes: a 3D 
+#   solid hex8 mesh (``complex_vfm_solid.g``) for the 
+#   gold simulation and a 2D surface mesh 
+#   (``complex_vfm_surface.g``) for the VFM model.
 
 setup_files = [
     "complex_vfm_gold.i",
@@ -121,19 +124,24 @@ for fname in setup_files:
         shutil.copy(src, dst)
 
 # %%
-# Next, we generate the complex-shape surface mesh by 
-# running the Cubit journal. The journal creates a 
-# brick, performs four cylindrical webcuts to form the 
-# holes, and extracts the front face as a 2D surface 
-# mesh. The same mesh is used for both the gold Sierra 
-# simulation and as the VFM model input, so there is 
-# no interpolation between different discretizations.
+# Next, we generate the meshes by running the Cubit 
+# journal. The journal creates a brick, performs four 
+# cylindrical webcuts to form the holes, and produces: 
+#
+# 1. A 3D solid hex8 mesh for the gold simulation, 
+#    which captures the full through-thickness response. 
+# 2. A 2D surface mesh (front face) for the VFM model.
+#
+# The gold simulation outputs displacement fields on the 
+# front surface (``dicsurface`` sideset), giving us 
+# surface data that matches the VFM model's 2D mesh.
 
 from matcal.sierra.tests.utilities import run_cubit_with_commands, read_file_lines
 
-shell_mesh_filename = os.path.join(gold_files_dir, "complex_vfm_mesh.g")
+solid_mesh_filename = os.path.join(gold_files_dir, "complex_vfm_solid.g")
+surface_mesh_filename = os.path.join(gold_files_dir, "complex_vfm_surface.g")
 
-if not os.path.exists(shell_mesh_filename):
+if not os.path.exists(solid_mesh_filename):
     init_dir = os.getcwd()
     os.chdir(gold_files_dir)
     mesh_str = read_file_lines("complex_vfm_mesh.jou")
@@ -141,10 +149,12 @@ if not os.path.exists(shell_mesh_filename):
     os.chdir(init_dir)
 
 # %%
-# With the mesh in place, we run the reference Sierra 
+# With the meshes in place, we run the reference Sierra 
 # simulation at the known goal parameter values. The 
-# gold simulation uses the fine shell mesh and the 
-# shell section defined in the Sierra input deck.
+# gold simulation uses the 3D solid mesh so that the 
+# full through-thickness material response (including 
+# non-zero sigma_zz from the Poisson effect) is captured 
+# in the reference data.
 
 gold_results_filename = os.path.join(gold_files_dir, "complex_plastic_results.e")
 
@@ -153,16 +163,17 @@ if not os.path.exists(gold_results_filename):
     mat_path = os.path.join(gold_files_dir, material_filename)
 
     gold_model = UserDefinedSierraModel(
-        "adagio", input_path, shell_mesh_filename, mat_path
+        "adagio", input_path, solid_mesh_filename, mat_path
     )
     gold_model.set_number_of_cores(8)
     gold_model.add_constants(
-        thickness=thickness, 
-        mesh_name=os.path.basename(shell_mesh_filename)
+        mesh_name=os.path.basename(solid_mesh_filename),
     )
     gold_model.read_full_field_data("complex_plastic_results.e")
 
     pc = ParameterCollection("goal")
+    pc.add(Parameter("elastic_modulus", 100e9, 300e9, elastic_modulus))
+    pc.add(Parameter("nu", 0.1, 0.4, nu))
     pc.add(Parameter("yield_stress", 10e6, 500e6, yield_stress_goal))
     pc.add(Parameter("A", 10e6, 5000e6, A_goal))
     pc.add(Parameter("b", 0.1, 5, b_goal))
@@ -190,10 +201,11 @@ field_data.rename_field("displacement_y", "V")
 # We now build the VFM model. For complex geometries, a 
 # 2D surface mesh file path is passed directly to the VFM 
 # model rather than using an auto-generated rectangular 
-# skeleton. Here we pass the same shell mesh that was 
-# used for the gold simulation so that the data points 
-# and model nodes are collocated, eliminating any 
-# interpolation error.
+# skeleton. We pass the surface mesh extracted from the 
+# free face of the gold simulation geometry. The gold 
+# simulation outputs surface displacement data on this 
+# same face, so the data points and VFM model nodes are 
+# collocated.
 #
 # ``set_number_of_time_steps(400)`` resamples the field 
 # data onto a finer time grid to improve the virtual 
@@ -203,7 +215,7 @@ mat = Material("matcal_test",
                os.path.join(gold_files_dir, material_filename),
                "j2_plasticity")
 
-vfm_model = VFMUniaxialTensionHexModel(mat, shell_mesh_filename, thickness=thickness)
+vfm_model = VFMUniaxialTensionHexModel(mat, surface_mesh_filename, thickness=thickness)
 vfm_model.add_constants(
     yield_stress=yield_stress_goal,
     A=A_goal,
@@ -216,12 +228,14 @@ vfm_model.set_number_of_time_steps(400)
 
 # %%
 # We define the calibration parameters with bounds that 
-# bracket the true values. The initial guesses are set 
-# approximately 2.5% above the mid-point of the search 
-# range to give the optimizer a realistic, non-trivial 
-# starting point.
+# bracket the true values. We pass the specimen 
+# ``thickness`` to the objective so that it includes 
+# the through-thickness (z-direction) virtual work in 
+# the internal virtual power calculation. This corrects 
+# for the non-zero sigma_zz that the 3D hex elements 
+# produce due to the Poisson effect.
 
-vfm_objective = MechanicalVFMObjective()
+vfm_objective = MechanicalVFMObjective(thickness=thickness)
 
 yield_stress = Parameter("yield_stress", 100e6, 500e6)
 A = Parameter("A", 1000e6, 5000e6)
@@ -299,6 +313,8 @@ plt.show()
 # %%
 # The calibrated parameters recover the goal values, 
 # confirming that MatCal's VFM tools work correctly for 
-# complex specimen geometries. Using the same mesh for 
-# both the gold simulation and the VFM model eliminates 
-# interpolation error and ensures an accurate verification.
+# complex specimen geometries. Using a full 3D gold 
+# simulation with half-thickness symmetry provides a 
+# realistic verification target, and the 
+# ``thickness`` option on the VFM objective accounts for 
+# the through-thickness virtual work in the residual.

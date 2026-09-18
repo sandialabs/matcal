@@ -430,18 +430,56 @@ class MechanicalVFMObjective(Objective):
 
     _class_name = "MechanicalVFMObjective"
 
-    def __init__(self, time_field="time", load_field="load"):
+    def __init__(self, time_field="time", load_field="load", thickness=None):
         """
         Optionally specify the time and load field names
         that are required to be in the experiment :class:`~matcal.full_field.data.FieldData`
         class for this objective.
         These are assumed to be "time" and "load" by default.
 
+        When ``thickness`` is provided, the objective includes 
+        the through-thickness (z-direction) virtual work 
+        contribution from the 3D model in the internal virtual 
+        power calculation. This improves accuracy for VFM 
+        models that use 3D hex elements by accounting for the 
+        non-zero through-thickness stress that arises from 
+        the Poisson effect.
+
+        The z virtual velocity is a linear function that 
+        satisfies the fixed-z boundary condition on the back 
+        face of the VFM hex mesh:
+
+        .. math::
+
+            v^*_z = \\frac{z - z_{\\text{back}}}{z_{\\text{front}} - z_{\\text{back}}}
+
+        where :math:`z_{\\text{back}}` is the fixed face 
+        (at :math:`z = -t` for the disconnected hex model, 
+        or :math:`z = -t/2` for the connected hex model 
+        with half-thickness symmetry) and 
+        :math:`z_{\\text{front}} = 0` is the free face.
+        The resulting virtual velocity gradient is constant:
+        :math:`\\partial v^*_z / \\partial z = 1/t_{\\text{mesh}}`
+        where :math:`t_{\\text{mesh}}` is the model mesh 
+        thickness.
+
+        The ``thickness`` parameter should always be the 
+        **full specimen thickness**. The computation 
+        ``\\sum_e V_e \\, P_{zz} / t`` produces the correct 
+        result for both model types because the connected 
+        hex model reports doubled element volumes that 
+        account for symmetry.
+
         :param time_field: the name of the time field in the data.
-        :type independent_field: str
+        :type time_field: str
 
         :param load_field: the name of the load field in the data.
         :type load_field: str
+
+        :param thickness: specimen thickness for 3D virtual field 
+            correction. When None (default), only in-plane virtual 
+            work is used.
+        :type thickness: float or None
 
         :raises Objective.TypeError: If the wrong types are passed into the constructor.
         """
@@ -452,6 +490,7 @@ class MechanicalVFMObjective(Objective):
 
         self._time_field = time_field
         self._load_field = load_field
+        self._thickness = thickness
         self._setup_qoi_extractors()
         self.set_as_large_data_sets_objective()
 
@@ -461,7 +500,9 @@ class MechanicalVFMObjective(Objective):
         )
 
         self.set_simulation_qoi_extractor(
-            InternalVirtualPowerExtractor(self._time_field)
+            InternalVirtualPowerExtractor(
+                self._time_field, thickness=self._thickness
+            )
         )
 
     def _confirm_simulation_fields(self, simulation_data):

@@ -256,13 +256,13 @@ vfm_model.use_under_integrated_element()
 # %%
 # The calibration objective is a 
 # :class:`~matcal.full_field.objective.MechanicalVFMObjective`.
-# We define five calibration parameters: the elastic 
-# modulus, Poisson's ratio, and the three plasticity 
-# parameters. The search bounds bracket the true values 
-# and the initial guesses are displaced from the goal 
-# to give the optimizer a realistic starting point.
+# We pass the specimen ``thickness`` so the objective 
+# includes the through-thickness virtual work from the 
+# 3D hex elements. We define five calibration parameters: 
+# the elastic modulus, Poisson's ratio, and the three 
+# plasticity parameters.
 
-vfm_objective = MechanicalVFMObjective()
+vfm_objective = MechanicalVFMObjective(thickness=thickness)
 
 e_mod = Parameter("elastic_modulus", 100e9, 300e9, 150e9)
 nu_param = Parameter("nu", 0.1, 0.4, 0.2 + 0.001 * np.random.uniform(0, 1))

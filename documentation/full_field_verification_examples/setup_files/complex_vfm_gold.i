@@ -1,6 +1,6 @@
 #end_time = {end_time = 10.0}
 #start_time = {start_time = 0.0}
-#{end_displacement = 0.035}
+#{end_displacement = 0.007}
 #time_step = {time_step = (end_time-start_time)/300}
 begin sierra vfm_complex_model
 
@@ -37,17 +37,6 @@ begin sierra vfm_complex_model
     strain incrementation = strongly_objective
   End
 
-  Begin Shell Section shell
-      thickness = {thickness}
-    Formulation = BT_shell
-  End
-
-  Begin Membrane Section membrane
-    thickness = {thickness}
-    Formulation = selective_deviatoric
-    deviatoric parameter = 1.0
-  End
-
 # FINITE ELEMENT MODEL =================================================
   begin finite element model tension_solid_mechanics
     Database name = {mesh_name}
@@ -56,7 +45,7 @@ begin sierra vfm_complex_model
     Begin Parameters for Block block_main
       Material = matcal_test
       Model = j2_plasticity
-      Section = shell
+      Section = default
     End
 
   end
@@ -113,8 +102,9 @@ begin sierra vfm_complex_model
           scale factor = -0.5
         end
 
+        # Symmetry plane at z=0: fix z displacement
         Begin fixed displacement
-          node_set = fixed_z_node_set
+          node_set = symmetry_z_nodes
           component = z
         end
 
@@ -143,17 +133,18 @@ begin sierra vfm_complex_model
           compute at every step
         end user output
 
-      # REQUESTED OUTPUT
+      # REQUESTED OUTPUT - surface data from the free face (dicsurface)
       begin results output solid_mechanics_output
         database name = ./complex_plastic_results.e
         database type = exodusII
+        include = dicsurface
+        exclude = block_main
         at step 0, increment = 1
-        element temperature
-        nodal temperature
         nodal displacement
         global time
         global displacement
         global load
+        output mesh = exposed surface
       end
 
       # SOLVER

@@ -1,22 +1,31 @@
-# Complex VFM shell mesh
+# Complex VFM meshes - half-thickness symmetry
 # Geometry: ~15 cm x 8 cm x 1.6 mm plate with four circular holes
 # (6 in x 3 in x 1/16 in, all dimensions in SI meters)
 # Hole radius: 0.0254 m (1 in)
 #   centers at (+/-0.0381, 0) and (0, +/-0.04572) m
 #
-# Produces a single 2D surface mesh extracted from the
-# front face of the 3D geometry. The same mesh is used
-# for both the gold Sierra simulation and the VFM model.
+# The solid mesh uses half-thickness symmetry: the mesh
+# spans from z=0 (symmetry plane) to z=D/2 (free surface).
+# The symmetry plane is fixed in z; the free surface is
+# where DIC measurements are taken.
+#
+# Produces two meshes from the same geometry:
+#   1. complex_vfm_solid.g   - 3D hex8 solid mesh (half
+#      thickness) for the gold Sierra simulation.
+#   2. complex_vfm_surface.g - 2D surface mesh (free face
+#      at z=D/2) for the VFM model input.
 
 # W = {W = 6.0*0.0254}
 # L = {L = 3.0*0.0254}
 # D = {D = 0.0625*0.0254}
+# half_D = {half_D = D/2}
 # R = {R = 1.0*0.0254}
 # cx = {cx = 1.5*0.0254}
 # cy = {cy = 1.8*0.0254}
 
 reset
-brick x {W} y {L} z {D}
+brick x {W} y {L} z {half_D}
+move vol 1 z {half_D/2}
 webcut volume 1 with cylinder radius {R} axis z center {cx} 0 0
 webcut volume 1 with cylinder radius {R} axis z center {-cx} 0 0
 del vol 2 3
@@ -24,8 +33,13 @@ webcut volume 1 with cylinder radius {R} axis z center 0 {cy} 0
 webcut volume 1 with cylinder radius {R} axis z center 0 {-cy} 0
 del vol 4 5
 
-sideset 1 add surface with z_coord > {0.99999*D/2}
+# Free surface (DIC measurement side) at z = D/2
+sideset 1 add surface with z_coord > {0.99999*half_D}
 sideset 1 name "dicsurface"
+
+# Symmetry plane at z = 0 (fixed in z)
+nodeset 5 add surface with z_coord < {0.00001}
+nodeset 5 name "symmetry_z_nodes"
 
 nodeset 1 add surface with y_coord < {0.99999*-L/2}
 nodeset 1 name "bottom_nodes"
@@ -33,20 +47,24 @@ nodeset 1 name "bottom_nodes"
 nodeset 2 add surface with y_coord > {0.99999*L/2}
 nodeset 2 name "top_nodes"
 
-nodeset 3 add vertex with y_coord > {0.99999*L/2} and x_coord > {0.99999*W/2} and z_coord > {D/2*0.99999}
+nodeset 3 add vertex with y_coord > {0.99999*L/2} and x_coord > {0.99999*W/2} and z_coord > {half_D*0.99999}
 nodeset 3 name "fixed_x_node_set"
-
-nodeset 4 add vertex with y_coord > {0.99999*L/2} and x_coord > {0.99999*W/2} and z_coord > {D/2*0.99999}
-nodeset 4 add vertex with y_coord > {0.99999*L/2} and x_coord < {-0.99999*W/2} and z_coord > {D/2*0.99999}
-nodeset 4 add vertex with y_coord < {-0.99999*L/2} and x_coord < {-0.99999*W/2} and z_coord > {D/2*0.99999}
-nodeset 4 name "fixed_z_node_set"
 
 # mesh_size = {mesh_size = W/80}
 vol all size {mesh_size}
 mesh vol all
-block 1 add surf in sideset 1
+
+# 3D solid mesh for gold simulation (half thickness)
+block 1 add volume all
+block 1 element type hex8
 block 1 name "block_main"
 
 set exodus netcdf4 off
 set large exodus file on
-export mesh "complex_vfm_mesh.g" overwrite
+export mesh "complex_vfm_solid.g" overwrite
+
+# 2D surface mesh for VFM model (free surface at z=D/2)
+del block 1
+block 1 add surf in sideset 1
+block 1 name "block_main"
+export mesh "complex_vfm_surface.g" overwrite
