@@ -5,7 +5,7 @@ In this example, we verify MatCal's VFM calibration tools
 on a non-rectangular specimen geometry. This is an important 
 extension of the rectangular verification because real DIC 
 experiments are often performed on specimens with complex 
-geometries — dogbone profiles, notches, or cutouts — and the 
+geometries - dogbone profiles, notches, or cutouts - and the 
 VFM implementation must correctly handle arbitrary shapes.
 
 The specimen is a 15 cm × 8 cm × 1.6 mm plate 
@@ -33,7 +33,7 @@ We generate synthetic displacement field data by running
 a Sierra simulation at known parameter values and then 
 calibrate MatCal's VFM model to those data. A successful 
 verification recovers the input parameters to within 1% 
-relative error — a relaxed tolerance compared to the 
+relative error - a relaxed tolerance compared to the 
 rectangular case because the complex geometry introduces 
 greater mapping and plane-stress approximation errors.
 
@@ -51,34 +51,30 @@ from matcal.core.parameters import ParameterCollection
 from matcal.core.state import SolitaryState
 
 # Known (goal) material parameter values
-density = 7800
 elastic_modulus = 200e9
 nu = 0.27
 yield_stress_goal = 250e6
 A_goal = 2500e6
 b_goal = 2.0
 
-# Thickness: 1/16 inch converted to metres
+# Thickness: 1/16 inch converted to meters
 thickness = 0.0625 * 0.0254
-
-# Additional constants required by the material file template
-specific_heat = 500
-beta_tq = 0.9
-coupling = "uncoupled"
 
 # %%
 # We create a working directory for the gold simulation 
 # and then write the SierraSM material property 
 # specification as an Aprepro-templated ``.inc`` file, 
 # identical to the one used in the rectangular 
-# verification example.
+# verification example. The calibration parameters 
+# (``yield_stress``, ``A``, ``b``) are Aprepro variables; 
+# all other material constants are hardcoded.
 
 gold_files_dir = "complex_vfm_gold_data"
 os.makedirs(gold_files_dir, exist_ok=True)
 
 material_file_string = """\
 begin property specification for material matcal_test
-   density = {density}
+   density = 7800
    begin parameters for model j2_plasticity
     youngs modulus = {elastic_modulus}
     poissons ratio = {nu}
@@ -94,12 +90,6 @@ begin property specification for material matcal_test
     yield rate coefficient = 1000
     yield rate exponent = 8
 
-    {if(coupling!="uncoupled")}
-
-      thermal softening model = {coupling}
-      beta_tq                 = {beta_tq}
-      specific heat           = {specific_heat}
-    {endif}
    end
    begin parameters for model linear_elastic
     youngs modulus    = {elastic_modulus}
@@ -116,11 +106,11 @@ with open(os.path.join(gold_files_dir, material_filename), "w") as mf:
 # The remaining input files are provided in the 
 # ``setup_files/`` directory alongside this example:
 #
-# * ``complex_vfm_gold.i`` — the Sierra/Adagio input 
+# * ``complex_vfm_gold.i`` - the Sierra/Adagio input 
 #   deck for a quasi-static uniaxial tension simulation 
 #   of the complex-shape specimen. It uses a shell 
 #   section and references a 2D surface mesh.
-# * ``complex_vfm_mesh.jou`` — a Cubit journal that 
+# * ``complex_vfm_mesh.jou`` - a Cubit journal that 
 #   creates the 15 × 8 cm geometry (in SI metres) with 
 #   four circular holes and produces two 2D surface 
 #   meshes: a fine mesh named ``fine_complex_vfm.g`` for 
@@ -169,12 +159,8 @@ if not os.path.exists(shell_mesh_filename):
 gold_results_filename = os.path.join(gold_files_dir, "complex_plastic_results.e")
 
 goal_constants = {
-    "density": density,
     "elastic_modulus": elastic_modulus,
     "nu": nu,
-    "specific_heat": specific_heat,
-    "beta_tq": beta_tq,
-    "coupling": coupling,
     "thickness": thickness,
     "mesh_name": os.path.basename(shell_mesh_filename),
 }
@@ -227,7 +213,7 @@ field_data.rename_field("displacement_y", "V")
 #
 # Two VFM-specific settings deserve attention here:
 #
-# * ``set_mapping_parameters(2, 1.1)`` — the GMLS mapping
+# * ``set_mapping_parameters(2, 1.1)`` - the GMLS mapping
 #   order and support radius multiplier. These non-default 
 #   values are needed because the experimental data mesh 
 #   and the VFM model mesh are of similar coarseness; the 
@@ -235,7 +221,7 @@ field_data.rename_field("displacement_y", "V")
 #   neighboring data points are far apart relative to the 
 #   element size.
 #
-# * ``set_number_of_time_steps(400)`` — the VFM model 
+# * ``set_number_of_time_steps(400)`` - the VFM model 
 #   resamples the field data onto a finer time grid to 
 #   improve the virtual power integration accuracy across 
 #   the loading history.
@@ -249,14 +235,9 @@ vfm_model.add_constants(
     yield_stress=yield_stress_goal,
     A=A_goal,
     b=b_goal,
-    density=density,
+    density=7800,
     elastic_modulus=elastic_modulus,
     nu=nu,
-    thermal_conductivity=15,
-    specific_heat=specific_heat,
-    beta_tq=beta_tq,
-    plastic_work_variable="plastic_work_heat_rate",
-    coupling=coupling,
 )
 vfm_model.set_number_of_cores(36)
 vfm_model.add_boundary_condition_data(field_data)
@@ -273,9 +254,9 @@ vfm_model.set_number_of_time_steps(400)
 
 vfm_objective = MechanicalVFMObjective()
 
-yield_stress = Parameter("yield_stress", 100e6, 500e6, 250e6 * 1.025)
-A = Parameter("A", 1000e6, 5000e6, 2500e6 * 1.025)
-b = Parameter("b", 0, 10, 2.0 * 1.02 + 0.005 * np.random.uniform(0, 1))
+yield_stress = Parameter("yield_stress", 100e6, 500e6)
+A = Parameter("A", 1000e6, 5000e6)
+b = Parameter("b", 0, 10)
 
 # %%
 # We launch the calibration study. An explicit 
@@ -343,7 +324,7 @@ for param_name, goal in [
 ax.axhline(1.0, color="k", linestyle="--", linewidth=0.8, label="goal (normalized)")
 ax.set_xlabel("Iteration")
 ax.set_ylabel("Normalized parameter value")
-ax.set_title("VFM Calibration Convergence — Complex Shape Specimen")
+ax.set_title("VFM Calibration Convergence - Complex Shape Specimen")
 ax.legend()
 plt.tight_layout()
 plt.show()

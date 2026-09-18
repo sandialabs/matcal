@@ -45,17 +45,11 @@ from matcal.core.parameters import ParameterCollection
 from matcal.core.state import SolitaryState
 
 # Known (goal) material parameter values
-density = 7800
 elastic_modulus = 200e9
 nu = 0.27
 yield_stress_goal = 250e6
 A_goal = 2500e6
 b_goal = 2.0
-
-# Additional constants required by the material file template
-specific_heat = 500
-beta_tq = 0.9
-coupling = "uncoupled"
 
 # %%
 # We create a working directory for the gold simulation 
@@ -63,16 +57,17 @@ coupling = "uncoupled"
 # specification as an Aprepro-templated ``.inc`` file.
 # The template uses J2 plasticity with Voce isotropic 
 # hardening and a power-law-breakdown rate multiplier. 
-# Aprepro variables such as ``{yield_stress}``, 
-# ``{A}``, and ``{b}`` are substituted by MatCal 
-# at runtime.
+# The calibration parameters (``elastic_modulus``, 
+# ``nu``, ``yield_stress``, ``A``, ``b``) are Aprepro 
+# variables substituted by MatCal at runtime. All other 
+# material constants are hardcoded in the file.
 
 gold_files_dir = "rectangle_vfm_gold_data"
 os.makedirs(gold_files_dir, exist_ok=True)
 
 material_file_string = """\
 begin property specification for material matcal_test
-   density = {density}
+   density = 7800
    begin parameters for model j2_plasticity
     youngs modulus = {elastic_modulus}
     poissons ratio = {nu}
@@ -88,16 +83,6 @@ begin property specification for material matcal_test
     yield rate coefficient = 1000
     yield rate exponent = 8
 
-    {if(coupling!="uncoupled")}
-
-      thermal softening model = {coupling}
-      beta_tq                 = {beta_tq}
-      specific heat           = {specific_heat}
-    {endif}
-   end
-   begin parameters for model linear_elastic
-    youngs modulus    = {elastic_modulus}
-    poissons ratio    = {nu}
    end
 end
 """
@@ -110,22 +95,22 @@ with open(os.path.join(gold_files_dir, material_filename), "w") as mf:
 # The remaining input files are provided in the 
 # ``setup_files/`` directory alongside this example:
 #
-# * ``rectangle_vfm_gold.i`` — the Sierra/Adagio input 
+# * ``rectangle_vfm_gold.i`` - the Sierra/Adagio input 
 #   deck for a quasi-static uniaxial tension simulation 
 #   of the rectangular specimen. It prescribes symmetric 
 #   displacements on the top and bottom nodesets and 
 #   outputs surface displacement fields.
-# * ``rectangle_vfm_mesh.jou`` — a Cubit journal that 
+# * ``rectangle_vfm_mesh.jou`` - a Cubit journal that 
 #   creates the 0.1 × 0.2 × 0.001 m rectangular mesh 
 #   with the required nodesets and sidesets. The journal 
 #   uses Aprepro variables (``N``, ``solid_mesh``, 
 #   ``mesh_name``) to control the mesh resolution and 
 #   whether a 3D solid or 2D surface mesh is produced.
-# * ``make_fine_solid_rect_mesh.inc`` — an Aprepro include
+# * ``make_fine_solid_rect_mesh.inc`` - an Aprepro include
 #   file that sets the variables for the fine hex8 solid 
 #   mesh (N=10, solid_mesh="true") used for the gold 
 #   simulation.
-# * ``make_coarse_surface_rect_mesh.inc`` — an Aprepro 
+# * ``make_coarse_surface_rect_mesh.inc`` - an Aprepro 
 #   include file that sets the variables for the coarser 
 #   2D surface mesh (N=5, solid_mesh="false") that could 
 #   be used as VFM model input.
@@ -170,8 +155,8 @@ if not os.path.exists(solid_mesh_filename):
 # With the mesh in place, we run the reference Sierra 
 # simulation using 
 # :class:`~matcal.sierra.models.UserDefinedSierraModel`.
-# We pass all material constants — including the known 
-# goal parameter values — so that the simulation reflects 
+# We pass all material constants - including the known 
+# goal parameter values - so that the simulation reflects 
 # the true material behavior we want to recover during 
 # calibration. The Sierra input deck includes the 
 # material file via an Aprepro ``{include(...)}`` 
@@ -182,12 +167,6 @@ if not os.path.exists(solid_mesh_filename):
 gold_results_filename = os.path.join(gold_files_dir, "plastic_results.e")
 
 goal_constants = {
-    "density": density,
-    "elastic_modulus": elastic_modulus,
-    "nu": nu,
-    "specific_heat": specific_heat,
-    "beta_tq": beta_tq,
-    "coupling": coupling,
     "mat_model": "j2_plasticity",
     "solid_mesh": "true",
     "aprepro_file": "make_fine_solid_rect_mesh.inc",
@@ -208,6 +187,8 @@ if not os.path.exists(gold_results_filename):
     gold_model.read_full_field_data("plastic_results.e")
 
     pc = ParameterCollection("goal")
+    pc.add(Parameter("elastic_modulus", 100e9, 300e9, elastic_modulus))
+    pc.add(Parameter("nu", 0.1, 0.4, nu))
     pc.add(Parameter("yield_stress", 10e6, 500e6, yield_stress_goal))
     pc.add(Parameter("A", 10e6, 5000e6, A_goal))
     pc.add(Parameter("b", 0.1, 5, b_goal))
@@ -265,14 +246,7 @@ vfm_model.add_constants(
     yield_stress=yield_stress_goal,
     A=A_goal,
     b=b_goal,
-    density=density,
-    elastic_modulus=elastic_modulus,
-    nu=nu,
-    thermal_conductivity=15,
-    specific_heat=specific_heat,
-    beta_tq=beta_tq,
-    plastic_work_variable="plastic_work_heat_rate",
-    coupling=coupling,
+    density=7800,
 )
 vfm_model.set_number_of_cores(1)
 vfm_model.add_boundary_condition_data(field_data)
@@ -282,13 +256,16 @@ vfm_model.use_under_integrated_element()
 # %%
 # The calibration objective is a 
 # :class:`~matcal.full_field.objective.MechanicalVFMObjective`.
-# We define the three calibration parameters with search 
-# bounds that bracket the true values and initial guesses 
-# that are displaced from the goal to give the optimizer 
-# a realistic starting point.
+# We define five calibration parameters: the elastic 
+# modulus, Poisson's ratio, and the three plasticity 
+# parameters. The search bounds bracket the true values 
+# and the initial guesses are displaced from the goal 
+# to give the optimizer a realistic starting point.
 
 vfm_objective = MechanicalVFMObjective()
 
+e_mod = Parameter("elastic_modulus", 100e9, 300e9, 150e9)
+nu_param = Parameter("nu", 0.1, 0.4, 0.2 + 0.001 * np.random.uniform(0, 1))
 yield_stress = Parameter("yield_stress", 100e6, 500e6, 200e6)
 A = Parameter("A", 1000e6, 5000e6, 4000e6)
 b = Parameter("b", 0, 10, 5.0 + 0.001 * np.random.uniform(0, 1))
@@ -301,7 +278,7 @@ b = Parameter("b", 0, 10, 5.0 + 0.001 * np.random.uniform(0, 1))
 # optimizer with a tight convergence tolerance to drive 
 # the residual to near zero.
 
-calibration = GradientCalibrationStudy(yield_stress, A, b)
+calibration = GradientCalibrationStudy(e_mod, nu_param, yield_stress, A, b)
 calibration.add_evaluation_set(vfm_model, vfm_objective, field_data)
 calibration.set_core_limit(32)
 calibration.set_convergence_tolerance(1e-12)
@@ -315,6 +292,8 @@ results = calibration.launch()
 # parameter. A successful verification will show errors 
 # well below 0.01%.
 
+recovered_elastic_modulus = results.outcome["best:elastic_modulus"]
+recovered_nu = results.outcome["best:nu"]
 recovered_yield_stress = results.outcome["best:yield_stress"]
 recovered_A = results.outcome["best:A"]
 recovered_b = results.outcome["best:b"]
@@ -325,15 +304,23 @@ def relative_error(recovered: float, goal: float) -> float:
     return abs(recovered - goal) / abs(goal)
 
 
-print(f"yield_stress:  goal = {yield_stress_goal:.4e} Pa, "
+print(f"elastic_modulus: goal = {elastic_modulus:.4e} Pa, "
+      f"recovered = {recovered_elastic_modulus:.4e} Pa, "
+      f"relative error = {relative_error(recovered_elastic_modulus, elastic_modulus):.2e}")
+
+print(f"nu:              goal = {nu:.4e}, "
+      f"recovered = {recovered_nu:.4e}, "
+      f"relative error = {relative_error(recovered_nu, nu):.2e}")
+
+print(f"yield_stress:    goal = {yield_stress_goal:.4e} Pa, "
       f"recovered = {recovered_yield_stress:.4e} Pa, "
       f"relative error = {relative_error(recovered_yield_stress, yield_stress_goal):.2e}")
 
-print(f"A:             goal = {A_goal:.4e} Pa, "
+print(f"A:               goal = {A_goal:.4e} Pa, "
       f"recovered = {recovered_A:.4e} Pa, "
       f"relative error = {relative_error(recovered_A, A_goal):.2e}")
 
-print(f"b:             goal = {b_goal:.4e}, "
+print(f"b:               goal = {b_goal:.4e}, "
       f"recovered = {recovered_b:.4e}, "
       f"relative error = {relative_error(recovered_b, b_goal):.2e}")
 
@@ -350,6 +337,8 @@ param_history = results.parameter_history
 
 fig, ax = plt.subplots()
 for param_name, goal in [
+    ("elastic_modulus", elastic_modulus),
+    ("nu", nu),
     ("yield_stress", yield_stress_goal),
     ("A", A_goal),
     ("b", b_goal),
@@ -361,7 +350,7 @@ for param_name, goal in [
 ax.axhline(1.0, color="k", linestyle="--", linewidth=0.8, label="goal (normalized)")
 ax.set_xlabel("Iteration")
 ax.set_ylabel("Normalized parameter value")
-ax.set_title("VFM Calibration Convergence — Rectangular Specimen")
+ax.set_title("VFM Calibration Convergence - Rectangular Specimen")
 ax.legend()
 plt.tight_layout()
 plt.show()
