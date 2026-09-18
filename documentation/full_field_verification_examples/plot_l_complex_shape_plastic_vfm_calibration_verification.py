@@ -66,10 +66,14 @@ beta_tq = 0.9
 coupling = "uncoupled"
 
 # %%
-# The gold simulation requires a SierraSM material 
-# property specification. We write this as an 
-# Aprepro-templated ``.inc`` file, identical to the 
-# one used in the rectangular verification example.
+# We create a working directory for the gold simulation 
+# and then write the SierraSM material property 
+# specification as an Aprepro-templated ``.inc`` file, 
+# identical to the one used in the rectangular 
+# verification example.
+
+gold_files_dir = "complex_vfm_gold_data"
+os.makedirs(gold_files_dir, exist_ok=True)
 
 material_file_string = """\
 begin property specification for material matcal_test
