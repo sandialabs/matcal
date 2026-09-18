@@ -185,15 +185,12 @@ goal_constants = {
     "density": density,
     "elastic_modulus": elastic_modulus,
     "nu": nu,
-    "yield_stress": yield_stress_goal,
-    "A": A_goal,
-    "b": b_goal,
     "specific_heat": specific_heat,
     "beta_tq": beta_tq,
     "coupling": coupling,
     "mat_model": "j2_plasticity",
     "solid_mesh": "true",
-    "aprepro_file": os.path.join(gold_files_dir, "make_fine_solid_rect_mesh.inc"),
+    "aprepro_file": "make_fine_solid_rect_mesh.inc",
 }
 
 if not os.path.exists(gold_results_filename):
