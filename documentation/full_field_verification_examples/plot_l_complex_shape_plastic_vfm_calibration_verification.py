@@ -41,7 +41,6 @@ We begin by importing the required MatCal tools and
 defining the known goal parameter values.
 '''
 from matcal import *
-import numpy as np
 import os
 import shutil
 
@@ -51,8 +50,6 @@ from matcal.core.parameters import ParameterCollection
 from matcal.core.state import SolitaryState
 
 # Known (goal) material parameter values
-elastic_modulus = 200e9
-nu = 0.27
 yield_stress_goal = 250e6
 A_goal = 2500e6
 b_goal = 2.0
@@ -76,8 +73,8 @@ material_file_string = """\
 begin property specification for material matcal_test
    density = 7800
    begin parameters for model j2_plasticity
-    youngs modulus = {elastic_modulus}
-    poissons ratio = {nu}
+    youngs modulus = 200e9
+    poissons ratio = 0.27
     yield stress = {yield_stress}
 
     hardening model   =  decoupled_flow_stress
@@ -90,10 +87,6 @@ begin property specification for material matcal_test
     yield rate coefficient = 1000
     yield rate exponent = 8
 
-   end
-   begin parameters for model linear_elastic
-    youngs modulus    = {elastic_modulus}
-    poissons ratio    = {nu}
    end
 end
 """
@@ -158,13 +151,6 @@ if not os.path.exists(shell_mesh_filename):
 
 gold_results_filename = os.path.join(gold_files_dir, "complex_plastic_results.e")
 
-goal_constants = {
-    "elastic_modulus": elastic_modulus,
-    "nu": nu,
-    "thickness": thickness,
-    "mesh_name": os.path.basename(shell_mesh_filename),
-}
-
 if not os.path.exists(gold_results_filename):
     input_path = os.path.join(gold_files_dir, "complex_vfm_gold.i")
     mat_path = os.path.join(gold_files_dir, material_filename)
@@ -173,7 +159,10 @@ if not os.path.exists(gold_results_filename):
         "adagio", input_path, shell_mesh_filename, mat_path
     )
     gold_model.set_number_of_cores(8)
-    gold_model.add_constants(**goal_constants)
+    gold_model.add_constants(
+        thickness=thickness, 
+        mesh_name=os.path.basename(shell_mesh_filename)
+    )
     gold_model.read_full_field_data("complex_plastic_results.e")
 
     pc = ParameterCollection("goal")
@@ -192,15 +181,11 @@ if not os.path.exists(gold_results_filename):
     shutil.move(completed_file, gold_results_filename)
 
 # %%
-# With the gold data generated, we load it and filter out 
-# time steps beyond 8.5 s. This removes data from the 
-# post-peak regime where significant plastic localization 
-# may violate the plane-stress assumption required by the 
-# VFM formulation. We also rename the displacement fields 
+# With the gold data generated, we load it and
+# rename the displacement fields 
 # to the short names expected by the VFM model.
 
 field_data = FieldSeriesData(gold_results_filename)
-field_data = field_data[field_data["time"] <= 8.5]
 field_data.rename_field("displacement_x", "U")
 field_data.rename_field("displacement_y", "V")
 
@@ -235,15 +220,13 @@ vfm_model.add_constants(
     yield_stress=yield_stress_goal,
     A=A_goal,
     b=b_goal,
-    density=7800,
-    elastic_modulus=elastic_modulus,
-    nu=nu,
 )
-vfm_model.set_number_of_cores(36)
+vfm_model.set_number_of_cores(8)
 vfm_model.add_boundary_condition_data(field_data)
 vfm_model.set_displacement_field_names("U", "V")
-vfm_model.set_mapping_parameters(2, 1.1)
+vfm_model.set_mapping_parameters(3, 1.5)
 vfm_model.set_number_of_time_steps(400)
+vfm_model.set_convergence_tolerance(1e-14)
 
 # %%
 # We define the calibration parameters with bounds that 
@@ -266,9 +249,7 @@ b = Parameter("b", 0, 10)
 
 calibration = GradientCalibrationStudy(yield_stress, A, b)
 calibration.add_evaluation_set(vfm_model, vfm_objective, field_data)
-calibration.set_core_limit(112)
-calibration.set_step_size(1e-6)
-calibration.set_convergence_tolerance(1e-12)
+calibration.set_core_limit(32)
 
 results = calibration.launch()
 
