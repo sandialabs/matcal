@@ -176,6 +176,7 @@ goal_constants = {
     "beta_tq": beta_tq,
     "coupling": coupling,
     "thickness": thickness,
+    "mesh_name": os.path.basename(shell_mesh_filename),
 }
 
 if not os.path.exists(gold_results_filename):
