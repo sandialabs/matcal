@@ -1,4 +1,6 @@
 import csv
+import logging
+import os
 import numpy as np
 
 from matcal.core.data import Data
@@ -11,6 +13,10 @@ from matcal.full_field.data_importer import (CSVFieldDataSeriesParser,
                                              _create_series_data_array, 
                                              FieldSeriesData, 
                                              _import_full_field_data_from_json, 
+                                             _warn_if_large_field_data,
+                                             _validate_float_dtype,
+                                             _add_global_data_type,
+                                             _add_space_data_type,
                                              mesh_file_to_skeleton, 
                                              _get_number_of_points_and_frames)
 from matcal.full_field.data_exporter import export_full_field_data_to_json
@@ -393,3 +399,183 @@ class TestJSONFieldDataParser(MatcalUnitTest):
         n_ele = 23
         parser, ref_data = self._init_random_parse(n_time, n_pts, n_ele, ele_size, field_vars, global_vars)
         self.assertEqual(n_ele, parser.number_of_elements)
+
+
+class TestLargeFieldDataWarning(MatcalUnitTest):
+    """Tests for the advisory large-file warning in field data import."""
+
+    def setUp(self) -> None:
+        super().setUp(__file__)
+
+    def _make_series_dir(self, dir_name, num_files, file_size):
+        """Create a series directory with *num_files* files of *file_size* bytes each."""
+        os.makedirs(dir_name, exist_ok=True)
+        for i in range(num_files):
+            fpath = os.path.join(dir_name, f"frame_{i}.csv")
+            with open(fpath, "w") as f:
+                f.write("A, B\n")
+                row = "1.0, 2.0\n"
+                while f.tell() < file_size:
+                    f.write(row)
+        return dir_name
+
+    def _make_global_csv(self, filename, size_bytes=50):
+        with open(filename, "w") as f:
+            f.write("time, file_\n")
+            row = "0.0, frame_0.csv\n"
+            while f.tell() < size_bytes:
+                f.write(row)
+        return filename
+
+    def test_no_warning_for_small_field_data(self):
+        """Small field data directories should not emit a warning."""
+        series_dir = self._make_series_dir("small_series", 2, 50)
+        global_csv = self._make_global_csv("global_small.csv")
+        with self.assertLogs("matcal", level=logging.WARNING) as cm:
+            logging.getLogger("matcal").warning("_sentinel_")
+            _warn_if_large_field_data(global_csv, series_dir)
+        for msg in cm.output:
+            self.assertNotIn("advisory threshold", msg)
+
+    def test_warning_for_large_field_data(self):
+        """Large field data directories should emit a warning."""
+        import matcal.core.data_importer as di
+        original = di.LARGE_FILE_THRESHOLD_BYTES
+        try:
+            di.LARGE_FILE_THRESHOLD_BYTES = 200
+            series_dir = self._make_series_dir("large_series", 3, 100)
+            global_csv = self._make_global_csv("global_large.csv", 50)
+            with self.assertLogs("matcal", level=logging.WARNING) as cm:
+                _warn_if_large_field_data(global_csv, series_dir)
+            threshold_warnings = [m for m in cm.output if "advisory threshold" in m]
+            self.assertTrue(
+                len(threshold_warnings) > 0,
+                "Expected a large-file advisory warning but none was logged.",
+            )
+        finally:
+            di.LARGE_FILE_THRESHOLD_BYTES = original
+
+
+class TestFloatDtype(MatcalUnitTest):
+    """Tests for the float_dtype parameter on FieldSeriesData."""
+
+    def setUp(self) -> None:
+        super().setUp(__file__)
+        self._global_data = (
+            self.get_current_files_path(__file__)
+            + "/input_files/csv_global_data.csv"
+        )
+        self._series_dir = (
+            self.get_current_files_path(__file__)
+            + "/input_files/csv_data_series"
+        )
+
+    # -- FieldSeriesData integration tests ----------------------------------
+
+    def test_default_dtype_is_float32(self):
+        """Without an explicit float_dtype the arrays should be float32."""
+        data = FieldSeriesData(
+            self._global_data, self._series_dir, ["X", "Y"]
+        )
+        for field in data.field_names:
+            self.assertEqual(
+                data.dtype[field].base,
+                np.dtype(np.float32),
+                f"Field '{field}' is {data.dtype[field]}, expected float32",
+            )
+
+    def test_float64_override(self):
+        """Passing float_dtype=np.float64 should produce float64 arrays."""
+        data = FieldSeriesData(
+            self._global_data,
+            self._series_dir,
+            ["X", "Y"],
+            float_dtype=np.float64,
+        )
+        for field in data.field_names:
+            self.assertEqual(
+                data.dtype[field].base,
+                np.dtype(np.float64),
+                f"Field '{field}' is {data.dtype[field]}, expected float64",
+            )
+
+    def test_float32_values_close_to_float64(self):
+        """float32 import should produce values close to the float64 import."""
+        data32 = FieldSeriesData(
+            self._global_data,
+            self._series_dir,
+            ["X", "Y"],
+            float_dtype=np.float32,
+        )
+        data64 = FieldSeriesData(
+            self._global_data,
+            self._series_dir,
+            ["X", "Y"],
+            float_dtype=np.float64,
+        )
+        for field in data32.field_names:
+            self.assert_close_arrays(
+                np.asarray(data32[field], dtype=np.float64),
+                np.asarray(data64[field], dtype=np.float64),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+
+    def test_float32_uses_less_memory_than_float64(self):
+        """The float32 array should be roughly half the size of float64."""
+        data32 = FieldSeriesData(
+            self._global_data,
+            self._series_dir,
+            ["X", "Y"],
+            float_dtype=np.float32,
+        )
+        data64 = FieldSeriesData(
+            self._global_data,
+            self._series_dir,
+            ["X", "Y"],
+            float_dtype=np.float64,
+        )
+        self.assertLess(data32.nbytes, data64.nbytes)
+
+    # -- _validate_float_dtype unit tests -----------------------------------
+
+    def test_validate_accepts_float32(self):
+        result = _validate_float_dtype(np.float32)
+        self.assertIs(result, np.float32)
+
+    def test_validate_accepts_float64(self):
+        result = _validate_float_dtype(np.float64)
+        self.assertIs(result, np.float64)
+
+    def test_validate_accepts_double(self):
+        result = _validate_float_dtype(np.double)
+        self.assertIs(result, np.float64)
+
+    def test_validate_accepts_string_float32(self):
+        result = _validate_float_dtype("float32")
+        self.assertIs(result, np.float32)
+
+    def test_validate_accepts_string_float64(self):
+        result = _validate_float_dtype("float64")
+        self.assertIs(result, np.float64)
+
+    def test_validate_rejects_int_dtype(self):
+        with self.assertRaises(ValueError):
+            _validate_float_dtype(np.int32)
+
+    def test_validate_rejects_nonsense(self):
+        with self.assertRaises(TypeError):
+            _validate_float_dtype([1, 2, 3])
+
+    # -- _add_global_data_type / _add_space_data_type unit tests ------------
+
+    def test_add_global_data_type_uses_given_dtype(self):
+        result = _add_global_data_type(["time", "load"], [], np.float32)
+        for name, dt in result:
+            self.assertEqual(np.dtype(dt), np.dtype(np.float32))
+
+    def test_add_space_data_type_uses_given_dtype(self):
+        result = _add_space_data_type([], ["U", "V"], [], 10, np.float32)
+        for name, dt, shape in result:
+            self.assertEqual(np.dtype(dt), np.dtype(np.float32))
+            self.assertEqual(shape, (10,))
