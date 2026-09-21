@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**19:04.589** total execution time for 8 files **from full_field_verification_examples**:
+**15:45.685** total execution time for 8 files **from full_field_verification_examples**:
 
 .. container::
 
@@ -33,13 +33,7 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_full_field_verification_examples_plot_l_complex_shape_plastic_vfm_calibration_verification.py` (``plot_l_complex_shape_plastic_vfm_calibration_verification.py``)
-     - 15:29.622
-     - 0.0
-   * - :ref:`sphx_glr_full_field_verification_examples_plot_k_basic_plastic_vfm_calibration_verification.py` (``plot_k_basic_plastic_vfm_calibration_verification.py``)
-     - 02:44.858
-     - 0.0
-   * - :ref:`sphx_glr_full_field_verification_examples_plot_vfm_methods_verification.py` (``plot_vfm_methods_verification.py``)
-     - 00:50.109
+     - 15:45.685
      - 0.0
    * - :ref:`sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py` (``plot_a_interpolation_methods_verification.py``)
      - 00:00.000
@@ -54,5 +48,11 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_full_field_verification_examples_plot_j_hwd_methods_verification.py` (``plot_j_hwd_methods_verification.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_k_basic_plastic_vfm_calibration_verification.py` (``plot_k_basic_plastic_vfm_calibration_verification.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_vfm_methods_verification.py` (``plot_vfm_methods_verification.py``)
      - 00:00.000
      - 0.0

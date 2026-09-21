@@ -300,7 +300,7 @@ HWD input parameters.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 191-205
+.. GENERATED FROM PYTHON SOURCE LINES 191-200
 
 We create a function that loops over the
 HWD method input parameters, generates 
@@ -310,33 +310,21 @@ error fields for our comparison.
 Since we will perform these operations twice using the different 
 basis functions sets, putting the 
 calculations in a function simplifies the process.
-The following code performs these calculations and stores the data 
-in NumPy arrays so that they can be visualized next. It 
-also stores the data in a pickle file so that they can be 
-loaded later without recalculating since the 
-computational cost for these mappings can be expensive.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 205-245
+.. GENERATED FROM PYTHON SOURCE LINES 200-232
 
 .. code-block:: Python
 
     def evaluate_errors(basis_data, comparison_data):
-        from concurrent.futures import ProcessPoolExecutor
-        futures = {}
-        with ProcessPoolExecutor(max_workers = num_depths*num_polys) as executor:    
-            for p_index,poly_order in enumerate(polynomial_orders):
-                futures[poly_order] = {}
-                for d_index, depth in enumerate(cut_depths):
-                    futures[poly_order][depth] = get_HWD_results(poly_order, depth, 
+        all_results = {}
+        for p_index,poly_order in enumerate(polynomial_orders):
+            all_results[poly_order] = {}
+            for d_index, depth in enumerate(cut_depths):
+                all_results[poly_order][depth] = get_HWD_results(poly_order, depth, 
                                                                  basis_data, 
                                                                  comparison_data)  
     
-    #                futures[poly_order][depth] = executor.submit(get_HWD_results, 
-    #                                                                 poly_order, depth, 
-    #                                                                 basis_data, 
-    #                                                                 comparison_data)  
-    #    
         reconstructed_error_fields = np.zeros((num_polys, num_depths, 1, 
                                                basis_data.spatial_coords.shape[0]))
         all_comparison_weights = []
@@ -345,11 +333,10 @@ computational cost for these mappings can be expensive.
             comparison_weights_fields_by_depth = []
             basis_weights_fields_by_depth = []
             for d_index, depth in enumerate(cut_depths):
-    #            results = futures[poly_order][depth].result()
-                results = futures[poly_order][depth]
-                basis_weights_fields_by_depth.append(results[0])
-                comparison_weights_fields_by_depth.append(results[1])
-                reconstructed_error_fields[p_index,d_index]  = results[2]          
+                result = all_results[poly_order][depth]
+                basis_weights_fields_by_depth.append(result[0])
+                comparison_weights_fields_by_depth.append(result[1])
+                reconstructed_error_fields[p_index,d_index]  = result[2]          
             all_comparison_weights.append(comparison_weights_fields_by_depth)
             all_basis_weights.append(basis_weights_fields_by_depth)
 
@@ -445,7 +432,7 @@ computational cost for these mappings can be expensive.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 246-284
+.. GENERATED FROM PYTHON SOURCE LINES 233-271
 
 First, we will look at how the HWD weights change 
 when using the different basis functions.
@@ -486,7 +473,7 @@ We then use that function to calculate
 the error metrics for our two 
 different comparisons.
 
-.. GENERATED FROM PYTHON SOURCE LINES 284-306
+.. GENERATED FROM PYTHON SOURCE LINES 271-293
 
 .. code-block:: Python
 
@@ -519,13 +506,13 @@ different comparisons.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 307-310
+.. GENERATED FROM PYTHON SOURCE LINES 294-297
 
 With the error fields calculated, we can now create two heat maps 
 showing how our two error measures change as the polynomial order 
 and cut depths are varied. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 310-331
+.. GENERATED FROM PYTHON SOURCE LINES 297-318
 
 .. code-block:: Python
 
@@ -562,7 +549,7 @@ and cut depths are varied.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 332-350
+.. GENERATED FROM PYTHON SOURCE LINES 319-337
 
 From these heat maps, it is clear that 
 the weights match better for those 
@@ -583,7 +570,7 @@ are polynomial order six and cut depth eight for both
 sets of basis functions.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 350-374
+.. GENERATED FROM PYTHON SOURCE LINES 337-361
 
 .. code-block:: Python
 
@@ -635,7 +622,7 @@ sets of basis functions.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 375-416
+.. GENERATED FROM PYTHON SOURCE LINES 362-403
 
 From these plots it is apparent 
 that the experimental basis 
@@ -679,7 +666,7 @@ of input parameters to the HWD method.
    When looking at the data, be cognizant of the changes 
    to the color bar maximums and minimums.
 
-.. GENERATED FROM PYTHON SOURCE LINES 416-444
+.. GENERATED FROM PYTHON SOURCE LINES 403-431
 
 .. code-block:: Python
 
@@ -718,13 +705,13 @@ of input parameters to the HWD method.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 445-448
+.. GENERATED FROM PYTHON SOURCE LINES 432-435
 
 First we observe the reconstructed
 field errors generated 
 using the mapped basis and associated weights.
 
-.. GENERATED FROM PYTHON SOURCE LINES 448-454
+.. GENERATED FROM PYTHON SOURCE LINES 435-441
 
 .. code-block:: Python
 
@@ -746,7 +733,7 @@ using the mapped basis and associated weights.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 455-482
+.. GENERATED FROM PYTHON SOURCE LINES 442-469
 
 Two trends are clear.
 
@@ -776,7 +763,7 @@ which are an area of future research.
 We now look at the same error fields 
 for the experimental basis.
 
-.. GENERATED FROM PYTHON SOURCE LINES 482-488
+.. GENERATED FROM PYTHON SOURCE LINES 469-475
 
 .. code-block:: Python
 
@@ -798,7 +785,7 @@ for the experimental basis.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 489-532
+.. GENERATED FROM PYTHON SOURCE LINES 476-519
 
 These results show that when there is 
 enough support for the basis functions 
@@ -847,7 +834,7 @@ alone.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 51.851 seconds)
+   **Total running time of the script:** (18 minutes 31.413 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_hwd_methods_verification_not_collocated_X_specimen.py:

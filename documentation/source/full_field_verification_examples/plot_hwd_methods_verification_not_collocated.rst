@@ -85,7 +85,7 @@ To begin we import the libraries and tools we will be using to perform this stud
 
 .. code-block:: Python
 
-
+    # sphinx_gallery_thumbnail_number = 2
     from matcal import *
     import numpy as np
     import matplotlib.pyplot as plt
@@ -328,34 +328,24 @@ and on the simulation cloud.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-216
+.. GENERATED FROM PYTHON SOURCE LINES 206-210
 
 Now we can loop over the parameters, generate 
 the HWD basis and store the values 
-that we will be plotting next. These evaluations
-are computationally expensive. As a result, we 
-use Python's ProcessPoolExecutor to 
-run the function in parallel for each 
-set of HWD input parameters to speed the calculations.
-We also store the results in a pickle file so
-that they are not needlessly recalculated.
+that we will be plotting next.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 216-244
+.. GENERATED FROM PYTHON SOURCE LINES 210-233
 
 .. code-block:: Python
 
     max_sim_value = np.max(np.abs(sim_truth_data['val']))
-    from concurrent.futures import ProcessPoolExecutor
-    futures = {}
-    with ProcessPoolExecutor(max_workers = max(num_depths*num_polys, 8)) as executor:    
-        for p_index,poly_order in enumerate(polynomial_orders):
-            futures[poly_order] = {}
-            for d_index, depth in enumerate(cut_depths):
-                 futures[poly_order][depth] = get_HWD_results(poly_order, depth, 
-                                                              sim_truth_data, measured_data)
-    #            futures[poly_order][depth] = executor.submit(get_HWD_results, poly_order, 
-    #                                                         depth, sim_truth_data, measured_data)           
+    results = {}
+    for p_index,poly_order in enumerate(polynomial_orders):
+        results[poly_order] = {}
+        for d_index, depth in enumerate(cut_depths):
+            results[poly_order][depth] = get_HWD_results(poly_order, depth, 
+                                                         sim_truth_data, measured_data)
 
     reconstructed_error_fields = np.zeros((num_polys, num_depths, 1, 
                                            sim_truth_data.spatial_coords.shape[0]))
@@ -365,11 +355,10 @@ that they are not needlessly recalculated.
         measured_weights_fields_by_depth = []
         truth_weights_fields_by_depth = []
         for d_index, depth in enumerate(cut_depths):
-    #        results = futures[poly_order][depth].result()
-            results = futures[poly_order][depth]
-            truth_weights_fields_by_depth.append(results[0])
-            measured_weights_fields_by_depth.append(results[1])
-            reconstructed_error_fields[p_index,d_index]  = results[2]          
+            result = results[poly_order][depth]
+            truth_weights_fields_by_depth.append(result[0])
+            measured_weights_fields_by_depth.append(result[1])
+            reconstructed_error_fields[p_index,d_index]  = result[2]          
         all_measured_weights.append(measured_weights_fields_by_depth)
         all_truth_weights.append(truth_weights_fields_by_depth)
 
@@ -451,7 +440,7 @@ that they are not needlessly recalculated.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 245-285
+.. GENERATED FROM PYTHON SOURCE LINES 234-274
 
 We are interested in two error measures. The first 
 error measure we will investigate is the L2-norm 
@@ -494,7 +483,7 @@ also stores the data in a pickle file so that it can be
 read back later without recalculating since the 
 computational cost for these calculations can be expensive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 285-305
+.. GENERATED FROM PYTHON SOURCE LINES 274-294
 
 .. code-block:: Python
 
@@ -525,13 +514,13 @@ computational cost for these calculations can be expensive.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 306-309
+.. GENERATED FROM PYTHON SOURCE LINES 295-298
 
 With the error fields calculated, we can now create four heat maps 
 showing how our four error measures change as the polynomial order 
 and cut depth are varied. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 309-332
+.. GENERATED FROM PYTHON SOURCE LINES 298-321
 
 .. code-block:: Python
 
@@ -570,7 +559,7 @@ and cut depth are varied.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 333-363
+.. GENERATED FROM PYTHON SOURCE LINES 322-352
 
 For this test, the four error measures 
 form a minimum in a diagonal trough from 
@@ -603,7 +592,7 @@ and a polynomial order of six.
 It is shown to highlight some of the potential issues 
 to be wary of with high depth cuts and high polynomials.
 
-.. GENERATED FROM PYTHON SOURCE LINES 363-387
+.. GENERATED FROM PYTHON SOURCE LINES 352-376
 
 .. code-block:: Python
 
@@ -643,7 +632,7 @@ to be wary of with high depth cuts and high polynomials.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 388-438
+.. GENERATED FROM PYTHON SOURCE LINES 377-427
 
 From these plots, the following conclusions can be made: 
 
@@ -696,23 +685,10 @@ planned for future releases.
    regions of inadequate support which will result in a failed HWD 
    transformation and errors in the study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 438-440
-
-.. code-block:: Python
-
-
-    # sphinx_gallery_thumbnail_number = 2
-
-
-
-
-
-
-
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (102 minutes 31.368 seconds)
+   **Total running time of the script:** (105 minutes 3.156 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_hwd_methods_verification_not_collocated.py:

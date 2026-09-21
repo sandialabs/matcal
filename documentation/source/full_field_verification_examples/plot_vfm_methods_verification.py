@@ -93,8 +93,8 @@ We will need:
     and :math:`\\nu`. We choose values that 
     are similar to steel with :math:`E=200` GPa
     and :math:`\\nu=0.25`.
-#.  The plate dimensions :math:`H=15.2` mm, :math:`W=7.6`, 
-    and :math:`T=0.1` mm with a discretization in Y and Y.
+#.  The plate dimensions :math:`H=15.2` mm, :math:`W=7.6` mm, 
+    and :math:`T=0.1` mm with a discretization in X and Y.
 #.  The load magnitude 
     as a function of time :math:`L(t)`. 
     We will choose :math:`L(t)` such that 
@@ -333,6 +333,10 @@ print(internal_power_error_connected)
 # power errors as a function time. 
 
 import matplotlib.pyplot as plt
+
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+plt.rcParams.update({'font.size': 12})
 
 plt.plot(time, internal_power_error_default, label="default VFM model", marker='o')
 plt.plot(time, internal_power_error_connected, label="connected hex VFM model")

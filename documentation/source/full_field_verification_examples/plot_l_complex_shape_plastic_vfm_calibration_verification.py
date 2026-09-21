@@ -44,7 +44,7 @@ import os
 import shutil
 
 from matcal.full_field.objective import MechanicalVFMObjective
-from matcal.sierra.models import VFMUniaxialTensionHexModel, UserDefinedSierraModel
+from matcal.sierra.models import UserDefinedSierraModel
 from matcal.core.parameters import ParameterCollection
 from matcal.core.state import SolitaryState
 
@@ -242,7 +242,9 @@ results = calibration.launch()
 # %%
 # After calibration, we compare the recovered parameters 
 # to the known goal values and report the relative errors.
-# For this complex geometry, we expect errors below 1%.
+# For this complex geometry, we expect errors below a few percent.
+# The VFM implementation using SIERRA does not respect the 
+# plane stress assumption which results in increased error.
 
 recovered_yield_stress = results.outcome["best:yield_stress"]
 recovered_A = results.outcome["best:A"]
@@ -275,6 +277,10 @@ print(
 # values over the calibration iterations.
 
 import matplotlib.pyplot as plt
+
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+plt.rcParams.update({'font.size': 12})
 
 param_history = results.parameter_history
 

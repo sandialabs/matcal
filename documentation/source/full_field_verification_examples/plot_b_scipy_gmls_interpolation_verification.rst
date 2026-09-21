@@ -64,7 +64,7 @@ The verification procedure:
 
 To begin we import the libraries and tools we will be using.
 
-.. GENERATED FROM PYTHON SOURCE LINES 49-57
+.. GENERATED FROM PYTHON SOURCE LINES 49-61
 
 .. code-block:: Python
 
@@ -76,6 +76,9 @@ To begin we import the libraries and tools we will be using.
     import numpy as np
     import matplotlib.pyplot as plt
 
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.rcParams.update({'font.size': 12})
 
 
 
@@ -83,14 +86,15 @@ To begin we import the libraries and tools we will be using.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 58-62
+
+.. GENERATED FROM PYTHON SOURCE LINES 62-66
 
 Define measurement domain
 --------------------------
 The domain is about 152 mm high (6 inches) and 76 mm wide (3 inches).
 The measured grid has 400 points in each dimension (x, y).
 
-.. GENERATED FROM PYTHON SOURCE LINES 62-71
+.. GENERATED FROM PYTHON SOURCE LINES 66-75
 
 .. code-block:: Python
 
@@ -110,7 +114,7 @@ The measured grid has 400 points in each dimension (x, y).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 72-78
+.. GENERATED FROM PYTHON SOURCE LINES 76-82
 
 Define the test function
 -------------------------
@@ -119,7 +123,7 @@ verification example: an additive combination of sinusoids
 and a linear function multiplied by a smooth approximation
 to a Dirac delta.
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-91
+.. GENERATED FROM PYTHON SOURCE LINES 82-95
 
 .. code-block:: Python
 
@@ -143,12 +147,12 @@ to a Dirac delta.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 92-94
+.. GENERATED FROM PYTHON SOURCE LINES 96-98
 
 Evaluate the function and add noise
 -------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 94-115
+.. GENERATED FROM PYTHON SOURCE LINES 98-119
 
 .. code-block:: Python
 
@@ -185,12 +189,12 @@ Evaluate the function and add noise
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 116-118
+.. GENERATED FROM PYTHON SOURCE LINES 120-122
 
 Create simulation grid and truth data
 ----------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 118-125
+.. GENERATED FROM PYTHON SOURCE LINES 122-129
 
 .. code-block:: Python
 
@@ -208,12 +212,12 @@ Create simulation grid and truth data
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 126-128
+.. GENERATED FROM PYTHON SOURCE LINES 130-132
 
 Prepare data for MatCal's mapping tools
 ------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 128-146
+.. GENERATED FROM PYTHON SOURCE LINES 132-150
 
 .. code-block:: Python
 
@@ -242,14 +246,14 @@ Prepare data for MatCal's mapping tools
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-151
+.. GENERATED FROM PYTHON SOURCE LINES 151-155
 
 Parameter study setup
 ----------------------
 We study polynomial orders 1 through 3 with search radius
 multipliers from 1.5 to 4.0 (plus 5.0).
 
-.. GENERATED FROM PYTHON SOURCE LINES 151-155
+.. GENERATED FROM PYTHON SOURCE LINES 155-159
 
 .. code-block:: Python
 
@@ -264,7 +268,7 @@ multipliers from 1.5 to 4.0 (plus 5.0).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 156-175
+.. GENERATED FROM PYTHON SOURCE LINES 160-179
 
 Run the parameter study using ``meshless_remapping``
 ----------------------------------------------------
@@ -286,7 +290,7 @@ Error measures:
 
    e_{max} = 100\frac{\lVert f^h_s-f_s\rVert_{\infty}}{\max\left(f_s\right)}
 
-.. GENERATED FROM PYTHON SOURCE LINES 175-214
+.. GENERATED FROM PYTHON SOURCE LINES 179-218
 
 .. code-block:: Python
 
@@ -336,12 +340,12 @@ Error measures:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 215-217
+.. GENERATED FROM PYTHON SOURCE LINES 219-221
 
 Visualize error measures as heatmaps
 ---------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-248
+.. GENERATED FROM PYTHON SOURCE LINES 221-252
 
 .. code-block:: Python
 
@@ -400,7 +404,7 @@ Visualize error measures as heatmaps
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 249-259
+.. GENERATED FROM PYTHON SOURCE LINES 253-263
 
 From these heatmaps, we observe the same trends as the pycompadre
 verification:
@@ -413,14 +417,14 @@ verification:
   as pycompadre for all tested parameter combinations; however, 
   errors are higher in the higher polynomial/lower radius regions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 261-265
+.. GENERATED FROM PYTHON SOURCE LINES 265-269
 
 Visualize error fields
 ------------------------
 We plot the absolute percent error fields for each parameter
 combination to visualize spatial error distribution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 265-310
+.. GENERATED FROM PYTHON SOURCE LINES 269-314
 
 .. code-block:: Python
 
@@ -481,7 +485,7 @@ combination to visualize spatial error distribution.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 311-331
+.. GENERATED FROM PYTHON SOURCE LINES 315-335
 
 Observations
 -------------
@@ -504,7 +508,7 @@ the same default parameters (polynomial order 1, search radius
 multiplier 2.75) provide a good balance between speed and
 accuracy for both interpolation and extrapolation tasks.
 
-.. GENERATED FROM PYTHON SOURCE LINES 333-339
+.. GENERATED FROM PYTHON SOURCE LINES 337-343
 
 Direct sparse weight matrix demonstration
 -------------------------------------------
@@ -513,7 +517,7 @@ building the sparse weight matrix directly using
 :func:`~matcal.full_field.field_mappers._build_gmls_weight_matrix`.
 This shows the sparse structure of the interpolation operator.
 
-.. GENERATED FROM PYTHON SOURCE LINES 339-363
+.. GENERATED FROM PYTHON SOURCE LINES 343-367
 
 .. code-block:: Python
 
@@ -561,7 +565,7 @@ This shows the sparse structure of the interpolation operator.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (9 minutes 55.554 seconds)
+   **Total running time of the script:** (10 minutes 39.315 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_b_scipy_gmls_interpolation_verification.py:

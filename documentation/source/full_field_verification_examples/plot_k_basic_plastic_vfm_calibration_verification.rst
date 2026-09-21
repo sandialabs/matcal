@@ -837,12 +837,16 @@ correct parameter values. The normalized parameter
 values are plotted so that all three parameters can be 
 compared on the same axis.
 
-.. GENERATED FROM PYTHON SOURCE LINES 333-358
+.. GENERATED FROM PYTHON SOURCE LINES 333-362
 
 .. code-block:: Python
 
 
     import matplotlib.pyplot as plt
+
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.rcParams.update({'font.size': 12})
 
     param_history = results.parameter_history
 
@@ -878,7 +882,7 @@ compared on the same axis.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 359-366
+.. GENERATED FROM PYTHON SOURCE LINES 363-370
 
 The calibrated parameters recover the goal values to 
 within the expected tolerance, confirming that MatCal's 
@@ -891,7 +895,7 @@ specimen geometry.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 44.858 seconds)
+   **Total running time of the script:** (2 minutes 29.695 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_k_basic_plastic_vfm_calibration_verification.py:

@@ -333,6 +333,10 @@ print(f"b:               goal = {b_goal:.4e}, "
 
 import matplotlib.pyplot as plt
 
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+plt.rcParams.update({'font.size': 12})
+
 param_history = results.parameter_history
 
 fig, ax = plt.subplots()

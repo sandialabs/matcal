@@ -54,6 +54,10 @@ from matcal.full_field.field_mappers import (
 import numpy as np
 import matplotlib.pyplot as plt
 
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+plt.rcParams.update({'font.size': 12})
+
 # %%
 # Define measurement domain
 # --------------------------

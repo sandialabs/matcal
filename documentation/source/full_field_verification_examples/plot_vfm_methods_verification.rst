@@ -111,8 +111,8 @@ We will need:
     and :math:`\nu`. We choose values that 
     are similar to steel with :math:`E=200` GPa
     and :math:`\nu=0.25`.
-#.  The plate dimensions :math:`H=15.2` mm, :math:`W=7.6`, 
-    and :math:`T=0.1` mm with a discretization in Y and Y.
+#.  The plate dimensions :math:`H=15.2` mm, :math:`W=7.6` mm, 
+    and :math:`T=0.1` mm with a discretization in X and Y.
 #.  The load magnitude 
     as a function of time :math:`L(t)`. 
     We will choose :math:`L(t)` such that 
@@ -563,12 +563,16 @@ magnitude of the maximum error is 0.05%. To
 further investigate, we plot the internal 
 power errors as a function time. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 334-345
+.. GENERATED FROM PYTHON SOURCE LINES 334-349
 
 .. code-block:: Python
 
 
     import matplotlib.pyplot as plt
+
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.rcParams.update({'font.size': 12})
 
     plt.plot(time, internal_power_error_default, label="default VFM model", marker='o')
     plt.plot(time, internal_power_error_connected, label="connected hex VFM model")
@@ -590,7 +594,7 @@ power errors as a function time.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 346-356
+.. GENERATED FROM PYTHON SOURCE LINES 350-360
 
 The error is increasing quadratically as
 the load is increased and the model 
@@ -606,7 +610,7 @@ obtain results with much smaller errors.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 50.109 seconds)
+   **Total running time of the script:** (0 minutes 48.610 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_vfm_methods_verification.py:

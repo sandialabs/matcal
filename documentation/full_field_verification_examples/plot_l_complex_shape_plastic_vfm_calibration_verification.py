@@ -242,7 +242,9 @@ results = calibration.launch()
 # %%
 # After calibration, we compare the recovered parameters 
 # to the known goal values and report the relative errors.
-# For this complex geometry, we expect errors below 1%.
+# For this complex geometry, we expect errors below a few percent.
+# The VFM implementation using SIERRA does not respect the 
+# plane stress assumption which results in increased error.
 
 recovered_yield_stress = results.outcome["best:yield_stress"]
 recovered_A = results.outcome["best:A"]

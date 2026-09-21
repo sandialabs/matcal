@@ -67,7 +67,7 @@ defining the known goal parameter values.
     import shutil
 
     from matcal.full_field.objective import MechanicalVFMObjective
-    from matcal.sierra.models import VFMUniaxialTensionHexModel, UserDefinedSierraModel
+    from matcal.sierra.models import UserDefinedSierraModel
     from matcal.core.parameters import ParameterCollection
     from matcal.core.state import SolitaryState
 
@@ -281,6 +281,14 @@ to the short names expected by the VFM model.
 .. rst-class:: sphx-glr-script-out
 
  .. code-block:: none
+
+
+    You are using exodus.py v 1.21.6 (seacas-py3), a python wrapper of some of the exodus library.
+
+    Copyright (c) 2013-2023 National Technology &
+    Engineering Solutions of Sandia, LLC (NTESS).  Under the terms of
+    Contract DE-NA0003525 with NTESS, the U.S. Government retains certain
+    rights in this software.
 
     Opening exodus file: complex_vfm_gold_data/complex_plastic_results.e
     Opening exodus file: complex_vfm_gold_data/complex_plastic_results.e
@@ -694,23 +702,25 @@ step size that is appropriate for this problem.
 
  .. code-block:: none
 
-    Opening exodus file: matcal_template/VFM_1/matcal_default_state/VFM_1.g
-    Closing exodus file: matcal_template/VFM_1/matcal_default_state/VFM_1.g
-    Opening exodus file: matcal_template/VFM_1/matcal_default_state/VFM_1.g
-    Closing exodus file: matcal_template/VFM_1/matcal_default_state/VFM_1.g
-    Opening exodus file: matcal_template/VFM_1/matcal_default_state/VFM_1.g
-    Closing exodus file: matcal_template/VFM_1/matcal_default_state/VFM_1.g
+    Opening exodus file: matcal_template/VFM_0/matcal_default_state/VFM_0.g
+    Closing exodus file: matcal_template/VFM_0/matcal_default_state/VFM_0.g
+    Opening exodus file: matcal_template/VFM_0/matcal_default_state/VFM_0.g
+    Closing exodus file: matcal_template/VFM_0/matcal_default_state/VFM_0.g
+    Opening exodus file: matcal_template/VFM_0/matcal_default_state/VFM_0.g
+    Closing exodus file: matcal_template/VFM_0/matcal_default_state/VFM_0.g
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 243-246
+.. GENERATED FROM PYTHON SOURCE LINES 243-248
 
 After calibration, we compare the recovered parameters 
 to the known goal values and report the relative errors.
-For this complex geometry, we expect errors below 1%.
+For this complex geometry, we expect errors below a few percent.
+The VFM implementation using SIERRA does not respect the 
+plane stress assumption which results in increased error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 246-273
+.. GENERATED FROM PYTHON SOURCE LINES 248-275
 
 .. code-block:: Python
 
@@ -756,17 +766,21 @@ For this complex geometry, we expect errors below 1%.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 274-276
+.. GENERATED FROM PYTHON SOURCE LINES 276-278
 
 We plot the convergence of the normalized parameter 
 values over the calibration iterations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 276-299
+.. GENERATED FROM PYTHON SOURCE LINES 278-305
 
 .. code-block:: Python
 
 
     import matplotlib.pyplot as plt
+
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.rcParams.update({'font.size': 12})
 
     param_history = results.parameter_history
 
@@ -800,7 +814,7 @@ values over the calibration iterations.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 300-305
+.. GENERATED FROM PYTHON SOURCE LINES 306-311
 
 The calibrated parameters recover the goal values, 
 confirming that MatCal's VFM tools work correctly for 
@@ -811,7 +825,7 @@ interpolation error and ensures an accurate verification.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (15 minutes 29.622 seconds)
+   **Total running time of the script:** (15 minutes 45.685 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_l_complex_shape_plastic_vfm_calibration_verification.py:
