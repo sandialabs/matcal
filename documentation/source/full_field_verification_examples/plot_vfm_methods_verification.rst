@@ -380,14 +380,6 @@ an object that we can analyze when the study completes.
 
  .. code-block:: none
 
-
-    You are using exodus.py v 1.21.6 (seacas-py3), a python wrapper of some of the exodus library.
-
-    Copyright (c) 2013-2023 National Technology &
-    Engineering Solutions of Sandia, LLC (NTESS).  Under the terms of
-    Contract DE-NA0003525 with NTESS, the U.S. Government retains certain
-    rights in this software.
-
     Opening exodus file: matcal_template/default_VFM_hex_model/matcal_default_state/default_VFM_hex_model.g
     Closing exodus file: matcal_template/default_VFM_hex_model/matcal_default_state/default_VFM_hex_model.g
     Opening exodus file: matcal_template/default_VFM_hex_model/matcal_default_state/default_VFM_hex_model.g
@@ -614,7 +606,7 @@ obtain results with much smaller errors.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 1.271 seconds)
+   **Total running time of the script:** (0 minutes 50.109 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_vfm_methods_verification.py:

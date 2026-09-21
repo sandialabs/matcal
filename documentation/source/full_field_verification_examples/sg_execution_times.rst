@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**125:50.539** total execution time for 6 files **from full_field_verification_examples**:
+**19:04.589** total execution time for 8 files **from full_field_verification_examples**:
 
 .. container::
 
@@ -32,14 +32,20 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_full_field_verification_examples_plot_j_hwd_methods_verification.py` (``plot_j_hwd_methods_verification.py``)
-     - 113:13.640
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_l_complex_shape_plastic_vfm_calibration_verification.py` (``plot_l_complex_shape_plastic_vfm_calibration_verification.py``)
+     - 15:29.622
      - 0.0
-   * - :ref:`sphx_glr_full_field_verification_examples_plot_b_scipy_gmls_interpolation_verification.py` (``plot_b_scipy_gmls_interpolation_verification.py``)
-     - 09:55.554
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_k_basic_plastic_vfm_calibration_verification.py` (``plot_k_basic_plastic_vfm_calibration_verification.py``)
+     - 02:44.858
+     - 0.0
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_vfm_methods_verification.py` (``plot_vfm_methods_verification.py``)
+     - 00:50.109
      - 0.0
    * - :ref:`sphx_glr_full_field_verification_examples_plot_a_interpolation_methods_verification.py` (``plot_a_interpolation_methods_verification.py``)
-     - 02:41.344
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_b_scipy_gmls_interpolation_verification.py` (``plot_b_scipy_gmls_interpolation_verification.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_full_field_verification_examples_plot_hwd_methods_verification_not_collocated.py` (``plot_hwd_methods_verification_not_collocated.py``)
      - 00:00.000
@@ -47,6 +53,6 @@ Computation times
    * - :ref:`sphx_glr_full_field_verification_examples_plot_hwd_methods_verification_not_collocated_X_specimen.py` (``plot_hwd_methods_verification_not_collocated_X_specimen.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_full_field_verification_examples_plot_vfm_methods_verification.py` (``plot_vfm_methods_verification.py``)
+   * - :ref:`sphx_glr_full_field_verification_examples_plot_j_hwd_methods_verification.py` (``plot_j_hwd_methods_verification.py``)
      - 00:00.000
      - 0.0

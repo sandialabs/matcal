@@ -44,7 +44,7 @@ import os
 import shutil
 
 from matcal.full_field.objective import MechanicalVFMObjective
-from matcal.sierra.models import UserDefinedSierraModel
+from matcal.sierra.models import VFMUniaxialTensionHexModel, UserDefinedSierraModel
 from matcal.core.parameters import ParameterCollection
 from matcal.core.state import SolitaryState
 
@@ -275,10 +275,6 @@ print(
 # values over the calibration iterations.
 
 import matplotlib.pyplot as plt
-
-plt.rc('text', usetex=True)
-plt.rc('font', family='serif')
-plt.rcParams.update({'font.size': 12})
 
 param_history = results.parameter_history
 
