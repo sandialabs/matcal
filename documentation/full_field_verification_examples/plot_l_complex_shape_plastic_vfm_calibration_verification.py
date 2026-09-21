@@ -203,7 +203,7 @@ mat = Material("matcal_test",
                os.path.join(gold_files_dir, material_filename),
                "j2_plasticity")
 
-vfm_model = VFMUniaxialTensionHexModel(mat, shell_mesh_filename, thickness=thickness)
+vfm_model = VFMUniaxialTensionConnectedHexModel(mat, shell_mesh_filename, thickness=thickness)
 vfm_model.add_constants(
     yield_stress=yield_stress_goal,
     A=A_goal,
