@@ -196,28 +196,16 @@ def get_HWD_results(poly_order, cut_depth, basis_data, comparison_data):
 # Since we will perform these operations twice using the different 
 # basis functions sets, putting the 
 # calculations in a function simplifies the process.
-# The following code performs these calculations and stores the data 
-# in NumPy arrays so that they can be visualized next. It 
-# also stores the data in a pickle file so that they can be 
-# loaded later without recalculating since the 
-# computational cost for these mappings can be expensive.
 # 
 def evaluate_errors(basis_data, comparison_data):
-    from concurrent.futures import ProcessPoolExecutor
-    futures = {}
-    with ProcessPoolExecutor(max_workers = num_depths*num_polys) as executor:    
-        for p_index,poly_order in enumerate(polynomial_orders):
-            futures[poly_order] = {}
-            for d_index, depth in enumerate(cut_depths):
-                futures[poly_order][depth] = get_HWD_results(poly_order, depth, 
+    all_results = {}
+    for p_index,poly_order in enumerate(polynomial_orders):
+        all_results[poly_order] = {}
+        for d_index, depth in enumerate(cut_depths):
+            all_results[poly_order][depth] = get_HWD_results(poly_order, depth, 
                                                              basis_data, 
                                                              comparison_data)  
     
-#                futures[poly_order][depth] = executor.submit(get_HWD_results, 
-#                                                                 poly_order, depth, 
-#                                                                 basis_data, 
-#                                                                 comparison_data)  
-#    
     reconstructed_error_fields = np.zeros((num_polys, num_depths, 1, 
                                            basis_data.spatial_coords.shape[0]))
     all_comparison_weights = []
@@ -226,11 +214,10 @@ def evaluate_errors(basis_data, comparison_data):
         comparison_weights_fields_by_depth = []
         basis_weights_fields_by_depth = []
         for d_index, depth in enumerate(cut_depths):
-#            results = futures[poly_order][depth].result()
-            results = futures[poly_order][depth]
-            basis_weights_fields_by_depth.append(results[0])
-            comparison_weights_fields_by_depth.append(results[1])
-            reconstructed_error_fields[p_index,d_index]  = results[2]          
+            result = all_results[poly_order][depth]
+            basis_weights_fields_by_depth.append(result[0])
+            comparison_weights_fields_by_depth.append(result[1])
+            reconstructed_error_fields[p_index,d_index]  = result[2]          
         all_comparison_weights.append(comparison_weights_fields_by_depth)
         all_basis_weights.append(basis_weights_fields_by_depth)
 

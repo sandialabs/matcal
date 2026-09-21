@@ -110,6 +110,40 @@ for each MatCal update.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="    \sigma_f\left(\epsilon_p\right) =      \sigma_y + A\left(1 - \exp\left(-b\,\epsilon_p\right)\right)">
+
+.. only:: html
+
+  .. image:: /full_field_verification_examples/images/thumb/sphx_glr_plot_k_basic_plastic_vfm_calibration_verification_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_full_field_verification_examples_plot_k_basic_plastic_vfm_calibration_verification.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">VFM Plastic Calibration Verification - Rectangular Specimen</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The specimen is a 15 cm × 8 cm × 1.6 mm plate  (approximately 6 in × 3 in × 1/16 in) with four  circular holes:">
+
+.. only:: html
+
+  .. image:: /full_field_verification_examples/images/thumb/sphx_glr_plot_l_complex_shape_plastic_vfm_calibration_verification_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_full_field_verification_examples_plot_l_complex_shape_plastic_vfm_calibration_verification.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">VFM Plastic Calibration Verification - Complex Shape Specimen</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="    \sigma_{yy} =\frac{L}{W T}">
 
 .. only:: html
@@ -140,6 +174,8 @@ for each MatCal update.
    /full_field_verification_examples/plot_hwd_methods_verification_not_collocated
    /full_field_verification_examples/plot_hwd_methods_verification_not_collocated_X_specimen
    /full_field_verification_examples/plot_j_hwd_methods_verification
+   /full_field_verification_examples/plot_k_basic_plastic_vfm_calibration_verification
+   /full_field_verification_examples/plot_l_complex_shape_plastic_vfm_calibration_verification
    /full_field_verification_examples/plot_vfm_methods_verification
 
 

@@ -62,7 +62,7 @@ We will complete the following steps for this example:
 
 To begin we import the libraries and tools we will be using to perform this study.
 '''
-
+# sphinx_gallery_thumbnail_number = 2
 from matcal import *
 import numpy as np
 import matplotlib.pyplot as plt
@@ -205,25 +205,15 @@ def get_HWD_results(poly_order, cut_depth, sim_truth_data, measured_data):
 # %%
 # Now we can loop over the parameters, generate 
 # the HWD basis and store the values 
-# that we will be plotting next. These evaluations
-# are computationally expensive. As a result, we 
-# use Python's ProcessPoolExecutor to 
-# run the function in parallel for each 
-# set of HWD input parameters to speed the calculations.
-# We also store the results in a pickle file so
-# that they are not needlessly recalculated.
+# that we will be plotting next.
 # 
 max_sim_value = np.max(np.abs(sim_truth_data['val']))
-from concurrent.futures import ProcessPoolExecutor
-futures = {}
-with ProcessPoolExecutor(max_workers = max(num_depths*num_polys, 8)) as executor:    
-    for p_index,poly_order in enumerate(polynomial_orders):
-        futures[poly_order] = {}
-        for d_index, depth in enumerate(cut_depths):
-             futures[poly_order][depth] = get_HWD_results(poly_order, depth, 
-                                                          sim_truth_data, measured_data)
-#            futures[poly_order][depth] = executor.submit(get_HWD_results, poly_order, 
-#                                                         depth, sim_truth_data, measured_data)           
+results = {}
+for p_index,poly_order in enumerate(polynomial_orders):
+    results[poly_order] = {}
+    for d_index, depth in enumerate(cut_depths):
+        results[poly_order][depth] = get_HWD_results(poly_order, depth, 
+                                                     sim_truth_data, measured_data)
 
 reconstructed_error_fields = np.zeros((num_polys, num_depths, 1, 
                                        sim_truth_data.spatial_coords.shape[0]))
@@ -233,11 +223,10 @@ for p_index,poly_order in enumerate(polynomial_orders):
     measured_weights_fields_by_depth = []
     truth_weights_fields_by_depth = []
     for d_index, depth in enumerate(cut_depths):
-#        results = futures[poly_order][depth].result()
-        results = futures[poly_order][depth]
-        truth_weights_fields_by_depth.append(results[0])
-        measured_weights_fields_by_depth.append(results[1])
-        reconstructed_error_fields[p_index,d_index]  = results[2]          
+        result = results[poly_order][depth]
+        truth_weights_fields_by_depth.append(result[0])
+        measured_weights_fields_by_depth.append(result[1])
+        reconstructed_error_fields[p_index,d_index]  = result[2]          
     all_measured_weights.append(measured_weights_fields_by_depth)
     all_truth_weights.append(truth_weights_fields_by_depth)
 
@@ -435,5 +424,3 @@ plt.show()
 #    will increase run time and memory consumption. It may also result in 
 #    regions of inadequate support which will result in a failed HWD 
 #    transformation and errors in the study.
-
-# sphinx_gallery_thumbnail_number = 2

@@ -308,35 +308,24 @@ HWD weights.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-196
+.. GENERATED FROM PYTHON SOURCE LINES 186-190
 
 Now we can loop over the parameters, generate 
 the HWD basis and store the values 
-that we will be plotting next. These evaluations
-are computationally expensive. As a result, we 
-use Python's ProcessPoolExecutor to 
-run the function in parallel for each 
-set of HWD input parameters to speed the calculations.
-We also store the results in a pickle file so
-that they are not needlessly recalculated.
+that we will be plotting next.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 196-222
+.. GENERATED FROM PYTHON SOURCE LINES 190-210
 
 .. code-block:: Python
 
     max_sim_value = np.max(np.abs(sim_truth_data['val']))
-    from concurrent.futures import ProcessPoolExecutor
-    futures = {}
-    with ProcessPoolExecutor(max_workers = int(num_depths*num_polys/3)) as executor:    
-        for p_index, poly_order in enumerate(polynomial_orders):
-            futures[poly_order] = {}
-            for d_index, depth in enumerate(cut_depths):
-                futures[poly_order][depth] = get_HWD_results(poly_order, depth, 
+    all_results = {}
+    for p_index, poly_order in enumerate(polynomial_orders):
+        all_results[poly_order] = {}
+        for d_index, depth in enumerate(cut_depths):
+            all_results[poly_order][depth] = get_HWD_results(poly_order, depth, 
                                                              sim_truth_data, measured_data)           
-    #            futures[poly_order][depth] = executor.submit(get_HWD_results, 
-    #                                                         poly_order, depth, 
-    #                                                         sim_truth_data, measured_data)           
 
     reconstructed_error_fields = np.zeros((num_polys, num_depths, 1, 
                                            sim_truth_data.spatial_coords.shape[0]))
@@ -346,8 +335,7 @@ that they are not needlessly recalculated.
         all_measured_weights[poly_order] = {}
         all_truth_weights[poly_order] = {}
         for d_index, depth in enumerate(cut_depths):
-    #        results = futures[poly_order][depth].result()
-            results = futures[poly_order][depth]
+            results = all_results[poly_order][depth]
             all_truth_weights[poly_order][depth] = results[0]
             all_measured_weights[poly_order][depth] = results[1]
             reconstructed_error_fields[p_index,d_index]  = results[2]          
@@ -441,7 +429,7 @@ that they are not needlessly recalculated.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 223-258
+.. GENERATED FROM PYTHON SOURCE LINES 211-246
 
 We are interested in two error measures. The first 
 error measure we will investigate is the L2-norm 
@@ -479,7 +467,7 @@ also stores the data in a pickle file so that it can be
 read back later without recalculating since the 
 computational cost for these calculations can be expensive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 258-278
+.. GENERATED FROM PYTHON SOURCE LINES 246-266
 
 .. code-block:: Python
 
@@ -510,13 +498,13 @@ computational cost for these calculations can be expensive.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 279-282
+.. GENERATED FROM PYTHON SOURCE LINES 267-270
 
 With the error fields calculated, we can now create four heat maps 
 showing how our four error measures change as the polynomial order 
 and cut depth are varied. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 282-305
+.. GENERATED FROM PYTHON SOURCE LINES 270-293
 
 .. code-block:: Python
 
@@ -555,7 +543,7 @@ and cut depth are varied.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 306-329
+.. GENERATED FROM PYTHON SOURCE LINES 294-317
 
 For this test, the error measures using the 
 weights 
@@ -581,7 +569,7 @@ We visualize the produced error fields
 over the domain of interest for the polynomial orders of three to six 
 and cut depths of six to ten.  
 
-.. GENERATED FROM PYTHON SOURCE LINES 329-353
+.. GENERATED FROM PYTHON SOURCE LINES 317-341
 
 .. code-block:: Python
 
@@ -621,7 +609,7 @@ and cut depths of six to ten.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 354-391
+.. GENERATED FROM PYTHON SOURCE LINES 342-379
 
 From these plots, the following conclusions can be made: 
 
@@ -661,7 +649,7 @@ colocated HWD is the default HWD method in MatCal.
    regions of inadequate support which will result in a failed HWD 
    transformation and errors in the study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 391-393
+.. GENERATED FROM PYTHON SOURCE LINES 379-381
 
 .. code-block:: Python
 
@@ -677,7 +665,7 @@ colocated HWD is the default HWD method in MatCal.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (113 minutes 13.640 seconds)
+   **Total running time of the script:** (112 minutes 52.536 seconds)
 
 
 .. _sphx_glr_download_full_field_verification_examples_plot_j_hwd_methods_verification.py:
