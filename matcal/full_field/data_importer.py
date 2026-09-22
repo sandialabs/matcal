@@ -9,7 +9,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from matcal.core.object_factory import BasicIdentifier, ObjectCreator, SpecificObjectFactory
-from matcal.core.data_importer import FileData, DataImporterBase
+from matcal.core.data_importer import FileData
 import matcal.core.data_importer as _core_data_importer
 
 from matcal.full_field.TwoDimensionalFieldGrid import (MeshSkeleton,
@@ -28,7 +28,7 @@ logger = initialize_matcal_logger(__name__)
 
 def FieldSeriesData(global_filename, series_directory="./", 
                     position_names = ['X','Y'], state=SolitaryState(), 
-                    file_type=None, n_cores=1, float_dtype=np.float32):
+                    file_type=None, n_cores=1):
     """
     A function used to import a MatCal :class:`~matcal.core.data.Data` object 
     from series field data. The user needs to use
@@ -57,35 +57,21 @@ def FieldSeriesData(global_filename, series_directory="./",
         only active when reading file data from separate 
         files such as DIC data saved as CSV files.
 
-    :param float_dtype: the NumPy floating-point type used for the imported
-        field data arrays.  Defaults to ``numpy.float32`` which halves memory
-        usage compared to 64-bit.  Set to ``numpy.float64`` (or equivalently
-        ``numpy.double``) when full double-precision is required.
-
-        Example — import with double precision::
-
-            data = FieldSeriesData("global.csv", "./frames",
-                                   float_dtype=numpy.float64)
-
-    :type float_dtype: numpy.dtype
-
     :return: a populated :class:`~matcal.full_field.data.FieldData` object.
     """
     _check_filename_type(global_filename)
     _check_series_directory(series_directory)
     _check_position_names(position_names)
     _check_n_cores(n_cores)
-    float_dtype = _validate_float_dtype(float_dtype)
     _warn_if_large_field_data(global_filename, series_directory)
     file_type = _get_file_type(global_filename, file_type)
 
     return _import_field_data(global_filename, series_directory, 
-                              position_names, state, file_type, n_cores,
-                              float_dtype)
+                              position_names, state, file_type, n_cores)
 
 def _import_field_data(global_filename, series_directory="./", 
                        position_names = ['X','Y'], state=SolitaryState(), 
-                       file_type=None, n_cores=1, float_dtype=np.float32):
+                       file_type=None, n_cores=1):
 
     try:
         field_parser = matcal_field_data_factory.create(file_type, global_filename, 
@@ -97,8 +83,7 @@ def _import_field_data(global_filename, series_directory="./",
         raise RuntimeError(err_str)
    
     _log_with_time(global_filename, "Start: Parsing Field Series Data")
-    series_array = _create_series_data_array(field_parser, position_names,
-                                             float_dtype=float_dtype)
+    series_array = _create_series_data_array(field_parser, position_names)
     series_data = FieldData(series_array)
     series_data.set_state(state)
     series_data = _create_position_data(series_data, field_parser, position_names)
@@ -176,35 +161,6 @@ def _check_position_names(position_names):
                                               "to FieldSeriesData must"
                                 f" contain only strings. Received variable of type '{type(name)}'"
                                  f" in position {idx} of the 'position_names'.")
-
-
-_VALID_FLOAT_DTYPES = {np.float32, np.float64}
-
-
-def _validate_float_dtype(float_dtype):
-    """Validate and normalise the *float_dtype* parameter.
-
-    Accepts any value that ``numpy.dtype(...)`` can resolve to either
-    ``float32`` or ``float64``.
-
-    :returns: a normalised NumPy dtype *type* (``np.float32`` or ``np.float64``).
-    :raises TypeError: if *float_dtype* cannot be resolved to a NumPy dtype.
-    :raises ValueError: if *float_dtype* resolves to something other than
-        ``float32`` or ``float64``.
-    """
-    try:
-        resolved = np.dtype(float_dtype).type
-    except TypeError:
-        raise TypeError(
-            "The parameter 'float_dtype' must be a valid NumPy floating-point "
-            f"dtype.  Received variable of type '{type(float_dtype)}'."
-        )
-    if resolved not in _VALID_FLOAT_DTYPES:
-        raise ValueError(
-            "The parameter 'float_dtype' must be numpy.float32 or "
-            f"numpy.float64.  Received '{np.dtype(float_dtype)}'."
-        )
-    return resolved
 
 
 def _warn_if_large_field_data(global_filename, series_directory):
@@ -572,16 +528,14 @@ def _get_number_of_points_and_frames(field_parser):
     return n_points, n_times, field_parser.number_of_elements
 
 
-def _create_series_data_array(field_parser, position_names, float_dtype=np.float32):
+def _create_series_data_array(field_parser, position_names):
     n_points, n_times, n_ele = _get_number_of_points_and_frames(field_parser)
     global_keys, node_keys, element_keys = _get_field_parser_info(field_parser)
     
     ignore_keys = ['file'] + position_names
-    data_list = _add_global_data_type(global_keys, ignore_keys, float_dtype)
-    data_list = _add_space_data_type(data_list, node_keys, ignore_keys, n_points,
-                                     float_dtype)
-    data_list = _add_space_data_type(data_list, element_keys, ignore_keys, n_ele,
-                                     float_dtype)
+    data_list = _add_global_data_type(global_keys, ignore_keys)
+    data_list = _add_space_data_type(data_list, node_keys, ignore_keys, n_points)
+    data_list = _add_space_data_type(data_list, element_keys, ignore_keys, n_ele)
 
     data = np.zeros(n_times, dtype=data_list)
     logger.info(f"{field_parser.filename}: Reading Global Data")
@@ -664,21 +618,20 @@ def _output_store_data(current_index, max_index, max_out):
         return False    
 
 
-def _add_global_data_type(global_keys, ignore_keys, float_dtype=np.float32):
+def _add_global_data_type(global_keys, ignore_keys):
     data_list = []
     for gkey in global_keys:
         if gkey in ignore_keys:
             continue
-        data_list.append((gkey, float_dtype))
+        data_list.append((gkey, np.double))
     return data_list
 
 
-def _add_space_data_type(data_list, space_keys, ignore_keys, n_space,
-                         float_dtype=np.float32):
+def _add_space_data_type(data_list, space_keys, ignore_keys, n_space):
     for skey in space_keys:
         if skey in ignore_keys:
             continue
-        data_list.append((skey, float_dtype, (n_space,)))
+        data_list.append((skey, np.double, (n_space,)))
     return data_list
 
 
@@ -714,8 +667,8 @@ matcal_field_data_factory.register_creator('json', _JSONFiledDataImporterCreator
 
 class MeshFileScraperSelector(BasicIdentifier):
     
-    def identify(self, mesh_filename:str):
-        extension = self._extract_extension(mesh_filename)
+    def identify(self, key=None):
+        extension = self._extract_extension(key)
         return super().identify(extension)
     
     def _extract_extension(self, mesh_filename:str)->str:

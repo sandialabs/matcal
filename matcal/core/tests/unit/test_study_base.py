@@ -951,3 +951,121 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
         for row_i in range(n_pts):
             goal += f"{time[row_i]}, {a[row_i]}, {b[row_i]}\n"
         self.assert_file_equals_string(goal, filename)
+
+
+class TestMinimalStorageAndDisabledHistoryErrors(MatcalUnitTest):
+    """Tests for set_results_storage_options(minimal=True) and
+    the DisabledHistoryError guards on StudyResults accessors.
+    """
+
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _make_minimal_results(self):
+        sr = StudyResults(record_qois=False, record_residuals=False,
+                          record_objectives=False, record_data=False,
+                          record_weighted_conditioned=False)
+        sr._set_outcome({"best:a": 1.0})
+        sr._total_objective_history = [10.0, 5.0, 2.0]
+        sr._evaluation_ids = [1, 2, 3]
+        sr._number_of_evaluations = 3
+        sr._parameter_history = OrderedDict(a=[1.0, 2.0, 3.0])
+        return sr
+
+    # -- minimal=True sets all flags to False --------------------------------
+
+    def test_minimal_sets_all_flags_false(self):
+        sr = StudyResults(record_qois=False, record_residuals=False,
+                          record_objectives=False, record_data=False,
+                          record_weighted_conditioned=False)
+        self.assertFalse(sr._record_data)
+        self.assertFalse(sr._record_qois)
+        self.assertFalse(sr._record_residuals)
+        self.assertFalse(sr._record_objectives)
+        self.assertFalse(sr._record_weighted_conditioned)
+
+    # -- Always-available accessors still work -------------------------------
+
+    def test_outcome_available_with_minimal(self):
+        sr = self._make_minimal_results()
+        self.assertEqual(sr.outcome["best:a"], 1.0)
+
+    def test_total_objective_history_available_with_minimal(self):
+        sr = self._make_minimal_results()
+        self.assertEqual(len(sr.total_objective_history), 3)
+
+    def test_parameter_history_available_with_minimal(self):
+        sr = self._make_minimal_results()
+        self.assertIn("a", sr.parameter_history)
+
+    def test_best_evaluation_index_available_with_minimal(self):
+        sr = self._make_minimal_results()
+        self.assertEqual(sr.best_evaluation_index, 2)
+
+    def test_best_total_objective_available_with_minimal(self):
+        sr = self._make_minimal_results()
+        self.assertAlmostEqual(sr.best_total_objective, 2.0)
+
+    # -- DisabledHistoryError on guarded accessors ---------------------------
+
+    def test_simulation_history_raises_when_data_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError) as ctx:
+            _ = sr.simulation_history
+        self.assertIn("data", str(ctx.exception))
+        self.assertIn("set_results_storage_options", str(ctx.exception))
+
+    def test_objective_history_raises_when_objectives_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError) as ctx:
+            _ = sr.objective_history
+        self.assertIn("objectives", str(ctx.exception))
+
+    def test_qoi_history_raises_when_qois_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError) as ctx:
+            _ = sr.qoi_history
+        self.assertIn("qois", str(ctx.exception))
+
+    def test_best_simulation_data_raises_when_data_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError):
+            sr.best_simulation_data("model", "state")
+
+    def test_best_residuals_raises_when_residuals_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError):
+            sr.best_residuals("model", "obj", "state")
+
+    def test_best_simulation_qois_raises_when_qois_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError):
+            sr.best_simulation_qois("model", "obj", "state")
+
+    def test_get_experiment_qois_raises_when_qois_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError):
+            sr.get_experiment_qois("model", "obj", "state")
+
+    def test_get_experiment_data_raises_when_data_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError):
+            sr.get_experiment_data("model", "obj", "state")
+
+    def test_get_evaluation_set_objectives_raises_when_objectives_disabled(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError):
+            sr.get_evaluation_set_objectives("model", "obj")
+
+    def test_best_weighted_conditioned_residuals_raises(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError):
+            sr.best_weighted_conditioned_residuals("model", "obj", "state")
+
+    def test_error_message_names_correct_option(self):
+        sr = self._make_minimal_results()
+        with self.assertRaises(StudyResults.DisabledHistoryError) as ctx:
+            sr.best_residuals("model", "obj", "state")
+        msg = str(ctx.exception)
+        self.assertIn("residuals", msg)
+        self.assertIn("set_results_storage_options(residuals=True)", msg)

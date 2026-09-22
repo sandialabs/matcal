@@ -11,6 +11,7 @@ import glob
 from inspect import isclass
 import numpy as np
 import os
+from typing import Optional
 import shutil
 from sys import argv
 
@@ -72,7 +73,7 @@ class StudyBase(ABC):
         """"""
 
     @abstractmethod
-    def restart():
+    def restart(self):
         """"""
 
     @property
@@ -211,13 +212,38 @@ class StudyBase(ABC):
     def set_results_storage_options(self, data:bool=True, qois:bool=True,
                                     residuals:bool=True, objectives:bool=True, 
                                     weighted_conditioned:bool=False, 
-                                    results_save_frequency:int=1):
+                                    results_save_frequency: int = 1,
+                                    minimal: bool = False):
         """
         Set which history information to save and return with the study results. 
         You can also down sample which evaluations to save using results_save_frequency.
         This is particularly useful if you wish to not store finite difference evaluations 
         for gradient based studies.
         The total objective is always stored.
+
+        When ``minimal=True`` is passed, only the total objective history and
+        parameter history are recorded. All other flags (``data``, ``qois``,
+        ``residuals``, ``objectives``, ``weighted_conditioned``) are forced to
+        ``False`` regardless of their individual values. This significantly
+        reduces memory usage for large studies. Post-study accessors that
+        require the disabled history (e.g.
+        :meth:`~matcal.core.study_base.StudyResults.best_simulation_data`,
+        :meth:`~matcal.core.study_base.StudyResults.best_residuals`) will raise
+        a descriptive error explaining which storage option must be enabled.
+
+        Example — run a large calibration with minimal memory::
+
+            study.set_results_storage_options(minimal=True)
+            results = study.launch()
+
+            # These still work:
+            results.outcome
+            results.total_objective_history
+            results.parameter_history
+
+            # These raise a clear error:
+            results.best_simulation_data(model, state)   # needs data=True
+            results.best_residuals(model, obj, state)     # needs residuals=True
        
         :param data: Store the raw data for each simulation and the raw experimental 
             data for each objective for each desired evaluation.
@@ -246,7 +272,19 @@ class StudyBase(ABC):
             results history.
         :type results_save_frequency: int
 
+        :param minimal: When True, disables storage of data, QoIs, residuals,
+            objectives and weighted/conditioned values. Only the total objective
+            history and parameter history are kept. This is the recommended
+            setting for memory-constrained studies with large data sets.
+        :type minimal: bool
         """
+        check_value_is_bool(minimal, "minimal")
+        if minimal:
+            data = False
+            qois = False
+            residuals = False
+            objectives = False
+            weighted_conditioned = False
         check_value_is_bool(data, "data")
         check_value_is_bool(qois, "qois") 
         check_value_is_bool(residuals, "residuals")
@@ -837,18 +875,39 @@ class StudyResults:
         self._record_weighted_conditioned = record_weighted_conditioned
         self._record_objectives = record_objectives
         self._save_freq = results_save_frequency
-        self._parameter_history = OrderedDict()
-        self._evaluation_sets = []
-        self._evaluation_ids = []
-        self._qoi_history = None
-        self._simulation_history = OrderedDict()
-        self._obj_history = None
-        self._total_objective_history = []
-        self._outcome = None
+        self._parameter_history: OrderedDict = OrderedDict()
+        self._evaluation_sets: list = []
+        self._evaluation_ids: list = []
+        self._qoi_history: Optional[OrderedDict] = None
+        self._simulation_history: OrderedDict = OrderedDict()
+        self._obj_history: Optional[OrderedDict] = None
+        self._total_objective_history: list = []
+        self._outcome: Optional[OrderedDict] = None
         self._number_of_evaluations=0
         self._success = None
         self._exit_message = None
         self._exit_status = None        
+
+    class DisabledHistoryError(RuntimeError):
+        """Raised when the user accesses results history that was not recorded.
+
+        The error message names the storage option that must be enabled via
+        :meth:`~matcal.core.study_base.StudyBase.set_results_storage_options`.
+        """
+
+    def _require_recorded(self, flag_name: str, accessor_name: str) -> None:
+        """Raise :class:`DisabledHistoryError` when a ``record_*`` flag is False.
+
+        :param flag_name: the name of the flag attribute (e.g. ``"_record_data"``).
+        :param accessor_name: user-visible method/property name for the error message.
+        """
+        if not getattr(self, flag_name):
+            option_name = flag_name.lstrip("_").replace("record_", "")
+            raise self.DisabledHistoryError(
+                f'"{accessor_name}" is not available because '
+                f'"{option_name}" recording was disabled. '
+                f'Enable it with: study.set_results_storage_options({option_name}=True)'
+            )
 
     @property
     def should_record_parameters(self):
@@ -905,7 +964,9 @@ class StudyResults:
             and state are the simulation results for that model and state 
             in the order of evaluation for the study.
         :rtype: OrderedDict(str, :class:`~matcal.core.data.DataCollection`)
+        :raises DisabledHistoryError: if ``data`` recording was disabled.
         """
+        self._require_recorded("_record_data", "simulation_history")
         return self._simulation_history
         
     @property
@@ -974,7 +1035,9 @@ class StudyResults:
 
         :return: The history of objectives evaluated during the study
         :rtype: OrderedDict(str, :class:`~matcal.core.study_base.ObjectiveInformation`)
+        :raises DisabledHistoryError: if ``objectives`` recording was disabled.
         """
+        self._require_recorded("_record_objectives", "objective_history")
         return self._obj_history
 
     @property
@@ -989,7 +1052,9 @@ class StudyResults:
 
         :return: The history of QoIs for each evaluation during the study
         :rtype: OrderedDict(str,  :class:`~matcal.core.study_base.QoiInformation`)
+        :raises DisabledHistoryError: if ``qois`` recording was disabled.
         """
+        self._require_recorded("_record_qois", "qoi_history")
         return self._qoi_history
 
     @property
@@ -1060,6 +1125,7 @@ class StudyResults:
         
         :return: The best evaluation set objective value and its index
         :rtype: tuple(float,int)
+        :raises DisabledHistoryError: if ``objectives`` recording was disabled.
         """
         summed_state_objs = self.get_evaluation_set_objectives(model, obj)
         best_index = np.argmin(summed_state_objs)
@@ -1081,9 +1147,11 @@ class StudyResults:
         
         :return: The summed state objectives
         :rtype: np.ndarray
+        :raises DisabledHistoryError: if ``objectives`` recording was disabled.
         """
+        self._require_recorded("_record_objectives", "get_evaluation_set_objectives")
         eval_key = self.get_eval_set_name(model, obj)
-        obj_evals = self.objective_history[eval_key].objectives
+        obj_evals = self._obj_history[eval_key].objectives
         summed_state_objs = np.zeros(len(obj_evals))
         for evaluation_number, eval_data_collection in enumerate(obj_evals):
             for state in eval_data_collection:
@@ -1140,10 +1208,12 @@ class StudyResults:
         
         :return: The best simulation data
         :rtype: :class:`matcal.core.data.Data`
+        :raises DisabledHistoryError: if ``data`` recording was disabled.
         """
+        self._require_recorded("_record_data", "best_simulation_data")
         model_name = _get_obj_name_if_not_string(model)
         best_eval = self.best_evaluation_index
-        return self.simulation_history[model_name][state][best_eval]
+        return self._simulation_history[model_name][state][best_eval]
 
     def get_experiment_qois(self, model, obj, state, index=None):
         """
@@ -1157,7 +1227,9 @@ class StudyResults:
         :type index: int
         :return: The experiment QoIs
         :rtype: :class:`~matcal.core.data.Data` or list(:class:`~matcal.core.data.Data`)
+        :raises DisabledHistoryError: if ``qois`` recording was disabled.
         """
+        self._require_recorded("_record_qois", "get_experiment_qois")
         model_name = _get_obj_name_if_not_string(model)
         obj_name = _get_obj_name_if_not_string(obj)
         eval_key = self.get_eval_set_name(model_name, obj_name)
@@ -1177,7 +1249,9 @@ class StudyResults:
         :type index: int
         :return: The experiment data
         :rtype: :class:`~matcal.core.data.Data` or list(:class:`~matcal.core.data.Data`)
+        :raises DisabledHistoryError: if ``data`` recording was disabled.
         """
+        self._require_recorded("_record_data", "get_experiment_data")
         model_name = _get_obj_name_if_not_string(model)
         obj_name = _get_obj_name_if_not_string(obj)
         eval_key = self.get_eval_set_name(model_name, obj_name)
@@ -1197,7 +1271,9 @@ class StudyResults:
         :type index: int
         :return: The best simulation qois
         :rtype: :class:`~matcal.core.data.Data` or list(:class:`~matcal.core.data.Data`)
+        :raises DisabledHistoryError: if ``qois`` recording was disabled.
         """
+        self._require_recorded("_record_qois", "best_simulation_qois")
         best_eval = self.best_evaluation_index
         model_name = _get_obj_name_if_not_string(model)
         obj_name = _get_obj_name_if_not_string(obj)
@@ -1220,7 +1296,9 @@ class StudyResults:
         :type index: int
         :return: The best objective residuals
         :rtype: :class:`~matcal.core.data.Data` or list(:class:`~matcal.core.data.Data`)
+        :raises DisabledHistoryError: if ``residuals`` recording was disabled.
         """
+        self._require_recorded("_record_residuals", "best_residuals")
         best_eval = self.best_evaluation_index
         model_name = _get_obj_name_if_not_string(model)
         obj_name = _get_obj_name_if_not_string(obj)
@@ -1244,7 +1322,12 @@ class StudyResults:
         :type index: int
         :return: The best objective weighted and conditioned residuals
         :rtype: :class:`~matcal.core.data.Data` or list(:class:`~matcal.core.data.Data`)
+        :raises DisabledHistoryError: if ``weighted_conditioned`` recording was disabled.
         """
+        self._require_recorded("_record_weighted_conditioned",
+                               "best_weighted_conditioned_residuals")
+        self._require_recorded("_record_residuals",
+                               "best_weighted_conditioned_residuals")
         best_eval = self.best_evaluation_index
         model_name = _get_obj_name_if_not_string(model)
         obj_name = _get_obj_name_if_not_string(obj)
@@ -1265,19 +1348,21 @@ class StudyResults:
         """
         matcal_save(filename, self)
            
-    def _export_parameter_results(filename:str, evaluation_data:dict, evaluation_parameters:dict):
-        parameter_string = __class__._make_parameter_string(evaluation_parameters)
+    @staticmethod
+    def _export_parameter_results(filename: str, evaluation_data: dict, evaluation_parameters: dict):
+        parameter_string = StudyResults._make_parameter_string(evaluation_parameters)
         data_keys = list(evaluation_data.keys())
-        key_string = __class__._make_key_string(data_keys)
+        key_string = StudyResults._make_key_string(data_keys)
         n_rows = len(evaluation_data[data_keys[0]])
         
         with open(filename, 'w') as eval_file:
             eval_file.write(parameter_string)
             eval_file.write(key_string)
             for row_i in range(n_rows):
-                row_string = __class__._make_row_string(evaluation_data, data_keys, row_i)
+                row_string = StudyResults._make_row_string(evaluation_data, data_keys, row_i)
                 eval_file.write(row_string)
 
+    @staticmethod
     def _make_row_string(evaluation_data, data_keys, row_i):
         row_string = ""
         for key_i, key in enumerate(data_keys):
@@ -1287,6 +1372,7 @@ class StudyResults:
         row_string += "\n"
         return row_string
 
+    @staticmethod
     def _make_key_string(data_keys):
         key_string = ""
         for key_idx, key in enumerate(data_keys):
@@ -1296,6 +1382,7 @@ class StudyResults:
         key_string += "\n"
         return key_string
     
+    @staticmethod
     def _make_parameter_string(evaluation_parameters):
         parameter_string = "{"
         for param_idx, (name, value) in enumerate(evaluation_parameters.items()):
