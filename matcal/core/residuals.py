@@ -8,6 +8,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 import numbers
+from typing import Optional
 
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.python_function_importer import python_function_importer
@@ -233,7 +234,7 @@ class UserFunctionWeighting(ResidualWeightingBase):
     weighting is to provide the user with a means to emphasize regions of
     their data.
     """
-    def __init__(self, independent_field, target_field, weighting_function):
+    def __init__(self, independent_field, target_field, weighting_function, *args, **kwargs):
         """
         :param independent_field: The name of the field to use as an independent field in the user function.
         :type independent_field: str
@@ -242,7 +243,7 @@ class UserFunctionWeighting(ResidualWeightingBase):
         :type target_field: str
 
         :param weighting_function: Predefined function with a signature of (independent_field_data, target_field_data,
-            target_field_residual) and returns a NumPy array the same length as the target_field_residual. the results
+            target_field_residual, *args, **kwargs) and returns a NumPy array the same length as the target_field_residual. the results
             of this function will replace the residual value in the evaluation. 
             
             .. note::
@@ -251,10 +252,16 @@ class UserFunctionWeighting(ResidualWeightingBase):
                 the data. The independent field data will be on the scale the user supplied in the data originally.
 
         :type weighting_function: Callable
+
+        :param args: Additional positional arguments to be passed to the weighting function.
+
+        :param kwargs: Additional keyword arguments to be passed to the weighting function.
         """
         self._target_field = target_field
         self._weighting_function_importer = python_function_importer(weighting_function)
         self._independent_field = independent_field
+        self._args = args
+        self._kwargs = kwargs
 
     def apply(self, reference_data, unconditioned_reference_data, residual):
         weighted_residual = OrderedDict()
@@ -272,7 +279,9 @@ class UserFunctionWeighting(ResidualWeightingBase):
             logger.debug("Applying user residual weighting...")
             results = self._weighting_function_importer.python_function(independent_field_data, 
                                                                         target_field_data, 
-                                                                        target_residual)
+                                                                        target_residual,
+                                                                        *self._args,
+                                                                        **self._kwargs)
             logger.debug("Finished applying user weights.")
         except Exception as e:
             logger.error(f"User residual weighting failed with the following error: { repr(e)}")
@@ -325,7 +334,7 @@ class NoiseWeightingConstant(ResidualWeightingBase):
     or if the noise value is 0, a 1 should be passed. 
     """
     
-    def __init__(self, weights_dict:dict = None, **field_noise_levels):
+    def __init__(self, weights_dict: Optional[dict] = None, **field_noise_levels):
         """
         Initialize weighting by noise. There are two ways to initialize the data.
         By passing keyword arguments with floats the weights are set for all fields 

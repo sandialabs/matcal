@@ -701,6 +701,12 @@ class PythonModel(ModelBase):
         and order is not guaranteed. 
     :type pass_params_by_category: bool
 
+    :param function_args: Additional positional arguments to be passed to the python function.
+    :type function_args: tuple
+
+    :param function_kwargs: Additional keyword arguments to be passed to the python function.
+    :type function_kwargs: dict
+
     .. warning::
         When ``pass_params_by_category=True`` the MatCal parameter‑type
         precedence logic (which determines whether a value comes from a
@@ -713,7 +719,8 @@ class PythonModel(ModelBase):
     _input_file = None
 
     def __init__(self, python_function, filename=None, field_coordinates=None, 
-                 pass_evaluation_number=False, pass_params_by_category=False):
+                 pass_evaluation_number=False, pass_params_by_category=False,
+                 function_args=None, function_kwargs=None):
         super().__init__(executable="python")
         self._field_coordinates = field_coordinates
         self._function_importer = python_function_importer(python_function, 
@@ -722,6 +729,8 @@ class PythonModel(ModelBase):
         check_value_is_bool(pass_params_by_category, "pass_params_by_category")
         self._pass_evaluation_number=pass_evaluation_number
         self._pass_params_by_category=pass_params_by_category
+        self._function_args = function_args if function_args is not None else ()
+        self._function_kwargs = function_kwargs if function_kwargs is not None else {}
         self._results_information.results_filename = None
         self._set_results_reader_object(_python_model_results_reader)
 
@@ -732,7 +741,7 @@ class PythonModel(ModelBase):
     def _get_simulator_class_inputs(self, state):
         args = [self.name, self._simulation_information, self._results_information, 
                 state, self, self._field_coordinates, self._pass_evaluation_number, 
-                self._pass_params_by_category]
+                self._pass_params_by_category, self._function_args, self._function_kwargs]
         kwargs = {}
 
         return args, kwargs

@@ -11,7 +11,7 @@ from matcal.core.residuals import LogResidualCalculator, NoiseWeightingConstant,
 
 
 class TestResiduals:
-    def __init__():
+    def __init__(self):
         pass
     class CommonTests(MatcalUnitTest):
         def test_raise_invalid_field_types(self):
@@ -138,7 +138,7 @@ class TestResidualWithVFMData(MatcalUnitTest):
 
 
 class DataSizeNormalizer:
-    def __init__():
+    def __init__(self):
         pass
 
     class CommonTests(MatcalUnitTest):       
@@ -297,6 +297,47 @@ class TestUserFunctionWeighting(MatcalUnitTest):
         residual = {"indep": a, "target": b}
         weighted_residual = UFW.apply(sample_data, sample_data, convert_dictionary_to_data(residual))
         self.assert_close_arrays(weighted_residual['target'], np.multiply(residual['target'], d))
+
+    def test_with_args(self):
+        def fun(independent_field, target_field, residual, scale_factor):
+            return residual * scale_factor
+
+        UFW = UserFunctionWeighting('indep', 'target', fun, 3.0)
+
+        n = 20
+        sample_data = {"indep": np.linspace(0, 10, n), "target": np.linspace(0, 15, n)}
+        a = np.random.random(n)
+        b = np.random.random(n)
+        residual = {"indep": a, "target": b}
+        weighted_residual = UFW.apply(sample_data, sample_data, convert_dictionary_to_data(residual))
+        self.assert_close_arrays(weighted_residual['target'], residual['target'] * 3.0)
+
+    def test_with_kwargs(self):
+        def fun(independent_field, target_field, residual, scale_factor=1.0):
+            return residual * scale_factor
+
+        UFW = UserFunctionWeighting('indep', 'target', fun, scale_factor=5.0)
+
+        n = 20
+        sample_data = {"indep": np.linspace(0, 10, n), "target": np.linspace(0, 15, n)}
+        a = np.random.random(n)
+        b = np.random.random(n)
+        residual = {"indep": a, "target": b}
+        weighted_residual = UFW.apply(sample_data, sample_data, convert_dictionary_to_data(residual))
+        self.assert_close_arrays(weighted_residual['target'], residual['target'] * 5.0)
+
+    def test_with_args_and_kwargs(self):
+        def fun(independent_field, target_field, residual, scale, offset=0.0):
+            return residual * scale + offset
+
+        UFW = UserFunctionWeighting('indep', 'target', fun, 2.0, offset=1.0)
+
+        n = 20
+        sample_data = {"indep": np.linspace(0, 10, n), "target": np.linspace(0, 15, n)}
+        b = np.random.random(n)
+        residual = {"indep": np.random.random(n), "target": b}
+        weighted_residual = UFW.apply(sample_data, sample_data, convert_dictionary_to_data(residual))
+        self.assert_close_arrays(weighted_residual['target'], residual['target'] * 2.0 + 1.0)
 
 
 class TestNoiseWeightingFromFile(MatcalUnitTest):

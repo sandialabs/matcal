@@ -6,6 +6,7 @@ from matcal.core.qoi_extractor import (DataSpecificExtractorWrapper, MaxExtracto
                                        QoIExtractorBase, InterpolatingExtractor,
                                        ReturnPassedDataExtractor, StateSpecificExtractorWrapper, 
                                        UserDefinedExtractor)
+from matcal.core.python_function_importer import PythonFunctionImportInputError
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.data import convert_dictionary_to_data
 
@@ -106,8 +107,9 @@ class TestUserDefinedExtractor(MatcalUnitTest):
             extractor = UserDefinedExtractor(func, None)
 
     def test_raise_invalid_field_types(self):
-        with self.assertRaises(TypeError):
+        with self.assertRaises(PythonFunctionImportInputError):
             extractor = UserDefinedExtractor(None)
+        with self.assertRaises(PythonFunctionImportInputError):
             extractor = UserDefinedExtractor(1)
 
     def test_extract_max_single_peak_dict(self):
@@ -157,6 +159,7 @@ class TestUserDefinedExtractor(MatcalUnitTest):
 
     def test_extract_max_single_peak_numpy_return(self):
         def func(x, y, fields):
+            import numpy as np
             extracted_data = x[x["x"] == x["x"].max()]
 
             return np.array(extracted_data.tolist())
@@ -176,6 +179,49 @@ class TestUserDefinedExtractor(MatcalUnitTest):
         self.assertIn('x', extractor.required_experimental_data_fields)
         self.assertIn('y', extractor.required_experimental_data_fields)
         self.assertIn('t', extractor.required_experimental_data_fields)
+
+    def test_with_function_args(self):
+        def func(working_data, reference_data, fields, scale_factor):
+            extracted_data = {}
+            for field in fields:
+                extracted_data[field] = working_data[field] * scale_factor
+            return extracted_data
+
+        extractor = UserDefinedExtractor(func, 'x', function_args=(2.0,))
+        extracted_data = extractor.calculate(self.test_data_one_peak, 
+                                             self.test_data_one_peak,
+                                             ['x'])
+        self.assert_close_arrays(extracted_data['x'], 
+                                 self.test_data_one_peak['x'] * 2.0)
+
+    def test_with_function_kwargs(self):
+        def func(working_data, reference_data, fields, scale_factor=1.0):
+            extracted_data = {}
+            for field in fields:
+                extracted_data[field] = working_data[field] * scale_factor
+            return extracted_data
+
+        extractor = UserDefinedExtractor(func, 'x', function_kwargs={'scale_factor': 3.0})
+        extracted_data = extractor.calculate(self.test_data_one_peak, 
+                                             self.test_data_one_peak,
+                                             ['x'])
+        self.assert_close_arrays(extracted_data['x'], 
+                                 self.test_data_one_peak['x'] * 3.0)
+
+    def test_with_function_args_and_kwargs(self):
+        def func(working_data, reference_data, fields, scale, offset=0.0):
+            extracted_data = {}
+            for field in fields:
+                extracted_data[field] = working_data[field] * scale + offset
+            return extracted_data
+
+        extractor = UserDefinedExtractor(func, 'x', function_args=(2.0,), 
+                                         function_kwargs={'offset': 1.0})
+        extracted_data = extractor.calculate(self.test_data_one_peak, 
+                                             self.test_data_one_peak,
+                                             ['x'])
+        self.assert_close_arrays(extracted_data['x'], 
+                                 self.test_data_one_peak['x'] * 2.0 + 1.0)
 
 
 class TestInterpolatingExtractor(MatcalUnitTest):

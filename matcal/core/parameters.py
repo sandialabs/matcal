@@ -5,6 +5,7 @@ study parameters.
 from collections import OrderedDict
 import numbers
 from copy import deepcopy 
+from typing import Any
 import numpy as np 
 
 from matcal.core.logger import initialize_matcal_logger
@@ -354,19 +355,28 @@ class UserDefinedParameterPreprocessor:
     :param filename: Name of the file where the function is defined if not in the MatCal python input file.
     :type filename: str
 
+    :param function_args: Additional positional arguments to be passed to the function.
+    :type function_args: tuple
+
+    :param function_kwargs: Additional keyword arguments to be passed to the function.
+    :type function_kwargs: dict
+
     :return: an updated parameter dictionary with the keys being the parameter names, and the values being the updated
         values. Note that new values can be added, and these values can be strings derived from the incoming parameters.
     :rtype: dict
     """
 
-    def __init__(self, function, filename=None):
+    def __init__(self, function, filename=None, function_args=None, function_kwargs=None):
         from matcal.core.python_function_importer import python_function_importer
         self._function_importer = python_function_importer(function, filename)
+        self._function_args = function_args if function_args is not None else ()
+        self._function_kwargs = function_kwargs if function_kwargs is not None else {}
     
     def __call__(self, *args, **kwargs):
         try:
             logger.debug("Preprocessing parameters...")
-            results = self._function_importer.python_function(*args, **kwargs)
+            results = self._function_importer.python_function(*args, *self._function_args,
+                                                              **kwargs, **self._function_kwargs)
             logger.debug("Finished preprocessing parameters.")
         except Exception as e:
             logger.error(f"Parameter preprocessor failed with the following error: {repr(e)}")
@@ -422,8 +432,8 @@ def _convert_serialized_parameter_collection(ser_param_collection):
 class _UnitParameterScaler:
   
     def __init__(self, param_collection)->None:
-      self._to_unit_functions = OrderedDict()
-      self._from_unit_functions = OrderedDict()
+      self._to_unit_functions: OrderedDict[str, Any] = OrderedDict()
+      self._from_unit_functions: OrderedDict[str, Any] = OrderedDict()
       self._make_functions(param_collection)
       self._unit_collection = self._make_unit_collection(param_collection)
 
