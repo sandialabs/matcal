@@ -4,6 +4,8 @@ includes user facing functions for plotting and retrieving results from
 serialized archive files.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,7 +38,7 @@ class _AutoPlotterBase(ABC):
     """
 
     @abstractmethod
-    def _get_plot_jobs(self)->list:
+    def _get_plot_jobs(self) -> list[_PlotJobBase]:
         """"""
 
     def __init__(self, plot_dir = MATCAL_PLOT_DIR, plot_id='best', 
@@ -122,8 +124,8 @@ class StandardAutoPlotter(_AutoPlotterBase):
     """
     Class used to create automatic plots at the end of an evaluation set.
     """
-    def _get_plot_jobs(self)->list:
-        plot_jobs = [_ObjectiveProgressPlotJob(plot_directory=self._plot_dir)]
+    def _get_plot_jobs(self) -> list[_PlotJobBase]:
+        plot_jobs: list[_PlotJobBase] = [_ObjectiveProgressPlotJob(plot_directory=self._plot_dir)]
         plot_jobs += [_TotalObjectiveProgressPlotJob(plot_directory=self._plot_dir)]
         plot_jobs += [_ParameterModelObjectivePlotJob(plot_directory=self._plot_dir)]
         plot_jobs += [_PlotEvaluationIdJob(plot_dir=self._plot_dir, plot_id="best", )]
@@ -147,8 +149,8 @@ class _UserAutoPlotter(_AutoPlotterBase):
     def _clean_plot_dir(self):
         clean_plot_dir(self._plot_dir)
 
-    def _get_plot_jobs(self)->list:
-        jobs = [_TotalObjectiveProgressPlotJob(plot_directory=self._plot_dir)]
+    def _get_plot_jobs(self) -> list[_PlotJobBase]:
+        jobs: list[_PlotJobBase] = [_TotalObjectiveProgressPlotJob(plot_directory=self._plot_dir)]
         jobs += [_PlotEvaluationIdJob(plot_dir=self._plot_dir, 
                                          plot_id=self._plot_id, 
                                          indep_fields=self._independent_fields, 
@@ -212,6 +214,13 @@ class _ObjectiveProgressPlotJob(_PlotJobBase):
         return 4
 
     def plot(self,  study_results):
+        try:
+            _ = study_results.objective_history
+        except RuntimeError:
+            logger.warning("Skipping per-model objective plots: objective "
+                           "history was not recorded. Enable with "
+                           "set_results_storage_options(objectives=True).")
+            return
         if len(study_results.evaluation_sets) > 1:
             for eval_set_name in study_results.evaluation_sets:
                 model_name, obj_name = study_results.decompose_evaluation_name(eval_set_name)
@@ -272,6 +281,13 @@ class _ParameterModelObjectivePlotJob(_PlotJobBase):
         return 5
     
     def plot(self, study_results):
+        try:
+            _ = study_results.objective_history
+        except RuntimeError:
+            logger.warning("Skipping parameter-objective plots: objective "
+                           "history was not recorded. Enable with "
+                           "set_results_storage_options(objectives=True).")
+            return
         if len(study_results.evaluation_sets) > 1:
             parameter_names = list(study_results.parameter_history.keys())
             n_param = len(parameter_names)
@@ -413,15 +429,24 @@ class _PlotEvaluationIdJob(_PlotJobBase):
 
     def _get_states(self, study_results, eval_set_name, model_name, index):
         try:
-            qois = study_results.qoi_history[eval_set_name]
-            sim_hist = study_results.simulation_history[model_name]
-            if qois.simulation_qois:
-                return qois.simulation_qois[index].states
-            elif sim_hist:
-                return sim_hist.states
-        except KeyError:
-            logger.warning("No simulation data or QoIs to plot. Skipping")
-            return {}
+            if (study_results._record_qois
+                    and study_results._qoi_history is not None
+                    and eval_set_name in study_results._qoi_history):
+                qois = study_results._qoi_history[eval_set_name]
+                if qois.simulation_qois:
+                    return qois.simulation_qois[index].states
+            if (study_results._record_data
+                    and model_name in study_results._simulation_history):
+                sim_hist = study_results._simulation_history[model_name]
+                if sim_hist:
+                    return sim_hist.states
+        except (KeyError, IndexError):
+            pass
+        logger.warning("No simulation data or QoIs available to plot. "
+                       "Skipping evaluation plots. If needed, enable "
+                       "recording with set_results_storage_options("
+                       "data=True, qois=True).")
+        return {}
 
     def plot(self, study_results):
         index = self.get_index(study_results)
@@ -447,13 +472,13 @@ class _PlotEvaluationIdJob(_PlotJobBase):
                 self._export(self._export_file_root+"_"+fig_name.replace(" ", "_")+".pdf")
 
     def get_results_to_plot(self, study_results, eval_set_name, model_name, state, index):
-        qoi_hist = study_results.qoi_history[eval_set_name]
+        qoi_hist = study_results._qoi_history[eval_set_name]
         if self._plot_exp_data:
             exp_results = qoi_hist.experiment_data[state]
         else:
             exp_results = qoi_hist.experiment_qois[state]
         if self._plot_sim_data:
-            sim_hist = study_results.simulation_history[model_name]
+            sim_hist = study_results._simulation_history[model_name]
             sim_results = [sim_hist[state][index]]
         else:
             sim_results = qoi_hist.simulation_qois[index][state]

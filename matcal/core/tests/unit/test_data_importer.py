@@ -3,6 +3,7 @@ import glob
 import numpy as np
 from copy import copy
 import csv
+import logging
 from unittest.mock import patch
 
 from matcal.core.data_importer import (
@@ -10,6 +11,7 @@ from matcal.core.data_importer import (
     DOSFileError,
     FileData,
     InvalidCharacterError,
+    LARGE_FILE_THRESHOLD_BYTES,
     _has_dos_newlines,
     _is_dos,
     _has_invalid_lines,
@@ -857,3 +859,71 @@ class TestMatlabFileDataMatV7(MatcalUnitTest):
         x_array = self.dic_data["E"]
         ref_x_array = 100 * np.ones(20 * 20)
         self.assertTrue(np.allclose(x_array, ref_x_array))
+
+
+class TestLargeFileWarning(MatcalUnitTest):
+    """Tests for the file-size advisory warning on data import."""
+
+    def setUp(self) -> None:
+        super().setUp(__file__)
+
+    def _make_csv(self, filename, size_bytes):
+        """Create a CSV file of at least *size_bytes* bytes."""
+        with open(filename, "w") as f:
+            f.write("x, y\n")
+            row = "1.0, 2.0\n"
+            while f.tell() < size_bytes:
+                f.write(row)
+        return filename
+
+    def test_no_warning_for_small_file(self):
+        """Files below the threshold should not emit a warning."""
+        small = self._make_csv("small.csv", 100)
+        with self.assertLogs("matcal", level=logging.WARNING) as cm:
+            # Inject a dummy warning so assertLogs does not fail if no
+            # warning is emitted (which is the expected outcome here).
+            logging.getLogger("matcal").warning("_sentinel_")
+            FileData(small)
+        # Only the sentinel should appear, not a large-file warning.
+        for msg in cm.output:
+            self.assertNotIn("advisory threshold", msg)
+
+    def test_warning_for_large_file(self):
+        """Files above the threshold should emit an advisory warning."""
+        import matcal.core.data_importer as di
+        original = di.LARGE_FILE_THRESHOLD_BYTES
+        try:
+            # Lower the threshold so we don't need to write 10 MB in a test
+            di.LARGE_FILE_THRESHOLD_BYTES = 500
+            large = self._make_csv("large.csv", 600)
+            with self.assertLogs("matcal", level=logging.WARNING) as cm:
+                FileData(large)
+            threshold_warnings = [m for m in cm.output if "advisory threshold" in m]
+            self.assertTrue(
+                len(threshold_warnings) > 0,
+                "Expected a large-file advisory warning but none was logged.",
+            )
+        finally:
+            di.LARGE_FILE_THRESHOLD_BYTES = original
+
+    def test_warn_if_large_file_static_method(self):
+        """The static helper should respect a custom threshold argument."""
+        from matcal.core.data_importer import DataImporterBase
+
+        small = self._make_csv("custom_thresh.csv", 200)
+        # Should NOT warn with a high threshold
+        with self.assertLogs("matcal", level=logging.WARNING) as cm:
+            logging.getLogger("matcal").warning("_sentinel_")
+            DataImporterBase._warn_if_large_file(small, threshold=10000)
+        for msg in cm.output:
+            self.assertNotIn("advisory threshold", msg)
+
+        # Should warn with a low threshold
+        with self.assertLogs("matcal", level=logging.WARNING) as cm:
+            DataImporterBase._warn_if_large_file(small, threshold=50)
+        threshold_warnings = [m for m in cm.output if "advisory threshold" in m]
+        self.assertTrue(len(threshold_warnings) > 0)
+
+    def test_threshold_constant_is_10mb(self):
+        """Verify the default threshold is 10 MB."""
+        self.assertEqual(LARGE_FILE_THRESHOLD_BYTES, 10 * 1024 * 1024)
