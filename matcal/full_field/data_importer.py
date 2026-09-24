@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 
 from matcal.core.object_factory import BasicIdentifier, ObjectCreator, SpecificObjectFactory
 from matcal.core.data_importer import FileData
+import matcal.core.data_importer as _core_data_importer
 
 from matcal.full_field.TwoDimensionalFieldGrid import (MeshSkeleton,
                                             MeshSkeletonTwoDimensionalMesh)
@@ -62,6 +63,7 @@ def FieldSeriesData(global_filename, series_directory="./",
     _check_series_directory(series_directory)
     _check_position_names(position_names)
     _check_n_cores(n_cores)
+    _warn_if_large_field_data(global_filename, series_directory)
     file_type = _get_file_type(global_filename, file_type)
 
     return _import_field_data(global_filename, series_directory, 
@@ -159,6 +161,44 @@ def _check_position_names(position_names):
                                               "to FieldSeriesData must"
                                 f" contain only strings. Received variable of type '{type(name)}'"
                                  f" in position {idx} of the 'position_names'.")
+
+
+def _warn_if_large_field_data(global_filename, series_directory):
+    """Warn when field series data files are collectively large.
+
+    Checks the global data file and all files in the series directory
+    against the advisory threshold defined in
+    :data:`~matcal.core.data_importer.LARGE_FILE_THRESHOLD_BYTES`.
+    """
+    total_size = 0
+    try:
+        if os.path.isfile(global_filename):
+            total_size += os.path.getsize(global_filename)
+        if os.path.isdir(series_directory):
+            for entry in os.listdir(series_directory):
+                fpath = os.path.join(series_directory, entry)
+                if os.path.isfile(fpath):
+                    total_size += os.path.getsize(fpath)
+    except OSError:
+        return
+
+    threshold = _core_data_importer.LARGE_FILE_THRESHOLD_BYTES
+    if total_size > threshold:
+        size_mb = total_size / (1024 * 1024)
+        logger.warning(
+            'The field series data ("%s" + directory "%s") totals %.1f MB '
+            "which exceeds the %.0f MB advisory threshold. "
+            "Loading large field data can significantly increase memory "
+            "usage, especially during calibration or sensitivity studies "
+            "that iterate over the model many times. Consider "
+            "down-sampling your data or reducing the number of time "
+            "frames.",
+            global_filename,
+            series_directory,
+            size_mb,
+            threshold / (1024 * 1024),
+        )
+
 
 class FieldDataParserBase(ABC):
 
@@ -627,8 +667,8 @@ matcal_field_data_factory.register_creator('json', _JSONFiledDataImporterCreator
 
 class MeshFileScraperSelector(BasicIdentifier):
     
-    def identify(self, mesh_filename:str):
-        extension = self._extract_extension(mesh_filename)
+    def identify(self, key=None):
+        extension = self._extract_extension(key)
         return super().identify(extension)
     
     def _extract_extension(self, mesh_filename:str)->str:

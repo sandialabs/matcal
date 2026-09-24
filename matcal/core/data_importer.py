@@ -14,6 +14,11 @@ from typing import Optional
 
 import numpy as np
 
+#: File-size threshold (in bytes) above which a warning is logged on import.
+#: Defaults to 10 MB.  Can be overridden at module level for testing or
+#: site-specific configuration.
+LARGE_FILE_THRESHOLD_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
 _scipy_import_error_msg = ""
 try:
     from scipy import io as scipy_io
@@ -126,6 +131,7 @@ class DataImporterBase(ABC):
         self._import_strings = import_strings
         self._import_options = self._parse_passed_options(**kwargs)
         self._drop_NaNs = drop_NaNs
+        self._warn_if_large_file(filename)
 
     def _check_file_exists(self, filename: str) -> None:
         if os.path.isdir(filename):
@@ -135,6 +141,42 @@ class DataImporterBase(ABC):
         if not os.path.isfile(filename):
             raise FileNotFoundError(
                 f'The file "{filename}" cannot be found to be imported. Check input.'
+            )
+
+    @staticmethod
+    def _warn_if_large_file(
+        filename: str,
+        threshold: Optional[int] = None,
+    ) -> None:
+        """Log a warning when *filename* exceeds the large-file threshold.
+
+        This helps users notice when they are about to load a very large
+        data set into memory, which can be problematic during calibration
+        or sensitivity studies that evaluate the model many times.
+
+        :param filename: path to the file being imported.
+        :param threshold: optional override for
+            :data:`LARGE_FILE_THRESHOLD_BYTES`.
+        """
+        if threshold is None:
+            threshold = LARGE_FILE_THRESHOLD_BYTES
+        try:
+            file_size = os.path.getsize(filename)
+        except OSError:
+            return
+        if file_size > threshold:
+            size_mb = file_size / (1024 * 1024)
+            logger.warning(
+                'The data file "%s" is %.1f MB which exceeds the %.0f MB '
+                "advisory threshold. Loading large data files can "
+                "significantly increase memory usage, especially during "
+                "calibration or sensitivity studies that iterate over "
+                "the model many times. Consider down-sampling, reducing "
+                "precision, or using the set_results_storage_options() "
+                "method on your study to limit stored history.",
+                filename,
+                size_mb,
+                threshold / (1024 * 1024),
             )
 
     def _inspect_data_and_clean(self, data):

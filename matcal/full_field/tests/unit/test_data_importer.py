@@ -1,4 +1,6 @@
 import csv
+import logging
+import os
 import numpy as np
 
 from matcal.core.data import Data
@@ -11,6 +13,7 @@ from matcal.full_field.data_importer import (CSVFieldDataSeriesParser,
                                              _create_series_data_array, 
                                              FieldSeriesData, 
                                              _import_full_field_data_from_json, 
+                                             _warn_if_large_field_data,
                                              mesh_file_to_skeleton, 
                                              _get_number_of_points_and_frames)
 from matcal.full_field.data_exporter import export_full_field_data_to_json
@@ -393,3 +396,58 @@ class TestJSONFieldDataParser(MatcalUnitTest):
         n_ele = 23
         parser, ref_data = self._init_random_parse(n_time, n_pts, n_ele, ele_size, field_vars, global_vars)
         self.assertEqual(n_ele, parser.number_of_elements)
+
+
+class TestLargeFieldDataWarning(MatcalUnitTest):
+    """Tests for the advisory large-file warning in field data import."""
+
+    def setUp(self) -> None:
+        super().setUp(__file__)
+
+    def _make_series_dir(self, dir_name, num_files, file_size):
+        """Create a series directory with *num_files* files of *file_size* bytes each."""
+        os.makedirs(dir_name, exist_ok=True)
+        for i in range(num_files):
+            fpath = os.path.join(dir_name, f"frame_{i}.csv")
+            with open(fpath, "w") as f:
+                f.write("A, B\n")
+                row = "1.0, 2.0\n"
+                while f.tell() < file_size:
+                    f.write(row)
+        return dir_name
+
+    def _make_global_csv(self, filename, size_bytes=50):
+        with open(filename, "w") as f:
+            f.write("time, file_\n")
+            row = "0.0, frame_0.csv\n"
+            while f.tell() < size_bytes:
+                f.write(row)
+        return filename
+
+    def test_no_warning_for_small_field_data(self):
+        """Small field data directories should not emit a warning."""
+        series_dir = self._make_series_dir("small_series", 2, 50)
+        global_csv = self._make_global_csv("global_small.csv")
+        with self.assertLogs("matcal", level=logging.WARNING) as cm:
+            logging.getLogger("matcal").warning("_sentinel_")
+            _warn_if_large_field_data(global_csv, series_dir)
+        for msg in cm.output:
+            self.assertNotIn("advisory threshold", msg)
+
+    def test_warning_for_large_field_data(self):
+        """Large field data directories should emit a warning."""
+        import matcal.core.data_importer as di
+        original = di.LARGE_FILE_THRESHOLD_BYTES
+        try:
+            di.LARGE_FILE_THRESHOLD_BYTES = 200
+            series_dir = self._make_series_dir("large_series", 3, 100)
+            global_csv = self._make_global_csv("global_large.csv", 50)
+            with self.assertLogs("matcal", level=logging.WARNING) as cm:
+                _warn_if_large_field_data(global_csv, series_dir)
+            threshold_warnings = [m for m in cm.output if "advisory threshold" in m]
+            self.assertTrue(
+                len(threshold_warnings) > 0,
+                "Expected a large-file advisory warning but none was logged.",
+            )
+        finally:
+            di.LARGE_FILE_THRESHOLD_BYTES = original
