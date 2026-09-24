@@ -298,8 +298,9 @@ class PythonSimulator(Simulator):
     """
 
     def __init__(self, name, compute_information, results_information, state, 
-                 model, field_coordinates=None, pass_evaluation_number=False, 
-                 pass_params_by_category=False):
+                 model, field_coordinates=None, pass_evaluation_number=False,
+                 pass_params_by_category=False, function_args=None,
+                 function_kwargs=None):
         super().__init__(name, compute_information, results_information, state)
         self._workdir = None
         self._orig_stdout = None
@@ -309,6 +310,8 @@ class PythonSimulator(Simulator):
         self._archive_name = None
         self._pass_evaluation_number=pass_evaluation_number
         self._pass_params_by_category=pass_params_by_category
+        self._function_args = function_args if function_args is not None else ()
+        self._function_kwargs = function_kwargs if function_kwargs is not None else {}
         self._save_dir = "matcal_python_results_archive"
         if not os.path.exists(self._save_dir):
             os.mkdir(self._save_dir)
@@ -329,8 +332,9 @@ class PythonSimulator(Simulator):
             if self.fail_calibration_on_simulation_failure:
                 raise e
             else:
-                logger.error("Continuing Study After Model \"{}\" Error.".format(self.model_name, 
-                                                                                 repr(e)))
+                logger.error(
+                    "Continuing Study After Model \"{}\" Error: {}".format(
+                        self.model_name, repr(e)))
                 stdout, stderr = self._extract_out_and_err(out)
                 output = SimulatorFailureResults(stdout, stderr, None, self._state)
         if output == None:
@@ -392,7 +396,8 @@ class PythonSimulator(Simulator):
         return self._field_coordinates != None
 
     def _python_function(self, **run_variables):
-        return self._model.python_function(**run_variables)
+        return self._model.python_function(
+            *self._function_args, **run_variables, **self._function_kwargs)
 
     @property
     def _results_file_path(self):

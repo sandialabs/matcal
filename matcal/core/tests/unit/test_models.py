@@ -628,7 +628,7 @@ class TestPythonModel(ModelTestBase.CommonTests, PythonModelForTests):
         self.assertTrue(model._pass_evaluation_number)
 
         inputs = model._get_simulator_class_inputs(SolitaryState())
-        self.assertTrue(inputs[0][-2])
+        self.assertTrue(inputs[0][-4])
 
     def test_pass_params_by_category(self):
         model = PythonModel(linear_python_model_constants, 
@@ -636,7 +636,7 @@ class TestPythonModel(ModelTestBase.CommonTests, PythonModelForTests):
         self.assertTrue(model._pass_params_by_category)
 
         inputs = model._get_simulator_class_inputs(SolitaryState())
-        self.assertTrue(inputs[0][-1])
+        self.assertTrue(inputs[0][-3])
 
     def test_pass_params_by_category_run_model(self):
         model = PythonModel(linear_python_model_more_constants_params_by_category, 

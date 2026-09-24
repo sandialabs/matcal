@@ -6,10 +6,10 @@ are not intended for users.
 """
 from abc import abstractmethod, ABC
 import numpy as np
-from types import FunctionType
 
 from matcal.core.data import Data, convert_dictionary_to_data
 from matcal.core.logger import initialize_matcal_logger
+from matcal.core.python_function_importer import python_function_importer
 from matcal.core.utilities import (check_value_is_nonempty_str, 
                                    check_item_is_correct_type)
 
@@ -275,7 +275,8 @@ class UserDefinedExtractor(QoIExtractorBase):
     for the objective.
     """
 
-    def __init__(self, function, *required_experiment_fields):
+    def __init__(self, function, *required_experiment_fields,
+                 function_args=None, function_kwargs=None):
         """
         :param function: a callable function that takes the working 
             :class:`~matcal.core.data.Data` object,
@@ -286,7 +287,7 @@ class UserDefinedExtractor(QoIExtractorBase):
             as a dictionary with keys for all fields of interest.
             The function is as follows::
 
-                def my_qoi_extractor_function(working_data, reference_data, return_keys_list):
+                def my_qoi_extractor_function(working_data, reference_data, return_keys_list, *args, **kwargs):
                     working_qois = {}
 
                     #Do something with reference_data and working_data to calculate working qois.
@@ -294,19 +295,26 @@ class UserDefinedExtractor(QoIExtractorBase):
 
                     return working_qois
 
-        :type function: FunctionType
+        :type function: Callable
                     
         :param required_experiment_fields: list of strings that denote data experimental 
             data fields are required for the QoI extractor to perform its QoI extraction.
         :type required_fields: list(str)
 
+        :param function_args: Additional positional arguments to be passed to the function.
+        :type function_args: tuple
+
+        :param function_kwargs: Additional keyword arguments to be passed to the function.
+        :type function_kwargs: dict
+
         :raises TypeError: if the function is not callable
         """
-        check_item_is_correct_type(function, FunctionType, "function")
         for field in required_experiment_fields:
             check_value_is_nonempty_str(field, "required_experiment_field")
-        self._function = function
+        self._function_importer = python_function_importer(function)
         self._required_fields = required_experiment_fields
+        self._function_args = function_args if function_args is not None else ()
+        self._function_kwargs = function_kwargs if function_kwargs is not None else {}
         super().__init__()
     
     @property
@@ -315,7 +323,9 @@ class UserDefinedExtractor(QoIExtractorBase):
 
     def calculate(self, working_data, reference_data, fields):
         try:
-            extracted_data = self._function(working_data, reference_data, fields)
+            extracted_data = self._function_importer.python_function(
+                working_data, reference_data, fields,
+                *self._function_args, **self._function_kwargs)
         except Exception as exc:
             import traceback
             logger.error("Error evaluating user defined QoI extractor.\n")
