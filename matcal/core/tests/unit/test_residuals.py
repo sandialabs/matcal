@@ -302,7 +302,7 @@ class TestUserFunctionWeighting(MatcalUnitTest):
         def fun(independent_field, target_field, residual, scale_factor):
             return residual * scale_factor
 
-        UFW = UserFunctionWeighting('indep', 'target', fun, 3.0)
+        UFW = UserFunctionWeighting('indep', 'target', fun, function_args=(3.0,))
 
         n = 20
         sample_data = {"indep": np.linspace(0, 10, n), "target": np.linspace(0, 15, n)}
@@ -316,7 +316,8 @@ class TestUserFunctionWeighting(MatcalUnitTest):
         def fun(independent_field, target_field, residual, scale_factor=1.0):
             return residual * scale_factor
 
-        UFW = UserFunctionWeighting('indep', 'target', fun, scale_factor=5.0)
+        UFW = UserFunctionWeighting('indep', 'target', fun,
+                                    function_kwargs={'scale_factor': 5.0})
 
         n = 20
         sample_data = {"indep": np.linspace(0, 10, n), "target": np.linspace(0, 15, n)}
@@ -330,7 +331,9 @@ class TestUserFunctionWeighting(MatcalUnitTest):
         def fun(independent_field, target_field, residual, scale, offset=0.0):
             return residual * scale + offset
 
-        UFW = UserFunctionWeighting('indep', 'target', fun, 2.0, offset=1.0)
+        UFW = UserFunctionWeighting('indep', 'target', fun,
+                                    function_args=(2.0,),
+                                    function_kwargs={'offset': 1.0})
 
         n = 20
         sample_data = {"indep": np.linspace(0, 10, n), "target": np.linspace(0, 15, n)}

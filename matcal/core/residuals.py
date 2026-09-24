@@ -234,7 +234,8 @@ class UserFunctionWeighting(ResidualWeightingBase):
     weighting is to provide the user with a means to emphasize regions of
     their data.
     """
-    def __init__(self, independent_field, target_field, weighting_function, *args, **kwargs):
+    def __init__(self, independent_field, target_field, weighting_function,
+                 function_args=None, function_kwargs=None):
         """
         :param independent_field: The name of the field to use as an independent field in the user function.
         :type independent_field: str
@@ -243,7 +244,7 @@ class UserFunctionWeighting(ResidualWeightingBase):
         :type target_field: str
 
         :param weighting_function: Predefined function with a signature of (independent_field_data, target_field_data,
-            target_field_residual, *args, **kwargs) and returns a NumPy array the same length as the target_field_residual. the results
+            target_field_residual) and returns a NumPy array the same length as the target_field_residual. the results
             of this function will replace the residual value in the evaluation. 
             
             .. note::
@@ -253,15 +254,17 @@ class UserFunctionWeighting(ResidualWeightingBase):
 
         :type weighting_function: Callable
 
-        :param args: Additional positional arguments to be passed to the weighting function.
+        :param function_args: Additional positional arguments to be passed to the weighting function.
+        :type function_args: tuple
 
-        :param kwargs: Additional keyword arguments to be passed to the weighting function.
+        :param function_kwargs: Additional keyword arguments to be passed to the weighting function.
+        :type function_kwargs: dict
         """
         self._target_field = target_field
         self._weighting_function_importer = python_function_importer(weighting_function)
         self._independent_field = independent_field
-        self._args = args
-        self._kwargs = kwargs
+        self._function_args = function_args if function_args is not None else ()
+        self._function_kwargs = function_kwargs if function_kwargs is not None else {}
 
     def apply(self, reference_data, unconditioned_reference_data, residual):
         weighted_residual = OrderedDict()
@@ -280,8 +283,8 @@ class UserFunctionWeighting(ResidualWeightingBase):
             results = self._weighting_function_importer.python_function(independent_field_data, 
                                                                         target_field_data, 
                                                                         target_residual,
-                                                                        *self._args,
-                                                                        **self._kwargs)
+                                                                        *self._function_args,
+                                                                        **self._function_kwargs)
             logger.debug("Finished applying user weights.")
         except Exception as e:
             logger.error(f"User residual weighting failed with the following error: { repr(e)}")
