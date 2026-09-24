@@ -11,11 +11,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import shutil
+from typing import TYPE_CHECKING
 
-from matcal.core.constants import (EVALUATION_EXTENSION, IN_PROGRESS_RESULTS_FILENAME, 
-                                   MATCAL_WORKDIR_STR)
+from matcal.core.constants import (
+    EVALUATION_EXTENSION,
+    IN_PROGRESS_RESULTS_FILENAME,
+    MATCAL_WORKDIR_STR,
+)
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.serializer_wrapper import matcal_load
+
+if TYPE_CHECKING:
+    from matcal.core.state import State
+    from matcal.core.study_base import (
+        QoiInformation,
+        StudyResults,
+    )
 
 
 logger = initialize_matcal_logger(__name__)
@@ -368,6 +379,40 @@ def _not_excluded(excluded_qois, dof):
     return dof not in excluded_qois
 
 
+def _warn_not_available(
+    label: str,
+    state: State,
+    context_name: str,
+    storage_flag: str,
+) -> None:
+    """Log a warning when requested data was not stored."""
+    logger.warning(
+        "%s not available for state '%s' in '%s'. "
+        "Skipping. Check that "
+        "set_results_storage_options(%s=True) "
+        "was set in the study input.",
+        label, state.name, context_name, storage_flag,
+    )
+
+
+def _warn_retrieval_failed(
+    label: str,
+    state: State,
+    context_name: str,
+    error: Exception,
+    storage_flag: str,
+) -> None:
+    """Log a warning when data retrieval raised an error."""
+    logger.warning(
+        "Could not retrieve %s for state '%s' in "
+        "'%s': %s. This is likely because "
+        "set_results_storage_options(%s=False) was "
+        "set. Check the study input.",
+        label, state.name, context_name,
+        error, storage_flag,
+    )
+
+
 class _PlotEvaluationIdJob(_PlotJobBase):
     
     @property           
@@ -427,62 +472,378 @@ class _PlotEvaluationIdJob(_PlotJobBase):
                          f"Objective: {obj}")
             return index
 
-    def _get_states(self, study_results, eval_set_name, model_name, index):
+    def _get_states(
+        self,
+        study_results: StudyResults,
+        eval_set_name: str,
+        model_name: str,
+        index: int,
+    ) -> dict:
+        """Return available states for an evaluation set.
+
+        Falls back to simulation history if QoI history is
+        unavailable.  Returns an empty dict when no data can
+        be found.
+        """
         try:
-            if (study_results._record_qois
-                    and study_results._qoi_history is not None
-                    and eval_set_name in study_results._qoi_history):
-                qois = study_results._qoi_history[eval_set_name]
-                if qois.simulation_qois:
-                    return qois.simulation_qois[index].states
-            if (study_results._record_data
-                    and model_name in study_results._simulation_history):
-                sim_hist = study_results._simulation_history[model_name]
-                if sim_hist:
-                    return sim_hist.states
-        except (KeyError, IndexError):
+            states = self._states_from_qoi_history(
+                study_results, eval_set_name, index
+            )
+            if states is not None:
+                return states
+            states = self._states_from_sim_history(
+                study_results, model_name
+            )
+            if states is not None:
+                return states
+        except (KeyError, IndexError, AttributeError):
             pass
-        logger.warning("No simulation data or QoIs available to plot. "
-                       "Skipping evaluation plots. If needed, enable "
-                       "recording with set_results_storage_options("
-                       "data=True, qois=True).")
+        logger.warning(
+            "No simulation data or QoIs available to plot "
+            "for '%s'. Skipping evaluation plots. If needed,"
+            " enable recording with "
+            "set_results_storage_options("
+            "data=True, qois=True).",
+            eval_set_name,
+        )
         return {}
 
-    def plot(self, study_results):
+    def _states_from_qoi_history(
+        self,
+        study_results: StudyResults,
+        eval_set_name: str,
+        index: int,
+    ) -> dict | None:
+        """Extract states from QoI history if available."""
+        qoi_history = getattr(
+            study_results, "_qoi_history", None
+        )
+        if not study_results._record_qois:
+            return None
+        if qoi_history is None:
+            return None
+        if eval_set_name not in qoi_history:
+            return None
+        qois = qoi_history[eval_set_name]
+        if qois.simulation_qois:
+            return qois.simulation_qois[index].states
+        return None
+
+    def _states_from_sim_history(
+        self,
+        study_results: StudyResults,
+        model_name: str,
+    ) -> dict | None:
+        """Extract states from simulation history if available."""
+        sim_history = getattr(
+            study_results, "_simulation_history", None
+        )
+        if not study_results._record_data:
+            return None
+        if sim_history is None:
+            return None
+        if model_name not in sim_history:
+            return None
+        sim_hist = sim_history[model_name]
+        if sim_hist:
+            return sim_hist.states
+        return None
+
+    def plot(self, study_results: StudyResults) -> None:
+        """Plot evaluation data for each state and eval set."""
         index = self.get_index(study_results)
         for eval_set_name in study_results.evaluation_sets:
-            model_name, obj_name = study_results.decompose_evaluation_name(eval_set_name)
-            states = self._get_states(study_results, eval_set_name, model_name, index)
+            model_name, obj_name = (
+                study_results.decompose_evaluation_name(
+                    eval_set_name
+                )
+            )
+            states = self._get_states(
+                study_results, eval_set_name,
+                model_name, index,
+            )
             for state in states.values():
-                state_exp_results, state_sim_results = self.get_results_to_plot(study_results, 
-                                                                               eval_set_name, 
-                                                                               model_name, state, 
-                                                                               index)
-                fig_name = f"{model_name} {obj_name} {state.name}"
-                y_qois = _get_common_fields(state_sim_results, state_exp_results, self.x_fields)
-                x_qois = self._determine_x_qois(y_qois, state_sim_results, state_exp_results)
+                self._plot_state(
+                    study_results, eval_set_name,
+                    model_name, obj_name, state, index,
+                )
 
-                fig, ax_set = self._set_up_figure_and_axis(len(x_qois), len(y_qois), 
-                                                           figname=fig_name)
-                for x_idx, x_qoi in enumerate(x_qois):
-                    for y_idx, y_qoi in enumerate(y_qois):
-                        ax = _lookup_ax(ax_set, x_idx, y_idx)
-                        self._plot_qois(ax, x_qoi, y_qoi, state_sim_results, 
-                                        state_exp_results)
-                self._export(self._export_file_root+"_"+fig_name.replace(" ", "_")+".pdf")
+    def _plot_state(
+        self,
+        study_results: StudyResults,
+        eval_set_name: str,
+        model_name: str,
+        obj_name: str,
+        state: State,
+        index: int,
+    ) -> None:
+        """Plot a single state, skipping if data is missing."""
+        results = self.get_results_to_plot(
+            study_results, eval_set_name,
+            model_name, state, index,
+        )
+        if results is None:
+            logger.warning(
+                "Skipping plot for state '%s' in '%s' "
+                "because the required data is not "
+                "available. Check "
+                "set_results_storage_options() in the "
+                "study input.",
+                state.name, eval_set_name,
+            )
+            return
+        state_exp_results, state_sim_results = results
+        if not self._both_results_available(
+            state_exp_results, state_sim_results,
+            state, eval_set_name,
+        ):
+            return
+        self._render_state_figure(
+            model_name, obj_name, state,
+            state_exp_results, state_sim_results,
+        )
 
-    def get_results_to_plot(self, study_results, eval_set_name, model_name, state, index):
-        qoi_hist = study_results._qoi_history[eval_set_name]
-        if self._plot_exp_data:
-            exp_results = qoi_hist.experiment_data[state]
-        else:
-            exp_results = qoi_hist.experiment_qois[state]
-        if self._plot_sim_data:
-            sim_hist = study_results._simulation_history[model_name]
-            sim_results = [sim_hist[state][index]]
-        else:
-            sim_results = qoi_hist.simulation_qois[index][state]
+    def _both_results_available(
+        self,
+        exp_results: list | None,
+        sim_results: list | None,
+        state: State,
+        eval_set_name: str,
+    ) -> bool:
+        """Check both result sets exist, warn if partial."""
+        if exp_results is not None and sim_results is not None:
+            return True
+        available: list[str] = []
+        if exp_results is not None:
+            available.append("experiment")
+        if sim_results is not None:
+            available.append("simulation")
+        logger.warning(
+            "Only partial data available for state "
+            "'%s' in '%s' (have: %s). Skipping.",
+            state.name, eval_set_name,
+            ", ".join(available) if available else "none",
+        )
+        return False
+
+    def _render_state_figure(
+        self,
+        model_name: str,
+        obj_name: str,
+        state: State,
+        state_exp_results: list,
+        state_sim_results: list,
+    ) -> None:
+        """Create and export the figure for one state."""
+        fig_name = (
+            f"{model_name} {obj_name} {state.name}"
+        )
+        y_qois = _get_common_fields(
+            state_sim_results, state_exp_results,
+            self.x_fields,
+        )
+        x_qois = self._determine_x_qois(
+            y_qois, state_sim_results, state_exp_results,
+        )
+        fig, ax_set = self._set_up_figure_and_axis(
+            len(x_qois), len(y_qois), figname=fig_name,
+        )
+        for x_idx, x_qoi in enumerate(x_qois):
+            for y_idx, y_qoi in enumerate(y_qois):
+                ax = _lookup_ax(ax_set, x_idx, y_idx)
+                self._plot_qois(
+                    ax, x_qoi, y_qoi,
+                    state_sim_results, state_exp_results,
+                )
+        self._export(
+            self._export_file_root + "_"
+            + fig_name.replace(" ", "_") + ".pdf"
+        )
+
+    def get_results_to_plot(
+        self,
+        study_results: StudyResults,
+        eval_set_name: str,
+        model_name: str,
+        state: State,
+        index: int,
+    ) -> tuple[list, list] | None:
+        """Retrieve experiment and simulation data to plot.
+
+        Returns ``None`` when neither experiment nor simulation
+        data is available.
+        """
+        qoi_hist = study_results._qoi_history.get(
+            eval_set_name
+        )
+        exp_results = self._fetch_experiment_results(
+            study_results, qoi_hist,
+            state, eval_set_name,
+        )
+        sim_results = self._fetch_simulation_results(
+            study_results, qoi_hist,
+            model_name, state, eval_set_name, index,
+        )
+        if exp_results is None and sim_results is None:
+            return None
         return exp_results, sim_results
+
+    def _fetch_experiment_results(
+        self,
+        study_results: StudyResults,
+        qoi_hist: QoiInformation | None,
+        state: State,
+        eval_set_name: str,
+    ) -> list | None:
+        """Fetch experiment data or QoIs for one state."""
+        if self._plot_exp_data:
+            return self._try_get_experiment_data(
+                study_results, qoi_hist,
+                state, eval_set_name,
+            )
+        return self._try_get_experiment_qois(
+            study_results, qoi_hist,
+            state, eval_set_name,
+        )
+
+    def _try_get_experiment_data(
+        self,
+        study_results: StudyResults,
+        qoi_hist: QoiInformation | None,
+        state: State,
+        eval_set_name: str,
+    ) -> list | None:
+        """Return experiment raw data, or None with warning."""
+        try:
+            if (
+                qoi_hist is not None
+                and study_results._record_data
+                and state in (
+                    qoi_hist.experiment_data.states.values()
+                )
+            ):
+                return qoi_hist.experiment_data[state]
+        except (KeyError, IndexError) as err:
+            _warn_retrieval_failed(
+                "experiment data", state, eval_set_name,
+                err, "data",
+            )
+            return None
+        _warn_not_available(
+            "Experiment data", state, eval_set_name, "data",
+        )
+        return None
+
+    def _try_get_experiment_qois(
+        self,
+        study_results: StudyResults,
+        qoi_hist: QoiInformation | None,
+        state: State,
+        eval_set_name: str,
+    ) -> list | None:
+        """Return experiment QoIs, or None with warning."""
+        try:
+            if (
+                qoi_hist is not None
+                and study_results._record_qois
+                and state in (
+                    qoi_hist.experiment_qois.states.values()
+                )
+            ):
+                return qoi_hist.experiment_qois[state]
+        except (KeyError, IndexError) as err:
+            _warn_retrieval_failed(
+                "experiment QoIs", state, eval_set_name,
+                err, "qois",
+            )
+            return None
+        _warn_not_available(
+            "Experiment QoIs", state, eval_set_name, "qois",
+        )
+        return None
+
+    def _fetch_simulation_results(
+        self,
+        study_results: StudyResults,
+        qoi_hist: QoiInformation | None,
+        model_name: str,
+        state: State,
+        eval_set_name: str,
+        index: int,
+    ) -> list | None:
+        """Fetch simulation data or QoIs for one state."""
+        if self._plot_sim_data:
+            return self._try_get_simulation_data(
+                study_results, model_name,
+                state, index,
+            )
+        return self._try_get_simulation_qois(
+            qoi_hist, study_results,
+            state, eval_set_name, index,
+        )
+
+    def _try_get_simulation_data(
+        self,
+        study_results: StudyResults,
+        model_name: str,
+        state: State,
+        index: int,
+    ) -> list | None:
+        """Return simulation raw data, or None with warning."""
+        try:
+            sim_hist_dict = study_results._simulation_history
+            if (
+                study_results._record_data
+                and model_name in sim_hist_dict
+                and state in (
+                    sim_hist_dict[model_name].states.values()
+                )
+            ):
+                return [sim_hist_dict[model_name][state][index]]
+        except (KeyError, IndexError) as err:
+            _warn_retrieval_failed(
+                "simulation data", state, model_name,
+                err, "data",
+            )
+            return None
+        _warn_not_available(
+            "Simulation data", state, model_name, "data",
+        )
+        return None
+
+    def _try_get_simulation_qois(
+        self,
+        qoi_hist: QoiInformation | None,
+        study_results: StudyResults,
+        state: State,
+        eval_set_name: str,
+        index: int,
+    ) -> list | None:
+        """Return simulation QoIs, or None with warning."""
+        try:
+            if (
+                qoi_hist is not None
+                and study_results._record_qois
+                and qoi_hist.simulation_qois
+                and index < len(qoi_hist.simulation_qois)
+                and state in (
+                    qoi_hist.simulation_qois[index]
+                    .states.values()
+                )
+            ):
+                return (
+                    qoi_hist.simulation_qois[index][state]
+                )
+        except (KeyError, IndexError) as err:
+            _warn_retrieval_failed(
+                "simulation QoIs", state, eval_set_name,
+                err, "qois",
+            )
+            return None
+        _warn_not_available(
+            "Simulation QoIs", state, eval_set_name, "qois",
+        )
+        return None
 
     def _determine_x_qois(self, common_qois, state_sim_qoi_list, state_exp_qoi_list):
         if len(self.x_fields) < 1 or self.x_fields is None:
