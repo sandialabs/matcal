@@ -84,8 +84,20 @@ if __name__=="__main__":
     if _will_make_pariwise_plot(args):
         make_pairwise_plots(args.pairwise_file, args.plot_dir, args.downsample_rate)
     else:
-        make_standard_plots(*independent_fields, plot_dir=args.plot_dir, 
-                            plot_id=plot_id,
-                            plot_model_objectives=args.plot_model_objectives, 
-                            plot_exp_data=args.plot_experiment_data, 
-                            plot_sim_data=args.plot_simulation_data)
+        try:
+            make_standard_plots(*independent_fields, plot_dir=args.plot_dir, 
+                                plot_id=plot_id,
+                                plot_model_objectives=args.plot_model_objectives, 
+                                plot_exp_data=args.plot_experiment_data, 
+                                plot_sim_data=args.plot_simulation_data)
+        except (KeyError, IndexError, AttributeError) as err:
+            logger.error(
+                "Plotting failed: %s\n"
+                "This is likely because the study's "
+                "set_results_storage_options() did not save the required "
+                "data (e.g. qois=False or data=False). Check the study "
+                "input file.\n"
+                "  - Use '-psd' to plot simulation data instead of QoIs.\n"
+                "  - Use '-ped' to plot experiment data instead of QoIs.\n"
+                "If using '-psd'/'-ped', ensure 'data=True' was set in "
+                "set_results_storage_options().", err)
