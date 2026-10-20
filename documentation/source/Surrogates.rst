@@ -1070,6 +1070,47 @@ surrogate options do not apply:
 * random forest settings;
 * PCA ``decomp_var``.
 
+Sparse-grid evaluation performance
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+PyApprox evaluates sparse-grid surrogates with parallel kernels compiled by
+`numba <https://numba.pydata.org>`_ when numba is installed. Without numba,
+PyApprox falls back to a much slower NumPy implementation, so install numba
+when using sparse-grid surrogates.
+
+A sparse-grid surrogate is evaluated one subspace at a time, and a large
+surrogate can contain thousands of subspaces. Each subspace evaluation is a
+small parallel task, so the cost of starting and synchronizing threads can
+exceed the work itself. As a result, numba's defaults (the first available
+threading layer, with one thread per core) can be several times slower than
+a tuned setting. Two environment variables control this:
+
+``NUMBA_THREADING_LAYER_PRIORITY``
+    The order in which numba tries its threading layers. For sparse-grid
+    evaluation, the OpenMP layer (``omp``) has performed best in MatCal
+    testing; the ``workqueue`` layer was 3 to 15 times slower, and the ``tbb``
+    layer slowed down as threads were added.
+
+``NUMBA_NUM_THREADS``
+    The number of threads numba uses. With the ``omp`` layer, performance was
+    nearly flat from 4 to 16 threads in MatCal testing, so a moderate count
+    such as 4 is a safe default. With the ``tbb`` and ``workqueue`` layers,
+    adding threads made evaluation slower.
+
+A good starting point is:
+
+.. code-block:: bash
+
+   export NUMBA_THREADING_LAYER_PRIORITY="omp tbb workqueue"
+   export NUMBA_NUM_THREADS=4
+
+These variables must be set before Python starts, because numba reads them
+when it is first imported. Using a priority list rather than
+``NUMBA_THREADING_LAYER=omp`` lets numba fall back to another layer on systems
+without OpenMP instead of raising an error. The best thread count depends on
+the machine and the surrogate, so time a representative evaluation with a few
+settings when performance matters.
+
 Choosing a Surrogate Workflow
 =============================
 
