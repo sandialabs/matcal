@@ -4,7 +4,6 @@ source ../../setup_env.sh
 setup_env
 cd ../../../../external_matcal/documentation
 source ~/.bashrc || true
-conda activate pyapprox-base || true
 
 make clean
 make html -j 8 
