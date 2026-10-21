@@ -1,6 +1,6 @@
 SIERRA/SM Material Point Model Practical Examples
 =================================================
-In this section, we present the calibration of our :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+In this section, we present the calibration of our :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 to uniaxial compression data for a 6061-T6 aluminum from the Ductile Failure project at Sandia 
 :cite:p:`DE_L2_Ductile_Failure`.
 Specifically, we calibrate to test specimens C-RD-01 and C-ST-01 from that dataset. Four calibrations are presented to highlight 

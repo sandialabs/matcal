@@ -1099,7 +1099,7 @@ class _SymmetricUniaxiallyLoadedModelContactBase(_SymmetricUniaxiallyLoadedModel
         one order of magnitude higher than the contact target relative and 
         its acceptable relative residual is set to 10. To specify custom CG solver 
         convergence tolerances with contact, call 
-        :meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.set_convergence_tolerance`
+        :meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.set_convergence_tolerance`
         after calling this method.
 
         No acceptable residual is specified for either solver.

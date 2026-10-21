@@ -17,7 +17,7 @@ demonstration purposes.
 These are then followed with more applied examples 
 with similar goals using a MatCal 
 generated SIERRA model for a uniaxially loaded 
-material point (:ref:`Uniaxial Loading Material Point Model`). 
+material point (:ref:`Uniaxial Stress Material Point Model`). 
 First a successful calibration is shown with justifications for 
 decisions made and tools used for that calibration. Next, 
 common issues that may be encountered in applied problems are 

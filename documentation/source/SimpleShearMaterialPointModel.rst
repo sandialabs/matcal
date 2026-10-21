@@ -17,7 +17,7 @@ specifics on simulation boundary conditions, and what is output from the model.
 
 .. note::
    This model follows the same patterns and examples as the
-   :ref:`Uniaxial Loading Material Point Model`. Additional examples can be found at
+   :ref:`Uniaxial Stress Material Point Model`. Additional examples can be found at
    :ref:`SIERRA/SM Material Point Model Practical Examples`
 
 Simple shear kinematics
