@@ -20,7 +20,8 @@ from matcal.sierra.material import Material
 from matcal.sierra.models import (RectangularUniaxialTensionModel, 
     RoundNotchedTensionModel, RoundUniaxialTensionModel,
     SimpleShearMaterialPointModel, SolidBarTorsionModel, TopHatShearModel,
-    UniaxialLoadingMaterialPointModel,
+    UniaxialLoadingMaterialPointModel, UniaxialStrainMaterialPointModel,
+    UniaxialStressMaterialPointModel,
     UserDefinedSierraModel, VFMUniaxialTensionConnectedHexModel, VFMUniaxialTensionHexModel)
 from matcal.sierra.simulators import SierraSimulator
 from matcal.sierra.tests.utilities import (write_j2_plasticity_material_file, write_empty_file, 
@@ -159,8 +160,7 @@ class MatcalGeneratedModelForTestsBase(SierraModelForTestsBase):
 
         return pc
     
-class UniaxialLoadingMaterialPointModelForTests(MatcalGeneratedModelForTestsBase):
-    _model_class = UniaxialLoadingMaterialPointModel
+class _UniaxialMaterialPointModelForTestsBase(MatcalGeneratedModelForTestsBase):
     geo_params = {}
 
     def init_model(self, plasticity=False, coupled=False):
@@ -198,6 +198,24 @@ class UniaxialLoadingMaterialPointModelForTests(MatcalGeneratedModelForTestsBase
                                         "rate_3.472463365511494e-05_eng_strain_rate", 
                                         "results.csv")
         return FileData(gold_data_file)
+
+
+class UniaxialStressMaterialPointModelForTests(_UniaxialMaterialPointModelForTestsBase):
+    _model_class = UniaxialStressMaterialPointModel
+
+
+class UniaxialLoadingMaterialPointModelForTests(UniaxialStressMaterialPointModelForTests):
+    _model_class = UniaxialLoadingMaterialPointModel
+
+
+class UniaxialStrainMaterialPointModelForTests(_UniaxialMaterialPointModelForTestsBase):
+    _model_class = UniaxialStrainMaterialPointModel
+
+    def _get_gold_data(self):
+        raise NotImplementedError(
+            "Gold results have not been generated for "
+            "UniaxialStrainMaterialPointModel."
+        )
 
 
 class SimpleShearMaterialPointModelForTests(MatcalGeneratedModelForTestsBase):

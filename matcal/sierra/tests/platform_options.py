@@ -1,6 +1,7 @@
 from matcal.core.computing_platforms import HPCComputingPlatform
 from matcal.core.object_factory import IdentifierByTestFunction
-from matcal.sierra.models import (UniaxialLoadingMaterialPointModel, UserDefinedSierraModel, 
+from matcal.sierra.models import (UniaxialStrainMaterialPointModel,
+UniaxialStressMaterialPointModel, UserDefinedSierraModel,
 VFMUniaxialTensionConnectedHexModel, VFMUniaxialTensionHexModel)
 
 
@@ -35,7 +36,8 @@ def set_platform_options(model, remote=True):
     elif is_cluster:
 
         cluster = get_cluster_platform()
-        if not isinstance(model, (UniaxialLoadingMaterialPointModel, UserDefinedSierraModel, 
+        if not isinstance(model, (UniaxialStressMaterialPointModel,
+                                  UniaxialStrainMaterialPointModel, UserDefinedSierraModel, 
                                   VFMUniaxialTensionConnectedHexModel, VFMUniaxialTensionHexModel)):
             model.set_number_of_cores(int(cluster.get_processors_per_node()/2))
     else:
