@@ -710,7 +710,12 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
         MaxLevelCriteria,
     )
     from pyapprox.surrogates.sparsegrids.error_indicators import (
-        VarianceChangeIndicator,
+        SummedSubspaceVarianceIndicator,
+    )
+    from pyapprox.surrogates.affine.univariate.piecewisepoly import (
+        PiecewiseCubic,
+        PiecewiseLinear,
+        PiecewiseQuadratic,
     )
 
     bkd = NumpyBkd()
@@ -748,16 +753,20 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
         if piecewise_degree not in (1, 2, 3):
             raise ValueError("piecewise_degree must be 1, 2, or 3")
 
-        poly_type = {1: "linear", 2: "quadratic", 3: "cubic"}[piecewise_degree]
+        basis_class = {
+            1: PiecewiseLinear,
+            2: PiecewiseQuadratic,
+            3: PiecewiseCubic,
+        }[piecewise_degree]
         factories = [
-            PiecewiseFactory(marginals[ii], bkd, poly_type=poly_type)
+            PiecewiseFactory(marginals[ii], bkd, basis_class=basis_class)
             for ii in range(n_parameters)
         ]
-        growth = CubicNestedGrowthRule() if poly_type == "cubic" else ClenshawCurtisGrowthRule()
+        growth = CubicNestedGrowthRule() if piecewise_degree == 3 else ClenshawCurtisGrowthRule()
 
     tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
     admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
-    error_indicator = VarianceChangeIndicator(bkd)
+    error_indicator = SummedSubspaceVarianceIndicator(bkd)
 
     fitter = SingleFidelityAdaptiveSparseGridFitter(
         bkd,
