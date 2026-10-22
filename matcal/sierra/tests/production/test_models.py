@@ -241,14 +241,15 @@ class UniaxialMaterialPointModelProductionTestsBase(ABC):
         def test_elastic_response(self):
             model = self.setup_model()
             data = convert_dictionary_to_data(
-                {"time": [0.0, 1.0], "engineering_strain": [0.0, self._elastic_strain]}
+                {"time": [0.0, 1.0], "engineering_strain": [0.0, self._elastic_strain*100]}
             )
             model.set_number_of_time_steps(2)
             model.add_boundary_condition_data(data)
             results = model.run(data.state, self.get_material_parameter_collection())
             properties = self.get_material_properties()
+            results_data = results.results_data[results.results_data["engineering_strain"] < self._elastic_strain]
             self._check_elastic_response(
-                results.results_data, properties["elastic_modulus"], properties["nu"]
+                results_data, properties["elastic_modulus"], properties["nu"]
             )
 
         def _run_first_state(self, direction):
