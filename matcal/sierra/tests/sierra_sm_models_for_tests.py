@@ -20,7 +20,8 @@ from matcal.sierra.material import Material
 from matcal.sierra.models import (RectangularUniaxialTensionModel, 
     RoundNotchedTensionModel, RoundUniaxialTensionModel,
     SimpleShearMaterialPointModel, SolidBarTorsionModel, TopHatShearModel,
-    UniaxialLoadingMaterialPointModel,
+    UniaxialLoadingMaterialPointModel, UniaxialStrainMaterialPointModel,
+    UniaxialStressMaterialPointModel,
     UserDefinedSierraModel, VFMUniaxialTensionConnectedHexModel, VFMUniaxialTensionHexModel)
 from matcal.sierra.simulators import SierraSimulator
 from matcal.sierra.tests.utilities import (write_j2_plasticity_material_file, write_empty_file, 
@@ -159,8 +160,7 @@ class MatcalGeneratedModelForTestsBase(SierraModelForTestsBase):
 
         return pc
     
-class UniaxialLoadingMaterialPointModelForTests(MatcalGeneratedModelForTestsBase):
-    _model_class = UniaxialLoadingMaterialPointModel
+class _UniaxialMaterialPointModelForTestsBase(MatcalGeneratedModelForTestsBase):
     geo_params = {}
 
     def init_model(self, plasticity=False, coupled=False):
@@ -191,13 +191,32 @@ class UniaxialLoadingMaterialPointModelForTests(MatcalGeneratedModelForTestsBase
         
         return [eng_strain_dc, true_strain_dc, true_strain_dc_no_time]
 
+    _gold_data_model_class = None
+
     def _get_gold_data(self):
+        gold_model_class = self._gold_data_model_class or self._model_class
+        model_type = gold_model_class.model_type
         gold_data_file = os.path.join(self.results_parent_folder, 
-                                        "uniaxial_loading_material_point", 
-                                        "uniaxial_loading_material_point_0", 
+                                        model_type, 
+                                        f"{model_type}_0", 
                                         "rate_3.472463365511494e-05_eng_strain_rate", 
                                         "results.csv")
         return FileData(gold_data_file)
+
+
+class UniaxialStressMaterialPointModelForTests(_UniaxialMaterialPointModelForTestsBase):
+    _model_class = UniaxialStressMaterialPointModel
+
+
+class UniaxialLoadingMaterialPointModelForTests(UniaxialStressMaterialPointModelForTests):
+    _model_class = UniaxialLoadingMaterialPointModel
+    # The deprecated alias produces results identical to the stress model, so
+    # it reuses the stress gold data instead of keeping its own copy.
+    _gold_data_model_class = UniaxialStressMaterialPointModel
+
+
+class UniaxialStrainMaterialPointModelForTests(_UniaxialMaterialPointModelForTestsBase):
+    _model_class = UniaxialStrainMaterialPointModel
 
 
 class SimpleShearMaterialPointModelForTests(MatcalGeneratedModelForTestsBase):

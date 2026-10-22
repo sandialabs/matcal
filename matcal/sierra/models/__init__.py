@@ -10,26 +10,30 @@ Examples:
 
 from .base import UserDefinedSierraModel
 from .material_point import (
-    UniaxialLoadingMaterialPointModel,
     SimpleShearMaterialPointModel,
-)
-from .tension import (
-    RoundUniaxialTensionModel,
-    RectangularUniaxialTensionModel,
-    RoundNotchedTensionModel,
+    UniaxialLoadingMaterialPointModel,
+    UniaxialStrainMaterialPointModel,
+    UniaxialStressMaterialPointModel,
 )
 from .shear import SolidBarTorsionModel, TopHatShearModel
-from .vfm import VFMUniaxialTensionHexModel, VFMUniaxialTensionConnectedHexModel
+from .tension import (
+    RectangularUniaxialTensionModel,
+    RoundNotchedTensionModel,
+    RoundUniaxialTensionModel,
+)
+from .vfm import VFMUniaxialTensionConnectedHexModel, VFMUniaxialTensionHexModel
 
 __all__ = [
-    "SimpleShearMaterialPointModel",
-    "SolidBarTorsionModel",
-    "RoundUniaxialTensionModel",
     "RectangularUniaxialTensionModel",
     "RoundNotchedTensionModel",
+    "RoundUniaxialTensionModel",
+    "SimpleShearMaterialPointModel",
+    "SolidBarTorsionModel",
     "TopHatShearModel",
     "UniaxialLoadingMaterialPointModel",
+    "UniaxialStrainMaterialPointModel",
+    "UniaxialStressMaterialPointModel",
     "UserDefinedSierraModel",
-    "VFMUniaxialTensionHexModel",
     "VFMUniaxialTensionConnectedHexModel",
+    "VFMUniaxialTensionHexModel",
 ]

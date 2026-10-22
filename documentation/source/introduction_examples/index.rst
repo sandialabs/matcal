@@ -19,7 +19,7 @@ demonstration purposes.
 These are then followed with more applied examples 
 with similar goals using a MatCal 
 generated SIERRA model for a uniaxially loaded 
-material point (:ref:`Uniaxial Loading Material Point Model`). 
+material point (:ref:`Uniaxial Stress Material Point Model`). 
 First a successful calibration is shown with justifications for 
 decisions made and tools used for that calibration. Next, 
 common issues that may be encountered in applied problems are 
@@ -153,7 +153,7 @@ explored using the same data set from the successful calibration.
 
 SIERRA/SM Material Point Model Practical Examples
 =================================================
-In this section, we present the calibration of our :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+In this section, we present the calibration of our :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 to uniaxial compression data for a 6061-T6 aluminum from the Ductile Failure project at Sandia 
 :cite:p:`DE_L2_Ductile_Failure`.
 Specifically, we calibrate to test specimens C-RD-01 and C-ST-01 from that dataset. Four calibrations are presented to highlight 
@@ -191,7 +191,7 @@ We use these four examples to highlight three important issues:
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="As stated previously, we present the calibration of our  UniaxialLoadingMaterialPointModel to uniaxial compression data for a 6061-T6 aluminum from the Ductile Failure Project at Sandia :citeDE_L2_Ductile_Failure. This example and calibration will consist of three steps:">
+    <div class="sphx-glr-thumbcontainer" tooltip="As stated previously, we present the calibration of our  UniaxialStressMaterialPointModel to uniaxial compression data for a 6061-T6 aluminum from the Ductile Failure Project at Sandia :citeDE_L2_Ductile_Failure. This example and calibration will consist of three steps:">
 
 .. only:: html
 
@@ -208,7 +208,7 @@ We use these four examples to highlight three important issues:
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In this section, we once again present the calibration of our UniaxialLoadingMaterialPointModel to the uniaxial compression data. However, instead of manipulating the data and weighting the residuals like we did in the  sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py example, we ignore the potential issues that were pointed out there and use the data as provided. Overall,  the exact same process is used in this calibration as  was used in the successful calibration; however, the data cleanup and residual weights modification is not  performed initially. See the sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py for more of those details. First, we import and view the data: ">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this section, we once again present the calibration of our UniaxialStressMaterialPointModel to the uniaxial compression data. However, instead of manipulating the data and weighting the residuals like we did in the  sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py example, we ignore the potential issues that were pointed out there and use the data as provided. Overall,  the exact same process is used in this calibration as  was used in the successful calibration; however, the data cleanup and residual weights modification is not  performed initially. See the sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py for more of those details. First, we import and view the data: ">
 
 .. only:: html
 
@@ -225,7 +225,7 @@ We use these four examples to highlight three important issues:
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In this section, we approach the calibration of the  UniaxialLoadingMaterialPointModel to the Ductile Failure 6061-T6 compression data a little differently. For the more traditional approach see the sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py. MatCal&#x27;s objective tools allow significant flexibility in how the objective for calibrations are built. Also, the UniaxialLoadingMaterialPointModel allows  flexibility in the way the boundary conditions are derived from data. In this example, we highlight  this flexibility by using strain versus time data to define the model boundary condition  so that it simulates both loading and unloading. We then define an objective with time as the independent variable and true stress as the dependent variable in the  CurveBasedInterpolatedObjective. In addition to the plasticity parameters calibrated in the previous example, we add the  elastic modulus as a calibrated parameter for this study. Generally, this is not  recommended as the isotropic elastic  properties of metals are readily available in the literature. However, we want  to make use of the additional information provided to the objective when including  the elastic unloading portion of  the data in the model. A more practical use of calibrating to stress-time history  would be calibrating a model to cyclical loading that has cycle dependent behavior such as calibrating a model with isotropic and kinematic hardening.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this section, we approach the calibration of the  UniaxialStressMaterialPointModel to the Ductile Failure 6061-T6 compression data a little differently. For the more traditional approach see the sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py. MatCal&#x27;s objective tools allow significant flexibility in how the objective for calibrations are built. Also, the UniaxialStressMaterialPointModel allows  flexibility in the way the boundary conditions are derived from data. In this example, we highlight  this flexibility by using strain versus time data to define the model boundary condition  so that it simulates both loading and unloading. We then define an objective with time as the independent variable and true stress as the dependent variable in the  CurveBasedInterpolatedObjective. In addition to the plasticity parameters calibrated in the previous example, we add the  elastic modulus as a calibrated parameter for this study. Generally, this is not  recommended as the isotropic elastic  properties of metals are readily available in the literature. However, we want  to make use of the additional information provided to the objective when including  the elastic unloading portion of  the data in the model. A more practical use of calibrating to stress-time history  would be calibrating a model to cyclical loading that has cycle dependent behavior such as calibrating a model with isotropic and kinematic hardening.">
 
 .. only:: html
 

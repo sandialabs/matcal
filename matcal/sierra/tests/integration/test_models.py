@@ -74,10 +74,20 @@ class MatCalStandardModelIntegrationTestBase:
                         self.assertAlmostEqual(state_vars[key], expected_value)              
         
        
-from matcal.sierra.tests.sierra_sm_models_for_tests import UniaxialLoadingMaterialPointModelForTests
-class UniaxialLoadingMaterialPointModelIntegrationTest(MatCalStandardModelIntegrationTestBase.CommonTests, 
-    UniaxialLoadingMaterialPointModelForTests):
-    """"""
+from matcal.sierra.tests.sierra_sm_models_for_tests import UniaxialStressMaterialPointModelForTests
+class UniaxialStressMaterialPointModelIntegrationTest(
+    MatCalStandardModelIntegrationTestBase.CommonTests,
+    UniaxialStressMaterialPointModelForTests
+):
+    """Integration tests for UniaxialStressMaterialPointModel."""
+
+
+from matcal.sierra.tests.sierra_sm_models_for_tests import UniaxialStrainMaterialPointModelForTests
+class UniaxialStrainMaterialPointModelIntegrationTest(
+    MatCalStandardModelIntegrationTestBase.CommonTests,
+    UniaxialStrainMaterialPointModelForTests
+):
+    """Integration tests for UniaxialStrainMaterialPointModel."""
 
 
 from matcal.sierra.tests.sierra_sm_models_for_tests import SimpleShearMaterialPointModelForTests

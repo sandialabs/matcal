@@ -15,7 +15,7 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.sierra.models import *
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
-    UniaxialLoadingMaterialPointModelForTests, 
+    UniaxialStressMaterialPointModelForTests, 
     MatcalGeneratedModelForTestsBase)
 from matcal.sierra.tests.utilities import (create_goal_model_simulation_results, 
     GENERATED_TEST_DATA_FOLDER)
@@ -38,7 +38,7 @@ def my_function(**param_dict):
             raise RuntimeError("Exiting as desired...")
     return {"true_strain": np.log(1.5), "true_stress": 0}
 
-MODEL_GENERATOR = UniaxialLoadingMaterialPointModelForTests()
+MODEL_GENERATOR = UniaxialStressMaterialPointModelForTests()
 BC_DATA = MODEL_GENERATOR.boundary_condition_data_sets
 RESULTS_SUB_DIR = os.path.join(GENERATED_TEST_DATA_FOLDER, "mat_point_study_test_files")
 if not os.path.exists(RESULTS_SUB_DIR):

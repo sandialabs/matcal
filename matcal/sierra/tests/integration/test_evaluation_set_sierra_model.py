@@ -11,7 +11,7 @@ from matcal.core.state import State, StateCollection
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.sierra.material import Material
-from matcal.sierra.models import UniaxialLoadingMaterialPointModel
+from matcal.sierra.models import UniaxialStressMaterialPointModel
 from matcal.sierra.tests.platform_options import matcal_test_platform_options_function_identifier
 from matcal.sierra.tests.utilities import write_linear_elastic_material_file
 
@@ -93,7 +93,7 @@ class TestStudyEvaluationSet(MatcalUnitTest):
     def test_prepare_model_and_simulators(self):
         material_file = write_linear_elastic_material_file()
         material_example = Material("matcal_test", material_file, "linear_elastic")
-        model = UniaxialLoadingMaterialPointModel(material_example)
+        model = UniaxialStressMaterialPointModel(material_example)
         model.add_boundary_condition_data(self.data_collection_stress_strain)
         model.add_constants(nu=0.3, elastic_modulus=10e6, density=0.0025)
         if not "SLURM_JOB_ID" in os.environ.keys() or not "SLURM_JOBID" in os.environ.keys():

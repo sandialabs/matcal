@@ -3,7 +3,8 @@ from matcal.core.parameter_studies import ParameterStudy
 import numpy as np
 import os
 
-from matcal.core.data import DataCollection, scale_data_collection
+from matcal.core.data import (DataCollection, convert_dictionary_to_data, 
+    scale_data_collection)
 from matcal.core.data_importer import FileData
 from matcal.core.objective import CurveBasedInterpolatedObjective, ObjectiveCollection, ObjectiveSet
 from matcal.core.parameters import Parameter, ParameterCollection
@@ -201,48 +202,154 @@ class MatcalGeneratedModelProductionTestsBase(ABC):
                 pass
 
 
+class UniaxialMaterialPointModelProductionTestsBase(ABC):
+    def __init__():
+        pass
+
+    class CommonTests(MatcalGeneratedModelProductionTestsBase.CommonTests):
+        _coupled_output_field_names = ["temperature"]
+        # Relative tolerance for closed-form elastic checks. The first, elastic
+        # step of the gold results (strain about 1.7e-6) matches the
+        # closed-form ratios to about 1e-9, so this leaves margin for platform
+        # differences while catching wrong constraints or moduli.
+        _elastic_rtol = 1e-5
+        _elastic_strain = -1e-5
+        # xx and yy responses are equal by symmetry, so only round-off remains.
+        _symmetry_rtol = 1e-9
+
+        def setup_model(self, coupled=False):
+            model = self.init_model(plasticity=True, coupled=coupled)
+            SET_PLATFORM_OPTIONS(model)
+            return model 
+
+        def test_coupled_under_integrated_element(self):
+            """"""""
+
+        def test_basic_composite_tet(self):
+            """"""
+
+        def test_compression(self):
+            model, results_data = self._run_first_state(direction=-1)
+            self._check_loading_direction(results_data, direction=-1)
+            self._check_results_data(results_data, model, check_objective=True)
+
+        def test_tension(self):
+            model, results_data = self._run_first_state(direction=1)
+            self._check_loading_direction(results_data, direction=1)
+            self._check_results_data(results_data, model, check_objective=False)
+
+        def test_elastic_response(self):
+            model = self.setup_model()
+            data = convert_dictionary_to_data(
+                {"time": [0.0, 1.0], "engineering_strain": [0.0, self._elastic_strain]}
+            )
+            model.add_boundary_condition_data(data)
+            results = model.run(data.state, self.get_material_parameter_collection())
+            properties = self.get_material_properties()
+            self._check_elastic_response(
+                results.results_data, properties["elastic_modulus"], properties["nu"]
+            )
+
+        def _run_first_state(self, direction):
+            model = self.setup_model()
+            bc_dc = self.boundary_condition_data_sets[0]
+            bc_dc = scale_data_collection(bc_dc, "engineering_stress", direction)
+            bc_dc = scale_data_collection(bc_dc, "engineering_strain", direction)
+            model.add_boundary_condition_data(bc_dc)
+            state = next(iter(bc_dc.states.values()))
+            results = model.run(state, self.get_material_parameter_collection())
+            return model, results.results_data
+
+        def _check_loading_direction(self, results_data, direction):
+            for field in ["engineering_stress", "engineering_strain", 
+                          "true_stress", "true_strain"]:
+                self.assertGreater(direction * results_data[field][-1], 0, field)
+
+        def _assert_ratio(self, numerator, denominator, expected, name):
+            ratio = numerator[-1] / denominator[-1]
+            self.assertAlmostEqual(ratio / expected, 1.0, delta=self._elastic_rtol, 
+                                   msg=f"{name}: got {ratio}, expected {expected}")
+
+        def _assert_equal_lateral(self, results_data, x_field, y_field):
+            x_value = results_data[x_field][-1]
+            y_value = results_data[y_field][-1]
+            self.assertAlmostEqual(x_value / y_value, 1.0, delta=self._symmetry_rtol, 
+                                   msg=f"{x_field}={x_value} != {y_field}={y_value}")
+
+        @abstractmethod
+        def _check_elastic_response(self, results_data, elastic_modulus, nu):
+            """Compare small strain results with the closed-form elastic solution."""
+
+
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
-    UniaxialLoadingMaterialPointModelForTests)
-class UniaxialLoadingMaterialPointModelProductionTests(
-    MatcalGeneratedModelProductionTestsBase.CommonTests, 
-    UniaxialLoadingMaterialPointModelForTests):
+    UniaxialStressMaterialPointModelForTests)
+class UniaxialStressMaterialPointModelProductionTests(
+    UniaxialMaterialPointModelProductionTestsBase.CommonTests, 
+    UniaxialStressMaterialPointModelForTests):
 
     _default_output_field_names = ["time", "displacement", "load", "engineering_strain", 
                                    "engineering_stress", "true_stress", "true_strain", 
-                                   "contraction", ]
+                                   "log_strain_xx", "log_strain_yy", "contraction", ]
 
-    _coupled_output_field_names = ["temperature"]
+    def _check_loading_direction(self, results_data, direction):
+        super()._check_loading_direction(results_data, direction)
+        # Free lateral faces expand in compression and contract in tension.
+        self.assertLess(direction * results_data["contraction"][-1], 0)
+        self.assertLess(direction * results_data["log_strain_xx"][-1], 0)
+        self.assertNotIn("cauchy_stress_xx", results_data.field_names)
+        self.assertNotIn("cauchy_stress_yy", results_data.field_names)
 
-    def setup_model(self, coupled=False):
-        model = self.init_model(plasticity=True, coupled=coupled)
-        SET_PLATFORM_OPTIONS(model)
-        return model 
+    def _check_elastic_response(self, results_data, elastic_modulus, nu):
+        self._assert_ratio(results_data["true_stress"], results_data["true_strain"], 
+                           elastic_modulus, "true_stress / true_strain")
+        self._assert_ratio(results_data["log_strain_xx"], results_data["true_strain"], 
+                           -nu, "log_strain_xx / true_strain")
+        self._assert_equal_lateral(results_data, "log_strain_xx", "log_strain_yy")
 
-    def test_coupled_under_integrated_element(self):
-        """"""""
 
-    def test_basic_composite_tet(self):
-        """"""
+from matcal.sierra.tests.sierra_sm_models_for_tests import (
+    UniaxialStrainMaterialPointModelForTests)
+class UniaxialStrainMaterialPointModelProductionTests(
+    UniaxialMaterialPointModelProductionTestsBase.CommonTests, 
+    UniaxialStrainMaterialPointModelForTests):
 
-    def test_compression(self):
-        model = self.setup_model()
-        bc_dc = self.boundary_condition_data_sets[0]
-        neg_bc_dc = scale_data_collection(bc_dc, "engineering_stress", -1)
-        neg_bc_dc = scale_data_collection(neg_bc_dc, "engineering_strain", -1)
+    _default_output_field_names = ["time", "displacement", "load", "engineering_strain", 
+                                   "engineering_stress", "true_stress", "true_strain", 
+                                   "log_strain_xx", "log_strain_yy", 
+                                   "cauchy_stress_xx", "cauchy_stress_yy", ]
+    _lateral_strain_tolerance = 1e-8
 
-        model.add_boundary_condition_data(neg_bc_dc)
+    def _check_loading_direction(self, results_data, direction):
+        super()._check_loading_direction(results_data, direction)
+        self.assertNotIn("contraction", results_data.field_names)
+        # Lateral faces are fixed, so lateral strains must stay at zero.
+        for field in ["log_strain_xx", "log_strain_yy"]:
+            self.assertLess(np.max(np.abs(results_data[field])), 
+                            self._lateral_strain_tolerance, field)
+        # Confinement produces lateral stress with the same sign as the load.
+        self.assertGreater(direction * results_data["cauchy_stress_xx"][-1], 0)
+        self.assertGreater(direction * results_data["cauchy_stress_yy"][-1], 0)
+        self._check_flow_stress(results_data)
 
-        for state in bc_dc.states.values():
-            results = model.run(state, self.get_material_parameter_collection())
-            self._check_compression(results.results_data)
-            self._check_results_data(results.results_data, model, check_objective=True)
-            break
+    def _check_flow_stress(self, results_data):
+        # For J2 plasticity in uniaxial strain, the von Mises stress equals
+        # |sigma_zz - sigma_xx|, which must be at least the initial yield stress
+        # once the material has yielded.
+        yield_stress = self.get_material_parameter_collection()["yield_stress"]
+        yield_stress = yield_stress.get_current_value()
+        axial = results_data["true_stress"][-1]
+        lateral_xx = results_data["cauchy_stress_xx"][-1]
+        lateral_yy = results_data["cauchy_stress_yy"][-1]
+        self.assertGreaterEqual(abs(axial - lateral_xx), yield_stress)
+        self.assertAlmostEqual(lateral_xx / lateral_yy, 1.0, delta=self._symmetry_rtol)
 
-    def _check_compression(self, results_data):
-            self.assertLess(results_data["engineering_stress"][-1], 0)
-            self.assertLess(results_data["engineering_strain"][-1], 0)
-            self.assertLess(results_data["true_stress"][-1], 0)
-            self.assertLess(results_data["true_strain"][-1], 0)
+    def _check_elastic_response(self, results_data, elastic_modulus, nu):
+        constrained_modulus = elastic_modulus * (1 - nu) / ((1 + nu) * (1 - 2 * nu))
+        self._assert_ratio(results_data["true_stress"], results_data["true_strain"], 
+                           constrained_modulus, "true_stress / true_strain")
+        self._assert_ratio(results_data["cauchy_stress_xx"], results_data["true_stress"], 
+                           nu / (1 - nu), "cauchy_stress_xx / true_stress")
+        self._assert_equal_lateral(results_data, "cauchy_stress_xx", "cauchy_stress_yy")
 
 
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
@@ -673,7 +780,7 @@ class TestUserDefinedSierraModel(MatcalUnitTest, UserDefinedSierraModelForTests)
                 self.assert_close_arrays(current_goal[name], model_results[name])
 
     def test_create_user_supplied_simulation_user_specified_filename_and_file_type(self):
-        model_generator = UniaxialLoadingMaterialPointModelForTests()
+        model_generator = UniaxialStressMaterialPointModelForTests()
         model = model_generator.init_model(plasticity=True)
         bc_data = model_generator.boundary_condition_data_sets[-1]
         model.add_boundary_condition_data(bc_data)

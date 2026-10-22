@@ -3,7 +3,7 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.sierra.tests.platform_options import matcal_test_platform_options_function_identifier
 from matcal.sierra.tests.sierra_sm_models_for_tests import (
-    UniaxialLoadingMaterialPointModelForTests, UserDefinedSierraModelForTests)
+    UniaxialStressMaterialPointModelForTests, UserDefinedSierraModelForTests)
 from matcal.sierra.tests.utilities import write_design_param_file
 
 
@@ -17,7 +17,7 @@ class TestSierraSimulator(MatcalUnitTest):
         write_design_param_file()
         
     def test_continue_on_simulation_failure_flag(self):
-        model_creator = UniaxialLoadingMaterialPointModelForTests()
+        model_creator = UniaxialStressMaterialPointModelForTests()
         model = model_creator.init_model()
         for bc_dc in model_creator.boundary_condition_data_sets:
             model.add_boundary_condition_data(bc_dc)
@@ -47,7 +47,7 @@ class TestSierraSimulator(MatcalUnitTest):
         self.assertTrue(sierra_submitted_cluster or sierra_ran_local)
 
     def test_create_sierra_simulator(self):
-        uniax_mat_point_model_for_test = UniaxialLoadingMaterialPointModelForTests()
+        uniax_mat_point_model_for_test = UniaxialStressMaterialPointModelForTests()
         model = uniax_mat_point_model_for_test.init_model()
         bc_dc = uniax_mat_point_model_for_test.boundary_condition_data_sets[0]
         model.add_boundary_condition_data(bc_dc)
@@ -62,7 +62,7 @@ class TestSierraSimulator(MatcalUnitTest):
             break
 
     def test_create_sierra_simulator_sprint_module(self):
-        uniax_mat_point_model_for_test = UniaxialLoadingMaterialPointModelForTests()
+        uniax_mat_point_model_for_test = UniaxialStressMaterialPointModelForTests()
         model = uniax_mat_point_model_for_test.init_model()
         model.add_environment_module("sierra/sprint")
         bc_dc = uniax_mat_point_model_for_test.boundary_condition_data_sets[0]

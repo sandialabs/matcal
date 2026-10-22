@@ -6,7 +6,8 @@ with links to their specific documentation.
 .. toctree::
    :maxdepth: 1
 
-   UniaxialLoadingMaterialPointModel
+   UniaxialStressMaterialPointModel
+   UniaxialStrainMaterialPointModel
    SimpleShearMaterialPointModel
    UniaxialTensionModels
    RoundNotchedTensionModel
@@ -37,12 +38,12 @@ These include:
    and the total lagrange 8 node hexahedral element. MatCal's defalt behavior is to use the total lagrange element.
 #. The ability to generate the model files for a given state
    without running the model using the 
-   :meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.preprocess`
+   :meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.preprocess`
    method. This is useful to verify the simulation files created, if desired, and for 
    model archiving.
 #. The ability to run the model for a given state and 
    a valid parameter collection using the 
-   :meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.run`
+   :meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.run`
    method. 
 
 Standard Model Geometry and Input Generation
@@ -72,7 +73,7 @@ Boundary condition generation
 After the standard model class has been constructed, 
 the boundary condition data can be passed to the model 
 using the 
-:meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.add_boundary_condition_data`
+:meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.add_boundary_condition_data`
 method. This method takes a :class:`~matcal.core.data.DataCollection` or
 :class:`~matcal.core.data.Data` object with the fields required for boundary
 condition generation specific to the model being built.
@@ -80,7 +81,7 @@ The model will use this data to determine its boundary
 conditions by state since maximum deformation, 
 material behavior and experiment setup can vary significantly over different states.
 The boundary condition isn't calculated until needed, so the 
-:meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.add_boundary_condition_data`
+:meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.add_boundary_condition_data`
 method can be called multiple times if needed. In general,
 the model will select the data from all added data sets that would 
 result in the largest deformation in the model for a given state. For example, 
@@ -91,7 +92,7 @@ until its gauge section experiences that level of engineering strain.
 
 A model option exists to scale this automatically determined boundary 
 condition if so desired. The 
-:meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.set_boundary_condition_scale_factor`
+:meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.set_boundary_condition_scale_factor`
 will scale the maximum boundary condition field by the specified scale factor, 
 and increase the maximum deformation applied to the model. 
 This can be useful in cases where you want the model to
@@ -192,7 +193,7 @@ Note that the :ref:`Uniaxial Tension Models`,
 and :ref:`Solid Bar Torsion Model` are loaded such that the 
 reaction force and displacements are positive in the
 Y direction. For the :ref:`Solid Bar Torsion Model`, this is a rotation 
-and torque about the Y axis. The :ref:`Uniaxial Loading Material Point Model`
+and torque about the Y axis. The :ref:`Uniaxial Stress Material Point Model`
 is loaded such that the 
 reaction force and displacements are positive in the Z direction.
 
@@ -326,7 +327,7 @@ conditions, initial conditions and assumptions are used:
 Thermal coupling is activated by the 
 :meth:`~matcal.sierra.models.RoundUniaxialTensionModel.activate_thermal_coupling`
 method. The behavior of the method is the same for all MatCal generated standard models except the 
-:class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` model which only supports 
+:class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` model which only supports 
 adiabatic heating. When the method is called, the user must supply the required thermal properties, 
 which include density, thermal conductivity, and specific heat. They must also 
 supply the name of the element variable where the plastic work rate is stored. If none of these 

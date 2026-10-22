@@ -132,25 +132,25 @@ objective.set_field_weights(residual_weights)
 # properties and density are pulled from MMPDS :cite:p:`MMPDS10`. 
 # With this SIERRA/SM input saved in the current directory as "sierra_sm_multiple_hardening_forms.inc", 
 # we can create the two :class:`~matcal.sierra.material.Material` objects and the 
-# two :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` objects we will be using 
+# two :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` objects we will be using 
 # for the calibrations. 
 #
 
 j2_double_voce = Material("j2_double_voce", "sierra_sm_multiple_hardening_forms.inc", "j2_plasticity")
 j2_power_law = Material("j2_power_law", "sierra_sm_multiple_hardening_forms.inc", "j2_plasticity")
 
-mat_point_model_DV = UniaxialLoadingMaterialPointModel(j2_double_voce)
+mat_point_model_DV = UniaxialStressMaterialPointModel(j2_double_voce)
 mat_point_model_DV.add_boundary_condition_data(boundary_data_collection)
 mat_point_model_DV.set_name("compression_mat_point_DV")
 
-mat_point_model_PL = UniaxialLoadingMaterialPointModel(j2_power_law)
+mat_point_model_PL = UniaxialStressMaterialPointModel(j2_power_law)
 mat_point_model_PL.add_boundary_condition_data(boundary_data_collection)
 mat_point_model_PL.set_name("compression_mat_point_PL")
 mat_point_model_PL.add_constants(epsilon_l=0.0)
 
 # %%
 # .. note::
-#      We use :meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.add_constants` to set the "epsilon_l" parameter to zero
+#      We use :meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.add_constants` to set the "epsilon_l" parameter to zero
 #      for the first round of the calibration. Since it is not included in the parameters for this first study, it will
 #      be set to the constant value zero as a model constant. When we use it as a study parameter for the second calibration study, 
 #      the model constant value will be overridden by the values specified during the study as described in the 

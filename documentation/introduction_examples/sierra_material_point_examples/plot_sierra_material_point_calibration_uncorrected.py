@@ -2,7 +2,7 @@
 Calibration With Unmodified Data and Objective: A Simple Calibration Gone Wrong
 ===============================================================================
 
-In this section, we once again present the calibration of our :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+In this section, we once again present the calibration of our :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 to the uniaxial compression data. However, instead of manipulating the data and weighting the residuals like we did in the 
 :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py`
 example, we ignore
@@ -37,7 +37,7 @@ b = Parameter('b', 5, 30, 20.001)
 
 j2_voce = Material("j2_voce", "sierra_sm_voce_hardening.inc", "j2_plasticity")
 
-mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
 mat_point_model.add_boundary_condition_data(data_collection)
 mat_point_model.set_name("compression_mat_point")
 
@@ -175,7 +175,7 @@ print("Final applied true strain if assumed in compression:", true_compression)
 # to generate boundary conditions. Only clean and well understood data should be  
 # provided for boundary condition data when passing time-strain or time-displacement data to 
 # the model. Also, any compression data used in the 
-# :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+# :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 # should always be supplied as negative for boundary condition generation and the objective.
 # The fact 
 # that the positive strain values appeared to behave correctly here is due to the way NumPy interp
@@ -200,7 +200,7 @@ boundary_data["engineering_strain"] *= -1
 boundary_data.set_name("dataset 1 derived BC data")
 boundary_data_collection = DataCollection('boundary_data', boundary_data)
 
-mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
 mat_point_model.add_boundary_condition_data(boundary_data_collection)
 mat_point_model.set_name("compression_mat_point")
 

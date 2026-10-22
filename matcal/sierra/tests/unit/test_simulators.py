@@ -7,7 +7,7 @@ from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 from matcal.sierra.material import Material
-from matcal.sierra.models import UniaxialLoadingMaterialPointModel, UserDefinedSierraModel
+from matcal.sierra.models import UniaxialStressMaterialPointModel, UserDefinedSierraModel
 from matcal.sierra.tests.platform_options import matcal_test_platform_options_function_identifier
 from matcal.sierra.tests.utilities import (write_linear_elastic_material_file, 
     write_empty_file, write_design_param_file)
@@ -53,7 +53,7 @@ class TestSierraSimulator(MatcalUnitTest):
         self.assertTrue(sierra_submitted_cluster or sierra_ran_local)
 
     def test_create_sierra_simulator(self):
-        model = UniaxialLoadingMaterialPointModel(self.material_example)
+        model = UniaxialStressMaterialPointModel(self.material_example)
         model.add_boundary_condition_data(self.data_collection)
         model.add_constants(nu=0.3, elastic_modulus=10e6, density=0.0025)
         SET_PLATFORM_OPTIONS(model)
@@ -63,7 +63,7 @@ class TestSierraSimulator(MatcalUnitTest):
         self._check_sierra_success_simulator(sim_results.stdout, sim_results.stderr)
 
     def test_create_sierra_simulator_check_input(self):
-        model = UniaxialLoadingMaterialPointModel(self.material_example)
+        model = UniaxialStressMaterialPointModel(self.material_example)
         model.add_boundary_condition_data(self.data_collection)
         model.add_constants(nu=0.3, elastic_modulus=10e6, density=0.0025)
         SET_PLATFORM_OPTIONS(model)
@@ -74,7 +74,7 @@ class TestSierraSimulator(MatcalUnitTest):
         self._check_sierra_success_simulator(sim_results.stdout, sim_results.stderr)
 
     def test_default_simulation_failure_flag(self):
-        model = UniaxialLoadingMaterialPointModel(self.material_example)
+        model = UniaxialStressMaterialPointModel(self.material_example)
         model.add_boundary_condition_data(self.data_collection)
         SET_PLATFORM_OPTIONS(model)
         model.preprocess(self.state)
@@ -82,7 +82,7 @@ class TestSierraSimulator(MatcalUnitTest):
         self.assertTrue(sim.fail_calibration_on_simulation_failure)
 
     def test_continue_on_simulation_failure_flag(self):
-        model = UniaxialLoadingMaterialPointModel(self.material_example)
+        model = UniaxialStressMaterialPointModel(self.material_example)
         model.add_boundary_condition_data(self.data_collection)
         model.continue_when_simulation_fails()
         model.preprocess(self.state)
@@ -90,7 +90,7 @@ class TestSierraSimulator(MatcalUnitTest):
         self.assertFalse(sim.fail_calibration_on_simulation_failure)
 
     def test_create_sierra_simulator_sprint_module(self):
-        model = UniaxialLoadingMaterialPointModel(self.material_example)
+        model = UniaxialStressMaterialPointModel(self.material_example)
         model.add_boundary_condition_data(self.data_collection)
         model.add_environment_module("sierra/sprint")
         model.add_constants(nu=0.3, elastic_modulus=10e6, density=0.0025)

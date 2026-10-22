@@ -1,8 +1,8 @@
 from matcal import *
 
-from matcal.sierra.tests.sierra_sm_models_for_tests import UniaxialLoadingMaterialPointModelForTests
+from matcal.sierra.tests.sierra_sm_models_for_tests import UniaxialStrainMaterialPointModelForTests
 
-model_setup_class = UniaxialLoadingMaterialPointModelForTests()
+model_setup_class = UniaxialStrainMaterialPointModelForTests()
 model = model_setup_class.init_model(plasticity=True, coupled=False)
 data_collections = model_setup_class.boundary_condition_data_sets
 pc = model_setup_class.get_material_parameter_collection()
