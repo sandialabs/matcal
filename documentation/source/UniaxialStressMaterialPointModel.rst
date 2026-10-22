@@ -19,7 +19,7 @@ specifics on simulation boundary conditions, and what is output from the model.
 
 .. warning::
    :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` is the
-   previous name of this model and is soon to be deprecated. It behaves
+   previous name of this model and is deprecated as of version 1.5.6. It behaves
    identically, but emits a ``FutureWarning`` when created and keeps the
    ``uniaxial_loading_material_point`` model type, so its default model
    names and result directories differ from this model's

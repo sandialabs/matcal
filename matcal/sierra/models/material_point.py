@@ -134,8 +134,8 @@ class UniaxialStressMaterialPointModel(_UniaxialMaterialPointModelBase):
     lateral faces are free to contract, producing a uniaxial stress state.
 
     This model replaces :class:`UniaxialLoadingMaterialPointModel`, which
-    is soon to be deprecated and behaves identically apart from its name and
-    ``model_type``.
+    is deprecated as of version 1.5.6 and behaves identically apart from its
+    name and ``model_type``.
     """
 
     model_type: ClassVar[str] = "uniaxial_stress_material_point"
@@ -166,7 +166,7 @@ class UniaxialLoadingMaterialPointModel(UniaxialStressMaterialPointModel):
     """
     MatCal generated material point model for uniaxial stress loading.
 
-    .. deprecated::
+    .. deprecated:: 1.5.6
         Use :class:`UniaxialStressMaterialPointModel` instead. This class
         will be removed in a future release. It keeps the
         ``"uniaxial_loading_material_point"`` ``model_type`` so existing
@@ -177,9 +177,9 @@ class UniaxialLoadingMaterialPointModel(UniaxialStressMaterialPointModel):
 
     def __init__(self, material: Material) -> None:
         warnings.warn(
-            "UniaxialLoadingMaterialPointModel is deprecated and will be "
-            "removed in a future release. Use UniaxialStressMaterialPointModel "
-            "instead.",
+            "UniaxialLoadingMaterialPointModel is deprecated as of version 1.5.6 "
+            "and will be removed in a future release. Use "
+            "UniaxialStressMaterialPointModel instead.",
             FutureWarning,
             stacklevel=2,
         )

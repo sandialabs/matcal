@@ -191,8 +191,11 @@ class _UniaxialMaterialPointModelForTestsBase(MatcalGeneratedModelForTestsBase):
         
         return [eng_strain_dc, true_strain_dc, true_strain_dc_no_time]
 
+    _gold_data_model_class = None
+
     def _get_gold_data(self):
-        model_type = self._model_class.model_type
+        gold_model_class = self._gold_data_model_class or self._model_class
+        model_type = gold_model_class.model_type
         gold_data_file = os.path.join(self.results_parent_folder, 
                                         model_type, 
                                         f"{model_type}_0", 
@@ -207,6 +210,9 @@ class UniaxialStressMaterialPointModelForTests(_UniaxialMaterialPointModelForTes
 
 class UniaxialLoadingMaterialPointModelForTests(UniaxialStressMaterialPointModelForTests):
     _model_class = UniaxialLoadingMaterialPointModel
+    # The deprecated alias produces results identical to the stress model, so
+    # it reuses the stress gold data instead of keeping its own copy.
+    _gold_data_model_class = UniaxialStressMaterialPointModel
 
 
 class UniaxialStrainMaterialPointModelForTests(_UniaxialMaterialPointModelForTestsBase):

@@ -208,10 +208,14 @@ class UniaxialMaterialPointModelProductionTestsBase(ABC):
 
     class CommonTests(MatcalGeneratedModelProductionTestsBase.CommonTests):
         _coupled_output_field_names = ["temperature"]
-        # Relative tolerance for closed-form elastic checks. Small strain keeps
-        # finite deformation effects well below this.
-        _elastic_rtol = 1e-3
-        _elastic_strain = -1e-4
+        # Relative tolerance for closed-form elastic checks. The first, elastic
+        # step of the gold results (strain about 1.7e-6) matches the
+        # closed-form ratios to about 1e-9, so this leaves margin for platform
+        # differences while catching wrong constraints or moduli.
+        _elastic_rtol = 1e-5
+        _elastic_strain = -1e-5
+        # xx and yy responses are equal by symmetry, so only round-off remains.
+        _symmetry_rtol = 1e-9
 
         def setup_model(self, coupled=False):
             model = self.init_model(plasticity=True, coupled=coupled)
@@ -269,7 +273,7 @@ class UniaxialMaterialPointModelProductionTestsBase(ABC):
         def _assert_equal_lateral(self, results_data, x_field, y_field):
             x_value = results_data[x_field][-1]
             y_value = results_data[y_field][-1]
-            self.assertAlmostEqual(x_value / y_value, 1.0, delta=self._elastic_rtol, 
+            self.assertAlmostEqual(x_value / y_value, 1.0, delta=self._symmetry_rtol, 
                                    msg=f"{x_field}={x_value} != {y_field}={y_value}")
 
         @abstractmethod
@@ -337,7 +341,7 @@ class UniaxialStrainMaterialPointModelProductionTests(
         lateral_xx = results_data["cauchy_stress_xx"][-1]
         lateral_yy = results_data["cauchy_stress_yy"][-1]
         self.assertGreaterEqual(abs(axial - lateral_xx), yield_stress)
-        self.assertAlmostEqual(lateral_xx / lateral_yy, 1.0, delta=self._elastic_rtol)
+        self.assertAlmostEqual(lateral_xx / lateral_yy, 1.0, delta=self._symmetry_rtol)
 
     def _check_elastic_response(self, results_data, elastic_modulus, nu):
         constrained_modulus = elastic_modulus * (1 - nu) / ((1 + nu) * (1 - 2 * nu))
