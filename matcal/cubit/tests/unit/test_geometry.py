@@ -9,12 +9,12 @@ from matcal.sierra.tests.sierra_sm_models_for_tests import (
     RoundUniaxialTensionModelForTests, 
     RectangularUniaxialTensionModelForTests, RoundNotchedTensionModelForTests, 
     SolidBarTorsionModelForTests, TopHatShearModelForTests,
-    UniaxialLoadingMaterialPointModelForTests)
+    UniaxialStressMaterialPointModelForTests)
 
 
-class TestUniaxialLoadingMaterialPointGeometry(MatcalUnitTest):
+class TestUniaxialStressMaterialPointGeometry(MatcalUnitTest):
     _geometry_class = MaterialPointGeometry
-    _params = UniaxialLoadingMaterialPointModelForTests().geo_params
+    _params = UniaxialStressMaterialPointModelForTests().geo_params
 
     def setUp(self) -> None:
         self.params = self._geometry_class.Parameters(**self._params)

@@ -192,9 +192,10 @@ class _UniaxialMaterialPointModelForTestsBase(MatcalGeneratedModelForTestsBase):
         return [eng_strain_dc, true_strain_dc, true_strain_dc_no_time]
 
     def _get_gold_data(self):
+        model_type = self._model_class.model_type
         gold_data_file = os.path.join(self.results_parent_folder, 
-                                        "uniaxial_loading_material_point", 
-                                        "uniaxial_loading_material_point_0", 
+                                        model_type, 
+                                        f"{model_type}_0", 
                                         "rate_3.472463365511494e-05_eng_strain_rate", 
                                         "results.csv")
         return FileData(gold_data_file)
@@ -210,12 +211,6 @@ class UniaxialLoadingMaterialPointModelForTests(UniaxialStressMaterialPointModel
 
 class UniaxialStrainMaterialPointModelForTests(_UniaxialMaterialPointModelForTestsBase):
     _model_class = UniaxialStrainMaterialPointModel
-
-    def _get_gold_data(self):
-        raise NotImplementedError(
-            "Gold results have not been generated for "
-            "UniaxialStrainMaterialPointModel."
-        )
 
 
 class SimpleShearMaterialPointModelForTests(MatcalGeneratedModelForTestsBase):

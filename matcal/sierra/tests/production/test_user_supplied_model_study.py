@@ -6,7 +6,7 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.sierra.models import *
 from matcal.sierra.tests.platform_options import matcal_test_platform_options_function_identifier
 from matcal.sierra.tests.sierra_sm_models_for_tests import ( 
-    UniaxialLoadingMaterialPointModelForTests)
+    UniaxialStressMaterialPointModelForTests)
 from matcal.sierra.tests.utilities import (TEST_SUPPORT_FILES_FOLDER, 
     replace_string_in_file)
 
@@ -41,7 +41,7 @@ class TestUserModels(MatcalUnitTest):
         self.assertAlmostEqual(results.outcome["best:K"], 1, delta=1e6)
 
     def redundant_consider_removing_test_adagio_user_model_calibration(self):
-        model_generator = UniaxialLoadingMaterialPointModelForTests()
+        model_generator = UniaxialStressMaterialPointModelForTests()
         model = model_generator.init_model(plasticity=True)
         bc_data = model_generator.boundary_condition_data_sets[-1]
         model.add_boundary_condition_data(bc_data)

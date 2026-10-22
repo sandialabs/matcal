@@ -1,6 +1,7 @@
 # test_material_point.py
 import os
 import warnings
+from typing import ClassVar
 
 import pytest
 
@@ -16,6 +17,7 @@ from matcal.core.constants import (
 )
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.state import SolitaryState, State
+from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.comment_test_helpers import (
     assert_data_set_index_comment,
     assert_data_set_name_comment,
@@ -138,9 +140,51 @@ class _UniaxialMaterialPointModelTestsBase:
                 if "fixed displacement" in block.type.lower()
             }
 
+        # Expected "compute global" lines per user output block. Subclasses add
+        # the constraint specific blocks.
+        _common_output_field_lines: ClassVar[dict[str, list[str]]] = {
+            "global_stress_strain_load_disp": [
+                "compute global displacement as average of nodal displacement(z)",
+                "compute global load as sum of nodal force_external(z)",
+            ],
+            "true_stress_strain": [
+                "compute global true_strain as average of element log_strain(zz)",
+                "compute global true_stress as average of element cauchy_stress(zz)",
+                "compute global log_strain_xx as average of element log_strain(xx)",
+                "compute global log_strain_yy as average of element log_strain(yy)",
+            ],
+        }
+        _constraint_output_field_lines: ClassVar[dict[str, list[str]]] = {}
+
+        def _setup_model_outputs(self):
+            model = self.init_model()
+            data = convert_dictionary_to_data({"engineering_strain": [0, 1]})
+            model.add_boundary_condition_data(data)
+            model._setup_state(SolitaryState(), build_mesh=False)
+            return model
+
+        def test_output_fields_map_to_correct_sierra_fields(self):
+            model = self._setup_model_outputs()
+            sm_region = model._input_file.solid_mechanics_region
+            expected = {
+                **self._common_output_field_lines,
+                **self._constraint_output_field_lines,
+            }
+            for block_name, expected_lines in expected.items():
+                block_string = sm_region.subblocks[block_name].get_string()
+                for line in expected_lines:
+                    self.assertIn(line, block_string, f"in block '{block_name}'")
+
 
 class _UniaxialStressMaterialPointModelTestsBase:
     class CommonTests(_UniaxialMaterialPointModelTestsBase.CommonTests):
+        _constraint_output_field_lines: ClassVar[dict[str, list[str]]] = {
+            "contraction": [
+                "node set = ns_positive_x",
+                "compute global contraction as average of nodal displacement(x)",
+            ],
+        }
+
         def test_fixed_boundary_conditions_allow_lateral_contraction(self):
             model = self.init_model()
             self.assertEqual(
@@ -149,15 +193,13 @@ class _UniaxialStressMaterialPointModelTestsBase:
             )
 
         def test_lateral_stress_outputs_not_added(self):
-            model = self.init_model()
-            data = convert_dictionary_to_data({"engineering_strain": [0, 1]})
-            model.add_boundary_condition_data(data)
-            model._setup_state(SolitaryState(), build_mesh=False)
+            model = self._setup_model_outputs()
 
             sm_region = model._input_file.solid_mechanics_region
             self.assertNotIn("lateral_stress", sm_region.subblocks)
             hb_output = model._input_file.heartbeat_output
             self.assertFalse(hb_output.has_global_output("cauchy_stress_xx"))
+            self.assertFalse(hb_output.has_global_output("cauchy_stress_yy"))
 
 
 class UniaxialStressMaterialPointModelTests(
@@ -177,10 +219,15 @@ class UniaxialStressMaterialPointModelTests(
             UniaxialStressMaterialPointModel(material)
 
 
-class UniaxialLoadingMaterialPointModelTests(
-    _UniaxialStressMaterialPointModelTestsBase.CommonTests,
+class UniaxialLoadingMaterialPointModelDeprecationTests(
+    MatcalUnitTest,
     UniaxialLoadingMaterialPointModelForTests,
 ):
+    """Check the deprecated alias only; its behaviour is tested via the stress model."""
+
+    def setUp(self):
+        super().setUp(__file__)
+
     def test_model_type_unchanged(self):
         self.assertEqual(
             UniaxialLoadingMaterialPointModel.model_type,
@@ -204,6 +251,14 @@ class UniaxialStrainMaterialPointModelTests(
     _UniaxialMaterialPointModelTestsBase.CommonTests,
     UniaxialStrainMaterialPointModelForTests,
 ):
+    _constraint_output_field_lines: ClassVar[dict[str, list[str]]] = {
+        "lateral_stress": [
+            "include all blocks",
+            "compute global cauchy_stress_xx as average of element cauchy_stress(xx)",
+            "compute global cauchy_stress_yy as average of element cauchy_stress(yy)",
+        ],
+    }
+
     def _check_outputs_default(self, model):
         sm_region = model._input_file.solid_mechanics_region
         self.assertIn("global_stress_strain_load_disp", sm_region.subblocks)
