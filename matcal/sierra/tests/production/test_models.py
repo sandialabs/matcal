@@ -243,6 +243,7 @@ class UniaxialMaterialPointModelProductionTestsBase(ABC):
             data = convert_dictionary_to_data(
                 {"time": [0.0, 1.0], "engineering_strain": [0.0, self._elastic_strain]}
             )
+            model.set_number_of_time_steps(2)
             model.add_boundary_condition_data(data)
             results = model.run(data.state, self.get_material_parameter_collection())
             properties = self.get_material_properties()
