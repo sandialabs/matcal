@@ -21,11 +21,11 @@
 Calibration With Unloading: A Stress vs. Time Calibration Needs Attention to Detail
 ===================================================================================
 
-In this section, we approach the calibration of the  :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+In this section, we approach the calibration of the  :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 to the Ductile Failure 6061-T6 compression data a little differently. For the more traditional approach see the
 :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py`.
 MatCal's objective tools allow significant flexibility in how the objective for calibrations are built.
-Also, the :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` allows 
+Also, the :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` allows 
 flexibility in the way the boundary conditions are derived from data. In this example, we highlight 
 this flexibility by using strain versus time data to define the model boundary condition 
 so that it simulates both loading and unloading.
@@ -75,7 +75,7 @@ Then load the data using the :class:`~matcal.core.data_importer.BatchDataImporte
 perform minor data manipulation. Remove the time offsets as was done in
 the previous examples and scale the true stress data from ksi to psi. Finally, 
 we must preprocess the strain-time functions in the data appropriately so that they are 
-interpreted correctly by the :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`.
+interpreted correctly by the :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`.
 Since the data as provided by the experimentalists are positive, MatCal 
 would interpret the engineering strain function as a tensile strain which would be invalid.
 This can be corrected in two ways, (1) we can make the data negative before
@@ -166,7 +166,7 @@ input deck is modified for the elastic modulus parameter as shown below::
 
 With this SIERRA/SM input saved in the current directory as "sierra_sm_voce_hardening_with_elastic_modulus.inc", 
 we can create the updated :class:`~matcal.sierra.material.Material` and 
-:class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` objects. 
+:class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` objects. 
 
 .. GENERATED FROM PYTHON SOURCE LINES 108-115
 
@@ -175,7 +175,7 @@ we can create the updated :class:`~matcal.sierra.material.Material` and
 
     j2_voce = Material("j2_voce", "sierra_sm_voce_hardening_with_elastic_modulus.inc", "j2_plasticity")
 
-    mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+    mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
     mat_point_model.add_boundary_condition_data(data_collection)
     mat_point_model.set_name("compression_mat_point")
 
@@ -243,9 +243,9 @@ but now has time as the independent variable.
  .. code-block:: none
 
     Y: 30.0
-    A: 24.624238784
+    A: 24.624238789
     b: 30.0
-    E: 21229.127107
+    E: 21229.127116
 
 
 
@@ -353,7 +353,7 @@ then launch the updated calibration.
 .. code-block:: Python
 
 
-    mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+    mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
     mat_point_model.add_boundary_condition_data(data_collection)
     mat_point_model.set_name("compression_mat_point")
 
@@ -421,10 +421,10 @@ then launch the updated calibration.
 
  .. code-block:: none
 
-    Y: 42.005871044
-    A: 12.817113716
-    b: 19.016426948
-    E: 8177.8316967
+    Y: 42.005871025
+    A: 12.817113759
+    b: 19.016426745
+    E: 8177.831701
 
 
 
@@ -445,7 +445,7 @@ compression data since it is well known and documented in the literature.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (4 minutes 4.204 seconds)
+   **Total running time of the script:** (3 minutes 1.785 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_with_unloading.py:

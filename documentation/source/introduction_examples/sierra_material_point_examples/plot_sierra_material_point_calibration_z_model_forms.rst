@@ -176,7 +176,7 @@ example, the elastic
 properties and density are pulled from MMPDS :cite:p:`MMPDS10`. 
 With this SIERRA/SM input saved in the current directory as "sierra_sm_multiple_hardening_forms.inc", 
 we can create the two :class:`~matcal.sierra.material.Material` objects and the 
-two :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` objects we will be using 
+two :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` objects we will be using 
 for the calibrations. 
 
 
@@ -188,11 +188,11 @@ for the calibrations.
     j2_double_voce = Material("j2_double_voce", "sierra_sm_multiple_hardening_forms.inc", "j2_plasticity")
     j2_power_law = Material("j2_power_law", "sierra_sm_multiple_hardening_forms.inc", "j2_plasticity")
 
-    mat_point_model_DV = UniaxialLoadingMaterialPointModel(j2_double_voce)
+    mat_point_model_DV = UniaxialStressMaterialPointModel(j2_double_voce)
     mat_point_model_DV.add_boundary_condition_data(boundary_data_collection)
     mat_point_model_DV.set_name("compression_mat_point_DV")
 
-    mat_point_model_PL = UniaxialLoadingMaterialPointModel(j2_power_law)
+    mat_point_model_PL = UniaxialStressMaterialPointModel(j2_power_law)
     mat_point_model_PL.add_boundary_condition_data(boundary_data_collection)
     mat_point_model_PL.set_name("compression_mat_point_PL")
     mat_point_model_PL.add_constants(epsilon_l=0.0)
@@ -207,7 +207,7 @@ for the calibrations.
 .. GENERATED FROM PYTHON SOURCE LINES 152-159
 
 .. note::
-     We use :meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.add_constants` to set the "epsilon_l" parameter to zero
+     We use :meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.add_constants` to set the "epsilon_l" parameter to zero
      for the first round of the calibration. Since it is not included in the parameters for this first study, it will
      be set to the constant value zero as a model constant. When we use it as a study parameter for the second calibration study, 
      the model constant value will be overridden by the values specified during the study as described in the 
@@ -285,11 +285,11 @@ review the results.
 
  .. code-block:: none
 
-    Y: 36.448349449
-    A1: 12.646207535
-    b1: 17.175431422
-    A2: 5.9698717802
-    b2: 541.93033883
+    Y: 36.448349145
+    A1: 12.646207573
+    b1: 17.175431488
+    A2: 5.9698720434
+    b2: 541.9303929
 
 
 
@@ -355,8 +355,8 @@ be more predictive than the single Voce model.
  .. code-block:: none
 
     Y: 30.0
-    A: 29.687098179
-    n: 0.13423214405
+    A: 29.686731893
+    n: 0.13422507
 
 
 
@@ -426,10 +426,10 @@ would likely over predict plastic strains.
 
  .. code-block:: none
 
-    Y: 42.443961545
-    A: 16.56960652
-    n: 0.2151717716
-    epsilon_l: 0.014951666047
+    Y: 42.443954312
+    A: 16.569616104
+    n: 0.21517172426
+    epsilon_l: 0.014951645675
 
 
 
@@ -460,7 +460,7 @@ and hopefully some validation experiments and simulations to choose a final mate
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (7 minutes 36.796 seconds)
+   **Total running time of the script:** (5 minutes 31.685 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_z_model_forms.py:

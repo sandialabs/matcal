@@ -3,7 +3,7 @@ Successful Calibration
 ======================
 
 As stated previously, we present the calibration of our 
-:class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+:class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 to uniaxial compression data for a 6061-T6 aluminum from the Ductile Failure Project at Sandia
 :cite:p:`DE_L2_Ductile_Failure`. This example and calibration will
 consist of three steps:
@@ -25,10 +25,10 @@ figsize = (4,3)
 
 #%%
 # Next we will review the data for model calibration. For the 
-# :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`, 
+# :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`, 
 # we support only specific data fields for calibration. These are 
 # 'time', 'engineering_strain', 'engineering_stress', 'true_strain', 'true_stress' and 'contraction'. 
-# To learn more see :ref:`Uniaxial Loading Material Point Model`. For this calibration,
+# To learn more see :ref:`Uniaxial Stress Material Point Model`. For this calibration,
 # we will be using true stress and strain data for the calibration. This data is used for 
 # both the objective calculation and boundary condition generation. To load the data, 
 # we can use the :class:`~matcal.core.data_importer.BatchDataImporter` tool that imports 
@@ -43,7 +43,7 @@ data_collection.plot("time", "true_strain")
 #%%
 # It is clear from the data that the test specimens' 'time' data fields
 # do not have a common start time. Although this is not necessarily
-# an issue for MatCal's :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`, 
+# an issue for MatCal's :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`, 
 # it does makes visualizing the data inconvenient. Since the :class:`~matcal.core.data.Data` class
 # is derived from NumPy arrays :cite:p:`harris2020array`, it is easy to modify the data for convenient viewing.
 
@@ -59,9 +59,9 @@ data_collection.plot("time", "true_strain")
 #   #. Dataset C-ST-01 has a period of unloading. 
 #
 # These features are important to take note of due to how
-# MatCal will produce boundary conditions for its :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`. 
-# The :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` has 
-# a method :meth:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel.add_boundary_condition_data`
+# MatCal will produce boundary conditions for its :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`. 
+# The :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` has 
+# a method :meth:`~matcal.sierra.models.UniaxialStressMaterialPointModel.add_boundary_condition_data`
 # that is used to provide data for boundary condition determination for the model. 
 # This boundary condition determination is done by state since maximum deformation, 
 # material behavior and experiment setup can vary significantly over different states. 
@@ -193,11 +193,11 @@ b = Parameter('b', 5, 30, 20)
 # we use values provided by MMPDS10 :cite:p:`MMPDS10`. 
 # With this SIERRA/SM input saved in the current directory as "sierra_sm_voce_hardening.inc", 
 # we can create the :class:`~matcal.sierra.material.Material` and the 
-# :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`. 
+# :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`. 
 
 j2_voce = Material("j2_voce", "sierra_sm_voce_hardening.inc", "j2_plasticity")
 
-mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
 mat_point_model.add_boundary_condition_data(boundary_data_collection)
 mat_point_model.set_name("compression_mat_point")
 

@@ -2,11 +2,11 @@
 Calibration With Unloading: A Stress vs. Time Calibration Needs Attention to Detail
 ===================================================================================
 
-In this section, we approach the calibration of the  :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+In this section, we approach the calibration of the  :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 to the Ductile Failure 6061-T6 compression data a little differently. For the more traditional approach see the
 :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py`.
 MatCal's objective tools allow significant flexibility in how the objective for calibrations are built.
-Also, the :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` allows 
+Also, the :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` allows 
 flexibility in the way the boundary conditions are derived from data. In this example, we highlight 
 this flexibility by using strain versus time data to define the model boundary condition 
 so that it simulates both loading and unloading.
@@ -44,7 +44,7 @@ figsize = (4,3)
 # perform minor data manipulation. Remove the time offsets as was done in
 # the previous examples and scale the true stress data from ksi to psi. Finally, 
 # we must preprocess the strain-time functions in the data appropriately so that they are 
-# interpreted correctly by the :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`.
+# interpreted correctly by the :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`.
 # Since the data as provided by the experimentalists are positive, MatCal 
 # would interpret the engineering strain function as a tensile strain which would be invalid.
 # This can be corrected in two ways, (1) we can make the data negative before
@@ -104,11 +104,11 @@ E = Parameter('E', 5000, 120000, 10000, units='ksi')
 # 
 # With this SIERRA/SM input saved in the current directory as "sierra_sm_voce_hardening_with_elastic_modulus.inc", 
 # we can create the updated :class:`~matcal.sierra.material.Material` and 
-# :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel` objects. 
+# :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel` objects. 
 
 j2_voce = Material("j2_voce", "sierra_sm_voce_hardening_with_elastic_modulus.inc", "j2_plasticity")
 
-mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
 mat_point_model.add_boundary_condition_data(data_collection)
 mat_point_model.set_name("compression_mat_point")
 
@@ -185,7 +185,7 @@ data_collection.plot("time", "true_strain")
 # the model and study with the updated data collection and
 # then launch the updated calibration.
 
-mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
 mat_point_model.add_boundary_condition_data(data_collection)
 mat_point_model.set_name("compression_mat_point")
 

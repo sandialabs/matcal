@@ -21,7 +21,7 @@
 Calibration With Unmodified Data and Objective: A Simple Calibration Gone Wrong
 ===============================================================================
 
-In this section, we once again present the calibration of our :class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+In this section, we once again present the calibration of our :class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 to the uniaxial compression data. However, instead of manipulating the data and weighting the residuals like we did in the 
 :ref:`sphx_glr_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration.py`
 example, we ignore
@@ -90,7 +90,7 @@ and the model we will be calibrating.
 
     j2_voce = Material("j2_voce", "sierra_sm_voce_hardening.inc", "j2_plasticity")
 
-    mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+    mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
     mat_point_model.add_boundary_condition_data(data_collection)
     mat_point_model.set_name("compression_mat_point")
 
@@ -168,8 +168,8 @@ Finally, we launch the calibration study and review the results.
 
  .. code-block:: none
 
-    Y: 44.493153355
-    A: 4.0987957384
+    Y: 44.493151803
+    A: 4.0987974109
     b: 30.0
 
 
@@ -285,9 +285,9 @@ indicating that the algorithm completed successfully. However, from
 
  .. code-block:: none
 
-    Y: 41.746714905
-    A: 13.487676572
-    b: 17.469581115
+    Y: 41.746714748
+    A: 13.487676705
+    b: 17.469581507
 
 
 
@@ -391,7 +391,7 @@ is passed into a MatCal model
 to generate boundary conditions. Only clean and well understood data should be  
 provided for boundary condition data when passing time-strain or time-displacement data to 
 the model. Also, any compression data used in the 
-:class:`~matcal.sierra.models.UniaxialLoadingMaterialPointModel`
+:class:`~matcal.sierra.models.UniaxialStressMaterialPointModel`
 should always be supplied as negative for boundary condition generation and the objective.
 The fact 
 that the positive strain values appeared to behave correctly here is due to the way NumPy interp
@@ -421,7 +421,7 @@ data to see how the results are affected.
     boundary_data.set_name("dataset 1 derived BC data")
     boundary_data_collection = DataCollection('boundary_data', boundary_data)
 
-    mat_point_model = UniaxialLoadingMaterialPointModel(j2_voce)
+    mat_point_model = UniaxialStressMaterialPointModel(j2_voce)
     mat_point_model.add_boundary_condition_data(boundary_data_collection)
     mat_point_model.set_name("compression_mat_point")
 
@@ -516,8 +516,8 @@ work well and provide the desired results.
  .. code-block:: none
 
     Y: 41.453715459
-    A: 13.540177273
-    b: 18.797345105
+    A: 13.540177274
+    b: 18.797345104
 
 
 
@@ -558,7 +558,7 @@ to not use NumPy interp's results padding.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (4 minutes 2.526 seconds)
+   **Total running time of the script:** (3 minutes 24.293 seconds)
 
 
 .. _sphx_glr_download_introduction_examples_sierra_material_point_examples_plot_sierra_material_point_calibration_uncorrected.py:
