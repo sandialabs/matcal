@@ -1002,6 +1002,12 @@ Adaptive sparse grids refine this index set incrementally. The algorithm
 estimates which candidate basis functions or subspaces are likely to improve the
 approximation most, then adds corresponding samples and basis terms.
 
+MatCal ranks candidate subspaces with PyApprox's ``L2SurplusIndicator``: the
+root-mean-square surplus, or the change in the surrogate, at the samples the
+candidate would add. Indicators based on changes in the response variance were
+also evaluated. They refined localized features later, and the validation error
+on the Peaks verification example stalled between about 200 and 300 samples.
+
 For users not familiar with sparse-grid notation, the main idea is:
 
 * a full grid samples every combination of points in every direction;
