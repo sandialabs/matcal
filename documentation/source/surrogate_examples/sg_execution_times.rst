@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**97:03.062** total execution time for 4 files **from surrogate_examples**:
+**06:25.318** total execution time for 4 files **from surrogate_examples**:
 
 .. container::
 
@@ -33,14 +33,14 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_surrogate_examples_plot_generate_surrogate_c_adaptive_sparse_grid.py` (``plot_generate_surrogate_c_adaptive_sparse_grid.py``)
-     - 34:43.1000
-     - 0.0
-   * - :ref:`sphx_glr_surrogate_examples_plot_generate_surrogate_b2_adaptive_voronoi_RBF.py` (``plot_generate_surrogate_b2_adaptive_voronoi_RBF.py``)
-     - 34:35.279
-     - 0.0
-   * - :ref:`sphx_glr_surrogate_examples_plot_generate_surrogate_b1_adaptive_voronoi_GP.py` (``plot_generate_surrogate_b1_adaptive_voronoi_GP.py``)
-     - 27:43.784
+     - 06:25.318
      - 0.0
    * - :ref:`sphx_glr_surrogate_examples_plot_generate_surrogate_a_standard.py` (``plot_generate_surrogate_a_standard.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_surrogate_examples_plot_generate_surrogate_b1_adaptive_voronoi_GP.py` (``plot_generate_surrogate_b1_adaptive_voronoi_GP.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_surrogate_examples_plot_generate_surrogate_b2_adaptive_voronoi_RBF.py` (``plot_generate_surrogate_b2_adaptive_voronoi_RBF.py``)
      - 00:00.000
      - 0.0
