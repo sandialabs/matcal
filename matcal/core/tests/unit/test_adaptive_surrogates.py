@@ -48,6 +48,7 @@ from matcal.core.adaptive_surrogates import (
     _remove_duplicate_rows_against_existing,
     _remove_invalid_rows,
     _select_farthest_point,
+    _setup_pyapprox_adaptive_sparse_grid_fitter,
     _validate_error_statistic,
     _validate_surrogate_generator_regressor_type,
     _validate_surrogate_storage_options,
@@ -4747,6 +4748,36 @@ class AdaptiveSurrogateActualFitMixin:
             pass
 
         self.assertEqual(study._seed, 11)
+
+
+@unittest.skipIf(not HAS_PYAPPROX, "pyapprox not installed")
+class TestSetupPyapproxAdaptiveSparseGridFitter(MatcalUnitTest):
+    def setUp(self) -> None:
+        super().setUp(__file__)
+
+    def _error_indicator_name(self, basis_type: str) -> str:
+        with patch(
+            "pyapprox.surrogates.sparsegrids.SingleFidelityAdaptiveSparseGridFitter"
+        ) as fitter_class:
+            _setup_pyapprox_adaptive_sparse_grid_fitter(
+                2, [[0.0, 1.0], [-1.0, 1.0]], basis_type=basis_type
+            )
+        error_indicator = fitter_class.call_args.kwargs["error_indicator"]
+        return type(error_indicator).__name__
+
+    def test_piecewise_basis_uses_l2_surplus_indicator(self) -> None:
+        self.assertEqual(
+            self._error_indicator_name("piecewise"), "L2SurplusIndicator"
+        )
+
+    def test_lagrange_basis_uses_l2_surplus_indicator(self) -> None:
+        self.assertEqual(
+            self._error_indicator_name("lagrange"), "L2SurplusIndicator"
+        )
+
+    def test_invalid_bounds_raise_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            _setup_pyapprox_adaptive_sparse_grid_fitter(2, [[1.0, 0.0], [0.0, 1.0]])
 
 
 @unittest.skipIf(

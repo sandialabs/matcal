@@ -710,7 +710,7 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
         MaxLevelCriteria,
     )
     from pyapprox.surrogates.sparsegrids.error_indicators import (
-        SummedSubspaceVarianceIndicator,
+        L2SurplusIndicator,
     )
     from pyapprox.surrogates.affine.univariate.piecewisepoly import (
         PiecewiseCubic,
@@ -766,7 +766,10 @@ def _setup_pyapprox_adaptive_sparse_grid_fitter(
 
     tp_factory = TensorProductSubspaceFactory(bkd, factories, growth)
     admissibility = MaxLevelCriteria(max_level=max_level, pnorm=pnorm, bkd=bkd)
-    error_indicator = SummedSubspaceVarianceIndicator(bkd)
+    # Rank candidates by their RMS surplus at the new samples. Variance-based
+    # indicators stall on localized features: on the Peaks verification
+    # example they plateau between roughly 200 and 300 samples.
+    error_indicator = L2SurplusIndicator(bkd)
 
     fitter = SingleFidelityAdaptiveSparseGridFitter(
         bkd,

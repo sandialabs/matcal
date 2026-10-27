@@ -455,8 +455,8 @@ Extract and report convergence histories.
       final max absolute error:   3.334068e-01
       best max absolute error:    3.334068e-01
       best max-error sample count:769
-      estimated RMSE rate p:      0.6893
-      estimated max-error rate p: 0.6184
+      estimated RMSE rate p:      0.7317
+      estimated max-error rate p: 0.6549
 
 
 
@@ -534,9 +534,9 @@ requested diagnostic sample count.
 
  .. code-block:: none
 
-    Selected retained adaptive surrogate for diagnostic plot: requested N=250, actual N=257, iteration=17.
-    Selected retained adaptive surrogate for diagnostic plot: requested N=500, actual N=481, iteration=21.
-    Selected retained adaptive surrogate for diagnostic plot: requested N=750, actual N=769, iteration=25.
+    Selected retained adaptive surrogate for diagnostic plot: requested N=250, actual N=257, iteration=18.
+    Selected retained adaptive surrogate for diagnostic plot: requested N=500, actual N=513, iteration=23.
+    Selected retained adaptive surrogate for diagnostic plot: requested N=750, actual N=769, iteration=26.
 
 
 
@@ -567,7 +567,7 @@ Plot true function and surrogate error fields.
 
 
 .. image-sg:: /surrogate_verification/images/sphx_glr_plot_a7_peaks_adaptive_sparse_grid_002.png
-   :alt: Peaks verification: adaptive sparse grid, True Peaks function requested N=250 nearest retained N=257, True Peaks function requested N=500 nearest retained N=481, True Peaks function requested N=750 nearest retained N=769, Absolute surrogate error requested N=250 nearest retained N=257, field max=1.432e+00, Absolute surrogate error requested N=500 nearest retained N=481, field max=1.110e+00, Absolute surrogate error requested N=750 nearest retained N=769, field max=3.906e-01
+   :alt: Peaks verification: adaptive sparse grid, True Peaks function requested N=250 nearest retained N=257, True Peaks function requested N=500 nearest retained N=513, True Peaks function requested N=750 nearest retained N=769, Absolute surrogate error requested N=250 nearest retained N=257, field max=1.432e+00, Absolute surrogate error requested N=500 nearest retained N=513, field max=5.759e-01, Absolute surrogate error requested N=750 nearest retained N=769, field max=3.906e-01
    :srcset: /surrogate_verification/images/sphx_glr_plot_a7_peaks_adaptive_sparse_grid_002.png
    :class: sphx-glr-single-img
 
@@ -585,7 +585,7 @@ Plot true function and surrogate error fields.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 30.718 seconds)
+   **Total running time of the script:** (1 minutes 42.049 seconds)
 
 
 .. _sphx_glr_download_surrogate_verification_plot_a7_peaks_adaptive_sparse_grid.py:

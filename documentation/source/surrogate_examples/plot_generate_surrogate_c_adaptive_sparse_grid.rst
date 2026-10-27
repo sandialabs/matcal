@@ -372,11 +372,11 @@ for this surrogate.
 
  .. code-block:: none
 
-    Best retained surrogate iteration: 21
+    Best retained surrogate iteration: 18
     Stored surrogate score record:
-    OrderedDict({'iteration_index': 21, 'batch_number': 22, 'sample_count': 233, 'rmse': 0.438308072910686, 'max_error': 2.5740938475280473, 'r2': 0.999990546832202, 'surrogate_stored': True, 'storage_reason': ['best']})
+    OrderedDict({'iteration_index': 18, 'batch_number': 19, 'sample_count': 209, 'rmse': 0.4361611286048184, 'max_error': 2.6437269177565668, 'r2': 0.9999906392134286, 'surrogate_stored': True, 'storage_reason': ['best']})
     Best retained surrogate R2 score:
-     0.999990546832202
+     0.9999906392134286
 
 
 
@@ -576,13 +576,13 @@ properties.
 
 
     === Sparse-grid adaptive surrogate common-test summary ===
-    Best retained surrogate iteration: 21
-    Training samples for best retained surrogate: 233
-    Common-test RMSE for best retained surrogate: 0.438308072910686
-    Common-test maximum absolute error for best retained surrogate: 2.5740938475280473
-    Common-test R2 for best retained surrogate: 0.999990546832202
-    Final batch max error: 2.5740938475280473
-    Final batch training samples: 233
+    Best retained surrogate iteration: 18
+    Training samples for best retained surrogate: 209
+    Common-test RMSE for best retained surrogate: 0.4361611286048184
+    Common-test maximum absolute error for best retained surrogate: 2.6437269177565668
+    Common-test R2 for best retained surrogate: 0.9999906392134286
+    Final batch max error: 2.6437269177565668
+    Final batch training samples: 209
 
 
 
@@ -660,7 +660,7 @@ column shows the signed error, surrogate minus test data.
 
  .. code-block:: none
 
-    Worst test sample indices: [193 139 112 247  73]
+    Worst test sample indices: [193  44 112 247 204]
 
 
 
@@ -756,7 +756,7 @@ Finally, we can visualize the adaptive training samples in parameter space.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (34 minutes 44.000 seconds)
+   **Total running time of the script:** (6 minutes 25.318 seconds)
 
 
 .. _sphx_glr_download_surrogate_examples_plot_generate_surrogate_c_adaptive_sparse_grid.py:
