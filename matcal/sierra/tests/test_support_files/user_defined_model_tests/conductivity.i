@@ -6,7 +6,11 @@
 Begin Sierra The_Job
 
    Begin ARIA Material mat
-      density = constant value =10
+      density = constant value = 10
+      {if(K < 0)}
+      Add some bad syntax to cause failure - we want it to fail to check if failure catching and results reporting works 
+      {endif}
+
       specific heat = constant cp = 10
       thermal Conductivity = Constant value = {K}
       heat conduction = basic

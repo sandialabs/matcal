@@ -656,6 +656,7 @@ class VFMUniaxialTensionModelBaseProductionTests():
         def test_VFM_model_multicore(self):
             vfm_model = self.prepare_VFM_model()
             vfm_model.set_number_of_cores(2)
+            vfm_model.add_constants(temperature=298.0)
             self._model_name = vfm_model.name
             state = SolitaryState()
             results = vfm_model.run(state, 
