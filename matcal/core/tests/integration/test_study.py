@@ -415,8 +415,8 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
                 if noise is not None:
                     mod_res['y'] += noise*np.random.normal(size=mod_res['y'].shape)
                 dc.add(convert_dictionary_to_data(mod_res))
-            return dc
-        dc = generate_data(measurement_noise)
+            return dc, thetas
+        dc, thetas = generate_data(measurement_noise)
 
         a = Parameter("a",0,5)
         b = Parameter("b",0,5)
@@ -433,12 +433,15 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         study.set_parameter_center(a=a_min, b=b_min)
         laplace_obj = CurveBasedInterpolatedObjective('x', 'y')
         study.add_evaluation_set(mod, laplace_obj, dc)
-        #study.set_calibrate_covariance(False)
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
 
-        self.assert_close_arrays(var_theta, results.estimated_parameter_covariance,  
-                                 atol = 0.0075)    
+        # Compare with the sample covariance of the draws: with 100 draws it
+        # differs from var_theta by ~0.05, far more than the tolerance.
+        sample_cov_theta = np.cov(thetas.T)
+        self.assert_close_arrays(sample_cov_theta,
+                                 results.estimated_parameter_covariance,
+                                 atol=0.0075)
 
     def test_uq_recovers_sample_covariance_for_linear_parameter_model(self):
         """
@@ -648,8 +651,12 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         )
 
     def test_uq_two_models(self):
-        n_experiments = 250
-        
+        # The models are linear in the parameters and noise free, so the
+        # estimate equals the sample covariance of the draws; a small sample
+        # suffices. Comparing with the population covariance instead needs
+        # hundreds of draws to stay within even a loose tolerance.
+        n_experiments = 20
+
         mu_theta = np.array([2.0, 1.0, 0.5])
         var_theta = np.array([[0.4, 0.05, 0.2],
                               [0.05, 0.1, 0.1], 
@@ -676,8 +683,8 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
                 dc_voce.add(convert_dictionary_to_data(voce_res))
                 dc_quadratic.add(convert_dictionary_to_data(quad_res))
 
-            return dc_voce, dc_quadratic
-        dc_voce, dc_quadratic = generate_data(measurement_noise)
+            return dc_voce, dc_quadratic, thetas
+        dc_voce, dc_quadratic, thetas = generate_data(measurement_noise)
 
         a = Parameter("a",0,5)
         b = Parameter("b",0,5)
@@ -703,11 +710,13 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
 
-        self.assert_close_arrays(var_theta, results.estimated_parameter_covariance,  
-                                 atol = 0.05)    
+        self.assert_close_arrays(np.cov(thetas.T),
+                                 results.estimated_parameter_covariance, atol=1e-6)
 
     def test_uq_with_single_value_obj(self):
-        n_experiments = 250
+        # Linear, noise-free models: compare with the sample covariance of the
+        # draws, which a small sample reproduces exactly.
+        n_experiments = 20
         mu_theta = np.array([2.0, 1.0])
         var_theta = np.array([[0.4,0.05],[0.05,0.1]])
 
@@ -726,8 +735,8 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
                     mod_res['y'] += noise*np.random.normal(size=mod_res['y'].shape)
                 dc.add(convert_dictionary_to_data(mod_res))
                 dc_single_point.add(convert_dictionary_to_data({'y':[mod_res['y'][-1]]}))
-            return dc, dc_single_point
-        dc, dc_single_point = generate_data(measurement_noise)
+            return dc, dc_single_point, thetas
+        dc, dc_single_point, thetas = generate_data(measurement_noise)
 
         a = Parameter("a",0,5)
         b = Parameter("b",0,5)
@@ -749,8 +758,8 @@ class LaplaceStudyTests(StudyBaseUnitTests.CommonSetup):
         study.set_noise_estimate(measurement_noise)
         results = study.launch()
 
-        self.assert_close_arrays(var_theta, results.estimated_parameter_covariance,  
-                                 atol = 0.05)  
+        self.assert_close_arrays(np.cov(thetas.T),
+                                 results.estimated_parameter_covariance, atol=1e-6)
 
 class TestHaltonStudy(StudyBaseUnitTests.CommonTests):
 
