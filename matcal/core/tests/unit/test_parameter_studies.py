@@ -1,5 +1,7 @@
 from collections import OrderedDict
 from copy import deepcopy
+from unittest.mock import patch
+
 import numpy as np
 
 from matcal.core.data import (convert_dictionary_to_data, DataCollection, 
@@ -19,8 +21,14 @@ from matcal.core.parameter_studies import (FiniteDifference, ClassicLaplaceStudy
                                            _estimate_parameter_covariance, 
                                            _get_residual_covariance, 
                                            _combine_array_list_into_zero_padded_single_array, 
-                                           _package_parameter_specific_results, 
-                                           _fit_posterior)
+                                           _package_parameter_specific_results,
+                                           _fit_posterior,
+                                           _get_log_determinant_of_positive_definite_matrix,
+                                           _log_posterior_predictive,
+                                           _project_symmetric_matrix_to_psd,
+                                           _solve_for_parameter_covariance,
+                                           _solve_for_parameter_covariance_svd_subspace,
+                                           _to_theta)
 
 from matcal.core.state import State
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
@@ -948,3 +956,321 @@ class TestClassicLaplaceStudy(StudyBaseUnitTests.CommonTests):
         self.assertAlmostEqual(res.hessian[0,0], goal)
 
 
+def _vector_residuals(point):
+    """Residuals with known Hessians; shape n_residuals x n_repeats."""
+    a, b = point
+    base = np.array([a * a * b, np.sin(a) * b, a + b])
+    return np.stack([base, 2 * base], axis=1)
+
+
+def _vector_residual_hessians(point):
+    """Analytic Hessians of the first repeat of _vector_residuals."""
+    a, b = point
+    hessians = np.zeros((3, 2, 2))
+    hessians[0] = [[2 * b, 2 * a], [2 * a, 0]]
+    hessians[1] = [[-np.sin(a) * b, np.cos(a)], [np.cos(a), 0]]
+    return hessians
+
+
+def _make_two_parameter_laplace_study():
+    return LaplaceStudy(Parameter("a", 0, 10), Parameter("b", 0, 10))
+
+
+class TestLaplaceStudyHessianOptions(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+        self.center = np.array([1.3, 0.7])
+        self.study = _make_two_parameter_laplace_study()
+
+    def _set_center_and_function_values(self, residual_function):
+        self.study.set_parameter_center(a=self.center[0], b=self.center[1])
+        finite_difference = self.study._finite_difference
+        points = finite_difference._finite_difference_evaluation_points
+        finite_difference.set_function_values([residual_function(p) for p in points])
+
+    def test_set_use_hessian_switches_evaluation_point_sets(self):
+        self.study.set_parameter_center(a=1, b=2)
+        self.assertEqual(len(self.study.parameter_sets_to_evaluate), 5)
+        self.study.set_use_hessian(True)
+        self.assertEqual(len(self.study.parameter_sets_to_evaluate), 9)
+        self.study.set_use_hessian(False)
+        self.assertEqual(len(self.study.parameter_sets_to_evaluate), 5)
+
+    def test_set_use_hessian_before_center_and_bad_input(self):
+        self.study.set_use_hessian(True)
+        self.assertTrue(self.study._use_hessian)
+        with self.assertRaises(TypeError):
+            self.study.set_use_hessian("yes")
+        with self.assertRaises(TypeError):
+            self.study.set_use_hessian(use_hesssian=True)
+
+    def test_residual_hessians_with_repeats_match_analytic(self):
+        self.study.set_use_hessian(True)
+        self._set_center_and_function_values(_vector_residuals)
+        hessians = self.study._calculate_residual_hessians()
+        self.assert_close_arrays(hessians, _vector_residual_hessians(self.center),
+                                 atol=1e-5)
+
+    def test_residual_hessians_without_repeats_match_analytic(self):
+        self.study.set_use_hessian(True)
+        self._set_center_and_function_values(lambda p: _vector_residuals(p)[:, 0])
+        hessians = self.study._calculate_residual_hessians()
+        self.assert_close_arrays(hessians, _vector_residual_hessians(self.center),
+                                 atol=1e-5)
+
+    def test_residual_hessian_for_scalar_residual(self):
+        self.study.set_use_hessian(True)
+        self._set_center_and_function_values(lambda p: _vector_residuals(p)[0, 0])
+        hessians = self.study._calculate_residual_hessians()
+        self.assertEqual(hessians.shape, (1, 2, 2))
+        self.assert_close_arrays(hessians[0], _vector_residual_hessians(self.center)[0],
+                                 atol=1e-5)
+
+    def test_residual_hessians_require_hessian_points(self):
+        self._set_center_and_function_values(_vector_residuals)
+        with self.assertRaises(RuntimeError):
+            self.study._calculate_residual_hessians()
+
+    def test_residual_hessians_reject_unexpected_shape(self):
+        self.study.set_use_hessian(True)
+        self._set_center_and_function_values(lambda p: np.ones((3, 2, 2)))
+        with self.assertRaises(RuntimeError):
+            self.study._calculate_residual_hessians()
+
+    def test_gauss_newton_objective_hessian(self):
+        sensitivities = np.array([[1.0, 2.0], [0.5, -1.0], [3.0, 0.0]])
+        center_residuals = np.ones((2, 3))
+        hessian = self.study._calculate_objective_hessian(center_residuals,
+                                                          sensitivities)
+        self.assert_close_arrays(hessian, 2 * sensitivities.T @ sensitivities)
+        with self.assertRaises(RuntimeError):
+            self.study._calculate_gauss_newton_objective_hessian(np.ones(3))
+
+    def test_full_objective_hessian_adds_mean_residual_term(self):
+        self.study.set_use_hessian(True)
+        self._set_center_and_function_values(_vector_residuals)
+        sensitivities = np.array([[1.0, 2.0], [0.5, -1.0], [3.0, 0.0]])
+        center_residuals = np.array([[1.0, 2.0, 3.0], [3.0, 2.0, 1.0]])
+        hessian = self.study._calculate_objective_hessian(center_residuals,
+                                                          sensitivities)
+        mean_residuals = np.array([2.0, 2.0, 2.0])
+        second_order = 2 * np.einsum("k,kij->ij", mean_residuals,
+                                     _vector_residual_hessians(self.center))
+        goal = 2 * sensitivities.T @ sensitivities + second_order
+        self.assert_close_arrays(hessian, goal, atol=1e-4)
+
+    def test_center_residual_vector_shapes(self):
+        get_vector = self.study._get_center_residual_vector_for_objective_hessian
+        self.assert_close_arrays(get_vector(np.array([1.0, 2.0])), [1.0, 2.0])
+        self.assert_close_arrays(get_vector(np.array([[1.0, 2.0], [3.0, 4.0]])),
+                                 [2.0, 3.0])
+        with self.assertRaises(RuntimeError):
+            get_vector(np.ones((2, 2, 2)))
+
+    def test_second_order_term_rejects_bad_shapes(self):
+        second_order = self.study._calculate_second_order_residual_hessian_term
+        with self.assertRaises(RuntimeError):
+            second_order(np.ones(3), np.ones((3, 2)))
+        with self.assertRaises(RuntimeError):
+            second_order(np.ones((3, 1)), np.ones((3, 2, 2)))
+        with self.assertRaises(RuntimeError):
+            second_order(np.ones(2), np.ones((3, 2, 2)))
+
+
+class TestLaplaceStudyCovarianceOptions(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+        self.study = _make_two_parameter_laplace_study()
+
+    def test_default_initial_covariance_estimator_is_least_squares(self):
+        self.assertEqual(self.study._initial_covariance_method, "least_squares")
+
+    def test_set_initial_covariance_estimator(self):
+        self.study.set_initial_covariance_estimator("LS", rcond=1e-8,
+                                                    regularization=0.1,
+                                                    project_to_psd=True,
+                                                    min_eigenvalue=1e-6)
+        self.assertEqual(self.study._initial_covariance_method, "least_squares")
+        self.assertEqual(self.study._initial_covariance_rcond, 1e-8)
+        self.assertEqual(self.study._initial_covariance_regularization, 0.1)
+        self.assertTrue(self.study._initial_covariance_project_to_psd)
+        self.assertEqual(self.study._initial_covariance_min_eigenvalue, 1e-6)
+        self.study.set_initial_covariance_estimator("svd_pinv")
+        self.assertEqual(self.study._initial_covariance_method, "svd_pinv")
+
+    def test_set_initial_covariance_estimator_bad_input(self):
+        with self.assertRaises(ValueError):
+            self.study.set_initial_covariance_estimator("cholesky")
+        with self.assertRaises(ValueError):
+            self.study.set_initial_covariance_estimator(rcond=-1.0)
+        with self.assertRaises(TypeError):
+            self.study.set_initial_covariance_estimator(project_to_psd=1)
+
+    def test_set_calibrate_covariance_keyword(self):
+        self.study.set_calibrate_covariance(calibrate_covariance=False)
+        self.assertFalse(self.study._calibrate_covariance)
+        with self.assertRaises(TypeError):
+            self.study.set_calibrate_covariance(calibrate_covaraince=False)
+
+    def _make_study_with_repeats(self, number_of_repeats):
+        study = LaplaceStudy(Parameter("a", 0, 10))
+        study.set_parameter_center(a=1)
+        data = [convert_dictionary_to_data(linear_model_with_length(1 + 0.01 * i))
+                for i in range(number_of_repeats)]
+        study.add_evaluation_set(PythonModel(linear_model_with_length),
+                                 DirectCurveBasedInterpolatedObjective("x", "y"),
+                                 DataCollection("test", *data),
+                                 data_conditioner_class=ReturnPassedDataConditioner)
+        return study
+
+    def test_launch_fails_before_evaluations_with_too_few_repeats(self):
+        study = self._make_study_with_repeats(1)
+        self.assertEqual(study._get_maximum_number_of_repeats(), 1)
+        with patch.object(LaplaceStudy, "_matcal_evaluate_parameter_sets_batch") as run:
+            with self.assertRaises(ValueError):
+                study.launch()
+        run.assert_not_called()
+
+    def test_repeat_check_skipped_for_svd_pinv(self):
+        study = self._make_study_with_repeats(1)
+        study.set_initial_covariance_estimator("svd_pinv")
+        study._check_enough_repeats_before_evaluations()
+
+    def test_repeat_check_passes_with_enough_repeats(self):
+        study = self._make_study_with_repeats(3)
+        self.assertEqual(study._get_maximum_number_of_repeats(), 3)
+        study._check_enough_repeats_before_evaluations()
+
+    def test_update_laplace_estimate_requires_launch(self):
+        with self.assertRaises(RuntimeError):
+            self.study.update_laplace_estimate(0.1)
+
+    def test_update_laplace_estimate_after_launch(self):
+        study = self._make_study_with_repeats(3)
+        study.set_calibrate_covariance(False)
+        study.launch()
+        results = study.update_laplace_estimate(0.001)
+        self.assertAlmostEqual(study._noise_variance, 1e-6)
+        self.assertEqual(results.estimated_parameter_covariance.shape, (1, 1))
+
+
+class TestParameterCovarianceEstimators(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+        rng = np.random.default_rng(1234)
+        self.sensitivities = rng.normal(size=(6, 3))
+        self.parameter_covariance = np.array([[2.0, 0.3, 0.1],
+                                              [0.3, 1.0, 0.2],
+                                              [0.1, 0.2, 0.5]])
+        self.noise_variance = 0.01
+        self.output_covariance = (self.sensitivities @ self.parameter_covariance
+                                  @ self.sensitivities.T
+                                  + self.noise_variance * np.eye(6))
+
+    def test_all_methods_recover_exact_covariance(self):
+        for method in ["least_squares", "ls", "svd_pinv", "svd_inverse"]:
+            estimate = _solve_for_parameter_covariance(
+                self.output_covariance, self.sensitivities, self.noise_variance,
+                method=method)
+            self.assert_close_arrays(estimate, self.parameter_covariance,
+                                     atol=1e-10, show_on_fail=True)
+
+    def test_unknown_method_raises(self):
+        with self.assertRaises(ValueError):
+            _solve_for_parameter_covariance(self.output_covariance,
+                                            self.sensitivities, method="qr")
+
+    def _collinear_problem(self):
+        sensitivities = self.sensitivities.copy()
+        sensitivities[:, 2] = sensitivities[:, 0] + sensitivities[:, 1]
+        output_covariance = (sensitivities @ np.diag([1.0, 2.0, 3.0])
+                             @ sensitivities.T + 1e-3 * np.eye(6))
+        return output_covariance, sensitivities
+
+    def test_least_squares_raises_for_unidentifiable_parameters(self):
+        output_covariance, sensitivities = self._collinear_problem()
+        with self.assertRaisesRegex(ValueError, "Unidentifiable directions"):
+            _solve_for_parameter_covariance(output_covariance, sensitivities)
+
+    def test_regularization_or_pinv_accept_unidentifiable_parameters(self):
+        output_covariance, sensitivities = self._collinear_problem()
+        regularized = _solve_for_parameter_covariance(
+            output_covariance, sensitivities, regularization=1e-6)
+        pseudo_inverse = _solve_for_parameter_covariance(
+            output_covariance, sensitivities, method="svd_pinv")
+        self.assertEqual(regularized.shape, (3, 3))
+        self.assertEqual(pseudo_inverse.shape, (3, 3))
+
+    def test_least_squares_raises_without_scatter(self):
+        residuals = np.tile(np.linspace(0, 1, 6), (10, 1))
+        with self.assertRaisesRegex(ValueError, "too little scatter"):
+            _estimate_parameter_covariance(residuals, self.sensitivities, 0.0)
+
+    def test_least_squares_raises_with_too_few_repeats(self):
+        residuals = np.random.default_rng(5).normal(size=(3, 6))
+        with self.assertRaisesRegex(ValueError, "at least 4 repeats"):
+            _estimate_parameter_covariance(residuals, self.sensitivities, 0.0)
+
+    def test_svd_inverse_raises_for_zero_singular_values(self):
+        with self.assertRaises(ValueError):
+            _solve_for_parameter_covariance(np.zeros((6, 6)), self.sensitivities,
+                                            method="svd_inverse")
+
+    def test_svd_subspace_rejects_unsupported_method(self):
+        with self.assertRaises(ValueError):
+            _solve_for_parameter_covariance_svd_subspace(
+                self.output_covariance, self.sensitivities, method="least_squares")
+
+    def test_svd_methods_raise_with_fewer_outputs_than_parameters(self):
+        with self.assertRaises(ValueError):
+            _solve_for_parameter_covariance(np.eye(2), np.ones((2, 3)),
+                                            method="svd_pinv")
+
+    def test_project_to_psd_option(self):
+        estimate = _solve_for_parameter_covariance(-np.eye(3), np.eye(3),
+                                                   method="svd_pinv",
+                                                   project_to_psd=True,
+                                                   min_eigenvalue=1e-6)
+        self.assertGreaterEqual(np.linalg.eigvalsh(estimate).min(), 1e-6 * 0.999)
+
+    def test_project_symmetric_matrix_to_psd(self):
+        projected = _project_symmetric_matrix_to_psd(np.array([[1.0, 2.0],
+                                                               [2.0, 1.0]]))
+        self.assert_close_arrays(projected, [[1.5, 1.5], [1.5, 1.5]])
+        positive = np.array([[2.0, 0.5], [0.5, 1.0]])
+        self.assert_close_arrays(_project_symmetric_matrix_to_psd(positive), positive)
+
+
+class TestLogPosteriorPredictive(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+        self.sensitivities = np.array([[1.0, 0.0], [0.0, 2.0], [1.0, 1.0]])
+        self.residuals = np.array([[0.1, -0.2, 0.05], [-0.1, 0.3, 0.0]])
+        self.theta = _to_theta(np.array([0.5, 0.2]), np.array([0.1]))
+
+    def test_log_determinant_of_positive_definite_matrix(self):
+        log_determinant = _get_log_determinant_of_positive_definite_matrix(
+            np.eye(2) * np.e)
+        self.assertAlmostEqual(log_determinant, 2.0)
+        self.assertIsNone(_get_log_determinant_of_positive_definite_matrix(
+            np.array([[1.0, 2.0], [2.0, 1.0]])))
+        self.assertIsNone(_get_log_determinant_of_positive_definite_matrix(
+            np.zeros((2, 2))))
+
+    def test_inverse_methods_agree_and_are_finite(self):
+        values = [_log_posterior_predictive(self.theta, self.sensitivities,
+                                            self.residuals, 0.01, method)
+                  for method in ["pseudoinverse", "solve"]]
+        self.assertTrue(np.all(np.isfinite(values)))
+        self.assertAlmostEqual(values[0], values[1])
+        diagonal = _log_posterior_predictive(self.theta, self.sensitivities,
+                                             self.residuals, 0.0, "diagonal")
+        self.assertTrue(np.isfinite(diagonal))
+
+    def test_not_positive_definite_candidate_is_rejected(self):
+        with patch("matcal.core.parameter_studies."
+                   "_get_log_determinant_of_positive_definite_matrix",
+                   return_value=None):
+            value = _log_posterior_predictive(self.theta, self.sensitivities,
+                                              self.residuals, 0.01)
+        self.assertEqual(value, -np.inf)

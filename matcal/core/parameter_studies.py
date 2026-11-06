@@ -4,6 +4,7 @@ These do not invoke external algorithm libraries.
 """
 from abc import abstractmethod
 from collections import OrderedDict
+
 import numpy as np
 from scipy.stats import qmc
 
@@ -261,7 +262,7 @@ class FiniteDifference:
         self._relative_step_size = relative_step_size
         self._step_sizes = []
         for x in self._center_point:
-          dx = np.abs(x)*relative_step_size
+          dx = relative_step_size * max(abs(x), 1.0)
           if dx < epsilon: 
             dx = epsilon
           self._step_sizes.append(dx)
@@ -272,12 +273,10 @@ class FiniteDifference:
         self._hessian_coefficients = None
         self._hessian_indices      = None
 
-    def set_function_values(self,ys): 
+    def set_function_values(self, ys): 
+        ys = np.asarray(ys)
         self._function_values = ys
-        ndim = np.squeeze(ys).ndim
-        self._function_shape = None
-        if ndim > 1: 
-          self._function_shape = ys[0].shape
+        self._function_shape = ys.shape[1:] if ys.ndim > 1 else None
 
     def gradient(self): 
         shape = [self._number_of_variables]
@@ -390,16 +389,102 @@ class FiniteDifference:
 _small = 1e-12
 
 
-def _estimate_parameter_covariance(residuals, sensitivities, noise_variance):
+def _estimate_parameter_covariance(residuals, sensitivities, noise_variance,
+                                   method="least_squares",
+                                   rcond=1e-10,
+                                   regularization=0.0,
+                                   project_to_psd=False,
+                                   min_eigenvalue=_small):
     has_replicas = len(residuals.shape) > 1
     if has_replicas:
+        if method.lower() in _LEAST_SQUARES_METHOD_NAMES:
+            _check_repeats_can_determine_covariance(residuals.shape[0],
+                                                    sensitivities.shape[1])
         Sigma_y = _get_residual_covariance(residuals)
-        Sigma_guess = _solve_for_parameter_covariance(Sigma_y, sensitivities, 
-                                                        noise_variance)
-    elif not has_replicas:
-        raise RuntimeError("The LaplaceStudy has no repeats. Repeat data "
-                            "are needed for the study.")
+        Sigma_guess = _solve_for_parameter_covariance(
+            Sigma_y,
+            sensitivities,
+            noise_variance,
+            method=method,
+            rcond=rcond,
+            regularization=regularization,
+            project_to_psd=project_to_psd,
+            min_eigenvalue=min_eigenvalue
+        )
+    else:
+        raise RuntimeError(
+            "The LaplaceStudy has no repeats. Repeat data are needed "
+            "for the study."
+        )
+
     return Sigma_guess
+
+
+_LEAST_SQUARES_METHOD_NAMES = ("least_squares", "ls")
+
+
+def _check_repeats_can_determine_covariance(number_of_repeats: int,
+                                            number_of_parameters: int) -> None:
+    """Raise if there are too few repeats to determine the parameter covariance.
+
+    A sample covariance from ``n`` repeats has rank of at most ``n - 1``, so it
+    cannot constrain more than ``n - 1`` independent parameter directions.
+
+    :param number_of_repeats: number of repeat data sets.
+    :param number_of_parameters: number of study parameters.
+    :raises ValueError: if ``number_of_repeats <= number_of_parameters``.
+    """
+    if number_of_repeats <= number_of_parameters:
+        raise ValueError(
+            f"LaplaceStudy under determined. It has {number_of_repeats} repeat "
+            f"data sets for {number_of_parameters} parameters; at least "
+            f"{number_of_parameters + 1} repeats are needed to estimate the "
+            "parameter covariance.")
+
+
+def _check_output_covariance_has_parameter_scatter(output_covariance: np.ndarray,
+                                                   number_of_parameters: int
+                                                   ) -> None:
+    """Raise if the residual covariance has no scatter in enough directions.
+
+    Uses the same absolute tolerance as the original eigenspace estimator.
+
+    :param output_covariance: sample residual covariance, Sigma_y.
+    :param number_of_parameters: number of study parameters.
+    :raises ValueError: if fewer than ``number_of_parameters`` eigenvalues of
+        Sigma_y exceed the tolerance.
+    """
+    eigenvalues = np.linalg.eigvalsh(output_covariance)
+    leading_eigenvalues = np.sort(eigenvalues)[::-1][:number_of_parameters]
+    if len(leading_eigenvalues) < number_of_parameters or (
+            leading_eigenvalues < _small).any():
+        raise ValueError(
+            "LaplaceStudy under determined. The repeat data have too little "
+            f"scatter: fewer than {number_of_parameters} residual covariance "
+            f"eigenvalues exceed {_small}.")
+
+
+def _raise_unidentifiable_parameters_error(residual_sensitivities: np.ndarray,
+                                           rcond: float) -> None:
+    """Raise an error naming the parameter combinations the residuals miss.
+
+    :param residual_sensitivities: residual sensitivity matrix, A.
+    :param rcond: relative cutoff of the covariance least-squares solve.
+    :raises ValueError: always.
+    """
+    _, singular_values, right_vectors = np.linalg.svd(residual_sensitivities)
+    tolerance = np.sqrt(rcond) * singular_values.max(initial=0.0)
+    missing_count = right_vectors.shape[0] - np.sum(singular_values > tolerance)
+    directions = right_vectors[right_vectors.shape[0] - missing_count:]
+    direction_text = "; ".join(str(np.round(row, 6)) for row in directions)
+    raise ValueError(
+        "LaplaceStudy under determined. The residuals are insensitive to some "
+        "parameter combinations, so their covariance cannot be estimated. "
+        "Unidentifiable directions (coefficients in study parameter order): "
+        f"{direction_text or 'not resolved'}. Remove or fix redundant "
+        "parameters, or use set_initial_covariance_estimator with "
+        "regularization > 0 or method 'svd_pinv' to accept a non-unique "
+        "estimate.")
 
 
 def _get_residual_covariance(residuals):
@@ -407,25 +492,273 @@ def _get_residual_covariance(residuals):
     return np.atleast_2d(Sigma_y)
 
 
-def _solve_for_parameter_covariance( output_covariance, 
+def _solve_for_parameter_covariance(output_covariance, 
                                     residual_sensitivities, 
-                                    noise_variance=0.0):
+                                    noise_variance=0.0,
+                                    method="least_squares",
+                                    rcond=1e-10,
+                                    regularization=0.0,
+                                    project_to_psd=False,
+                                    min_eigenvalue=_small):
+    """
+    Estimate parameter covariance from an output covariance and residual
+    sensitivities.
+
+    The supported methods are:
+
+    ``"svd_inverse"``
+        Original embedded-Laplace initial estimator:
+
+        Sigma_theta = (U.T A)^-1 D (U.T A)^-T
+
+        using a direct inverse.
+
+    ``"svd_pinv"``
+        Same eigenspace estimator, but using a pseudo-inverse for U.T A.
+
+    ``"least_squares"``
+        Solve the linearized covariance equation
+
+        Sigma_y - sigma^2 I ~= A Sigma_theta A.T
+
+        directly in a least-squares sense, enforcing symmetry of Sigma_theta.
+
+    :param output_covariance: observed/sample residual covariance, Sigma_y.
+    :type output_covariance: np.ndarray
+
+    :param residual_sensitivities: residual sensitivity matrix, A, with shape
+        n_outputs x n_parameters.
+    :type residual_sensitivities: np.ndarray
+
+    :param noise_variance: measurement noise variance, sigma^2.
+    :type noise_variance: float
+
+    :param method: covariance estimator method. One of
+        "svd_inverse", "svd_pinv", or "least_squares" (default).
+    :type method: str
+
+    :param rcond: cutoff for pseudo-inverse or least-squares solve.
+    :type rcond: float
+
+    :param regularization: optional Tikhonov regularization for the least-squares
+        method. This regularizes the upper-triangular entries of Sigma_theta.
+    :type regularization: float
+
+    :param project_to_psd: if True, symmetrize and project the estimated
+        parameter covariance to positive semidefinite.
+    :type project_to_psd: bool
+
+    :param min_eigenvalue: minimum eigenvalue used in PSD projection.
+    :type min_eigenvalue: float
+
+    :return: estimated parameter covariance matrix.
+    :rtype: np.ndarray
+
+    :raises ValueError: for an unknown method, or when the problem is under
+        determined: for "least_squares", when Sigma_y has too little scatter or
+        (without regularization) the residuals are insensitive to some
+        parameter combination; for "svd_inverse", when the leading singular
+        values are near zero. "svd_pinv" never raises for under-determined
+        problems and returns a non-unique estimate.
+    """
+    output_covariance = np.asarray(output_covariance, dtype=float)
+    residual_sensitivities = np.asarray(residual_sensitivities, dtype=float)
+
     mineval, maxeval = _check_covariance(output_covariance)
     if np.abs(mineval) < _small:
-        logger.warning("Residual "
-                    "covariance is not positive definite!")
+        logger.warning("Residual covariance is nearly singular or not positive definite.")
+
     n_y = output_covariance.shape[0]
+
+    # Important: do not mutate the caller's covariance matrix.
+    shifted_output_covariance = (
+        output_covariance - np.eye(n_y) * noise_variance
+    )
+    shifted_output_covariance = _symmetrize_matrix(shifted_output_covariance)
+
+    method = method.lower()
+    if method in ["svd_inverse", "svd_pinv"]:
+        sigma_theta = _solve_for_parameter_covariance_svd_subspace(
+            shifted_output_covariance,
+            residual_sensitivities,
+            method=method,
+            rcond=rcond
+        )
+    elif method in _LEAST_SQUARES_METHOD_NAMES:
+        _check_output_covariance_has_parameter_scatter(
+            output_covariance, residual_sensitivities.shape[1])
+        sigma_theta = _solve_for_parameter_covariance_least_squares(
+            shifted_output_covariance,
+            residual_sensitivities,
+            rcond=rcond,
+            regularization=regularization
+        )
+    else:
+        raise ValueError(
+            "Unknown parameter covariance estimation method "
+            f"'{method}'. Valid options are 'svd_inverse', "
+            "'svd_pinv', and 'least_squares'."
+        )
+
+    sigma_theta = _symmetrize_matrix(sigma_theta)
+
+    if project_to_psd:
+        sigma_theta = _project_symmetric_matrix_to_psd(
+            sigma_theta,
+            min_eigenvalue=min_eigenvalue
+        )
+
+    return sigma_theta
+
+
+def _solve_for_parameter_covariance_svd_subspace(shifted_output_covariance,
+                                                 residual_sensitivities,
+                                                 method="svd_pinv",
+                                                 rcond=1e-10):
+    """
+    Original embedded-Laplace eigenspace estimator, with either direct inverse
+    or pseudo-inverse for U.T A.
+    """
     n_p = residual_sensitivities.shape[1]
-    output_covariance -= np.eye(n_y)*noise_variance
-    [U,d,V] = np.linalg.svd(output_covariance)
-    UTA = U[:,:n_p].T@residual_sensitivities
-    invUTA = np.linalg.inv(UTA)
-    s = np.diag(d[:n_p])
-    if (d[:n_p-1] < _small).any(): 
-        raise ValueError("LaplaceStudy under determined. "
-                         "System may be under determined.")
-    S = invUTA@s@(invUTA.T)
-    return S
+
+    U, d, Vt = np.linalg.svd(shifted_output_covariance)
+
+    if len(d) < n_p:
+        raise ValueError(
+            "LaplaceStudy under determined. The output covariance has fewer "
+            "singular values than there are parameters."
+        )
+
+    # The first n_p singular vectors/eigenvectors are assumed to span the
+    # parameter-induced covariance subspace.
+    Ubar = U[:, :n_p]
+    Dbar = np.diag(d[:n_p])
+    B = Ubar.T @ residual_sensitivities
+
+    logger.debug(
+        "Initial covariance SVD-subspace diagnostics:\n"
+        f"  singular values used = {d[:n_p]}\n"
+        f"  cond(A) = {np.linalg.cond(residual_sensitivities)}\n"
+        f"  cond(U.T @ A) = {np.linalg.cond(B)}"
+    )
+
+    if method == "svd_inverse":
+        # Original behavior, but fix the off-by-one rank check.
+        if (d[:n_p] < _small).any():
+            raise ValueError(
+                "LaplaceStudy under determined. System may be under determined."
+            )
+        Binv = np.linalg.inv(B)
+    elif method == "svd_pinv":
+        Binv = np.linalg.pinv(B, rcond=rcond)
+    else:
+        raise ValueError(f"Unsupported SVD covariance method '{method}'.")
+
+    sigma_theta = Binv @ Dbar @ Binv.T
+    return sigma_theta
+
+
+def _solve_for_parameter_covariance_least_squares(shifted_output_covariance,
+                                                  residual_sensitivities,
+                                                  rcond=1e-10,
+                                                  regularization=0.0):
+    """
+    Solve
+
+        C ~= A Sigma_theta A.T
+
+    for symmetric Sigma_theta using least squares, where
+
+        C = Sigma_y - sigma^2 I.
+
+    The unknowns are the upper-triangular entries of Sigma_theta.
+
+    This avoids relying on the dominant eigenspace of C and can be more stable
+    when the sample covariance eigenspace is noisy.
+    """
+    C = np.asarray(shifted_output_covariance, dtype=float)
+    A = np.asarray(residual_sensitivities, dtype=float)
+
+    C = _symmetrize_matrix(C)
+
+    n_y, n_p = A.shape
+
+    param_tri_rows, param_tri_cols = np.triu_indices(n_p)
+    output_tri_rows, output_tri_cols = np.triu_indices(n_y)
+
+    n_unknowns = len(param_tri_rows)
+    n_equations = len(output_tri_rows)
+
+    design_matrix = np.empty((n_equations, n_unknowns), dtype=float)
+
+    for col_index, (p_i, p_j) in enumerate(zip(param_tri_rows, param_tri_cols)):
+        # Contribution of Sigma_theta[p_i, p_j].
+        #
+        # If p_i == p_j:
+        #   C_ab contribution = A[a, p_i] A[b, p_i]
+        #
+        # If p_i != p_j and Sigma_theta is symmetric:
+        #   C_ab contribution =
+        #       A[a, p_i] A[b, p_j] + A[a, p_j] A[b, p_i]
+        basis_pushforward = np.outer(A[:, p_i], A[:, p_j])
+        if p_i != p_j:
+            basis_pushforward += np.outer(A[:, p_j], A[:, p_i])
+
+        design_matrix[:, col_index] = basis_pushforward[
+            output_tri_rows, output_tri_cols
+        ]
+
+    rhs = C[output_tri_rows, output_tri_cols]
+
+    if regularization is not None and regularization > 0.0:
+        sqrt_reg = np.sqrt(regularization)
+        design_matrix = np.vstack(
+            [design_matrix, sqrt_reg * np.eye(n_unknowns)]
+        )
+        rhs = np.concatenate([rhs, np.zeros(n_unknowns)])
+
+    coeffs, residuals, rank, singular_values = np.linalg.lstsq(
+        design_matrix, rhs, rcond=rcond
+    )
+
+    logger.debug(
+        "Initial covariance least-squares diagnostics:\n"
+        f"  n_outputs = {n_y}\n"
+        f"  n_parameters = {n_p}\n"
+        f"  n_equations = {n_equations}\n"
+        f"  n_unknowns = {n_unknowns}\n"
+        f"  rank(design_matrix) = {rank}\n"
+        f"  singular values = {singular_values}\n"
+        f"  cond(design_matrix) = {np.linalg.cond(design_matrix)}"
+    )
+    if rank < n_unknowns:
+        _raise_unidentifiable_parameters_error(A, rcond)
+
+    sigma_theta = np.zeros((n_p, n_p), dtype=float)
+    sigma_theta[param_tri_rows, param_tri_cols] = coeffs
+    sigma_theta[param_tri_cols, param_tri_rows] = coeffs
+
+    return _symmetrize_matrix(sigma_theta)
+
+
+def _symmetrize_matrix(matrix):
+    matrix = np.asarray(matrix, dtype=float)
+    return 0.5 * (matrix + matrix.T)
+
+
+def _project_symmetric_matrix_to_psd(matrix, min_eigenvalue=0.0):
+    """
+    Project a symmetric matrix to the positive-semidefinite cone by clipping
+    eigenvalues.
+
+    This is useful for forming a numerically safe initial covariance estimate
+    for the subsequent fitted-posterior optimization.
+    """
+    matrix = _symmetrize_matrix(matrix)
+    eigvals, eigvecs = np.linalg.eigh(matrix)
+    eigvals = np.maximum(eigvals, min_eigenvalue)
+    projected = eigvecs @ np.diag(eigvals) @ eigvecs.T
+    return _symmetrize_matrix(projected)
 
 
 def _check_covariance(Sigma):
@@ -524,23 +857,50 @@ def _to_theta(variances, correlation_coefficients, clip=True):
     return theta
 
 
-def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise):
-    noise2 = noise*noise
-    if noise2 == 0.0:
-        noise2 = _small
+def _log_posterior_predictive(theta, residual_sensitivities, residuals, noise_variance, inverse_method="pseudoinverse"):
+    if noise_variance == 0.0:
+        noise_variance = _small
     variances, correlation_coefficients = _from_theta(theta, residual_sensitivities.shape[1])
     Sigma_y = _pushed_forward_variances(variances,correlation_coefficients,residual_sensitivities)
-    Sigma_y = Sigma_y + noise2*np.eye(Sigma_y.shape[0])
-    
-    sign, logdet =  np.linalg.slogdet(Sigma_y)
-    logdetSigma_y = sign*logdet
-    invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
+    Sigma_y = Sigma_y + noise_variance*np.eye(Sigma_y.shape[0])
+    logdetSigma_y = _get_log_determinant_of_positive_definite_matrix(Sigma_y)
+    if logdetSigma_y is None:
+        # Reject this candidate: the predictive covariance is numerically
+        # not positive definite, so its density is undefined.
+        return -np.inf
+    ## diagonal approx
+    if   inverse_method[:4] == "diag":
+        diagSig_y = np.diag(Sigma_y)
+        invSigma= np.diag(1.0/diagSig_y)
+    ## pseudo inverse
+    elif inverse_method[:4] == "pseu":
+        invSigma= np.linalg.pinv(Sigma_y,hermitian=True)
+    ## solve
+    else:
+        invSigma = np.linalg.solve(Sigma_y, np.eye(Sigma_y.shape[0]))
     mse = np.einsum("ki,ij,kj",residuals,invSigma,residuals) 
-
-    n_repeats = residuals.shape[1]
+    n_repeats = residuals.shape[0]
     logp = -0.5*( logdetSigma_y + mse/n_repeats)
     return logp
     
+
+def _get_log_determinant_of_positive_definite_matrix(
+    matrix: np.ndarray,
+) -> float | None:
+    """Return the log determinant of a positive definite matrix.
+
+    :param matrix: symmetric matrix expected to be positive definite.
+    :type matrix: np.ndarray
+    :return: the log determinant, or ``None`` if the determinant is not
+        positive or not finite (the matrix is numerically not positive
+        definite).
+    :rtype: float or None
+    """
+    sign, log_determinant = np.linalg.slogdet(matrix)
+    if sign <= 0 or not np.isfinite(log_determinant):
+        return None
+    return float(log_determinant)
+
 
 def _from_theta(theta, nparameters, clip=True):
     variances                = np.exp (theta[:nparameters])
@@ -580,6 +940,13 @@ class _LaplaceStudyBase(ParameterStudy):
         self._center = None
         self._finite_difference = None
         self._step_size = None
+
+        self._initial_covariance_method = "least_squares"
+        self._initial_covariance_rcond = 1e-10
+        self._initial_covariance_regularization = 0.0
+        self._initial_covariance_project_to_psd = False
+        self._initial_covariance_min_eigenvalue = _small
+
         self.set_step_size()
 
     def _check_parameter_sets_populated(self):
@@ -631,6 +998,82 @@ class _LaplaceStudyBase(ParameterStudy):
         self._step_size=step_size
         if self._finite_difference is not None:
             self._setup_finite_difference()
+
+    def set_initial_covariance_estimator(self,
+                                         method="least_squares",
+                                         rcond=1e-10,
+                                         regularization=0.0,
+                                         project_to_psd=False,
+                                         min_eigenvalue=_small):
+        """
+        Select the initial covariance estimator used by LaplaceStudy.
+
+        Valid methods are:
+
+        ``"svd_inverse"``
+            Original eigenspace method using a direct inverse.
+
+        ``"svd_pinv"``
+            Eigenspace method using a pseudo-inverse for improved robustness
+            when U.T @ A is ill-conditioned.
+
+        ``"least_squares"`` (default)
+            Direct least-squares solve of
+
+                Sigma_y - sigma^2 I ~= A Sigma_theta A.T
+
+            using the symmetric upper-triangular entries of Sigma_theta as
+            unknowns. The study raises ``ValueError`` after the evaluations
+            if the problem is under determined: too few repeats (at least
+            one more than the number of parameters is needed), too little
+            scatter in the repeats, or, without regularization, parameter
+            combinations the residuals are insensitive to. The repeat count
+            is also checked before any evaluation runs.
+
+        Use ``"svd_pinv"`` or ``regularization > 0`` to accept a non-unique
+        estimate for under-determined problems instead of an error.
+
+        :param method: covariance estimator method.
+        :type method: str
+
+        :param rcond: cutoff used in pseudo-inverse or least-squares solve.
+        :type rcond: float
+
+        :param regularization: Tikhonov regularization used only by the
+            least-squares method.
+        :type regularization: float
+
+        :param project_to_psd: project the result to positive semidefinite.
+        :type project_to_psd: bool
+
+        :param min_eigenvalue: minimum eigenvalue for PSD projection.
+        :type min_eigenvalue: float
+
+        :raises ValueError: if the method is unknown.
+        """
+        valid_methods = ["svd_inverse", "svd_pinv", "least_squares", "ls"]
+        method = method.lower()
+
+        if method not in valid_methods:
+            raise ValueError(
+                f"Unknown initial covariance estimator '{method}'. "
+                "Valid options are 'svd_inverse', 'svd_pinv', and "
+                "'least_squares'."
+            )
+
+        check_value_is_nonnegative_real(rcond, "rcond")
+        check_value_is_nonnegative_real(regularization, "regularization")
+        check_value_is_bool(project_to_psd, "project_to_psd")
+        check_value_is_nonnegative_real(min_eigenvalue, "min_eigenvalue")
+
+        if method == "ls":
+            method = "least_squares"
+
+        self._initial_covariance_method = method
+        self._initial_covariance_rcond = rcond
+        self._initial_covariance_regularization = regularization
+        self._initial_covariance_project_to_psd = project_to_psd
+        self._initial_covariance_min_eigenvalue = min_eigenvalue
 
     def _add_parameter_evaluation(self, **p):
       super().add_parameter_evaluation(**p)
@@ -684,180 +1127,6 @@ class _LaplaceStudyBase(ParameterStudy):
     def _get_overall_results(self):
         """"""
 
-class LaplaceStudy(_LaplaceStudyBase):
-    """
-    Use the MatCal :class:`~matcal.core.parameter_studies.LaplaceStudy` to evaluate the gradient of the 
-    calibration residuals
-    at an optimal point in parameter space. The residual gradient can then be used to form a modified Laplace 
-    approximation to estimate the parameter covariance matrix for use in uncertainty quantification. We perform this
-    assuming uncertainty is due to model form error. 
-    """
-    study_class = "LaplaceStudy"
-    _laplace_results_key = "laplace results"
-
-    def __init__(self, *parameters):
-        super().__init__(*parameters)
-        self._calibrate_covariance = True
-        self.set_noise_estimate()
-        
-    def _get_finite_difference_evaluation_points(self):
-        return self._finite_difference.compute_gradient_evaluation_points()
-
-    def add_evaluation_set(self, model, objectives, data=None, 
-                           states=None, data_conditioner_class=MaxAbsDataConditioner):
-        super().add_evaluation_set(model, objectives, data, states, data_conditioner_class)
-        for eval_set in self._evaluation_sets.values():
-            for obj_set in eval_set.objective_sets:
-                for obj_name in obj_set.objectives:
-                    obj = obj_set.objectives[obj_name]
-                    more_than_one_qoi = self._check_obj_qois_for_more_than_one_qoi(obj_set, 
-                                                                                   obj_name)
-                    objs_invalid = more_than_one_qoi and not obj.has_independent_field()
-                    self._raise_error_if_objs_invalid(objs_invalid)
-
-    def set_noise_estimate(self, noise_estimate=0.0):
-        """
-        Set the estimate for the noise in the data. 
-        Currently only a single value is accepted for all data.
-        This is the expected standard deviation of the noise.
-
-        :param noise_estimate: value for the noise estimate, must be non-negative
-        :type noise_estimate: float
-        """
-        check_value_is_nonnegative_real(noise_estimate, "noise_estimate")
-        self._noise_variance=noise_estimate**2
-
-    def set_calibrate_covariance(self, calibrate_covaraince=True):
-        """
-        By default, the laplace study will attempt to improve the 
-        covariance through a calibraiton. Optionally, turn this off or back on.
-
-        :param calibrate_covariance: flag to turn the covariance calibration process off or on
-        :type calibrate_covariance: bool
-        """
-        self._calibrate_covariance = calibrate_covaraince
-
-    def update_laplace_estimate(self, noise_estimate):
-        """Update the laplace study covariance estimate after with an 
-        updated noise estimate."""
-        if self._results is None:
-            raise RuntimeError("Study has not been run yet. Use the \'launch\' method " +
-                "for the first study run. ")
-        self.set_noise_estimate(noise_estimate)
-        self._study_specific_postprocessing()
-        return self._results
-
-    def _log_total_sensitivity_information(self):
-        super()._log_total_sensitivity_information()
-        if self._calibrate_covariance:
-            logger.info("Calibrated parameter covariance:")
-            fit_sigma = (self._results.outcome["fitted_parameter_covariance"])
-            logger.info(str(repr(fit_sigma)))
-            logger.info("\n")
-
-    def _check_obj_qois_for_more_than_one_qoi(self, obj_set, obj_name):
-        more_than_one_qoi = False
-        conditioned_exp_qois = obj_set.conditioned_experiment_qoi_collection[obj_name]
-        for state in conditioned_exp_qois:
-            for data in conditioned_exp_qois[state]:
-                if data.length > 1:
-                    more_than_one_qoi = True
-        return more_than_one_qoi
-
-    def _raise_error_if_objs_invalid(self, objs_invalid):
-        if objs_invalid:
-            raise ValueError(f"The {LaplaceStudy.study_class}Study"
-                            " only accepts residuals/objectives of length 1 or" 
-                            " objectives with independent fields variables"
-                            " so that repeat data can be compared at common" 
-                            " independent variable locations.")
-
-    def _study_specific_postprocessing(self):
-        total_eval_residual_vecs = self._extract_residual_information_for_processing()
-        center_resids = total_eval_residual_vecs[self._get_center_eval_index()].T
-        residual_gradients = self._calculate_residual_sensitivities(total_eval_residual_vecs)
-        covariance_estimates = self._calculate_covariance(center_resids, residual_gradients)
-        output = self._get_parameter_specific_results("residuals_gradient")
-        output.update(self._get_overall_results(covariance_estimates))
-        self._results._set_outcome(output)
-        self._log_total_sensitivity_information()
-    
-    def _get_overall_results(self, covariance_estimates):
-        results = OrderedDict()
-        results["parameter_order"] = self._parameter_collection.get_item_names()
-        results.update(covariance_estimates)
-        return results
-
-    def _calculate_residual_sensitivities(self, total_eval_residuals):
-        self._finite_difference.set_function_values(total_eval_residuals)
-        residual_sensitivities = np.atleast_3d(self._gradient())
-        # grab first one from repeats, this is the most populated and since this is 
-        # the derivative of the residuals where the third index is the repeat #, 
-        # the first one is good enough for derivative of the model w.r.t. the parameters. 
-        residual_sensitivities = residual_sensitivities.T[0, :, :]
-        return residual_sensitivities
-
-    def _calculate_covariance(self, center_resids, residual_sensitivities):
-        estimated_covariance = _estimate_parameter_covariance(center_resids, 
-                                                             residual_sensitivities, 
-                                                             self._noise_variance) 
-        covariance_results = OrderedDict()
-        covariance_results["estimated_parameter_covariance"] = estimated_covariance
-        if self._calibrate_covariance:
-            fitted_posterior = _fit_posterior(center_resids, residual_sensitivities, 
-                                              estimated_covariance, 
-                                         self._noise_variance)
-            covariance_results["fitted_parameter_covariance"] = fitted_posterior
-        else:
-            logger.info("Skipping covariance calibration by user request.\n")
-
-        return covariance_results
-    
-    def _extract_residual_information_for_processing(self):
-        residual_matrices=[]
-        for eval_index in range(self._results.number_of_evaluations):
-            eval_sub_residual_matrices = []
-            for model, eval_set in self._evaluation_sets.items():
-                for obj_set in eval_set.objective_sets:
-                    for obj_name in obj_set.objectives:
-                        resids_dc = self._get_raw_residuals(model.name, obj_name, eval_index)
-                        if obj_set.objectives[obj_name].has_independent_field():
-                            indep_field = obj_set.objectives[obj_name].independent_field
-                            exp_dc = obj_set.data_collection
-                            new_resids = self._get_interpolated_responses(resids_dc, exp_dc, 
-                                                                          indep_field)
-                        else:
-                            new_resids = self._get_single_response_set(resids_dc)
-                        eval_sub_residual_matrices += new_resids
-            _combine_array_method = _combine_array_list_into_zero_padded_single_array
-            total_residual_matrix = _combine_array_method(eval_sub_residual_matrices)
-            residual_matrices.append(np.atleast_2d(total_residual_matrix))
-        return residual_matrices
-    
-    def _get_interpolated_responses(self, residuals_dc, exp_dc, indep_field):
-        data_stats = DataCollectionStatistics()
-        combined_interpolated_residuals = []
-        for state in residuals_dc:
-            register_data_method = data_stats._interpolate_state_data_to_common_independent_variable
-            interpolated_resids = register_data_method(indep_field, residuals_dc, state, exp_dc)
-            interpolated_resids.pop(indep_field)
-            for field in interpolated_resids:
-                combined_interpolated_residuals.append(np.atleast_2d(interpolated_resids[field]).T)
-
-        return combined_interpolated_residuals
-
-    def _get_single_response_set(self, response_dc):
-        combined_responses = []
-        for state in response_dc:
-            for field in response_dc.state_common_field_names(state):
-                combined_resids_current_field = []
-                for data in response_dc[state]:
-                    if data.length > 1:
-                        raise RuntimeError(f"Error in {LaplaceStudy.study_class}Study."
-                                            " Contact MatCal support")
-                    combined_resids_current_field.append(data[field][0])
-                combined_responses.append(np.atleast_2d(combined_resids_current_field))
-        return combined_responses
    
 
 def sample_multivariate_normal(nsamples, mean, covariance_matrix, seed=None, param_names=None):
@@ -933,6 +1202,43 @@ def _create_samples_dict_from_samples_array( samples, param_names=None):
     return samples_dict
 
 
+
+def _get_total_scaled_covariance(inverse_hessian, std_dev_estimate):
+    cov = inverse_hessian
+    scale = 2*std_dev_estimate*std_dev_estimate
+    return scale*cov
+
+
+def _package_parameter_specific_results(param_collect, sens_info):
+    out = OrderedDict()
+    for sens_key, sens_val in sens_info.items():
+        for param_i, param_key in enumerate(param_collect.keys()):
+            if isinstance(sens_val, (list, np.ndarray)):
+                out_name = f"{sens_key}:{param_key}"
+                out[out_name] = sens_val[param_i]
+    return out
+
+
+def _combine_array_list_into_zero_padded_single_array(arrays):
+    max_shape = [0,0]
+    num_resids = 0
+    for array in arrays:
+        current_shape = array.shape
+        max_shape[0] = np.max((max_shape[0], current_shape[0]))
+        max_shape[1] = np.max((max_shape[1], current_shape[1]))
+        num_resids += current_shape[0]
+    
+    combined_array = np.zeros((num_resids, max_shape[1]))
+    current_eval_set_row = 0
+    from copy import deepcopy
+    for array in arrays:
+        start_row = current_eval_set_row
+        end_row = current_eval_set_row+array.shape[0]
+        end_col = array.shape[1]
+        combined_array[start_row:end_row, 0:end_col] = deepcopy(array)
+        current_eval_set_row = end_row
+    return combined_array
+
 class ClassicLaplaceStudy(_LaplaceStudyBase):
     """
     Use the MatCal :class:`~matcal.core.parameter_studies.ClassicLaplaceStudy` 
@@ -1007,40 +1313,572 @@ class ClassicLaplaceStudy(_LaplaceStudyBase):
         return C
   
 
-def _get_total_scaled_covariance(inverse_hessian, std_dev_estimate):
-    cov = inverse_hessian
-    scale = 2*std_dev_estimate*std_dev_estimate
-    return scale*cov
+class LaplaceStudy(_LaplaceStudyBase):
+    """
+    Use the MatCal :class:`~matcal.core.parameter_studies.LaplaceStudy` to evaluate the gradient of the 
+    calibration residuals
+    at an optimal point in parameter space. The residual gradient can then be used to form a modified Laplace 
+    approximation to estimate the parameter covariance matrix for use in uncertainty quantification. We perform this
+    assuming uncertainty is due to model form error. 
 
+    This class can also compute an objective Hessian from the residual finite
+    differences. By default, the objective Hessian uses the Gauss-Newton form
 
-def _package_parameter_specific_results(param_collect, sens_info):
-    out = OrderedDict()
-    for sens_key, sens_val in sens_info.items():
-        for param_i, param_key in enumerate(param_collect.keys()):
-            if isinstance(sens_val, (list, np.ndarray)):
-                out_name = f"{sens_key}:{param_key}"
-                out[out_name] = sens_val[param_i]
-    return out
+        H = 2 J.T @ J
 
+    where J is the residual/model gradient with respect to parameters.
 
-def _combine_array_list_into_zero_padded_single_array(arrays):
-    max_shape = [0,0]
-    num_resids = 0
-    for array in arrays:
-        current_shape = array.shape
-        max_shape[0] = np.max((max_shape[0], current_shape[0]))
-        max_shape[1] = np.max((max_shape[1], current_shape[1]))
-        num_resids += current_shape[0]
-    
-    combined_array = np.zeros((num_resids, max_shape[1]))
-    current_eval_set_row = 0
-    from copy import deepcopy
-    for array in arrays:
-        start_row = current_eval_set_row
-        end_row = current_eval_set_row+array.shape[0]
-        end_col = array.shape[1]
-        combined_array[start_row:end_row, 0:end_col] = deepcopy(array)
-        current_eval_set_row = end_row
-    return combined_array
+    If set_use_hessian(True) is called, the study evaluates the larger nested
+    finite-difference Hessian stencil and computes the full residual-based
+    Hessian of the sum-of-squares objective
 
+        H = 2 * (J.T @ J + sum_k r_k H_k)
 
+    where r_k is residual k and H_k is the parameter Hessian of residual k.
+    """
+    study_class = "LaplaceStudy"
+    _laplace_results_key = "laplace results"
+
+    def __init__(self, *parameters):
+        super().__init__(*parameters)
+        # If True use lin.alg. estimate to start a fitting
+        self._calibrate_covariance = True
+
+        # If False, only gradient finite-difference points are evaluated and the
+        # reported objective Hessian is the Gauss-Newton approximation:
+        #
+        #     H = 2 J.T @ J
+        #
+        # If True, Hessian finite-difference points are evaluated and the
+        # reported objective Hessian is:
+        #
+        #     H = 2 * (J.T @ J + sum_k r_k H_k)
+        #
+        # The Hessian point set is nested: it includes the central-difference
+        # gradient point set, so the same evaluations provide both J and H_k.
+        self._use_hessian = False
+
+        self.set_noise_estimate()
+
+    def set_use_hessian(self, use_hessian=True):
+        """
+        Set whether the LaplaceStudy should use the full residual Hessian
+        contribution when forming the objective Hessian.
+
+        If False, the objective Hessian is approximated using the Gauss-Newton
+        form
+
+            H = 2 J.T @ J
+
+        If True, the full residual-based Hessian is used
+
+            H = 2 * (J.T @ J + sum_k r_k H_k)
+
+        where J is the residual sensitivity matrix, r_k is residual k, and H_k
+        is the Hessian of residual k with respect to the parameters.
+
+        Setting this to True causes the study to evaluate the larger nested
+        finite-difference Hessian point set. The gradient is still computed from
+        the subset of those same evaluations.
+
+        :param use_hessian: whether to use the full residual Hessian contribution
+        :type use_hessian: bool
+        """
+        check_value_is_bool(use_hessian, "use_hessian")
+        self._use_hessian = use_hessian
+
+        # If the parameter center has already been set, rebuild the parameter
+        # evaluation list so launch() will run the correct finite-difference
+        # point set.
+        if self._center is not None:
+            self._setup_finite_difference()
+
+    def _get_finite_difference_evaluation_points(self):
+        """
+        Return the finite-difference evaluation points required by this study.
+
+        If self._use_hessian is False, only the central-difference gradient
+        stencil is used.
+
+        If self._use_hessian is True, the Hessian stencil is used. The Hessian
+        stencil is nested and includes the central-difference gradient stencil.
+        """
+        if getattr(self, "_use_hessian", False):
+            return self._finite_difference.compute_hessian_evaluation_points()
+        else:
+            return self._finite_difference.compute_gradient_evaluation_points()
+
+    def add_evaluation_set(self, model, objectives, data=None, 
+                           states=None, data_conditioner_class=MaxAbsDataConditioner):
+        super().add_evaluation_set(model, objectives, data, states, data_conditioner_class)
+        for eval_set in self._evaluation_sets.values():
+            for obj_set in eval_set.objective_sets:
+                for obj_name in obj_set.objectives:
+                    obj = obj_set.objectives[obj_name]
+                    more_than_one_qoi = self._check_obj_qois_for_more_than_one_qoi(obj_set, 
+                                                                                   obj_name)
+                    objs_invalid = more_than_one_qoi and not obj.has_independent_field()
+                    self._raise_error_if_objs_invalid(objs_invalid)
+
+    def _run_study(self):
+        self._check_parameter_sets_populated()
+        self._check_enough_repeats_before_evaluations()
+        return super()._run_study()
+
+    def _check_enough_repeats_before_evaluations(self) -> None:
+        """Fail before any evaluation runs if the repeats cannot determine the
+        covariance with the least-squares estimator."""
+        if self._initial_covariance_method not in _LEAST_SQUARES_METHOD_NAMES:
+            return
+        number_of_parameters = len(self._parameter_collection.get_item_names())
+        _check_repeats_can_determine_covariance(self._get_maximum_number_of_repeats(),
+                                                number_of_parameters)
+
+    def _get_maximum_number_of_repeats(self) -> int:
+        """Return the largest number of repeat data sets for any state of any
+        objective; this is the number of repeats in the residual matrix."""
+        repeat_counts = [
+            len(qois[state])
+            for eval_set in self._evaluation_sets.values()
+            for obj_set in eval_set.objective_sets
+            for qois in obj_set.conditioned_experiment_qoi_collection.values()
+            for state in qois]
+        return max(repeat_counts, default=0)
+
+    def set_noise_estimate(self, noise_estimate=0.0):
+        """
+        Set the estimate for the noise in the data. 
+        Currently only a single value is accepted for all data.
+        This is the expected standard deviation of the noise.
+
+        :param noise_estimate: value for the noise estimate, must be non-negative
+        :type noise_estimate: float
+        """
+        check_value_is_nonnegative_real(noise_estimate, "noise_estimate")
+        self._noise_variance = noise_estimate**2
+
+    def set_calibrate_covariance(self, calibrate_covariance=True):
+        """
+        By default, the laplace study will attempt to improve the
+        covariance through a calibration. Optionally, turn this off or back on.
+
+        :param calibrate_covariance: flag to turn the covariance calibration process off or on
+        :type calibrate_covariance: bool
+        """
+        check_value_is_bool(calibrate_covariance, "calibrate_covariance")
+        self._calibrate_covariance = calibrate_covariance
+
+    def update_laplace_estimate(self, noise_estimate):
+        """Update the laplace study covariance estimate after with an 
+        updated noise estimate."""
+        if self._results is None:
+            raise RuntimeError("Study has not been run yet. Use the \'launch\' method " +
+                "for the first study run. ")
+        self.set_noise_estimate(noise_estimate)
+        self._study_specific_postprocessing()
+        return self._results
+
+    def _log_total_sensitivity_information(self):
+        super()._log_total_sensitivity_information()
+        if self._calibrate_covariance:
+            logger.info("Calibrated parameter covariance:")
+            fit_sigma = self._results.outcome["fitted_parameter_covariance"]
+            logger.info(str(repr(fit_sigma)))
+            logger.info("\n")
+
+        if "objective_hessian" in self._results.outcome:
+            logger.info("Objective Hessian:")
+            logger.info(str(repr(self._results.outcome["objective_hessian"])))
+            logger.info("\n")
+            logger.info("Objective Hessian type:")
+            logger.info(str(self._results.outcome["objective_hessian_type"]))
+            logger.info("\n")
+
+    def _check_obj_qois_for_more_than_one_qoi(self, obj_set, obj_name):
+        more_than_one_qoi = False
+        conditioned_exp_qois = obj_set.conditioned_experiment_qoi_collection[obj_name]
+        for state in conditioned_exp_qois:
+            for data in conditioned_exp_qois[state]:
+                if data.length > 1:
+                    more_than_one_qoi = True
+        return more_than_one_qoi
+
+    def _raise_error_if_objs_invalid(self, objs_invalid):
+        if objs_invalid:
+            raise ValueError(f"The {LaplaceStudy.study_class}Study"
+                            " only accepts residuals/objectives of length 1 or" 
+                            " objectives with independent fields variables"
+                            " so that repeat data can be compared at common" 
+                            " independent variable locations.")
+
+    def _study_specific_postprocessing(self):
+        total_eval_residual_vecs = self._extract_residual_information_for_processing()
+
+        center_resids = total_eval_residual_vecs[self._get_center_eval_index()].T
+
+        residual_gradients = self._calculate_residual_sensitivities(
+            total_eval_residual_vecs
+        )
+
+        objective_hessian = self._calculate_objective_hessian(
+            center_resids,
+            residual_gradients
+        )
+
+        covariance_estimates = self._calculate_covariance(
+            center_resids,
+            residual_gradients
+        )
+
+        output = self._get_parameter_specific_results("residuals_gradient")
+        output.update({"residuals": center_resids})
+        output.update({"objective_hessian": objective_hessian})
+        output.update({
+            "objective_hessian_type": (
+                "full_residual_hessian" if self._use_hessian else "gauss_newton"
+            )
+        })
+        output.update(self._get_overall_results(covariance_estimates))
+
+        self._results._set_outcome(output)
+        self._log_total_sensitivity_information()
+
+    def _get_overall_results(self, covariance_estimates):
+        results = OrderedDict()
+        results["parameter_order"] = self._parameter_collection.get_item_names()
+        results.update(covariance_estimates)
+        return results
+
+    def _calculate_residual_sensitivities(self, total_eval_residuals):
+        self._finite_difference.set_function_values(total_eval_residuals)
+
+        residual_sensitivities = np.atleast_3d(self._gradient())
+
+        # Grab first one from repeats. This is the most populated and since this is 
+        # the derivative of the residuals where the third index is the repeat #, 
+        # the first one is good enough for derivative of the model w.r.t. the parameters.
+        residual_sensitivities = residual_sensitivities.T[0, :, :]
+
+        return residual_sensitivities
+
+    def _calculate_objective_hessian(self, center_resids, residual_sensitivities):
+        """
+        Calculate the Hessian of the residual sum-of-squares objective.
+
+        If self._use_hessian is False, this returns the Gauss-Newton Hessian
+
+            H = 2 J.T @ J
+
+        If self._use_hessian is True, this returns the full residual-based
+        objective Hessian
+
+            H = 2 * (J.T @ J + sum_k r_k H_k)
+
+        where H_k is the Hessian of residual k with respect to the parameters.
+
+        For repeated data, this implementation uses the mean residual over
+        repeats in the second-order residual term. This is consistent with a
+        mean-over-repeats sum-of-squares objective.
+        """
+        objective_hessian = self._calculate_gauss_newton_objective_hessian(
+            residual_sensitivities
+        )
+
+        if self._use_hessian:
+            residual_hessians = self._calculate_residual_hessians()
+
+            center_residual_vector = (
+                self._get_center_residual_vector_for_objective_hessian(
+                    center_resids
+                )
+            )
+
+            second_order_hessian = (
+                self._calculate_second_order_residual_hessian_term(
+                    center_residual_vector,
+                    residual_hessians
+                )
+            )
+
+            objective_hessian = objective_hessian + second_order_hessian
+
+        return _symmetrize_matrix(objective_hessian)
+
+    def _calculate_gauss_newton_objective_hessian(self, residual_sensitivities):
+        """
+        Calculate the Gauss-Newton approximation to the residual sum-of-squares
+        objective Hessian.
+
+        For the objective
+
+            Phi(theta) = r(theta).T r(theta)
+
+        the Gauss-Newton Hessian is
+
+            H_GN = 2 J.T J
+
+        If you instead define the objective as
+
+            Phi(theta) = 0.5 r(theta).T r(theta)
+
+        then divide this Hessian by 2.
+        """
+        J = np.asarray(residual_sensitivities, dtype=float)
+
+        if J.ndim != 2:
+            raise RuntimeError(
+                "Unexpected residual sensitivity shape in LaplaceStudy: "
+                f"{J.shape}. Expected shape is n_residuals x n_parameters."
+            )
+
+        return _symmetrize_matrix(2.0 * J.T @ J)
+
+    def _calculate_residual_hessians(self):
+        """
+        Calculate residual Hessians from the FiniteDifference object.
+
+        The raw FiniteDifference hessian has shape
+
+            n_parameters x n_parameters x n_residuals x n_repeats
+
+        when residuals have repeated observations.
+
+        The residual sensitivities already use the first repeat because the
+        derivative of the model residual with respect to the parameters should
+        be independent of the repeat. We do the same here.
+
+        Returns an array with shape
+
+            n_residuals x n_parameters x n_parameters
+        """
+        if not self._use_hessian:
+            raise RuntimeError(
+                "Residual Hessians were requested, but this LaplaceStudy was "
+                "not configured to evaluate Hessian points. Call "
+                "set_use_hessian(True) before launch()."
+            )
+
+        residual_hessians = np.asarray(self._finite_difference.hessian())
+
+        if residual_hessians.ndim == 4:
+            # Shape:
+            #
+            #     n_parameters x n_parameters x n_residuals x n_repeats
+            #
+            # Use the first repeat, consistent with
+            # _calculate_residual_sensitivities().
+            residual_hessians = residual_hessians[:, :, :, 0]
+
+        elif residual_hessians.ndim == 3:
+            # Shape:
+            #
+            #     n_parameters x n_parameters x n_residuals
+            pass
+
+        elif residual_hessians.ndim == 2:
+            # Scalar residual case:
+            #
+            #     n_parameters x n_parameters
+            #
+            # Convert to:
+            #
+            #     n_parameters x n_parameters x 1
+            residual_hessians = residual_hessians[:, :, np.newaxis]
+
+        else:
+            raise RuntimeError(
+                "Unexpected residual Hessian shape in LaplaceStudy: "
+                f"{residual_hessians.shape}"
+            )
+
+        # Convert from:
+        #
+        #     n_parameters x n_parameters x n_residuals
+        #
+        # to:
+        #
+        #     n_residuals x n_parameters x n_parameters
+        residual_hessians = np.moveaxis(residual_hessians, -1, 0)
+
+        return residual_hessians
+
+    def _get_center_residual_vector_for_objective_hessian(self, center_resids):
+        """
+        Return the residual vector used in the second-order Hessian correction.
+
+        center_resids has shape
+
+            n_repeats x n_residuals
+
+        for repeated data.
+
+        This method uses the mean residual over repeats, which corresponds to a
+        mean-over-repeats objective. If the desired objective is instead the raw
+        sum over repeats, replace np.mean(center_resids, axis=0) with
+        np.sum(center_resids, axis=0).
+        """
+        center_resids = np.asarray(center_resids, dtype=float)
+
+        if center_resids.ndim == 1:
+            return center_resids
+
+        if center_resids.ndim == 2:
+            return np.mean(center_resids, axis=0)
+
+        raise RuntimeError(
+            "Unexpected center residual shape in LaplaceStudy: "
+            f"{center_resids.shape}"
+        )
+
+    def _calculate_second_order_residual_hessian_term(self,
+                                                     center_residual_vector,
+                                                     residual_hessians):
+        """
+        Calculate the second-order residual contribution to the objective
+        Hessian
+
+            2 * sum_k r_k H_k
+
+        where residual_hessians[k, :, :] is H_k.
+        """
+        center_residual_vector = np.asarray(center_residual_vector, dtype=float)
+        residual_hessians = np.asarray(residual_hessians, dtype=float)
+
+        if residual_hessians.ndim != 3:
+            raise RuntimeError(
+                "Unexpected residual Hessian shape in LaplaceStudy: "
+                f"{residual_hessians.shape}. Expected shape is "
+                "n_residuals x n_parameters x n_parameters."
+            )
+
+        if center_residual_vector.ndim != 1:
+            raise RuntimeError(
+                "Unexpected center residual vector shape in LaplaceStudy: "
+                f"{center_residual_vector.shape}. Expected a one-dimensional "
+                "residual vector."
+            )
+
+        if residual_hessians.shape[0] != center_residual_vector.shape[0]:
+            raise RuntimeError(
+                "Residual Hessian/residual size mismatch in LaplaceStudy. "
+                f"Residual Hessians have {residual_hessians.shape[0]} "
+                f"residual entries, while the center residual vector has "
+                f"{center_residual_vector.shape[0]} entries."
+            )
+
+        return _symmetrize_matrix(
+            2.0 * np.einsum(
+                "k,kij->ij",
+                center_residual_vector,
+                residual_hessians
+            )
+        )
+
+    def _calculate_covariance(self, center_resids, residual_sensitivities):
+        estimated_covariance = _estimate_parameter_covariance(
+            center_resids,
+            residual_sensitivities,
+            self._noise_variance,
+            method=self._initial_covariance_method,
+            rcond=self._initial_covariance_rcond,
+            regularization=self._initial_covariance_regularization,
+            project_to_psd=self._initial_covariance_project_to_psd,
+            min_eigenvalue=self._initial_covariance_min_eigenvalue
+        )
+
+        covariance_results = OrderedDict()
+        covariance_results["estimated_parameter_covariance"] = estimated_covariance
+
+        if self._calibrate_covariance:
+            fitted_posterior = _fit_posterior(
+                center_resids,
+                residual_sensitivities,
+                estimated_covariance,
+                self._noise_variance
+            )
+            covariance_results["fitted_parameter_covariance"] = fitted_posterior
+        else:
+            logger.info("Skipping covariance calibration by user request.\n")
+
+        return covariance_results
+
+    def _extract_residual_information_for_processing(self):
+        residual_matrices = []
+
+        for eval_index in range(self._results.number_of_evaluations):
+            eval_sub_residual_matrices = []
+
+            for model, eval_set in self._evaluation_sets.items():
+                for obj_set in eval_set.objective_sets:
+                    for obj_name in obj_set.objectives:
+                        resids_dc = self._get_raw_residuals(
+                            model.name,
+                            obj_name,
+                            eval_index
+                        )
+
+                        if obj_set.objectives[obj_name].has_independent_field():
+                            indep_field = obj_set.objectives[obj_name].independent_field
+                            exp_dc = obj_set.data_collection
+                            new_resids = self._get_interpolated_responses(
+                                resids_dc,
+                                exp_dc,
+                                indep_field
+                            )
+                        else:
+                            new_resids = self._get_single_response_set(resids_dc)
+
+                        eval_sub_residual_matrices += new_resids
+
+            _combine_array_method = _combine_array_list_into_zero_padded_single_array
+            total_residual_matrix = _combine_array_method(eval_sub_residual_matrices)
+            residual_matrices.append(np.atleast_2d(total_residual_matrix))
+
+        return residual_matrices
+
+    def _get_interpolated_responses(self, residuals_dc, exp_dc, indep_field):
+        data_stats = DataCollectionStatistics()
+        combined_interpolated_residuals = []
+
+        for state in residuals_dc:
+            register_data_method = (
+                data_stats._interpolate_state_data_to_common_independent_variable
+            )
+
+            interpolated_resids = register_data_method(
+                indep_field,
+                residuals_dc,
+                state,
+                exp_dc
+            )
+
+            interpolated_resids.pop(indep_field)
+
+            for field in interpolated_resids:
+                combined_interpolated_residuals.append(
+                    np.atleast_2d(interpolated_resids[field]).T
+                )
+
+        return combined_interpolated_residuals
+
+    def _get_single_response_set(self, response_dc):
+        combined_responses = []
+
+        for state in response_dc:
+            for field in response_dc.state_common_field_names(state):
+                combined_resids_current_field = []
+
+                for data in response_dc[state]:
+                    if data.length > 1:
+                        raise RuntimeError(
+                            f"Error in {LaplaceStudy.study_class}Study."
+                            " Contact MatCal support"
+                        )
+
+                    combined_resids_current_field.append(data[field][0])
+
+                combined_responses.append(
+                    np.atleast_2d(combined_resids_current_field)
+                )
+
+        return combined_responses
