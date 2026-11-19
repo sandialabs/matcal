@@ -38,7 +38,8 @@ class TwoParameterPythonTest(MatcalUnitTest):
     def evaluate_calibration_results_for_method(self, method="nl2sol", 
                                                 convergence_tol=1e-12, 
                                                 max_iterations=25, 
-                                                step_size = 1e-7):
+                                                step_size = 1e-7,
+                                                absolute_tolerance=None):
         slope = Parameter("m", 0., 100.)
         intercept = Parameter("b", -5, 5, 0.5+1e-2*np.random.uniform())
         parameter_collection = ParameterCollection("one_parameter", slope, intercept)
@@ -55,6 +56,8 @@ class TwoParameterPythonTest(MatcalUnitTest):
         calibration.set_max_iterations(max_iterations)
         calibration.set_convergence_tolerance(convergence_tol)
         calibration.set_step_size(step_size)
+        if absolute_tolerance is not None:
+            calibration.set_absolute_convergence_tolerance(absolute_tolerance)
         results = calibration.launch()
 
         self.assertAlmostEqual(results.outcome["best:m"], 2., delta=2 * self.error_tol)
@@ -112,6 +115,26 @@ class TwoParameterPythonTest(MatcalUnitTest):
 
         self.assertAlmostEqual(results.outcome["best:m"], 2., delta=2 * self.error_tol)
         self.assertAlmostEqual(results.outcome["best:b"], 0, delta=self.error_tol)
+
+    def test_calibration_dot_mmfd(self):
+        self.error_tol = 1e-2
+        self.evaluate_calibration_results_for_method("dot_mmfd", convergence_tol=1e-9,
+                                                     step_size=1e-6, max_iterations=50)
+
+    def test_calibration_dot_slp(self):
+        self.error_tol = 1e-2
+        self.evaluate_calibration_results_for_method("dot_slp", convergence_tol=1e-9,
+                                                     step_size=1e-6, max_iterations=50)
+
+    def test_calibration_rol(self):
+        self.error_tol = 1e-2
+        self.evaluate_calibration_results_for_method("rol", max_iterations=50,
+                                                     step_size=1e-6)
+
+    def test_calibration_matcal_absolute_tolerance_conmin_mfd(self):
+        self.error_tol = 1e-3
+        self.evaluate_calibration_results_for_method(
+            "conmin_mfd", absolute_tolerance=1e-8)
 
     def test_calibration_conmin_mfd(self):
         self.error_tol= 1e-5

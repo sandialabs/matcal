@@ -1,20 +1,39 @@
 """
 This module contains MatCal's interface to Dakota's local calibration methods.
 """
+from collections.abc import Sequence
+from dataclasses import replace
 from numbers import Real
 
+from matcal.core.input_file_writer import InputFileLine
 from matcal.core.logger import initialize_matcal_logger
-from matcal.core.utilities import (check_item_is_correct_type, 
-                                   check_value_is_positive_integer, 
-                                   check_value_is_real_between_values)
-
+from matcal.core.utilities import (
+    check_item_is_correct_type,
+    check_value_is_positive_integer,
+    check_value_is_positive_real,
+    check_value_is_real_between_values,
+)
 from matcal.dakota.dakota_studies import DakotaCalibrationStudyBase
-from matcal.dakota.input_file_writer import (DakotaCalibrationFile, GeneralGradientMethodType, 
-                                             NongradientResponseBlock, DakMethodKeys, 
-                                             dakota_response_identifier, GradientResponseBlock, 
-                                             LeastSquaresResponseBlock, NumericalGradientBlock, 
-                                             DakGradientKeys, GeneralNongradientMethodType, 
-                                             method_type_defaults_identifier)
+from matcal.dakota.gradient_convergence import (
+    ConvergenceSettings,
+    MatCalConvergenceMonitor,
+    keywords_to_remove,
+    matcal_checked_settings,
+    native_lines,
+)
+from matcal.dakota.input_file_writer import (
+    DakGradientKeys,
+    DakMethodKeys,
+    DakotaCalibrationFile,
+    GeneralGradientMethodType,
+    GeneralNongradientMethodType,
+    GradientResponseBlock,
+    LeastSquaresResponseBlock,
+    NongradientResponseBlock,
+    NumericalGradientBlock,
+    dakota_response_identifier,
+    method_type_defaults_identifier,
+)
 
 logger = initialize_matcal_logger(__name__)
 
@@ -40,8 +59,8 @@ class _GradientMethodKeys():
     dot_sqp = "dot_sqp"
     conmin_mfd = "conmin_mfd"
     optpp_q_newton = "optpp_q_newton"
-    optpp_g_newton = "optpp_g_newton"
     optpp_fd_newton = "optpp_fd_newton"
+    rol = "rol"
 
 
 dakota_response_identifier.register(_GradientMethodKeys.npsol_sqp, 
@@ -58,6 +77,17 @@ dakota_response_identifier.register(_GradientMethodKeys.optpp_q_newton,
                                     GradientResponseBlock)
 dakota_response_identifier.register(_GradientMethodKeys.optpp_fd_newton, 
                                     GradientResponseBlock)
+dakota_response_identifier.register(_GradientMethodKeys.rol, 
+                                    GradientResponseBlock)
+
+
+_STEP_SIZE_LIMITS = (1e-9, 1e-1)
+_STEP_SIZE_TYPES = ("relative", "absolute", "bounds")
+
+
+def _check_step_size(value: Real) -> None:
+    check_value_is_real_between_values(value, *_STEP_SIZE_LIMITS, "step size",
+                                       call_depth=1)
 
 
 class _GradientDakotaFile(DakotaCalibrationFile):
@@ -73,11 +103,14 @@ class _GradientDakotaFile(DakotaCalibrationFile):
                         _GradientMethodKeys.dot_sqp,
                         _GradientMethodKeys.conmin_mfd, 
                         _GradientMethodKeys.optpp_q_newton,
-                        _GradientMethodKeys.optpp_fd_newton]
+                        _GradientMethodKeys.optpp_fd_newton,
+                        _GradientMethodKeys.rol]
 
     valid_methods = least_squares_methods+gradient_methods
 
     def __init__(self, *args, **kwargs):
+        self._convergence_settings = ConvergenceSettings()
+        self._number_of_step_sizes: int | None = None
         super().__init__(*args, **kwargs)
         self.set_method(_LeastSquaresMethodKeys.nl2sol)
     
@@ -88,50 +121,226 @@ class _GradientDakotaFile(DakotaCalibrationFile):
 
         Optionally, gradient based methods that operate on objective functions can be chosen which is recommended 
         for problems with large numbers of residuals such as some full-field interpolation objective. 
-        These methods include "npsol_sqp", "dot_sqp" , "optpp_q_newton", and "conmin_mfd". 
+        These methods include "npsol_sqp", "dot_sqp", "optpp_q_newton", "conmin_mfd" and "rol". 
 
         Some gradient methods that use an objective that are available but not recommended included 
         "dot_slp", "dot_mmfd", and  "optpp_fd_newton". These performed poorly on our production level tests, so 
         the other methods are recommended unless you have a specific case where these are required.
 
-        .. note: Some methods treat the method options differently and may not behave the same for different options 
-            such as "convergence_tolerance", "max_iterations" and "max_function_evaluations".
+        Convergence settings made before or after this call apply to the
+        chosen method. See :class:`~matcal.dakota.local_calibration_studies.GradientCalibrationStudy`
+        for how each setting is handled per method.
 
+        .. note::
+            "npsol_sqp", "nlssol_sqp" and the "dot_*" methods are licensed
+            solvers that are only available in Dakota builds that include them.
+
+        :param method_name: the Dakota method keyword.
+        :type method_name: str
+        :raises ValueError: if the method is not a supported gradient method.
         """
         self._set_method(method_name)
+        self._apply_convergence_settings()
+
+    def set_convergence_tolerance(self, value: float) -> None:
+        """
+        Set the relative convergence tolerance: the calibration stops when the
+        relative drop in the total objective between iterates is at most this
+        value. A value greater than 0.0 and less than 1.0 is expected. The
+        default is 1e-3.
+
+        :param value: the relative convergence tolerance
+        :type value: float
+        :raises TypeError: if the value is not a real number.
+        :raises ValueError: if the value is not between 0 and 1.
+        """
+        check_value_is_real_between_values(value, 0, 1.0, "value")
+        self._update_convergence_settings(relative=value)
+
+    def set_absolute_convergence_tolerance(self, value: float) -> None:
+        """
+        Set the absolute convergence tolerance: the calibration stops when the
+        total objective is at most this value. Not set by default.
+
+        :param value: the absolute convergence tolerance
+        :type value: float
+        :raises TypeError: if the value is not a real number.
+        :raises ValueError: if the value is not positive.
+        """
+        check_value_is_positive_real(value, "value")
+        self._update_convergence_settings(absolute=value)
+
+    def set_variable_tolerance(self, value: float) -> None:
+        """
+        Set the variable convergence tolerance: the calibration stops when no
+        parameter, scaled to its bounds, changes by more than this value
+        between iterates. A value greater than 0.0 and less than 1.0 is
+        expected. Not set by default.
+
+        :param value: the variable convergence tolerance
+        :type value: float
+        :raises TypeError: if the value is not a real number.
+        :raises ValueError: if the value is not between 0 and 1.
+        """
+        check_value_is_real_between_values(value, 0, 1.0, "value")
+        self._update_convergence_settings(variable=value)
+
+    def set_max_function_evaluations(self, value: int) -> None:
+        """
+        Set the maximum number of function evaluations. The default is 1000.
+
+        :param value: the maximum number of function evaluations
+        :type value: int
+        :raises TypeError: if the value is not an integer.
+        :raises ValueError: if the value is not positive.
+        """
+        check_value_is_positive_integer(value, "value")
+        self._update_convergence_settings(max_function_evaluations=value)
+
+    def get_convergence_settings(self) -> ConvergenceSettings:
+        """
+        :return: a copy of the study's convergence settings.
+        :rtype: :class:`~matcal.dakota.gradient_convergence.ConvergenceSettings`
+        """
+        return replace(self._convergence_settings)
+
+    def _update_convergence_settings(self, **settings: float) -> None:
+        self._convergence_settings = replace(self._convergence_settings, **settings)
+        self._apply_convergence_settings()
+
+    def _apply_convergence_settings(self) -> None:
+        method_type_block = self.get_method_type_block()
+        method = method_type_block.name
+        removed = keywords_to_remove(method, self._convergence_settings)
+        for keyword in removed:
+            method_type_block.lines.pop(keyword, None)
+        self._restore_default_lines(method_type_block, removed)
+        for keyword, value in native_lines(method, self._convergence_settings).items():
+            self.set_method_type_block_line(keyword, value)
+
+    def _restore_default_lines(self, method_type_block, removed: set[str]) -> None:
+        missing_defaults = {keyword: value for keyword, value
+                            in self._method_class.default_values.items()
+                            if keyword not in method_type_block.lines
+                            and keyword not in removed}
+        method_type_block.add_lines_from_dictionary(missing_defaults)
+
+    def _create_convergence_monitor(self) -> MatCalConvergenceMonitor | None:
+        method = self.get_method_type_block().name
+        checked = matcal_checked_settings(method, self._convergence_settings)
+        return MatCalConvergenceMonitor(checked) if checked.is_active() else None
 
     def get_gradient_block(self):
         response_block = self.get_response_block()
         return  response_block.get_subblock(NumericalGradientBlock.type)
     
-    def set_step_size(self, value=
-                      NumericalGradientBlock.default_values[DakGradientKeys.fd_step_size]):
+    def set_step_size(self, value: Real | Sequence[Real] =
+                      NumericalGradientBlock.default_values[DakGradientKeys.fd_step_size]
+                      ) -> None:
         """
-        Sets the finite difference step sizes for the gradient decent optimizations.
-        Default step size is a relative step of 5e-5.
-        
-        :param step_size: the desired step_size
-        :type step_size: float
+        Sets the finite difference step size for the gradient calculations.
+        The default is a relative step of 5e-5. Because MatCal enables Dakota
+        variable scaling, a relative step applies to the parameter value
+        scaled to its bounds. Pass one value for all parameters or a list
+        with one value per parameter, in parameter order.
+
+        :param value: the desired step size or step sizes, each between
+            1e-9 and 0.1.
+        :type value: float or list(float)
+        :raises TypeError: if a step size is not a real number.
+        :raises ValueError: if a step size is outside the allowed range. The
+            number of step sizes is checked against the number of parameters
+            when the study is launched.
         """
-        check_value_is_real_between_values(value, 1e-9, 1e-1, "step size")
-        grad_block = self.get_gradient_block()
-        step_size_line  = grad_block.get_line(DakGradientKeys.fd_step_size) 
-        step_size_line.set(value)
+        step_sizes = list(value) if isinstance(value, Sequence) else [value]
+        for step_size in step_sizes:
+            _check_step_size(step_size)
+        self._number_of_step_sizes = len(step_sizes) if isinstance(value, Sequence) else None
+        step_size_line = InputFileLine(DakGradientKeys.fd_step_size, *step_sizes)
+        self.get_gradient_block().add_line(step_size_line, replace=True)
+
+    def set_step_size_type(self, step_type: str) -> None:
+        """
+        Set how Dakota interprets the finite difference step size:
+        "relative" (the default) scales it by the parameter value, "absolute"
+        uses it directly, and "bounds" scales it by the parameter's bound range.
+
+        :param step_type: one of "relative", "absolute" or "bounds".
+        :type step_type: str
+        :raises TypeError: if the step type is not a string.
+        :raises ValueError: if the step type is not a valid option.
+        """
+        check_item_is_correct_type(step_type, str, "step_type")
+        if step_type not in _STEP_SIZE_TYPES:
+            raise ValueError(f"Invalid step size type \"{step_type}\". Valid options "
+                             f"are: {', '.join(_STEP_SIZE_TYPES)}.")
+        method_source_line = self.get_gradient_block().get_line(DakGradientKeys.method_source)
+        method_source_line.set(step_type, index=2)
+
+    def _check_step_size_count(self, number_of_parameters: int) -> None:
+        count = self._number_of_step_sizes
+        if count is not None and count != number_of_parameters:
+            raise ValueError(f"{count} finite difference step sizes were given for "
+                             f"{number_of_parameters} parameters. Give one step size "
+                             "or one per parameter.")
 
 
 class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
 
     """
-    The Gradient Calibration algorithm is a local optimization method that requires the objective
-    function be smooth and convex. This method can quickly find a nearby minimum if the
-    objective function is smooth. It is useful if you are calibrating to a single model with only a
-    couple states and you know a decent initial guess for the parameters. This is the MatCal implementation of the
-    NL2SOL method from Dakota.
+    The Gradient Calibration study is a local optimization study that uses
+    finite difference gradients. It can quickly find a nearby minimum of a
+    smooth objective from a good initial guess. It uses Dakota's NL2SOL least
+    squares method by default; choose another method with
+    :meth:`~matcal.dakota.local_calibration_studies.GradientCalibrationStudy.set_method`.
+
+    The stopping settings have the same meaning for every method. ``f`` is
+    MatCal's total objective (the sum of squared residuals for least squares
+    methods, otherwise the sum of the objectives), parameters are scaled to
+    their bounds, and an iterate is a point at which Dakota requests a
+    gradient that improves the best ``f`` so far.
+
+    * :meth:`set_convergence_tolerance`: relative drop in ``f`` between iterates.
+    * :meth:`set_absolute_convergence_tolerance`: ``f`` at most the tolerance.
+    * :meth:`set_variable_tolerance`: largest change of a scaled parameter
+      between iterates.
+    * :meth:`set_max_iterations` and :meth:`set_max_function_evaluations`.
+    * :meth:`set_step_size` and :meth:`set_step_size_type` for the finite
+      difference gradients.
+
+    Where a method has a Dakota keyword for a setting, MatCal passes the
+    value to Dakota, which applies its own form of the test:
+
+    ==================  ======================  ===================  ====================
+    Method              relative                absolute             variable
+    ==================  ======================  ===================  ====================
+    nl2sol              convergence_tolerance   absolute_conv_tol    x_conv_tol
+    rol                 MatCal                  MatCal               variable_tolerance
+    all other methods   convergence_tolerance   MatCal               MatCal
+    ==================  ======================  ===================  ====================
+
+    "MatCal" means MatCal checks the setting after each batch and stops
+    Dakota when it is met; the results then report the best evaluation MatCal
+    recorded. MatCal also counts function evaluations for rol, which has no
+    Dakota limit for them. MatCal turns off Dakota's variable scaling for rol,
+    because ROL's first trust region step on bound-scaled parameters can end
+    at a bound corner; a relative step size for rol therefore applies to the
+    parameter value itself. Dakota's own tests differ slightly from the
+    definitions above: NL2SOL's relative test uses the predicted reduction,
+    and NPSOL's convergence tolerance is an optimality tolerance.
     """
+
+    _has_single_best_point = True
 
     def __init__(self, *parameters):
         DakotaCalibrationStudyBase.__init__(self, *parameters)
         _GradientDakotaFile.__init__(self, )
+
+    def _prepare_dakota_input(self):
+        self._check_step_size_count(self._parameter_collection.get_number_of_items())
+        self._convergence_monitor = self._create_convergence_monitor()
+        return super()._prepare_dakota_input()
+
 
 class _NongradientMethodKeys():
     coliny_cobyla = "coliny_cobyla"
