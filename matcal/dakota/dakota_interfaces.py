@@ -108,6 +108,12 @@ _NPSOL_INFORM_MEANINGS = {
 
 _NL2SOL_FAILURES = ("FALSE", "SINGULAR", "LIMIT")
 
+# INFORM 1: the optimality conditions hold but NPSOL could not confirm the
+# requested accuracy, typically because the objective is already near zero.
+_NPSOL_SUCCESS_CODES = (0, 1)
+
+_DOT_SUCCESS_MARKERS = ("CONVERGENCE CRITERION WAS MET", "KUHN-TUCKER CONDITIONS")
+
 _ROL_SUCCESS_STATUSES = ("Converged", "Step Tolerance Met")
 
 
@@ -133,7 +139,8 @@ def _parse_npsol(text: str) -> DakotaTermination | None:
         return None
     solver, code = match.group(1), int(match.group(2))
     meaning = _NPSOL_INFORM_MEANINGS.get(code, "see the NPSOL manual")
-    return DakotaTermination(code == 0, code, f"{solver} INFORM {code}: {meaning}")
+    success = code in _NPSOL_SUCCESS_CODES
+    return DakotaTermination(success, code, f"{solver} INFORM {code}: {meaning}")
 
 
 def _parse_optpp(text: str) -> DakotaTermination | None:
@@ -160,7 +167,7 @@ def _parse_dot(text: str) -> DakotaTermination | None:
     if match is None:
         return None
     reason = match.group(1).strip()
-    success = "CONVERGENCE CRITERION WAS MET" in reason
+    success = any(marker in reason for marker in _DOT_SUCCESS_MARKERS)
     return DakotaTermination(success, None, f"DOT: {reason}")
 
 

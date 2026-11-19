@@ -191,6 +191,14 @@ class TestParseTerminationText(MatcalUnitTest):
             DOT_OUTPUT, "dot_sqp", True, None, "ABSOLUTE CONVERGENCE CRITERION"
         )
 
+    def test_dot_kuhn_tucker_is_success(self):
+        text = "  TERMINATION CRITERIA\n\n  KUHN-TUCKER CONDITIONS ARE SATISFIED\n"
+        self._assert_termination(text, "dot_sqp", True, None, "KUHN-TUCKER")
+
+    def test_npsol_inform_one_is_success(self):
+        text = "NLSSOL exits with INFORM code = 1 (see manual)\n"
+        self._assert_termination(text, "nlssol_sqp", True, 1, "requested accuracy")
+
     def test_dot_iteration_limit(self):
         self._assert_termination(DOT_LIMIT_OUTPUT, "dot_mmfd", False, None, "ITMAX")
 
