@@ -1,11 +1,9 @@
 """
 This module contains MatCal's interface to Dakota's local calibration methods.
 """
-from collections.abc import Sequence
 from dataclasses import replace
 from numbers import Real
 
-from matcal.core.input_file_writer import InputFileLine
 from matcal.core.logger import initialize_matcal_logger
 from matcal.core.utilities import (
     check_item_is_correct_type,
@@ -86,13 +84,9 @@ dakota_response_identifier.register(_GradientMethodKeys.rol,
 
 
 _STEP_SIZE_LIMITS = (1e-9, 1e-1)
+_DEFAULT_STEP_SIZE = NumericalGradientBlock.default_values[DakGradientKeys.fd_step_size]
 _STEP_SIZE_TYPES = ("relative", "absolute", "bounds")
 _FINITE_DIFFERENCE_INTERVALS = ("forward", "central")
-
-
-def _check_step_size(value: Real) -> None:
-    check_value_is_real_between_values(value, *_STEP_SIZE_LIMITS, "step size",
-                                       call_depth=1)
 
 
 def _write_text_file(filename: str, text: str) -> None:
@@ -120,7 +114,6 @@ class _GradientDakotaFile(DakotaCalibrationFile):
 
     def __init__(self, *args, **kwargs):
         self._convergence_settings = ConvergenceSettings()
-        self._number_of_step_sizes: int | None = None
         super().__init__(*args, **kwargs)
         self.set_method(_LeastSquaresMethodKeys.nl2sol)
     
@@ -248,32 +241,22 @@ class _GradientDakotaFile(DakotaCalibrationFile):
     
     def set_step_size(
         self,
-        value: Real | Sequence[Real] = NumericalGradientBlock.default_values[
-            DakGradientKeys.fd_step_size
-        ],
+        value: Real = _DEFAULT_STEP_SIZE,
     ) -> None:
         """
         Sets the finite difference step size for the gradient calculations.
         The default is a relative step of 5e-5. Because MatCal enables Dakota
         variable scaling, a relative step applies to the parameter value
-        scaled to its bounds. Pass one value for all parameters or a list
-        with one value per parameter, in parameter order.
+        scaled to its bounds.
 
-        :param value: the desired step size or step sizes, each between
-            1e-9 and 0.1.
-        :type value: float or list(float)
-        :raises TypeError: if a step size is not a real number.
-        :raises ValueError: if a step size is outside the allowed range. The
-            number of step sizes is checked against the number of parameters
-            when the study is launched.
+        :param value: the desired step size, between 1e-9 and 0.1.
+        :type value: float
+        :raises TypeError: if the step size is not a real number.
+        :raises ValueError: if the step size is outside the allowed range.
         """
-        step_sizes = list(value) if isinstance(value, Sequence) else [value]
-        for step_size in step_sizes:
-            _check_step_size(step_size)
-        is_list = isinstance(value, Sequence)
-        self._number_of_step_sizes = len(step_sizes) if is_list else None
-        step_size_line = InputFileLine(DakGradientKeys.fd_step_size, *step_sizes)
-        self.get_gradient_block().add_line(step_size_line, replace=True)
+        check_value_is_real_between_values(value, *_STEP_SIZE_LIMITS, "step size")
+        gradient_block = self.get_gradient_block()
+        gradient_block.get_line(DakGradientKeys.fd_step_size).set(value)
 
     def set_finite_difference_interval(self, interval: str) -> None:
         """
@@ -313,13 +296,6 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         gradient_block = self.get_gradient_block()
         method_source_line = gradient_block.get_line(DakGradientKeys.method_source)
         method_source_line.set(step_type, index=2)
-
-    def _check_step_size_count(self, number_of_parameters: int) -> None:
-        count = self._number_of_step_sizes
-        if count is not None and count != number_of_parameters:
-            raise ValueError(f"{count} finite difference step sizes were given for "
-                             f"{number_of_parameters} parameters. Give one step size "
-                             "or one per parameter.")
 
 
 class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
@@ -381,7 +357,6 @@ class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
         _GradientDakotaFile.__init__(self, )
 
     def _prepare_dakota_input(self):
-        self._check_step_size_count(self._parameter_collection.get_number_of_items())
         self._convergence_monitor = self._create_convergence_monitor()
         if self.get_method_type_block().name == _GradientMethodKeys.rol:
             _write_text_file(ROL_OPTIONS_FILENAME, rol_options_xml(ROL_INITIAL_RADIUS))

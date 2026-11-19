@@ -200,16 +200,6 @@ class TestGradientDakotaFileSharedSettings(MatcalUnitTest):
         with self.assertRaises(ValueError):
             self.grad_file.set_variable_tolerance(2.0)
 
-    def test_set_step_size_list(self):
-        self.grad_file.set_step_size([1e-5, 2e-5])
-        values = self.grad_file.get_gradient_block().get_line(
-            DakGradientKeys.fd_step_size).get_values()
-        self.assertEqual(values[1:], [1e-5, 2e-5])
-
-    def test_set_step_size_list_invalid_entry(self):
-        with self.assertRaises(ValueError):
-            self.grad_file.set_step_size([1e-5, 1.0])
-
     def test_dot_writes_tight_native_tolerance(self):
         self.grad_file.set_method("dot_sqp")
         self.grad_file.set_convergence_tolerance(1e-6)
@@ -249,16 +239,6 @@ class TestGradientDakotaFileSharedSettings(MatcalUnitTest):
             self.grad_file.set_step_size_type(1)
         with self.assertRaises(ValueError):
             self.grad_file.set_step_size_type("central")
-
-    def test_step_size_list_length_checked_at_launch(self):
-        study = _linear_calibration("nl2sol", lambda study: study.set_step_size([1e-5]))
-        with self.assertRaises(ValueError):
-            study._prepare_dakota_input()
-
-    def test_step_size_list_length_matches(self):
-        study = _linear_calibration("nl2sol",
-                                    lambda study: study.set_step_size([1e-5, 1e-5]))
-        study._prepare_dakota_input()
 
 
 class TestGradientCalibrationMatCalChecks(MatcalUnitTest):
