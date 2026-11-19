@@ -95,17 +95,6 @@ _TERMINATION_NOT_FOUND = DakotaTermination(
     None, None, "Termination reason not found in the Dakota or solver output."
 )
 
-_NPSOL_INFORM_MEANINGS = {
-    0: "optimal solution found",
-    1: "optimal solution found, but not to the requested accuracy",
-    2: "no feasible point for the linear constraints",
-    3: "no feasible point for the nonlinear constraints",
-    4: "iteration limit reached",
-    6: "current point cannot be improved",
-    7: "derivative check failed",
-    9: "invalid input parameter",
-}
-
 _NL2SOL_FAILURES = ("FALSE", "SINGULAR", "LIMIT")
 
 # INFORM 1: the optimality conditions hold but NPSOL could not confirm the
@@ -138,12 +127,20 @@ def _parse_nl2sol(text: str) -> DakotaTermination | None:
     return DakotaTermination(success, None, f"NL2SOL: {reason}")
 
 
+def _npsol_exit_message(text: str, solver: str) -> str:
+    # NPSOL and NLSSOL print their own reason ("Exit NPSOL - Optimal solution
+    # found.") to standard output and their print file; Dakota reports only
+    # the INFORM code.
+    match = _last_match(rf"Exit {solver} - ([^\n]*?)\.?\s*$", text)
+    return match.group(1) if match else "see the NPSOL manual"
+
+
 def _parse_npsol(text: str) -> DakotaTermination | None:
     match = _last_match(r"(NPSOL|NLSSOL) exits with INFORM code = (-?\d+)", text)
     if match is None:
         return None
     solver, code = match.group(1), int(match.group(2))
-    meaning = _NPSOL_INFORM_MEANINGS.get(code, "see the NPSOL manual")
+    meaning = _npsol_exit_message(text, solver)
     success = code in _NPSOL_SUCCESS_CODES
     return DakotaTermination(success, code, f"{solver} INFORM {code}: {meaning}")
 

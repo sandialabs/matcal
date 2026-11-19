@@ -99,6 +99,8 @@ NPSOL_OUTPUT = (
     "NPSOL exits with INFORM code = 4 "
     '(see "Interpretation of output" section in NPSOL manual)\n'
 )
+NPSOL_STDOUT = " Exit NPSOL - Too many major iterations.             \n"
+NLSSOL_STDOUT = " Exit NLSSOL - Optimal solution found.\n"
 NLSSOL_OUTPUT = (
     "NLSSOL exits with INFORM code = 0 "
     '(see "Interpretation of output" section of NPSOL manual)\n'
@@ -160,13 +162,22 @@ class TestParseTerminationText(MatcalUnitTest):
             NL2SOL_LIMIT_OUTPUT, "nl2sol", False, None, "ITERATION LIMIT"
         )
 
-    def test_npsol_iteration_limit(self):
+    def test_npsol_message_comes_from_solver_output(self):
         self._assert_termination(
-            NPSOL_OUTPUT, "npsol_sqp", False, 4, "iteration limit"
+            NPSOL_OUTPUT + NPSOL_STDOUT, "npsol_sqp", False, 4,
+            "NPSOL INFORM 4: Too many major iterations"
         )
 
     def test_nlssol_optimal(self):
-        self._assert_termination(NLSSOL_OUTPUT, "nlssol_sqp", True, 0, "INFORM 0")
+        self._assert_termination(
+            NLSSOL_OUTPUT + NLSSOL_STDOUT, "nlssol_sqp", True, 0,
+            "NLSSOL INFORM 0: Optimal solution found"
+        )
+
+    def test_npsol_without_exit_line_points_to_manual(self):
+        self._assert_termination(
+            NPSOL_OUTPUT, "npsol_sqp", False, 4, "INFORM 4: see the NPSOL manual"
+        )
 
     def test_optpp_dakota_out_success(self):
         self._assert_termination(
@@ -197,7 +208,7 @@ class TestParseTerminationText(MatcalUnitTest):
 
     def test_npsol_inform_one_is_success(self):
         text = "NLSSOL exits with INFORM code = 1 (see manual)\n"
-        self._assert_termination(text, "nlssol_sqp", True, 1, "requested accuracy")
+        self._assert_termination(text, "nlssol_sqp", True, 1, "INFORM 1")
 
     def test_dot_iteration_limit(self):
         self._assert_termination(DOT_LIMIT_OUTPUT, "dot_mmfd", False, None, "ITMAX")
