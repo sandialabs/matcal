@@ -278,6 +278,14 @@ class TestGradientCalibrationMatCalChecks(MatcalUnitTest):
             self.assertAlmostEqual(results.outcome[f"best:{name}"],
                                    results.parameter_history[name][best_index])
 
+    def test_callback_error_propagates_and_restores_stdout(self):
+        study = _linear_calibration("conmin_mfd")
+        study._for_testing_fail_after_first_batch()
+        stdout_before = os.fstat(1)
+        with self.assertRaises(RuntimeError):
+            study.launch()
+        self.assertEqual(os.fstat(1).st_ino, stdout_before.st_ino)
+
     def test_matcal_function_evaluation_limit_for_rol(self):
         study = _linear_calibration(
             "rol", lambda study: study.set_max_function_evaluations(6))

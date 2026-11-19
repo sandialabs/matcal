@@ -1,5 +1,6 @@
+import io
 import os
-import time
+import threading
 from collections import OrderedDict
 from unittest import mock
 
@@ -13,10 +14,15 @@ from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests
 from matcal.dakota import dakota_studies
 from matcal.dakota.dakota_studies import (
+    _close_quietly,
+    _copy_stream,
     _flush_library,
+    _move_aside,
     _parameters_match,
-    _read_text_if_modified_since,
+    _read_text_if_exists,
+    _restore_stdout,
     _tee_process_stdout,
+    _write_all,
 )
 from matcal.dakota.local_calibration_studies import (
     CobylaCalibrationStudy,
@@ -181,19 +187,118 @@ class TestBestParameterHelpers(MatcalUnitTest):
     def test_parameters_with_different_names_do_not_match(self):
         self.assertFalse(_parameters_match({"a": 1.0}, {"b": 1.0}))
 
-    def test_read_text_if_modified_since_missing_file(self):
-        self.assertEqual(_read_text_if_modified_since("missing.out", 0.0), "")
+    def test_read_text_if_exists_missing_file(self):
+        self.assertEqual(_read_text_if_exists("missing.out"), "")
 
-    def test_read_text_if_modified_since_old_file(self):
-        with open("old.out", "w") as file_handle:
-            file_handle.write("old")
-        self.assertEqual(_read_text_if_modified_since("old.out", time.time() + 100), "")
-
-    def test_read_text_if_modified_since_new_file(self):
-        start_time = time.time() - 100
+    def test_read_text_if_exists(self):
         with open("new.out", "w") as file_handle:
             file_handle.write("new")
-        self.assertEqual(_read_text_if_modified_since("new.out", start_time), "new")
+        self.assertEqual(_read_text_if_exists("new.out"), "new")
+
+
+class TestMoveAside(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_existing_file_is_renamed(self):
+        with open("OPT_DEFAULT.out", "w") as file_handle:
+            file_handle.write("stale")
+        _move_aside("OPT_DEFAULT.out")
+        self.assertFalse(os.path.exists("OPT_DEFAULT.out"))
+        with open("OPT_DEFAULT.out.previous") as file_handle:
+            self.assertEqual(file_handle.read(), "stale")
+
+    def test_previous_copy_is_replaced(self):
+        for text in ["first", "second"]:
+            with open("OPT_DEFAULT.out", "w") as file_handle:
+                file_handle.write(text)
+            _move_aside("OPT_DEFAULT.out")
+        with open("OPT_DEFAULT.out.previous") as file_handle:
+            self.assertEqual(file_handle.read(), "second")
+
+    def test_missing_file_is_ignored(self):
+        _move_aside("missing.out")
+        self.assertFalse(os.path.exists("missing.out.previous"))
+
+    def test_calibration_moves_stale_optpp_output_before_run(self):
+        with open("OPT_DEFAULT.out", "w") as file_handle:
+            file_handle.write("Return code = 3 (Algorithm converged - stale)")
+        study = _calibration_study_with_history([], [])
+        study._before_dakota_run()
+        self.assertFalse(os.path.exists("OPT_DEFAULT.out"))
+
+
+class TestCopyStream(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _pipe_with(self, data):
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, data)
+        os.close(write_fd)
+        return read_fd
+
+    def test_write_all_retries_partial_writes(self):
+        written = []
+        def one_byte_write(fd, data):
+            written.append(data[:1])
+            return 1
+        with mock.patch.object(dakota_studies.os, "write", one_byte_write):
+            _write_all(5, b"abc")
+        self.assertEqual(b"".join(written), b"abc")
+
+    def test_copies_to_output_and_log(self):
+        output_read, output_write = os.pipe()
+        log = io.BytesIO()
+        _copy_stream(self._pipe_with(b"solver text"), output_write, log)
+        self.assertEqual(log.getvalue(), b"solver text")
+        self.assertEqual(os.read(output_read, 100), b"solver text")
+        os.close(output_read)
+
+    def test_closes_output_when_done(self):
+        output_read, output_write = os.pipe()
+        _copy_stream(self._pipe_with(b"x"), output_write, io.BytesIO())
+        with self.assertRaises(OSError):
+            os.fstat(output_write)
+        os.close(output_read)
+
+    def test_keeps_logging_after_output_fails(self):
+        output_read, output_write = os.pipe()
+        os.close(output_read)
+        log = io.BytesIO()
+        _copy_stream(self._pipe_with(b"still logged"), output_write, log)
+        self.assertEqual(log.getvalue(), b"still logged")
+
+    def test_close_quietly_ignores_closed_descriptor(self):
+        read_fd, write_fd = os.pipe()
+        os.close(read_fd)
+        os.close(write_fd)
+        _close_quietly(write_fd)
+
+    def test_keeps_draining_after_log_fails(self):
+        output_read, output_write = os.pipe()
+        log = io.BytesIO()
+        log.close()
+        _copy_stream(self._pipe_with(b"to terminal"), output_write, log)
+        self.assertEqual(os.read(output_read, 100), b"to terminal")
+        os.close(output_read)
+
+
+class TestRestoreStdout(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_saved_descriptor_left_to_live_reader(self):
+        release = threading.Event()
+        reader = threading.Thread(target=release.wait, daemon=True)
+        reader.start()
+        saved_fd = os.dup(1)
+        with mock.patch.object(dakota_studies, "_TEE_JOIN_TIMEOUT_SECONDS", 0.05), \
+             mock.patch.object(dakota_studies.logger, "warning"):
+            _restore_stdout(saved_fd, reader)
+        os.fstat(saved_fd)
+        release.set()
+        os.close(saved_fd)
 
 
 class TestNativeFlush(MatcalUnitTest):

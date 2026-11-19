@@ -212,6 +212,17 @@ class TestParseTerminationText(MatcalUnitTest):
             CONMIN_LIMIT_OUTPUT, "conmin_mfd", False, None, "ITER EQUALS ITMAX"
         )
 
+    def test_conmin_relative_convergence(self):
+        text = (
+            "     TERMINATION CRITERION\n"
+            "          ABS(1-OBJ(I-1)/OBJ(I)) LESS THAN DELFUN FOR  3 ITERATIONS\n"
+        )
+        self._assert_termination(text, "conmin_mfd", True, None, "DELFUN")
+
+    def test_conmin_unrecognised_reason_is_not_success(self):
+        text = "     TERMINATION CRITERION\n          CONSTRAINT VIOLATION\n"
+        self._assert_termination(text, "conmin_mfd", False, None, "CONSTRAINT")
+
     def test_conmin_parser_ignores_optpp_header(self):
         self._assert_termination(
             OPTPP_DAKOTA_OUT, "conmin_mfd", None, None, "not found"

@@ -5,10 +5,9 @@ import multiprocessing.forkserver
 import os
 import sys
 import threading
-import time
 from abc import abstractmethod
 from collections import OrderedDict
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from typing import BinaryIO
 
@@ -34,13 +33,44 @@ _TEE_JOIN_TIMEOUT_SECONDS = 10.0
 _TEE_CHUNK_SIZE = 65536
 
 
+def _write_all(file_descriptor: int, data: bytes) -> None:
+    """Write all of ``data``; ``os.write`` may write only part of it."""
+    while data:
+        data = data[os.write(file_descriptor, data):]
+
+
+def _try_write(write: Callable[[bytes], object], chunk: bytes) -> bool:
+    # Logging here would write to the captured stream itself, so failures
+    # are only reported through the return value.
+    try:
+        write(chunk)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _close_quietly(file_descriptor: int) -> None:
+    try:
+        os.close(file_descriptor)
+    except OSError:
+        pass
+
+
 def _copy_stream(read_fd: int, output_fd: int, log_file: BinaryIO) -> None:
+    """
+    Copy the pipe to the original standard output and the log until the pipe
+    closes. A destination that fails is dropped, but the pipe is always
+    drained so the solver can never block on a full pipe. The reader owns
+    ``output_fd`` and closes it when done.
+    """
+    destinations: list[Callable[[bytes], object]] = [
+        lambda chunk: _write_all(output_fd, chunk), log_file.write]
     chunk = os.read(read_fd, _TEE_CHUNK_SIZE)
     while chunk:
-        os.write(output_fd, chunk)
-        log_file.write(chunk)
+        destinations = [write for write in destinations if _try_write(write, chunk)]
         chunk = os.read(read_fd, _TEE_CHUNK_SIZE)
     os.close(read_fd)
+    _close_quietly(output_fd)
 
 
 def _start_forkserver_if_used() -> None:
@@ -71,9 +101,9 @@ def _restore_stdout(saved_fd: int, reader: threading.Thread) -> None:
     os.dup2(saved_fd, 1)
     reader.join(timeout=_TEE_JOIN_TIMEOUT_SECONDS)
     if reader.is_alive():
+        # The reader still writes to saved_fd and closes it when it ends.
         logger.warning("Captured solver output may be incomplete: a child "
                        "process still holds standard output.")
-    os.close(saved_fd)
 
 
 @contextmanager
@@ -114,15 +144,21 @@ def _parameters_match(first: Mapping[str, float], second: Mapping[str, float],
                for name in first)
 
 
-def _read_text_if_modified_since(filename: str, start_time: float) -> str:
-    """
-    :return: the file contents if it exists and was modified at or after
-        ``start_time``, otherwise an empty string.
-    """
-    if not os.path.isfile(filename) or os.path.getmtime(filename) < start_time:
+def _read_text_if_exists(filename: str) -> str:
+    """:return: the file contents, or an empty string if it does not exist."""
+    if not os.path.isfile(filename):
         return ""
     with open(filename, "r") as file_handle:
         return file_handle.read()
+
+
+def _move_aside(filename: str) -> None:
+    """
+    Rename an existing ``filename`` to ``filename.previous``, replacing an
+    older copy, so output read after a run cannot come from an earlier run.
+    """
+    if os.path.isfile(filename):
+        os.replace(filename, f"{filename}.previous")
 
 
 class DakotaStudyBase(StudyBase):
@@ -189,7 +225,7 @@ class DakotaStudyBase(StudyBase):
         self._updated_next_evaluation_id_number()
         input_file_string = self._prepare_dakota_input()
         matcal_callback_dict = self._select_matcal_interface()
-        start_time = time.time()
+        self._before_dakota_run()
 
         ########################################################################
         #                       Start Dakota Cluster
@@ -199,18 +235,16 @@ class DakotaStudyBase(StudyBase):
         import dakota.environment as dakenv
         daklib = self._build_dakota_environment(input_file_string, matcal_callback_dict, dakenv)
         try:
-            try:
-                with _tee_process_stdout(DAKOTA_STDOUT_FILENAME):
-                    daklib.execute()
-                self._capture_final_variables(dakenv, daklib)
-            except MatCalConvergenceReached as stop:
-                self._handle_matcal_stop(stop.reason)
+            with _tee_process_stdout(DAKOTA_STDOUT_FILENAME):
+                daklib.execute()
+            self._capture_final_variables(dakenv, daklib)
+        except MatCalConvergenceReached as stop:
+            # Raised by MatCal's own convergence check to stop Dakota early.
+            self._handle_matcal_stop(stop.reason)
+        finally:
+            # Any other exception propagates after the references are released.
             del daklib
             del dakenv
-        except Exception as e:
-            del daklib
-            del dakenv
-            raise e
         import gc
         gc.collect()
         ########################################################################
@@ -220,8 +254,11 @@ class DakotaStudyBase(StudyBase):
         dakota_results = self._return_output_information("./dakota.out")
         self._initialize_parameters_if_skipped_by_dakota()
         self._results._set_outcome(self._package_results(dakota_results))
-        self._record_exit_information(start_time)
+        self._record_exit_information()
         return self._results
+
+    def _before_dakota_run(self) -> None:
+        """Hook to prepare the working directory just before Dakota runs."""
 
     def _capture_final_variables(self, dakota_environment, dakota_study) -> None:
         """Hook to read final results from the Dakota study before it is deleted."""
@@ -230,7 +267,7 @@ class DakotaStudyBase(StudyBase):
         logger.info(f"MatCal stopped Dakota: {reason.message}")
         self._matcal_stop_reason = reason
 
-    def _record_exit_information(self, start_time: float) -> None:
+    def _record_exit_information(self) -> None:
         self._results._set_exit_information(None, None,
                                             "Termination information not recorded for Dakota." +
                                             "Check terminal output, 'dakota.out' and " +
@@ -441,15 +478,18 @@ class DakotaCalibrationStudyBase(DakotaStudyBase):
                            f"objective evaluation.\n Dakota: {dict(dakota_results)}"
                            f"\n MatCal: {dict(matcal_best)}")
 
-    def _record_exit_information(self, start_time: float) -> None:
-        termination = (self._read_solver_termination(start_time)
+    def _before_dakota_run(self) -> None:
+        _move_aside(OPTPP_OUTPUT_FILENAME)
+
+    def _record_exit_information(self) -> None:
+        termination = (self._read_solver_termination()
                        if self._matcal_stop_reason is None
                        else _matcal_termination(self._matcal_stop_reason))
         self._results._set_exit_information(termination.success, termination.status,
                                             termination.message)
 
-    def _read_solver_termination(self, start_time: float) -> DakotaTermination:
-        solver_texts = [_read_text_if_modified_since(filename, start_time)
+    def _read_solver_termination(self) -> DakotaTermination:
+        solver_texts = [_read_text_if_exists(filename)
                         for filename in (DAKOTA_STDOUT_FILENAME, OPTPP_OUTPUT_FILENAME)]
         method = self.get_method_type_block().name
         return self._dakota_reader("./dakota.out").parse_termination(method, solver_texts)

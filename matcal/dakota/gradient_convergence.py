@@ -189,11 +189,19 @@ def batch_center(parameter_sets: Mapping | Sequence[Mapping]) -> np.ndarray:
 def scale_to_bounds(
     values: np.ndarray, parameter_collection: ParameterCollection
 ) -> np.ndarray:
-    """:return: ``values`` mapped to [0, 1] by each parameter's bounds."""
+    """
+    :return: ``values`` mapped to [0, 1] by each parameter's bounds. Values of
+        parameters with an infinite bound are returned unchanged, as Dakota
+        leaves such variables unscaled.
+    """
     names = parameter_collection.get_item_names()
     lower = np.array([parameter_collection[name].get_lower_bound() for name in names])
     upper = np.array([parameter_collection[name].get_upper_bound() for name in names])
-    return (values - lower) / (upper - lower)
+    width = upper - lower
+    scalable = np.isfinite(width) & (width > 0)
+    safe_width = np.where(scalable, width, 1.0)
+    safe_lower = np.where(scalable, lower, 0.0)
+    return np.where(scalable, (values - safe_lower) / safe_width, values)
 
 
 def total_objective(dakota_functions: np.ndarray, is_residual: bool) -> float:
@@ -314,7 +322,7 @@ class MatCalConvergenceMonitor:
         if tolerance is None or previous is None:
             return None
         change = float(np.max(np.abs(scaled_center - previous)))
-        if change > tolerance:
+        if not np.isfinite(change) or change > tolerance:
             return None
         return ConvergenceReason(
             True,

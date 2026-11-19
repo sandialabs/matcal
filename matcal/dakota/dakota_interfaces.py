@@ -114,6 +114,11 @@ _NPSOL_SUCCESS_CODES = (0, 1)
 
 _DOT_SUCCESS_MARKERS = ("CONVERGENCE CRITERION WAS MET", "KUHN-TUCKER CONDITIONS")
 
+# CONMIN's convergence messages: absolute (DABFUN) or relative (DELFUN)
+# objective change, or the Kuhn-Tucker conditions. Anything else, such as
+# the iteration limit, is not a success.
+_CONMIN_SUCCESS_MARKERS = ("LESS THAN DABFUN", "LESS THAN DELFUN", "KUHN-TUCKER")
+
 _ROL_SUCCESS_STATUSES = ("Converged", "Step Tolerance Met")
 
 
@@ -176,7 +181,7 @@ def _parse_conmin(text: str) -> DakotaTermination | None:
     if match is None:
         return None
     reason = match.group(1).strip()
-    success = "ITMAX" not in reason
+    success = any(marker in reason for marker in _CONMIN_SUCCESS_MARKERS)
     return DakotaTermination(success, None, f"CONMIN: {reason}")
 
 

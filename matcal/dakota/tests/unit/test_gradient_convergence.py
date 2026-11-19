@@ -165,6 +165,13 @@ class TestBatchHelpers(MatcalUnitTest):
         scaled = scale_to_bounds(np.array([1.0, 0.0]), self.parameters)
         self.assert_close_arrays(scaled, np.array([0.1, 0.5]))
 
+    def test_scale_to_bounds_keeps_unbounded_values_raw(self):
+        parameters = ParameterCollection(
+            "p", Parameter("m", -np.inf, np.inf, 1.0), Parameter("b", 0.0, np.inf, 2.0)
+        )
+        scaled = scale_to_bounds(np.array([3.0, 4.0]), parameters)
+        self.assert_close_arrays(scaled, np.array([3.0, 4.0]))
+
     def test_total_objective_for_residuals_is_sum_of_squares(self):
         self.assertAlmostEqual(total_objective(np.array([1.0, 2.0]), True), 5.0)
 
@@ -228,6 +235,11 @@ class TestMatCalConvergenceMonitor(MatcalUnitTest):
         self.assertIsNone(monitor.update(np.array([0.2, 0.5]), 0.5, 6))
         reason = monitor.update(np.array([0.2005, 0.5]), 0.4, 9)
         self.assertIn("variable", reason.message)
+
+    def test_non_finite_change_is_not_convergence(self):
+        monitor = self._monitor(variable=1e-3)
+        monitor.update(np.array([np.nan]), 1.0, 3)
+        self.assertIsNone(monitor.update(np.array([np.nan]), 0.5, 6))
 
     def test_non_improving_center_is_not_an_iterate(self):
         monitor = self._monitor(variable=1e-3)
