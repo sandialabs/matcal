@@ -67,6 +67,17 @@ _NATIVE_KEYWORDS: dict[str, dict[str, _NativeKeyword]] = {
     "rol": {"variable": _NativeKeyword("variable_tolerance", default=1e-8)},
 }
 
+# DOT and CONMIN combine their relative test with absolute objective change
+# tests that Dakota sets from the starting objective or does not expose, so
+# they stopped early. They get a tight native tolerance and MatCal checks the
+# relative tolerance.
+_TIGHT_NATIVE_TOLERANCE = 1e-12
+_MATCAL_RELATIVE_METHODS = ("dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd")
+for _method in _MATCAL_RELATIVE_METHODS:
+    _NATIVE_KEYWORDS[_method] = {
+        "max_function_evaluations": _COMMON_KEYWORDS["max_function_evaluations"]
+    }
+
 _UNSUPPORTED_KEYWORDS: dict[str, frozenset[str]] = {
     "rol": frozenset(
         {"convergence_tolerance", "max_function_evaluations", "speculative"}
@@ -80,9 +91,16 @@ ROL_OPTIONS_FILENAME = "matcal_rol_options.xml"
 # run on its step tolerance after one iteration. 0.1 is 10% of each range.
 ROL_INITIAL_RADIUS = 0.1
 
-_METHOD_SPECIFIC_LINES: dict[str, dict[str, str]] = {
+_METHOD_SPECIFIC_LINES: dict[str, dict[str, str | float]] = {
     "rol": {"options_file": f'"{ROL_OPTIONS_FILENAME}"'},
+    **{
+        method: {"convergence_tolerance": _TIGHT_NATIVE_TOLERANCE}
+        for method in _MATCAL_RELATIVE_METHODS
+    },
 }
+
+# A single line search point with a tiny improvement must not end the run.
+_RELATIVE_DROPS_REQUIRED = 2
 
 _ALL_NATIVE_KEYWORDS: frozenset[str] = frozenset(
     [
@@ -112,7 +130,7 @@ def native_lines(method: str, settings: ConvergenceSettings) -> dict[str, float 
     return lines
 
 
-def method_specific_lines(method: str) -> dict[str, str]:
+def method_specific_lines(method: str) -> dict[str, str | float]:
     """
     :return: extra Dakota method keywords MatCal always writes for ``method``.
     """
@@ -220,6 +238,7 @@ class MatCalConvergenceMonitor:
         self._settings = settings
         self._best_objective: float | None = None
         self._best_center: np.ndarray | None = None
+        self._small_relative_drops = 0
 
     def __repr__(self) -> str:
         return (
@@ -279,10 +298,15 @@ class MatCalConvergenceMonitor:
         if tolerance is None or previous is None or previous == 0.0:
             return None
         drop = (previous - objective) / abs(previous)
-        if drop > tolerance:
+        self._small_relative_drops = (
+            self._small_relative_drops + 1 if drop <= tolerance else 0
+        )
+        if self._small_relative_drops < _RELATIVE_DROPS_REQUIRED:
             return None
         return ConvergenceReason(
-            True, f"relative convergence: objective drop {drop:g} <= {tolerance:g}"
+            True,
+            f"relative convergence: objective drop {drop:g} <= {tolerance:g} "
+            f"for {_RELATIVE_DROPS_REQUIRED} consecutive iterates",
         )
 
     def _check_variable(self, scaled_center: np.ndarray) -> ConvergenceReason | None:

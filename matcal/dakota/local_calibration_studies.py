@@ -87,6 +87,7 @@ dakota_response_identifier.register(_GradientMethodKeys.rol,
 
 _STEP_SIZE_LIMITS = (1e-9, 1e-1)
 _STEP_SIZE_TYPES = ("relative", "absolute", "bounds")
+_FINITE_DIFFERENCE_INTERVALS = ("forward", "central")
 
 
 def _check_step_size(value: Real) -> None:
@@ -245,9 +246,12 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         response_block = self.get_response_block()
         return  response_block.get_subblock(NumericalGradientBlock.type)
     
-    def set_step_size(self, value: Real | Sequence[Real] =
-                      NumericalGradientBlock.default_values[DakGradientKeys.fd_step_size]
-                      ) -> None:
+    def set_step_size(
+        self,
+        value: Real | Sequence[Real] = NumericalGradientBlock.default_values[
+            DakGradientKeys.fd_step_size
+        ],
+    ) -> None:
         """
         Sets the finite difference step size for the gradient calculations.
         The default is a relative step of 5e-5. Because MatCal enables Dakota
@@ -266,9 +270,30 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         step_sizes = list(value) if isinstance(value, Sequence) else [value]
         for step_size in step_sizes:
             _check_step_size(step_size)
-        self._number_of_step_sizes = len(step_sizes) if isinstance(value, Sequence) else None
+        is_list = isinstance(value, Sequence)
+        self._number_of_step_sizes = len(step_sizes) if is_list else None
         step_size_line = InputFileLine(DakGradientKeys.fd_step_size, *step_sizes)
         self.get_gradient_block().add_line(step_size_line, replace=True)
+
+    def set_finite_difference_interval(self, interval: str) -> None:
+        """
+        Set the finite difference stencil for the gradients: "forward" (the
+        default) or "central". Central differences cost one more evaluation
+        per parameter for each gradient but are much more accurate near the
+        minimum; they are recommended for the "dot_*" and "conmin_mfd" methods,
+        which can stall with forward differences.
+
+        :param interval: "forward" or "central".
+        :type interval: str
+        :raises TypeError: if the interval is not a string.
+        :raises ValueError: if the interval is not a valid option.
+        """
+        check_item_is_correct_type(interval, str, "interval")
+        if interval not in _FINITE_DIFFERENCE_INTERVALS:
+            valid_intervals = ", ".join(_FINITE_DIFFERENCE_INTERVALS)
+            raise ValueError(f"Invalid finite difference interval \"{interval}\". "
+                             f"Valid options are: {valid_intervals}.")
+        self.get_gradient_block().get_line(DakGradientKeys.interval_type).set(interval)
 
     def set_step_size_type(self, step_type: str) -> None:
         """
@@ -285,7 +310,8 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         if step_type not in _STEP_SIZE_TYPES:
             raise ValueError(f"Invalid step size type \"{step_type}\". Valid options "
                              f"are: {', '.join(_STEP_SIZE_TYPES)}.")
-        method_source_line = self.get_gradient_block().get_line(DakGradientKeys.method_source)
+        gradient_block = self.get_gradient_block()
+        method_source_line = gradient_block.get_line(DakGradientKeys.method_source)
         method_source_line.set(step_type, index=2)
 
     def _check_step_size_count(self, number_of_parameters: int) -> None:
@@ -316,28 +342,34 @@ class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
     * :meth:`set_variable_tolerance`: largest change of a scaled parameter
       between iterates.
     * :meth:`set_max_iterations` and :meth:`set_max_function_evaluations`.
-    * :meth:`set_step_size` and :meth:`set_step_size_type` for the finite
+    * :meth:`set_step_size`, :meth:`set_step_size_type` and
+      :meth:`set_finite_difference_interval` for the finite
       difference gradients.
 
     Where a method has a Dakota keyword for a setting, MatCal passes the
     value to Dakota, which applies its own form of the test:
 
-    ==================  ======================  ===================  ====================
-    Method              relative                absolute             variable
-    ==================  ======================  ===================  ====================
-    nl2sol              convergence_tolerance   absolute_conv_tol    x_conv_tol
-    rol                 MatCal                  MatCal               variable_tolerance
-    all other methods   convergence_tolerance   MatCal               MatCal
-    ==================  ======================  ===================  ====================
+    =================  =====================  =================  ==================
+    Method             relative               absolute           variable
+    =================  =====================  =================  ==================
+    nl2sol             convergence_tolerance  absolute_conv_tol  x_conv_tol
+    rol                MatCal                 MatCal             variable_tolerance
+    dot_*, conmin_mfd  MatCal                 MatCal             MatCal
+    all other methods  convergence_tolerance  MatCal             MatCal
+    =================  =====================  =================  ==================
 
     "MatCal" means MatCal checks the setting after each batch and stops
     Dakota when it is met; the results then report the best evaluation MatCal
-    recorded. MatCal also counts function evaluations for rol, which has no
-    Dakota limit for them. For rol MatCal writes ``matcal_rol_options.xml`` with
-    an initial trust region radius of 0.1 of each scaled parameter range and
-    uses a variable tolerance of 1e-8 unless one is set, because ROL's
-    automatic initial radius and Dakota's default ROL step tolerance can stop
-    it after one iteration on bound-scaled parameters. Dakota's own tests differ slightly from the
+    recorded. MatCal's relative test must hold for two consecutive iterates.
+    DOT and CONMIN also stop on absolute objective change tests that Dakota
+    does not expose, so MatCal gives them a native tolerance of 1e-12 and
+    checks the relative tolerance itself. MatCal also counts function
+    evaluations for rol, which has no Dakota limit for them. For rol MatCal
+    writes ``matcal_rol_options.xml`` with an initial trust region radius of
+    0.1 of each scaled parameter range and uses a variable tolerance of 1e-8
+    unless one is set, because ROL's automatic initial radius and Dakota's
+    default ROL step tolerance can stop it after one iteration on
+    bound-scaled parameters. Dakota's own tests differ slightly from the
     definitions above: NL2SOL's relative test uses the predicted reduction,
     and NPSOL's convergence tolerance is an optimality tolerance.
     """

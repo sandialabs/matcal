@@ -210,6 +210,33 @@ class TestGradientDakotaFileSharedSettings(MatcalUnitTest):
         with self.assertRaises(ValueError):
             self.grad_file.set_step_size([1e-5, 1.0])
 
+    def test_dot_writes_tight_native_tolerance(self):
+        self.grad_file.set_method("dot_sqp")
+        self.grad_file.set_convergence_tolerance(1e-6)
+        self.assertEqual(self._method_lines()["convergence_tolerance"].get_values()[1],
+                         1e-12)
+        self.assertEqual(self.grad_file.get_convergence_settings().relative, 1e-6)
+
+    def test_leaving_conmin_restores_relative_tolerance(self):
+        self.grad_file.set_convergence_tolerance(1e-6)
+        self.grad_file.set_method("conmin_mfd")
+        self.grad_file.set_method("optpp_q_newton")
+        self.assertEqual(self._method_lines()["convergence_tolerance"].get_values()[1],
+                         1e-6)
+
+    def test_set_finite_difference_interval(self):
+        for interval in ["central", "forward"]:
+            self.grad_file.set_finite_difference_interval(interval)
+            line = self.grad_file.get_gradient_block().get_line(
+                DakGradientKeys.interval_type)
+            self.assertEqual(line.get_values()[1], interval)
+
+    def test_set_invalid_finite_difference_interval(self):
+        with self.assertRaises(TypeError):
+            self.grad_file.set_finite_difference_interval(1)
+        with self.assertRaises(ValueError):
+            self.grad_file.set_finite_difference_interval("backward")
+
     def test_set_step_size_type(self):
         for step_type in ["absolute", "bounds", "relative"]:
             self.grad_file.set_step_size_type(step_type)

@@ -53,6 +53,23 @@ class TestNativeLines(MatcalUnitTest):
             },
         )
 
+    def test_dot_and_conmin_relative_is_checked_by_matcal(self):
+        for method in ["dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd"]:
+            self.assertEqual(
+                native_lines(method, self.settings), {"max_function_evaluations": 50}
+            )
+            checked = matcal_checked_settings(method, self.settings)
+            self.assertEqual(checked.relative, 1e-6)
+
+    def test_dot_and_conmin_get_tight_native_tolerance(self):
+        for method in ["dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd"]:
+            self.assertEqual(
+                method_specific_lines(method), {"convergence_tolerance": 1e-12}
+            )
+            self.assertNotIn(
+                "convergence_tolerance", keywords_to_remove(method, self.settings)
+            )
+
     def test_common_methods_only_relative_and_evaluations(self):
         lines = native_lines("optpp_q_newton", self.settings)
         self.assertEqual(
@@ -87,7 +104,7 @@ class TestMatCalCheckedSettings(MatcalUnitTest):
 
     def test_conmin_checks_absolute_and_variable(self):
         checked = matcal_checked_settings("conmin_mfd", self.settings)
-        self.assertEqual(checked, ConvergenceSettings(None, 1e-4, 1e-5, None))
+        self.assertEqual(checked, ConvergenceSettings(1e-6, 1e-4, 1e-5, None))
         self.assertTrue(checked.is_active())
 
     def test_rol_checks_relative_absolute_and_evaluations(self):
@@ -185,12 +202,20 @@ class TestMatCalConvergenceMonitor(MatcalUnitTest):
         reason = self._monitor(absolute=1e-3).update(np.array([0.1]), 0.0, 3)
         self.assertIn("absolute", reason.message)
 
-    def test_relative_tolerance_needs_two_iterates(self):
+    def test_relative_tolerance_needs_two_consecutive_small_drops(self):
         monitor = self._monitor(relative=1e-2)
         self.assertIsNone(monitor.update(np.array([0.1]), 1.0, 3))
         self.assertIsNone(monitor.update(np.array([0.2]), 0.5, 6))
-        reason = monitor.update(np.array([0.3]), 0.499, 9)
+        self.assertIsNone(monitor.update(np.array([0.3]), 0.499, 9))
+        reason = monitor.update(np.array([0.4]), 0.4985, 12)
         self.assertIn("relative", reason.message)
+
+    def test_relative_count_resets_after_large_drop(self):
+        monitor = self._monitor(relative=1e-2)
+        monitor.update(np.array([0.1]), 1.0, 3)
+        self.assertIsNone(monitor.update(np.array([0.2]), 0.999, 6))
+        self.assertIsNone(monitor.update(np.array([0.3]), 0.5, 9))
+        self.assertIsNone(monitor.update(np.array([0.4]), 0.4999, 12))
 
     def test_relative_tolerance_with_zero_objective(self):
         monitor = self._monitor(relative=1e-2)
