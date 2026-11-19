@@ -1,3 +1,5 @@
+from xml.etree import ElementTree
+
 import numpy as np
 
 from matcal.core.parameters import Parameter, ParameterCollection
@@ -9,7 +11,9 @@ from matcal.dakota.gradient_convergence import (
     batch_center,
     keywords_to_remove,
     matcal_checked_settings,
+    method_specific_lines,
     native_lines,
+    rol_options_xml,
     scale_to_bounds,
     total_objective,
 )
@@ -60,6 +64,11 @@ class TestNativeLines(MatcalUnitTest):
             native_lines("rol", self.settings), {"variable_tolerance": 1e-5}
         )
 
+    def test_rol_default_variable_tolerance(self):
+        self.assertEqual(
+            native_lines("rol", ConvergenceSettings()), {"variable_tolerance": 1e-8}
+        )
+
     def test_unset_settings_are_not_written(self):
         lines = native_lines("nl2sol", ConvergenceSettings())
         self.assertNotIn("absolute_conv_tol", lines)
@@ -103,9 +112,18 @@ class TestKeywordsToRemove(MatcalUnitTest):
             "convergence_tolerance",
             "max_function_evaluations",
             "speculative",
-            "scaling",
         ]:
             self.assertIn(keyword, removed)
+
+    def test_rol_keeps_scaling_and_options_file(self):
+        removed = keywords_to_remove("rol", ConvergenceSettings())
+        self.assertNotIn("scaling", removed)
+        self.assertNotIn("options_file", removed)
+
+    def test_other_methods_remove_rol_options_file(self):
+        self.assertIn(
+            "options_file", keywords_to_remove("nl2sol", ConvergenceSettings())
+        )
 
     def test_written_keywords_are_kept(self):
         removed = keywords_to_remove("nl2sol", ConvergenceSettings(absolute=1e-4))
@@ -209,3 +227,22 @@ class TestMatCalConvergenceMonitor(MatcalUnitTest):
         monitor = self._monitor(absolute=1.0)
         monitor.update(np.array([0.1]), 2.0, 3)
         self.assertIn("best_objective=2.0", repr(monitor))
+
+
+class TestRolOptions(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_rol_method_specific_lines_point_to_options_file(self):
+        self.assertEqual(
+            method_specific_lines("rol"), {"options_file": '"matcal_rol_options.xml"'}
+        )
+
+    def test_other_methods_have_no_specific_lines(self):
+        self.assertEqual(method_specific_lines("nl2sol"), {})
+
+    def test_rol_options_xml_sets_initial_radius(self):
+        root = ElementTree.fromstring(rol_options_xml(0.25))
+        radius = root.find(".//Parameter[@name='Initial Radius']")
+        self.assertEqual(radius.get("type"), "double")
+        self.assertEqual(float(radius.get("value")), 0.25)

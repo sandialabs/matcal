@@ -171,8 +171,11 @@ class TestGradientDakotaFileSharedSettings(MatcalUnitTest):
         self.grad_file.set_method("rol")
         self.grad_file.set_variable_tolerance(1e-6)
         for keyword in ["convergence_tolerance", "max_function_evaluations",
-                        "speculative", "scaling"]:
+                        "speculative"]:
             self.assertNotIn(keyword, self._method_lines())
+        self.assertIn("scaling", self._method_lines())
+        self.assertEqual(self._method_lines()["options_file"].get_values()[1],
+                         '"matcal_rol_options.xml"')
         self.assertEqual(self._method_lines()["variable_tolerance"].get_values()[1], 1e-6)
         self.assertIn("max_iterations", self._method_lines())
 
@@ -182,6 +185,8 @@ class TestGradientDakotaFileSharedSettings(MatcalUnitTest):
         for keyword in ["convergence_tolerance", "max_function_evaluations",
                         "speculative", "scaling"]:
             self.assertIn(keyword, self._method_lines())
+        self.assertNotIn("options_file", self._method_lines())
+        self.assertNotIn("variable_tolerance", self._method_lines())
 
     def test_invalid_absolute_tolerance(self):
         with self.assertRaises(TypeError):
@@ -261,6 +266,20 @@ class TestGradientCalibrationMatCalChecks(MatcalUnitTest):
         results = study.launch()
         self.assertAlmostEqual(results.outcome["best:m"], 2.0, delta=1e-3)
         self.assertAlmostEqual(results.outcome["best:b"], 0.0, delta=1e-2)
+        self.assertTrue(os.path.exists("matcal_rol_options.xml"))
+
+    def test_rol_calibration_from_far_start(self):
+        study = GradientCalibrationStudy(ParameterCollection(
+            "line", Parameter("m", 0.0, 100.0), Parameter("b", -5.0, 5.0, 0.505)))
+        study.set_method("rol")
+        goal = convert_dictionary_to_data(linear_function(m=2.0, b=0.0))
+        study.add_evaluation_set(
+            PythonModel(linear_function), CurveBasedInterpolatedObjective("x", "y"), goal)
+        study.set_max_iterations(50)
+        results = study.launch()
+        self.assertTrue(results.success)
+        self.assertAlmostEqual(results.outcome["best:m"], 2.0, delta=1e-2)
+        self.assertAlmostEqual(results.outcome["best:b"], 0.0, delta=5e-2)
 
 
 class TestGradientCalibrationStudyDefaultNl2sol(TestDakotaStudyBase.CommonTests):

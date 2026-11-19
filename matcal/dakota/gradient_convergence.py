@@ -44,6 +44,7 @@ class ConvergenceSettings:
 class _NativeKeyword:
     keyword: str
     scale: float = 1.0
+    default: float | None = None
 
     def translate(self, value: float) -> float | int:
         return value if self.scale == 1.0 else value * self.scale
@@ -62,22 +63,34 @@ _NATIVE_KEYWORDS: dict[str, dict[str, _NativeKeyword]] = {
         "absolute": _NativeKeyword("absolute_conv_tol", 0.5),
         "variable": _NativeKeyword("x_conv_tol"),
     },
-    "rol": {"variable": _NativeKeyword("variable_tolerance")},
+    # Dakota's default ROL step tolerance is coarse for bound-scaled parameters.
+    "rol": {"variable": _NativeKeyword("variable_tolerance", default=1e-8)},
 }
 
-# Default method keywords left out per method. ROL rejects the first three;
-# with "scaling" its first trust region step spans the whole bound-scaled box
-# and it can stop at a bound corner.
 _UNSUPPORTED_KEYWORDS: dict[str, frozenset[str]] = {
     "rol": frozenset(
-        {"convergence_tolerance", "max_function_evaluations", "speculative", "scaling"}
+        {"convergence_tolerance", "max_function_evaluations", "speculative"}
     ),
 }
 
+ROL_OPTIONS_FILENAME = "matcal_rol_options.xml"
+
+# On bound-scaled parameters ROL's automatic initial trust region radius can
+# collapse when the projected gradient path reaches a bound, which ends the
+# run on its step tolerance after one iteration. 0.1 is 10% of each range.
+ROL_INITIAL_RADIUS = 0.1
+
+_METHOD_SPECIFIC_LINES: dict[str, dict[str, str]] = {
+    "rol": {"options_file": f'"{ROL_OPTIONS_FILENAME}"'},
+}
+
 _ALL_NATIVE_KEYWORDS: frozenset[str] = frozenset(
-    native.keyword
-    for keywords in [_COMMON_KEYWORDS, *_NATIVE_KEYWORDS.values()]
-    for native in keywords.values()
+    [
+        native.keyword
+        for keywords in [_COMMON_KEYWORDS, *_NATIVE_KEYWORDS.values()]
+        for native in keywords.values()
+    ]
+    + [keyword for lines in _METHOD_SPECIFIC_LINES.values() for keyword in lines]
 )
 
 
@@ -93,9 +106,33 @@ def native_lines(method: str, settings: ConvergenceSettings) -> dict[str, float 
     lines = {}
     for name, native in _native_keywords(method).items():
         value = getattr(settings, name)
+        value = native.default if value is None else value
         if value is not None:
             lines[native.keyword] = native.translate(value)
     return lines
+
+
+def method_specific_lines(method: str) -> dict[str, str]:
+    """
+    :return: extra Dakota method keywords MatCal always writes for ``method``.
+    """
+    return dict(_METHOD_SPECIFIC_LINES.get(method, {}))
+
+
+def rol_options_xml(initial_radius: float) -> str:
+    """
+    :param initial_radius: the trust region radius for ROL's first iteration.
+    :return: a ROL parameter list for Dakota's ``options_file`` keyword.
+    """
+    return (
+        '<ParameterList name="Inputs">\n'
+        '  <ParameterList name="Step">\n'
+        '    <ParameterList name="Trust Region">\n'
+        f'      <Parameter name="Initial Radius" type="double" value="{initial_radius!r}"/>\n'
+        "    </ParameterList>\n"
+        "  </ParameterList>\n"
+        "</ParameterList>\n"
+    )
 
 
 def matcal_checked_settings(
@@ -115,7 +152,7 @@ def keywords_to_remove(method: str, settings: ConvergenceSettings) -> set[str]:
         ``method``: native keywords of other methods or unset settings, and
         keywords ``method`` does not accept.
     """
-    written = set(native_lines(method, settings))
+    written = set(native_lines(method, settings)) | set(method_specific_lines(method))
     unsupported = _UNSUPPORTED_KEYWORDS.get(method, frozenset())
     return (set(_ALL_NATIVE_KEYWORDS) - written) | set(unsupported)
 

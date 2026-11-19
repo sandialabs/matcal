@@ -15,11 +15,15 @@ from matcal.core.utilities import (
 )
 from matcal.dakota.dakota_studies import DakotaCalibrationStudyBase
 from matcal.dakota.gradient_convergence import (
+    ROL_INITIAL_RADIUS,
+    ROL_OPTIONS_FILENAME,
     ConvergenceSettings,
     MatCalConvergenceMonitor,
     keywords_to_remove,
     matcal_checked_settings,
+    method_specific_lines,
     native_lines,
+    rol_options_xml,
 )
 from matcal.dakota.input_file_writer import (
     DakGradientKeys,
@@ -88,6 +92,11 @@ _STEP_SIZE_TYPES = ("relative", "absolute", "bounds")
 def _check_step_size(value: Real) -> None:
     check_value_is_real_between_values(value, *_STEP_SIZE_LIMITS, "step size",
                                        call_depth=1)
+
+
+def _write_text_file(filename: str, text: str) -> None:
+    with open(filename, "w") as file_handle:
+        file_handle.write(text)
 
 
 class _GradientDakotaFile(DakotaCalibrationFile):
@@ -215,7 +224,9 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         for keyword in removed:
             method_type_block.lines.pop(keyword, None)
         self._restore_default_lines(method_type_block, removed)
-        for keyword, value in native_lines(method, self._convergence_settings).items():
+        lines = {**native_lines(method, self._convergence_settings),
+                 **method_specific_lines(method)}
+        for keyword, value in lines.items():
             self.set_method_type_block_line(keyword, value)
 
     def _restore_default_lines(self, method_type_block, removed: set[str]) -> None:
@@ -322,10 +333,11 @@ class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
     "MatCal" means MatCal checks the setting after each batch and stops
     Dakota when it is met; the results then report the best evaluation MatCal
     recorded. MatCal also counts function evaluations for rol, which has no
-    Dakota limit for them. MatCal turns off Dakota's variable scaling for rol,
-    because ROL's first trust region step on bound-scaled parameters can end
-    at a bound corner; a relative step size for rol therefore applies to the
-    parameter value itself. Dakota's own tests differ slightly from the
+    Dakota limit for them. For rol MatCal writes ``matcal_rol_options.xml`` with
+    an initial trust region radius of 0.1 of each scaled parameter range and
+    uses a variable tolerance of 1e-8 unless one is set, because ROL's
+    automatic initial radius and Dakota's default ROL step tolerance can stop
+    it after one iteration on bound-scaled parameters. Dakota's own tests differ slightly from the
     definitions above: NL2SOL's relative test uses the predicted reduction,
     and NPSOL's convergence tolerance is an optimality tolerance.
     """
@@ -339,6 +351,8 @@ class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
     def _prepare_dakota_input(self):
         self._check_step_size_count(self._parameter_collection.get_number_of_items())
         self._convergence_monitor = self._create_convergence_monitor()
+        if self.get_method_type_block().name == _GradientMethodKeys.rol:
+            _write_text_file(ROL_OPTIONS_FILENAME, rol_options_xml(ROL_INITIAL_RADIUS))
         return super()._prepare_dakota_input()
 
 
