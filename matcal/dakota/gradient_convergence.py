@@ -41,41 +41,56 @@ class ConvergenceSettings:
 
 
 @dataclass(frozen=True)
-class _NativeKeyword:
+class _DakotaKeywordMapping:
+    """
+    How one MatCal convergence setting is written as a Dakota keyword.
+
+    :param keyword: the Dakota method keyword.
+    :param to_dakota_factor: converts a MatCal value to the Dakota value. The
+        integer default keeps integer settings such as
+        ``max_function_evaluations`` integers in the deck.
+    :param value_if_unset: written when the MatCal setting is not set.
+    """
+
     keyword: str
-    scale: float = 1.0
-    default: float | None = None
+    to_dakota_factor: float = 1
+    value_if_unset: float | None = None
 
-    def translate(self, value: float) -> float | int:
-        return value if self.scale == 1.0 else value * self.scale
+    def to_dakota_value(self, value: float) -> float:
+        """:return: ``value`` in the units Dakota expects for ``keyword``."""
+        return value * self.to_dakota_factor
 
 
-_COMMON_KEYWORDS: dict[str, _NativeKeyword] = {
-    "relative": _NativeKeyword("convergence_tolerance"),
-    "max_function_evaluations": _NativeKeyword("max_function_evaluations"),
+_DEFAULT_DAKOTA_KEYWORD_MAPPINGS: dict[str, _DakotaKeywordMapping] = {
+    "relative": _DakotaKeywordMapping("convergence_tolerance"),
+    "max_function_evaluations": _DakotaKeywordMapping("max_function_evaluations"),
 }
 
 # NL2SOL minimizes half the sum of squared residuals; MatCal's total
 # objective for least squares methods is the full sum of squares.
-_NATIVE_KEYWORDS: dict[str, dict[str, _NativeKeyword]] = {
+_DAKOTA_KEYWORD_MAPPINGS: dict[str, dict[str, _DakotaKeywordMapping]] = {
     "nl2sol": {
-        **_COMMON_KEYWORDS,
-        "absolute": _NativeKeyword("absolute_conv_tol", 0.5),
-        "variable": _NativeKeyword("x_conv_tol"),
+        **_DEFAULT_DAKOTA_KEYWORD_MAPPINGS,
+        "absolute": _DakotaKeywordMapping("absolute_conv_tol", to_dakota_factor=0.5),
+        "variable": _DakotaKeywordMapping("x_conv_tol"),
     },
     # Dakota's default ROL step tolerance is coarse for bound-scaled parameters.
-    "rol": {"variable": _NativeKeyword("variable_tolerance", default=1e-8)},
+    "rol": {
+        "variable": _DakotaKeywordMapping("variable_tolerance", value_if_unset=1e-8)
+    },
 }
 
 # DOT and CONMIN combine their relative test with absolute objective change
 # tests that Dakota sets from the starting objective or does not expose, so
-# they stopped early. They get a tight native tolerance and MatCal checks the
+# they stopped early. They get a tight Dakota tolerance and MatCal checks the
 # relative tolerance.
-_TIGHT_NATIVE_TOLERANCE = 1e-12
+_TIGHT_DAKOTA_TOLERANCE = 1e-12
 _MATCAL_RELATIVE_METHODS = ("dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd")
 for _method in _MATCAL_RELATIVE_METHODS:
-    _NATIVE_KEYWORDS[_method] = {
-        "max_function_evaluations": _COMMON_KEYWORDS["max_function_evaluations"]
+    _DAKOTA_KEYWORD_MAPPINGS[_method] = {
+        "max_function_evaluations": _DEFAULT_DAKOTA_KEYWORD_MAPPINGS[
+            "max_function_evaluations"
+        ]
     }
 
 _UNSUPPORTED_KEYWORDS: dict[str, frozenset[str]] = {
@@ -94,7 +109,7 @@ ROL_INITIAL_RADIUS = 0.1
 _METHOD_SPECIFIC_LINES: dict[str, dict[str, str | float]] = {
     "rol": {"options_file": f'"{ROL_OPTIONS_FILENAME}"'},
     **{
-        method: {"convergence_tolerance": _TIGHT_NATIVE_TOLERANCE}
+        method: {"convergence_tolerance": _TIGHT_DAKOTA_TOLERANCE}
         for method in _MATCAL_RELATIVE_METHODS
     },
 }
@@ -102,31 +117,36 @@ _METHOD_SPECIFIC_LINES: dict[str, dict[str, str | float]] = {
 # A single line search point with a tiny improvement must not end the run.
 _RELATIVE_DROPS_REQUIRED = 2
 
-_ALL_NATIVE_KEYWORDS: frozenset[str] = frozenset(
+_ALL_DAKOTA_SETTING_KEYWORDS: frozenset[str] = frozenset(
     [
-        native.keyword
-        for keywords in [_COMMON_KEYWORDS, *_NATIVE_KEYWORDS.values()]
-        for native in keywords.values()
+        mapping.keyword
+        for mappings in [
+            _DEFAULT_DAKOTA_KEYWORD_MAPPINGS,
+            *_DAKOTA_KEYWORD_MAPPINGS.values(),
+        ]
+        for mapping in mappings.values()
     ]
     + [keyword for lines in _METHOD_SPECIFIC_LINES.values() for keyword in lines]
 )
 
 
-def _native_keywords(method: str) -> dict[str, _NativeKeyword]:
-    return _NATIVE_KEYWORDS.get(method, _COMMON_KEYWORDS)
+def _dakota_keyword_mappings(method: str) -> dict[str, _DakotaKeywordMapping]:
+    return _DAKOTA_KEYWORD_MAPPINGS.get(method, _DEFAULT_DAKOTA_KEYWORD_MAPPINGS)
 
 
-def native_lines(method: str, settings: ConvergenceSettings) -> dict[str, float | int]:
+def dakota_setting_lines(
+    method: str, settings: ConvergenceSettings
+) -> dict[str, float | int]:
     """
     :return: the Dakota method keywords and values for the settings that
-        ``method`` supports natively.
+        Dakota handles for ``method``.
     """
     lines = {}
-    for name, native in _native_keywords(method).items():
+    for name, mapping in _dakota_keyword_mappings(method).items():
         value = getattr(settings, name)
-        value = native.default if value is None else value
+        value = mapping.value_if_unset if value is None else value
         if value is not None:
-            lines[native.keyword] = native.translate(value)
+            lines[mapping.keyword] = mapping.to_dakota_value(value)
     return lines
 
 
@@ -160,19 +180,21 @@ def matcal_checked_settings(
     :return: a copy of ``settings`` keeping only the settings that ``method``
         has no Dakota keyword for, so MatCal must check them.
     """
-    natively_supported = _native_keywords(method)
-    return replace(settings, **{name: None for name in natively_supported})
+    handled_by_dakota = _dakota_keyword_mappings(method)
+    return replace(settings, **{name: None for name in handled_by_dakota})
 
 
 def keywords_to_remove(method: str, settings: ConvergenceSettings) -> set[str]:
     """
     :return: method keywords that must not appear in the Dakota input for
-        ``method``: native keywords of other methods or unset settings, and
+        ``method``: Dakota keywords of other methods or unset settings, and
         keywords ``method`` does not accept.
     """
-    written = set(native_lines(method, settings)) | set(method_specific_lines(method))
+    written = set(dakota_setting_lines(method, settings)) | set(
+        method_specific_lines(method)
+    )
     unsupported = _UNSUPPORTED_KEYWORDS.get(method, frozenset())
-    return (set(_ALL_NATIVE_KEYWORDS) - written) | set(unsupported)
+    return (set(_ALL_DAKOTA_SETTING_KEYWORDS) - written) | set(unsupported)
 
 
 def batch_center(parameter_sets: Mapping | Sequence[Mapping]) -> np.ndarray:

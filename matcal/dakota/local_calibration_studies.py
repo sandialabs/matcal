@@ -19,10 +19,10 @@ from matcal.dakota.gradient_convergence import (
     ROL_OPTIONS_FILENAME,
     ConvergenceSettings,
     MatCalConvergenceMonitor,
+    dakota_setting_lines,
     keywords_to_remove,
     matcal_checked_settings,
     method_specific_lines,
-    native_lines,
     rol_options_xml,
 )
 from matcal.dakota.input_file_writer import (
@@ -225,7 +225,7 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         for keyword in removed:
             method_type_block.lines.pop(keyword, None)
         self._restore_default_lines(method_type_block, removed)
-        lines = {**native_lines(method, self._convergence_settings),
+        lines = {**dakota_setting_lines(method, self._convergence_settings),
                  **method_specific_lines(method)}
         for keyword, value in lines.items():
             self.set_method_type_block_line(keyword, value)
@@ -362,7 +362,7 @@ class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
     Dakota when it is met; the results then report the best evaluation MatCal
     recorded. MatCal's relative test must hold for two consecutive iterates.
     DOT and CONMIN also stop on absolute objective change tests that Dakota
-    does not expose, so MatCal gives them a native tolerance of 1e-12 and
+    does not expose, so MatCal gives them a Dakota tolerance of 1e-12 and
     checks the relative tolerance itself. MatCal also counts function
     evaluations for rol, which has no Dakota limit for them. For rol MatCal
     writes ``matcal_rol_options.xml`` with an initial trust region radius of

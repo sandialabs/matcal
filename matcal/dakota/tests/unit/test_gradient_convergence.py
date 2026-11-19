@@ -8,11 +8,12 @@ from matcal.dakota.gradient_convergence import (
     ConvergenceSettings,
     MatCalConvergenceMonitor,
     MatCalConvergenceReached,
+    _DakotaKeywordMapping,
     batch_center,
+    dakota_setting_lines,
     keywords_to_remove,
     matcal_checked_settings,
     method_specific_lines,
-    native_lines,
     rol_options_xml,
     scale_to_bounds,
     total_objective,
@@ -34,7 +35,21 @@ class TestConvergenceSettings(MatcalUnitTest):
         self.assertIn("relative=0.001", repr(ConvergenceSettings()))
 
 
-class TestNativeLines(MatcalUnitTest):
+class TestDakotaKeywordMapping(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_integer_setting_stays_integer(self):
+        value = _DakotaKeywordMapping("max_function_evaluations").to_dakota_value(50)
+        self.assertIsInstance(value, int)
+        self.assertEqual(value, 50)
+
+    def test_factor_converts_value(self):
+        mapping = _DakotaKeywordMapping("absolute_conv_tol", to_dakota_factor=0.5)
+        self.assertAlmostEqual(mapping.to_dakota_value(1e-4), 5e-5)
+
+
+class TestDakotaSettingLines(MatcalUnitTest):
     def setUp(self):
         super().setUp(__file__)
         self.settings = ConvergenceSettings(
@@ -42,7 +57,7 @@ class TestNativeLines(MatcalUnitTest):
         )
 
     def test_nl2sol_translates_absolute_to_half_sum_of_squares(self):
-        lines = native_lines("nl2sol", self.settings)
+        lines = dakota_setting_lines("nl2sol", self.settings)
         self.assertEqual(
             lines,
             {
@@ -56,12 +71,13 @@ class TestNativeLines(MatcalUnitTest):
     def test_dot_and_conmin_relative_is_checked_by_matcal(self):
         for method in ["dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd"]:
             self.assertEqual(
-                native_lines(method, self.settings), {"max_function_evaluations": 50}
+                dakota_setting_lines(method, self.settings),
+                {"max_function_evaluations": 50},
             )
             checked = matcal_checked_settings(method, self.settings)
             self.assertEqual(checked.relative, 1e-6)
 
-    def test_dot_and_conmin_get_tight_native_tolerance(self):
+    def test_dot_and_conmin_get_tight_dakota_tolerance(self):
         for method in ["dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd"]:
             self.assertEqual(
                 method_specific_lines(method), {"convergence_tolerance": 1e-12}
@@ -71,23 +87,24 @@ class TestNativeLines(MatcalUnitTest):
             )
 
     def test_common_methods_only_relative_and_evaluations(self):
-        lines = native_lines("optpp_q_newton", self.settings)
+        lines = dakota_setting_lines("optpp_q_newton", self.settings)
         self.assertEqual(
             lines, {"convergence_tolerance": 1e-6, "max_function_evaluations": 50}
         )
 
     def test_rol_only_variable(self):
         self.assertEqual(
-            native_lines("rol", self.settings), {"variable_tolerance": 1e-5}
+            dakota_setting_lines("rol", self.settings), {"variable_tolerance": 1e-5}
         )
 
     def test_rol_default_variable_tolerance(self):
         self.assertEqual(
-            native_lines("rol", ConvergenceSettings()), {"variable_tolerance": 1e-8}
+            dakota_setting_lines("rol", ConvergenceSettings()),
+            {"variable_tolerance": 1e-8},
         )
 
     def test_unset_settings_are_not_written(self):
-        lines = native_lines("nl2sol", ConvergenceSettings())
+        lines = dakota_setting_lines("nl2sol", ConvergenceSettings())
         self.assertNotIn("absolute_conv_tol", lines)
         self.assertNotIn("x_conv_tol", lines)
 
