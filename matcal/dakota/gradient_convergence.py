@@ -10,11 +10,12 @@ is an iterate.
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, fields, replace
 
 import numpy as np
 
 from matcal.core.parameters import ParameterCollection
+from matcal.dakota.dakota_interfaces import DakotaTermination
 
 
 @dataclass
@@ -37,7 +38,7 @@ class ConvergenceSettings:
 
     def is_active(self) -> bool:
         """:return: True if any setting is set."""
-        return any(getattr(self, field.name) is not None for field in fields(self))
+        return any(getattr(self, setting.name) is not None for setting in fields(self))
 
 
 @dataclass(frozen=True)
@@ -61,43 +62,33 @@ class _DakotaKeywordMapping:
         return value * self.to_dakota_factor
 
 
-_DEFAULT_DAKOTA_KEYWORD_MAPPINGS: dict[str, _DakotaKeywordMapping] = {
-    "relative": _DakotaKeywordMapping("convergence_tolerance"),
-    "max_function_evaluations": _DakotaKeywordMapping("max_function_evaluations"),
-}
+@dataclass(frozen=True)
+class _MethodSettings:
+    """
+    How one Dakota method receives MatCal's convergence settings.
 
-# NL2SOL minimizes half the sum of squared residuals; MatCal's total
-# objective for least squares methods is the full sum of squares.
-_DAKOTA_KEYWORD_MAPPINGS: dict[str, dict[str, _DakotaKeywordMapping]] = {
-    "nl2sol": {
-        **_DEFAULT_DAKOTA_KEYWORD_MAPPINGS,
-        "absolute": _DakotaKeywordMapping("absolute_conv_tol", to_dakota_factor=0.5),
-        "variable": _DakotaKeywordMapping("x_conv_tol"),
-    },
-    # Dakota's default ROL step tolerance is coarse for bound-scaled parameters.
-    "rol": {
-        "variable": _DakotaKeywordMapping("variable_tolerance", value_if_unset=1e-8)
-    },
-}
+    :param dakota_keywords: the MatCal settings Dakota handles for the method,
+        by setting name. MatCal checks the others itself.
+    :param fixed_lines: method keywords always written, with their values.
+    :param dropped_keywords: default method keywords the method rejects.
+    """
 
-# DOT and CONMIN combine their relative test with absolute objective change
-# tests that Dakota sets from the starting objective or does not expose, so
-# they stopped early. They get a tight Dakota tolerance and MatCal checks the
-# relative tolerance.
-_TIGHT_DAKOTA_TOLERANCE = 1e-12
-_MATCAL_RELATIVE_METHODS = ("dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd")
-for _method in _MATCAL_RELATIVE_METHODS:
-    _DAKOTA_KEYWORD_MAPPINGS[_method] = {
-        "max_function_evaluations": _DEFAULT_DAKOTA_KEYWORD_MAPPINGS[
-            "max_function_evaluations"
-        ]
-    }
+    dakota_keywords: Mapping[str, _DakotaKeywordMapping]
+    fixed_lines: Mapping[str, str | float] = field(default_factory=dict)
+    dropped_keywords: frozenset[str] = frozenset()
 
-_UNSUPPORTED_KEYWORDS: dict[str, frozenset[str]] = {
-    "rol": frozenset(
-        {"convergence_tolerance", "max_function_evaluations", "speculative"}
-    ),
-}
+    def written_keywords(self) -> set[str]:
+        """:return: every keyword this method's settings can write."""
+        keywords = {mapping.keyword for mapping in self.dakota_keywords.values()}
+        return keywords | set(self.fixed_lines)
+
+
+_RELATIVE = _DakotaKeywordMapping("convergence_tolerance")
+_MAX_EVALUATIONS = _DakotaKeywordMapping("max_function_evaluations")
+
+_DEFAULT_METHOD_SETTINGS = _MethodSettings(
+    {"relative": _RELATIVE, "max_function_evaluations": _MAX_EVALUATIONS}
+)
 
 ROL_OPTIONS_FILENAME = "matcal_rol_options.xml"
 
@@ -106,32 +97,56 @@ ROL_OPTIONS_FILENAME = "matcal_rol_options.xml"
 # run on its step tolerance after one iteration. 0.1 is 10% of each range.
 ROL_INITIAL_RADIUS = 0.1
 
-_METHOD_SPECIFIC_LINES: dict[str, dict[str, str | float]] = {
-    "rol": {"options_file": f'"{ROL_OPTIONS_FILENAME}"'},
+# DOT and CONMIN combine their relative test with absolute objective change
+# tests that Dakota sets from the starting objective or does not expose, so
+# they stopped early. They get a tight Dakota tolerance and MatCal checks the
+# relative tolerance.
+_TIGHT_DAKOTA_TOLERANCE = 1e-12
+_MATCAL_RELATIVE_METHODS = ("dot_sqp", "dot_slp", "dot_mmfd", "conmin_mfd")
+
+_METHOD_SETTINGS: dict[str, _MethodSettings] = {
+    # NL2SOL minimizes half the sum of squared residuals; MatCal's total
+    # objective for least squares methods is the full sum of squares.
+    "nl2sol": _MethodSettings(
+        {
+            "relative": _RELATIVE,
+            "max_function_evaluations": _MAX_EVALUATIONS,
+            "absolute": _DakotaKeywordMapping(
+                "absolute_conv_tol", to_dakota_factor=0.5
+            ),
+            "variable": _DakotaKeywordMapping("x_conv_tol"),
+        }
+    ),
+    # Dakota's default ROL step tolerance is coarse for bound-scaled parameters.
+    "rol": _MethodSettings(
+        {"variable": _DakotaKeywordMapping("variable_tolerance", value_if_unset=1e-8)},
+        fixed_lines={"options_file": f'"{ROL_OPTIONS_FILENAME}"'},
+        dropped_keywords=frozenset(
+            {"convergence_tolerance", "max_function_evaluations", "speculative"}
+        ),
+    ),
     **{
-        method: {"convergence_tolerance": _TIGHT_DAKOTA_TOLERANCE}
+        method: _MethodSettings(
+            {"max_function_evaluations": _MAX_EVALUATIONS},
+            fixed_lines={"convergence_tolerance": _TIGHT_DAKOTA_TOLERANCE},
+        )
         for method in _MATCAL_RELATIVE_METHODS
     },
 }
 
+_ALL_SETTING_KEYWORDS: frozenset[str] = frozenset().union(
+    *(
+        settings.written_keywords()
+        for settings in [_DEFAULT_METHOD_SETTINGS, *_METHOD_SETTINGS.values()]
+    )
+)
+
 # A single line search point with a tiny improvement must not end the run.
 _RELATIVE_DROPS_REQUIRED = 2
 
-_ALL_DAKOTA_SETTING_KEYWORDS: frozenset[str] = frozenset(
-    [
-        mapping.keyword
-        for mappings in [
-            _DEFAULT_DAKOTA_KEYWORD_MAPPINGS,
-            *_DAKOTA_KEYWORD_MAPPINGS.values(),
-        ]
-        for mapping in mappings.values()
-    ]
-    + [keyword for lines in _METHOD_SPECIFIC_LINES.values() for keyword in lines]
-)
 
-
-def _dakota_keyword_mappings(method: str) -> dict[str, _DakotaKeywordMapping]:
-    return _DAKOTA_KEYWORD_MAPPINGS.get(method, _DEFAULT_DAKOTA_KEYWORD_MAPPINGS)
+def _method_settings(method: str) -> _MethodSettings:
+    return _METHOD_SETTINGS.get(method, _DEFAULT_METHOD_SETTINGS)
 
 
 def dakota_setting_lines(
@@ -142,7 +157,7 @@ def dakota_setting_lines(
         Dakota handles for ``method``.
     """
     lines = {}
-    for name, mapping in _dakota_keyword_mappings(method).items():
+    for name, mapping in _method_settings(method).dakota_keywords.items():
         value = getattr(settings, name)
         value = mapping.value_if_unset if value is None else value
         if value is not None:
@@ -154,7 +169,7 @@ def method_specific_lines(method: str) -> dict[str, str | float]:
     """
     :return: extra Dakota method keywords MatCal always writes for ``method``.
     """
-    return dict(_METHOD_SPECIFIC_LINES.get(method, {}))
+    return dict(_method_settings(method).fixed_lines)
 
 
 def rol_options_xml(initial_radius: float) -> str:
@@ -180,7 +195,7 @@ def matcal_checked_settings(
     :return: a copy of ``settings`` keeping only the settings that ``method``
         has no Dakota keyword for, so MatCal must check them.
     """
-    handled_by_dakota = _dakota_keyword_mappings(method)
+    handled_by_dakota = _method_settings(method).dakota_keywords
     return replace(settings, **{name: None for name in handled_by_dakota})
 
 
@@ -193,8 +208,8 @@ def keywords_to_remove(method: str, settings: ConvergenceSettings) -> set[str]:
     written = set(dakota_setting_lines(method, settings)) | set(
         method_specific_lines(method)
     )
-    unsupported = _UNSUPPORTED_KEYWORDS.get(method, frozenset())
-    return (set(_ALL_DAKOTA_SETTING_KEYWORDS) - written) | set(unsupported)
+    dropped = _method_settings(method).dropped_keywords
+    return (set(_ALL_SETTING_KEYWORDS) - written) | set(dropped)
 
 
 def batch_center(parameter_sets: Mapping | Sequence[Mapping]) -> np.ndarray:
@@ -236,25 +251,17 @@ def total_objective(dakota_functions: np.ndarray, is_residual: bool) -> float:
     return float(np.sum(values**2) if is_residual else np.sum(values))
 
 
-@dataclass(frozen=True)
-class ConvergenceReason:
-    """
-    Why a MatCal convergence check stopped a calibration.
-
-    :param success: True for a tolerance, False for an evaluation limit.
-    :param message: a description of the criterion that was met.
-    """
-
-    success: bool
-    message: str
+def _matcal_stop(success: bool, message: str) -> DakotaTermination:
+    outcome = "Converged" if success else "Stopped"
+    return DakotaTermination(success, "MatCal", f"{outcome} (MatCal check): {message}")
 
 
 class MatCalConvergenceReached(Exception):
     """Raised from the Dakota callback to stop a calibration MatCal judged done."""
 
-    def __init__(self, reason: ConvergenceReason) -> None:
-        super().__init__(reason.message)
-        self.reason = reason
+    def __init__(self, termination: DakotaTermination) -> None:
+        super().__init__(termination.message)
+        self.termination = termination
 
 
 class MatCalConvergenceMonitor:
@@ -278,7 +285,7 @@ class MatCalConvergenceMonitor:
 
     def update(
         self, scaled_center: np.ndarray, objective: float, evaluations: int
-    ) -> ConvergenceReason | None:
+    ) -> DakotaTermination | None:
         """
         Record a batch center and check the settings.
 
@@ -298,7 +305,7 @@ class MatCalConvergenceMonitor:
 
     def _check_iterate(
         self, scaled_center: np.ndarray, objective: float
-    ) -> ConvergenceReason | None:
+    ) -> DakotaTermination | None:
         reason = self._check_absolute(objective)
         if reason is None and self._best_objective is not None:
             reason = self._check_relative(objective) or self._check_variable(
@@ -306,24 +313,22 @@ class MatCalConvergenceMonitor:
             )
         return reason
 
-    def _check_evaluations(self, evaluations: int) -> ConvergenceReason | None:
+    def _check_evaluations(self, evaluations: int) -> DakotaTermination | None:
         limit = self._settings.max_function_evaluations
         if limit is None or evaluations < limit:
             return None
-        return ConvergenceReason(
-            False, f"maximum function evaluations ({limit}) reached"
-        )
+        return _matcal_stop(False, f"maximum function evaluations ({limit}) reached")
 
-    def _check_absolute(self, objective: float) -> ConvergenceReason | None:
+    def _check_absolute(self, objective: float) -> DakotaTermination | None:
         tolerance = self._settings.absolute
         if tolerance is None or objective > tolerance:
             return None
-        return ConvergenceReason(
+        return _matcal_stop(
             True,
             f"absolute convergence: total objective {objective:g} <= {tolerance:g}",
         )
 
-    def _check_relative(self, objective: float) -> ConvergenceReason | None:
+    def _check_relative(self, objective: float) -> DakotaTermination | None:
         tolerance, previous = self._settings.relative, self._best_objective
         if tolerance is None or previous is None or previous == 0.0:
             return None
@@ -333,20 +338,20 @@ class MatCalConvergenceMonitor:
         )
         if self._small_relative_drops < _RELATIVE_DROPS_REQUIRED:
             return None
-        return ConvergenceReason(
+        return _matcal_stop(
             True,
             f"relative convergence: objective drop {drop:g} <= {tolerance:g} "
             f"for {_RELATIVE_DROPS_REQUIRED} consecutive iterates",
         )
 
-    def _check_variable(self, scaled_center: np.ndarray) -> ConvergenceReason | None:
+    def _check_variable(self, scaled_center: np.ndarray) -> DakotaTermination | None:
         tolerance, previous = self._settings.variable, self._best_center
         if tolerance is None or previous is None:
             return None
         change = float(np.max(np.abs(scaled_center - previous)))
         if not np.isfinite(change) or change > tolerance:
             return None
-        return ConvergenceReason(
+        return _matcal_stop(
             True,
             f"variable convergence: scaled parameter change {change:g} "
             f"<= {tolerance:g}",

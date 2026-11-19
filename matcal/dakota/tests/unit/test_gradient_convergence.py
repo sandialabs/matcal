@@ -274,7 +274,7 @@ class TestMatCalConvergenceMonitor(MatcalUnitTest):
     def test_reason_as_exception(self):
         reason = self._monitor(absolute=1.0).update(np.array([0.1]), 0.5, 3)
         error = MatCalConvergenceReached(reason)
-        self.assertIs(error.reason, reason)
+        self.assertIs(error.termination, reason)
         self.assertIn("absolute", str(error))
 
     def test_monitor_repr(self):

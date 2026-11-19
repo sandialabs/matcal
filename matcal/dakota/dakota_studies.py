@@ -17,7 +17,6 @@ from matcal.core.serializer_wrapper import matcal_load
 from matcal.core.study_base import StudyBase
 from matcal.dakota.dakota_interfaces import DakotaOutputReader, DakotaTermination
 from matcal.dakota.gradient_convergence import (
-    ConvergenceReason,
     MatCalConvergenceMonitor,
     MatCalConvergenceReached,
     batch_center,
@@ -39,11 +38,11 @@ def _write_all(file_descriptor: int, data: bytes) -> None:
         data = data[os.write(file_descriptor, data):]
 
 
-def _try_write(write: Callable[[bytes], object], chunk: bytes) -> bool:
+def _try_write(write: Callable[..., object], *arguments: object) -> bool:
     # Logging here would write to the captured stream itself, so failures
     # are only reported through the return value.
     try:
-        write(chunk)
+        write(*arguments)
     except (OSError, ValueError):
         return False
     return True
@@ -63,11 +62,11 @@ def _copy_stream(read_fd: int, output_fd: int, log_file: BinaryIO) -> None:
     drained so the solver can never block on a full pipe. The reader owns
     ``output_fd`` and closes it when done.
     """
-    destinations: list[Callable[[bytes], object]] = [
-        lambda chunk: _write_all(output_fd, chunk), log_file.write]
+    terminal_ok, log_ok = True, True
     chunk = os.read(read_fd, _TEE_CHUNK_SIZE)
     while chunk:
-        destinations = [write for write in destinations if _try_write(write, chunk)]
+        terminal_ok = terminal_ok and _try_write(_write_all, output_fd, chunk)
+        log_ok = log_ok and _try_write(log_file.write, chunk)
         chunk = os.read(read_fd, _TEE_CHUNK_SIZE)
     os.close(read_fd)
     _close_quietly(output_fd)
@@ -216,8 +215,7 @@ class DakotaStudyBase(StudyBase):
         self._restart_results_filename = None
         self.__testing_fail = False
         self._convergence_monitor: MatCalConvergenceMonitor | None = None
-        self._matcal_stop_reason: ConvergenceReason | None = None
-        self._monitored_evaluations = 0
+        self._matcal_stop: DakotaTermination | None = None
             
     def _run_study(self):
         if self._restart and self._restart_results_filename != None:
@@ -240,7 +238,7 @@ class DakotaStudyBase(StudyBase):
             self._capture_final_variables(dakenv, daklib)
         except MatCalConvergenceReached as stop:
             # Raised by MatCal's own convergence check to stop Dakota early.
-            self._handle_matcal_stop(stop.reason)
+            self._handle_matcal_stop(stop.termination)
         finally:
             # Any other exception propagates after the references are released.
             del daklib
@@ -263,9 +261,9 @@ class DakotaStudyBase(StudyBase):
     def _capture_final_variables(self, dakota_environment, dakota_study) -> None:
         """Hook to read final results from the Dakota study before it is deleted."""
 
-    def _handle_matcal_stop(self, reason: ConvergenceReason) -> None:
-        logger.info(f"MatCal stopped Dakota: {reason.message}")
-        self._matcal_stop_reason = reason
+    def _handle_matcal_stop(self, termination: DakotaTermination) -> None:
+        logger.info(f"MatCal stopped Dakota: {termination.message}")
+        self._matcal_stop = termination
 
     def _record_exit_information(self) -> None:
         self._results._set_exit_information(None, None,
@@ -302,14 +300,12 @@ class DakotaStudyBase(StudyBase):
             return
         center_functions = (dakota_results[0] if isinstance(dakota_results, list)
                             else dakota_results)["fns"]
-        self._monitored_evaluations += (len(parameter_sets)
-                                        if isinstance(parameter_sets, list) else 1)
-        reason = self._convergence_monitor.update(
+        termination = self._convergence_monitor.update(
             scale_to_bounds(batch_center(parameter_sets), self._parameter_collection),
             total_objective(center_functions, self._needs_residuals),
-            self._monitored_evaluations)
-        if reason is not None:
-            raise MatCalConvergenceReached(reason)
+            self._results.number_of_evaluations)
+        if termination is not None:
+            raise MatCalConvergenceReached(termination)
 
     def _fail_matcal_evaluate_parameter_sets_batch(self, parameter_sets):
         batch_results = self._matcal_evaluate_parameter_sets_batch(parameter_sets, 
@@ -413,12 +409,6 @@ class DakotaStudyBase(StudyBase):
         self._results = matcal_load(filename)
     
 
-def _matcal_termination(reason: ConvergenceReason) -> DakotaTermination:
-    outcome = "Converged" if reason.success else "Stopped"
-    return DakotaTermination(reason.success, "MatCal",
-                             f"{outcome} (MatCal check): {reason.message}")
-
-
 def _package_best_parameters(parameters: Mapping[str, float]) -> OrderedDict:
     return OrderedDict((f"best:{name}", float(value)) for name, value in parameters.items())
 
@@ -467,8 +457,8 @@ class DakotaCalibrationStudyBase(DakotaStudyBase):
         best_values = self._matcal_best_values()
         return None if best_values is None else _package_best_parameters(best_values)
 
-    def _handle_matcal_stop(self, reason: ConvergenceReason) -> None:
-        super()._handle_matcal_stop(reason)
+    def _handle_matcal_stop(self, termination: DakotaTermination) -> None:
+        super()._handle_matcal_stop(termination)
         self._final_dakota_parameters = self._matcal_best_values()
 
     def _warn_if_best_differs_from_matcal(self, dakota_results: Mapping) -> None:
@@ -483,8 +473,7 @@ class DakotaCalibrationStudyBase(DakotaStudyBase):
 
     def _record_exit_information(self) -> None:
         termination = (self._read_solver_termination()
-                       if self._matcal_stop_reason is None
-                       else _matcal_termination(self._matcal_stop_reason))
+                       if self._matcal_stop is None else self._matcal_stop)
         self._results._set_exit_information(termination.success, termination.status,
                                             termination.message)
 
