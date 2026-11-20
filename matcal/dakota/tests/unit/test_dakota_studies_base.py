@@ -1,8 +1,35 @@
+import io
 import os
+import threading
+from collections import OrderedDict
+from unittest import mock
+
 import numpy as np
-from matcal.core.constants import (IN_PROGRESS_RESULTS_FILENAME, EVALUATION_EXTENSION)
+
+from matcal.core.constants import EVALUATION_EXTENSION, IN_PROGRESS_RESULTS_FILENAME
+from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.restart_file import BatchRestartNone
+from matcal.core.study_base import StudyResults
+from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.tests.unit.test_study_base import StudyBaseUnitTests
+from matcal.dakota import dakota_studies
+from matcal.dakota.dakota_studies import (
+    _close_quietly,
+    _copy_stream,
+    _flush_library,
+    _move_aside,
+    _parameters_match,
+    _read_text_if_exists,
+    _restore_stdout,
+    _tee_process_stdout,
+    _write_all,
+)
+from matcal.dakota.local_calibration_studies import (
+    CobylaCalibrationStudy,
+)
+from matcal.dakota.local_calibration_studies import (
+    GradientCalibrationStudy as _MinimalCalibrationStudy,
+)
 
 
 class TestDakotaStudyBase:
@@ -129,3 +156,245 @@ class TestDakotaStudyBase:
                 results = results[0]
             goal =  {'fns':np.zeros((1,6))}
             self.assert_close_arrays(results['fns'],goal['fns'])
+
+class TestTeeProcessStdout(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_os_level_writes_are_captured_in_file(self):
+        with _tee_process_stdout("captured.log"):
+            os.write(1, b"fortran style output\n")
+        with open("captured.log") as file_handle:
+            self.assertIn("fortran style output", file_handle.read())
+
+    def test_stdout_restored_after_exception(self):
+        original_fd_target = os.fstat(1)
+        with self.assertRaises(ValueError), _tee_process_stdout("captured.log"):
+            raise ValueError("inside")
+        self.assertEqual(os.fstat(1).st_ino, original_fd_target.st_ino)
+
+
+class TestBestParameterHelpers(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_parameters_match_within_tolerance(self):
+        self.assertTrue(_parameters_match({"a": 1.0, "b": 0.0}, {"a": 1.0 + 1e-12, "b": 0.0}))
+
+    def test_parameters_do_not_match(self):
+        self.assertFalse(_parameters_match({"a": 1.0}, {"a": 1.1}))
+
+    def test_parameters_with_different_names_do_not_match(self):
+        self.assertFalse(_parameters_match({"a": 1.0}, {"b": 1.0}))
+
+    def test_read_text_if_exists_missing_file(self):
+        self.assertEqual(_read_text_if_exists("missing.out"), "")
+
+    def test_read_text_if_exists(self):
+        with open("new.out", "w") as file_handle:
+            file_handle.write("new")
+        self.assertEqual(_read_text_if_exists("new.out"), "new")
+
+
+class TestMoveAside(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_existing_file_is_renamed(self):
+        with open("OPT_DEFAULT.out", "w") as file_handle:
+            file_handle.write("stale")
+        _move_aside("OPT_DEFAULT.out")
+        self.assertFalse(os.path.exists("OPT_DEFAULT.out"))
+        with open("OPT_DEFAULT.out.previous") as file_handle:
+            self.assertEqual(file_handle.read(), "stale")
+
+    def test_previous_copy_is_replaced(self):
+        for text in ["first", "second"]:
+            with open("OPT_DEFAULT.out", "w") as file_handle:
+                file_handle.write(text)
+            _move_aside("OPT_DEFAULT.out")
+        with open("OPT_DEFAULT.out.previous") as file_handle:
+            self.assertEqual(file_handle.read(), "second")
+
+    def test_missing_file_is_ignored(self):
+        _move_aside("missing.out")
+        self.assertFalse(os.path.exists("missing.out.previous"))
+
+    def test_calibration_moves_stale_optpp_output_before_run(self):
+        with open("OPT_DEFAULT.out", "w") as file_handle:
+            file_handle.write("Return code = 3 (Algorithm converged - stale)")
+        study = _calibration_study_with_history([], [])
+        study._before_dakota_run()
+        self.assertFalse(os.path.exists("OPT_DEFAULT.out"))
+
+
+class TestCopyStream(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _pipe_with(self, data):
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, data)
+        os.close(write_fd)
+        return read_fd
+
+    def test_write_all_retries_partial_writes(self):
+        written = []
+        def one_byte_write(fd, data):
+            written.append(data[:1])
+            return 1
+        with mock.patch.object(dakota_studies.os, "write", one_byte_write):
+            _write_all(5, b"abc")
+        self.assertEqual(b"".join(written), b"abc")
+
+    def test_copies_to_output_and_log(self):
+        output_read, output_write = os.pipe()
+        log = io.BytesIO()
+        _copy_stream(self._pipe_with(b"solver text"), output_write, log)
+        self.assertEqual(log.getvalue(), b"solver text")
+        self.assertEqual(os.read(output_read, 100), b"solver text")
+        os.close(output_read)
+
+    def test_closes_output_when_done(self):
+        output_read, output_write = os.pipe()
+        _copy_stream(self._pipe_with(b"x"), output_write, io.BytesIO())
+        with self.assertRaises(OSError):
+            os.fstat(output_write)
+        os.close(output_read)
+
+    def test_keeps_logging_after_output_fails(self):
+        output_read, output_write = os.pipe()
+        os.close(output_read)
+        log = io.BytesIO()
+        _copy_stream(self._pipe_with(b"still logged"), output_write, log)
+        self.assertEqual(log.getvalue(), b"still logged")
+
+    def test_close_quietly_ignores_closed_descriptor(self):
+        read_fd, write_fd = os.pipe()
+        os.close(read_fd)
+        os.close(write_fd)
+        _close_quietly(write_fd)
+
+    def test_keeps_draining_after_log_fails(self):
+        output_read, output_write = os.pipe()
+        log = io.BytesIO()
+        log.close()
+        _copy_stream(self._pipe_with(b"to terminal"), output_write, log)
+        self.assertEqual(os.read(output_read, 100), b"to terminal")
+        os.close(output_read)
+
+
+class TestRestoreStdout(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_saved_descriptor_left_to_live_reader(self):
+        release = threading.Event()
+        reader = threading.Thread(target=release.wait, daemon=True)
+        reader.start()
+        saved_fd = os.dup(1)
+        with mock.patch.object(dakota_studies, "_TEE_JOIN_TIMEOUT_SECONDS", 0.05), \
+             mock.patch.object(dakota_studies.logger, "warning"):
+            _restore_stdout(saved_fd, reader)
+        os.fstat(saved_fd)
+        release.set()
+        os.close(saved_fd)
+
+
+class TestNativeFlush(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_missing_library_is_ignored(self):
+        _flush_library("library_that_does_not_exist_xyz", "fflush")
+
+    def test_missing_function_is_ignored(self):
+        _flush_library("c", "function_that_does_not_exist_xyz")
+
+    def test_flush_existing_function(self):
+        _flush_library("c", "fflush")
+
+
+class TestTeeChildHoldsStdout(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_warns_when_output_is_still_held(self):
+        with mock.patch.object(dakota_studies, "_TEE_JOIN_TIMEOUT_SECONDS", 0.1), \
+             mock.patch.object(dakota_studies.logger, "warning") as warning:
+            with _tee_process_stdout("captured.log"):
+                held_fd = os.dup(1)
+            os.close(held_fd)
+        warning.assert_called_once()
+
+
+def _calibration_study_with_history(total_objectives, parameter_values):
+    study = _MinimalCalibrationStudy(
+        ParameterCollection("p", Parameter("a", 0, 10, 1.0)))
+    study._results = StudyResults()
+    study._results._total_objective_history = list(total_objectives)
+    study._results._parameter_history = OrderedDict(a=list(parameter_values))
+    return study
+
+
+class TestCalibrationBestParameters(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_matcal_best_parameters_none_without_history(self):
+        study = _calibration_study_with_history([], [])
+        self.assertIsNone(study._matcal_best_parameters())
+
+    def test_matcal_best_parameters_uses_lowest_objective(self):
+        study = _calibration_study_with_history([3.0, 1.0, 2.0], [5.0, 6.0, 7.0])
+        self.assertEqual(study._matcal_best_parameters(), {"best:a": 6.0})
+
+    def test_warns_when_dakota_best_differs(self):
+        study = _calibration_study_with_history([3.0, 1.0], [5.0, 6.0])
+        with mock.patch.object(dakota_studies.logger, "warning") as warning:
+            study._package_results(OrderedDict({"best:a": 5.0}))
+        warning.assert_called_once()
+
+    def test_no_warning_when_dakota_best_agrees(self):
+        study = _calibration_study_with_history([3.0, 1.0], [5.0, 6.0])
+        with mock.patch.object(dakota_studies.logger, "warning") as warning:
+            study._package_results(OrderedDict({"best:a": 6.0}))
+        warning.assert_not_called()
+
+    def test_output_information_falls_back_to_text_reader(self):
+        study = _calibration_study_with_history([], [])
+        support_dir = os.path.join(os.path.dirname(__file__), "..", "test_support_files")
+        results = study._return_output_information(os.path.join(support_dir, "dakota.out"))
+        self.assertAlmostEqual(results["best:Y"], 500.49999998)
+
+    def test_output_information_prefers_final_dakota_variables(self):
+        study = _calibration_study_with_history([], [])
+        study._final_dakota_parameters = OrderedDict(a=2.5)
+        self.assertEqual(study._return_output_information("unused"), {"best:a": 2.5})
+
+
+class _FakeDakotaEnvironment:
+    @staticmethod
+    def get_variable_values(dakota_study):
+        return [4.5]
+
+
+class TestCaptureFinalVariables(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_single_best_point_study_reads_final_variables(self):
+        study = _calibration_study_with_history([], [])
+        study._capture_final_variables(_FakeDakotaEnvironment, None)
+        self.assertEqual(study._final_dakota_parameters, {"a": 4.5})
+
+    def test_multi_point_study_keeps_text_reader(self):
+        study = CobylaCalibrationStudy(ParameterCollection("p", Parameter("a", 0, 10, 1.0)))
+        study._capture_final_variables(_FakeDakotaEnvironment, None)
+        self.assertIsNone(study._final_dakota_parameters)
+
+    def test_multi_point_study_does_not_check_best(self):
+        study = CobylaCalibrationStudy(ParameterCollection("p", Parameter("a", 0, 10, 1.0)))
+        with mock.patch.object(study, "_warn_if_best_differs_from_matcal") as check:
+            study._package_results(OrderedDict({"best:a": 5.0}))
+        check.assert_not_called()

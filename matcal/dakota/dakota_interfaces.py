@@ -1,17 +1,21 @@
-from collections import OrderedDict
-import numpy as np
 import os
 import re
+from collections import OrderedDict
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
+import numpy as np
 
 from matcal.core.data import convert_data_to_dictionary
 from matcal.core.data_importer import FileData
-from matcal.core.serializer_wrapper import matcal_save, matcal_load
-from matcal.core.utilities import _find_smallest_rect
-from matcal.dakota.dakota_constants import (DAKOTA_MCMC_CHAIN_FILE, 
-    DAKOTA_COVARIANCE_FILE, MATCAL_MCMC_CHAIN_FILE)
-
 from matcal.core.logger import initialize_matcal_logger
+from matcal.core.serializer_wrapper import matcal_load, matcal_save
+from matcal.core.utilities import _find_smallest_rect
+from matcal.dakota.dakota_constants import (
+    DAKOTA_COVARIANCE_FILE,
+    DAKOTA_MCMC_CHAIN_FILE,
+    MATCAL_MCMC_CHAIN_FILE,
+)
 
 logger = initialize_matcal_logger(__name__)
 
@@ -25,8 +29,8 @@ def read_dakota_mcmc_chain(chain_file, n_params):
 
 def make_pairwise_plots(chain_file, plot_dir, downsample_rate):
     chain_data = matcal_load(chain_file)
-    import pandas as pd
     import matplotlib.pyplot as plt
+    import pandas as pd
     import seaborn as sns
     
     _make_triangle_plot(plot_dir, chain_data, downsample_rate, pd, plt, sns)
@@ -71,7 +75,146 @@ def _make_triangle_plot(plot_dir, chain_data, downsample_rate, pd, plt, sns):
     filename = f"{plot_dir}/triangle_plot.png"
     plt.savefig(filename, dpi=400)
 
+@dataclass(frozen=True)
+class DakotaTermination:
+    """
+    Termination information reported by a Dakota solver.
 
+    :param success: True if the solver reports convergence, False if it
+        stopped for another reason, and None if no termination text was found.
+    :param status: the solver's exit code or status string, if it reports one.
+    :param message: a human readable termination message.
+    """
+
+    success: bool | None
+    status: int | str | None
+    message: str
+
+
+_TERMINATION_NOT_FOUND = DakotaTermination(
+    None, None, "Termination reason not found in the Dakota or solver output."
+)
+
+_NL2SOL_FAILURES = ("FALSE", "SINGULAR", "LIMIT")
+
+# INFORM 1: the optimality conditions hold but NPSOL could not confirm the
+# requested accuracy, typically because the objective is already near zero.
+_NPSOL_SUCCESS_CODES = (0, 1)
+
+_DOT_SUCCESS_MARKERS = ("CONVERGENCE CRITERION WAS MET", "KUHN-TUCKER CONDITIONS")
+
+# CONMIN's convergence messages: absolute (DABFUN) or relative (DELFUN)
+# objective change, or the Kuhn-Tucker conditions. Anything else, such as
+# the iteration limit, is not a success.
+_CONMIN_SUCCESS_MARKERS = ("LESS THAN DABFUN", "LESS THAN DELFUN", "KUHN-TUCKER")
+
+_ROL_SUCCESS_STATUSES = ("Converged", "Step Tolerance Met")
+
+
+def _last_match(pattern: str, text: str) -> re.Match | None:
+    matches = list(re.finditer(pattern, text, flags=re.MULTILINE))
+    return matches[-1] if matches else None
+
+
+def _parse_nl2sol(text: str) -> DakotaTermination | None:
+    match = _last_match(r"\*{5} ([A-Z][A-Z\- ]*?) \*{5}", text)
+    if match is None:
+        return None
+    reason = match.group(1)
+    success = "CONVERGENCE" in reason and not any(
+        failure in reason for failure in _NL2SOL_FAILURES
+    )
+    return DakotaTermination(success, None, f"NL2SOL: {reason}")
+
+
+def _npsol_exit_message(text: str, solver: str) -> str:
+    # NPSOL and NLSSOL print their own reason ("Exit NPSOL - Optimal solution
+    # found.") to standard output and their print file; Dakota reports only
+    # the INFORM code.
+    match = _last_match(rf"Exit {solver} - ([^\n]*?)\.?\s*$", text)
+    return match.group(1) if match else "see the NPSOL manual"
+
+
+def _parse_npsol(text: str) -> DakotaTermination | None:
+    match = _last_match(r"(NPSOL|NLSSOL) exits with INFORM code = (-?\d+)", text)
+    if match is None:
+        return None
+    solver, code = match.group(1), int(match.group(2))
+    meaning = _npsol_exit_message(text, solver)
+    success = code in _NPSOL_SUCCESS_CODES
+    return DakotaTermination(success, code, f"{solver} INFORM {code}: {meaning}")
+
+
+def _parse_optpp(text: str) -> DakotaTermination | None:
+    default_out = r"Return code\s+=\s+(-?\d+) \((.*)\)"
+    dakota_out = r"Return Code\s+(-?\d+)\s*\n.*\n(Algorithm[^\n]*)"
+    match = _last_match(default_out, text) or _last_match(dakota_out, text)
+    if match is None:
+        return None
+    code = int(match.group(1))
+    return DakotaTermination(code > 0, code, f"OPT++: {match.group(2).strip()}")
+
+
+def _parse_rol(text: str) -> DakotaTermination | None:
+    match = _last_match(r"Optimization Terminated with Status: ([^\n]+)", text)
+    if match is None:
+        return None
+    status = match.group(1).strip()
+    success = status in _ROL_SUCCESS_STATUSES
+    return DakotaTermination(success, status, f"ROL: {status}")
+
+
+def _parse_dot(text: str) -> DakotaTermination | None:
+    match = _last_match(r"^\s*TERMINATION CRITERIA\s*\n\s*([^\n]*\S)", text)
+    if match is None:
+        return None
+    reason = match.group(1).strip()
+    success = any(marker in reason for marker in _DOT_SUCCESS_MARKERS)
+    return DakotaTermination(success, None, f"DOT: {reason}")
+
+
+def _parse_conmin(text: str) -> DakotaTermination | None:
+    match = _last_match(r"^\s*TERMINATION CRITERION\s*\n\s*([^\n]*\S)", text)
+    if match is None:
+        return None
+    reason = match.group(1).strip()
+    success = any(marker in reason for marker in _CONMIN_SUCCESS_MARKERS)
+    return DakotaTermination(success, None, f"CONMIN: {reason}")
+
+
+_TERMINATION_PARSERS: dict[str, Callable[[str], DakotaTermination | None]] = {
+    "nl2sol": _parse_nl2sol,
+    "npsol_": _parse_npsol,
+    "nlssol_": _parse_npsol,
+    "optpp_": _parse_optpp,
+    "rol": _parse_rol,
+    "dot_": _parse_dot,
+    "conmin_": _parse_conmin,
+}
+
+
+def _select_termination_parser(
+    method: str,
+) -> Callable[[str], DakotaTermination | None] | None:
+    for prefix, parser in _TERMINATION_PARSERS.items():
+        if method.startswith(prefix):
+            return parser
+    return None
+
+
+def parse_termination_text(text: str, method: str) -> DakotaTermination:
+    """
+    Extract the termination reason of a Dakota gradient solver from its output.
+
+    :param text: the combined Dakota and solver output to search.
+    :param method: the Dakota method keyword, used to select the solver's
+        termination message format.
+    :return: the last termination message found for the solver, or a
+        termination with ``success`` None if none is found.
+    """
+    parser = _select_termination_parser(method)
+    termination = parser(text) if parser is not None else None
+    return termination if termination is not None else _TERMINATION_NOT_FOUND
 
 
 class DakotaOutputReader(object):
@@ -118,6 +261,21 @@ class DakotaOutputReader(object):
         self._current_line_number+= 1
 
     return all_parameters
+
+  def parse_termination(self, method: str,
+                        additional_texts: Iterable[str] = ()) -> DakotaTermination:
+    """
+    Return the solver termination reason found in the Dakota output file
+    and any additional solver output, such as captured standard output.
+
+    :param method: the Dakota method keyword.
+    :param additional_texts: other solver output to search after the Dakota
+        output file.
+    :return: the termination information.
+    """
+    with open(self.dakota_file, "r") as file_handle:
+      texts = [file_handle.read(), *additional_texts]
+    return parse_termination_text("\n".join(texts), method)
 
   def _find_key_phrase_in_lines(self, key_phrase):
     current_line = self._lines[self._current_line_number]
