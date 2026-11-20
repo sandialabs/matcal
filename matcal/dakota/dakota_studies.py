@@ -449,9 +449,11 @@ class DakotaCalibrationStudyBase(DakotaStudyBase):
     def _matcal_best_values(self) -> OrderedDict | None:
         if len(self._results.total_objective_history) < 1:
             return None
+        # Dakota's parameters, before any MatCal parameter preprocessors.
+        history = self._results.parameter_history
         best_index = self._results.best_evaluation_index
         return OrderedDict((name, values[best_index])
-                           for name, values in self._results.parameter_history.items())
+                           for name, values in history.items())
 
     def _matcal_best_parameters(self) -> OrderedDict | None:
         best_values = self._matcal_best_values()

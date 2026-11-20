@@ -38,6 +38,16 @@ def model_func(coeff, power, offset):
     return {"x":x, "y": y}
 
 
+def model_func_ignoring_extra_parameters(coeff, power, offset, **extra_parameters):
+    return model_func(coeff, power, offset)
+
+
+def double_coeff_and_add_table(params):
+    params["coeff"] = 2 * params["coeff"]
+    params["table"] = "0.0, 0.0\n1.0, 2.0"
+    return params
+
+
 def simple_func(a):
     return {"x":[0, 1], "y": [0,1]}
 
@@ -815,6 +825,53 @@ class StudyResultsBaseUnitTests(object):
             self.assertIn('b',sr.parameter_history.keys())
             self.assertNotIn('c',sr.parameter_history.keys())
 
+        def test_processed_parameter_history_defaults_to_parameters(self):
+            sr = StudyResults()
+            sr._update_parameter_history({"test1": {"a": 1.0}}, ["test1"])
+            self.assertEqual(sr.parameter_history, {"a": [1.0]})
+            self.assertEqual(sr.processed_parameter_history, {"a": [1.0]})
+
+        def test_processed_parameter_history_kept_separately(self):
+            sr = StudyResults()
+            parameters = {"test1": {"a": 1.0}}
+            processed = {"test1": {"a": 2.0, "table": "0.0, 1.0"}}
+            sr._update_parameter_history(parameters, ["test1"], processed)
+            self.assertEqual(sr.parameter_history, {"a": [1.0]})
+            self.assertEqual(sr.processed_parameter_history,
+                             {"a": [2.0], "table": ["0.0, 1.0"]})
+
+        def test_processed_parameter_history_respects_save_frequency(self):
+            sr = StudyResults(results_save_frequency=2)
+            keys = ["e1", "e2", "e3"]
+            parameters = {key: {"a": 1.0 * i} for i, key in enumerate(keys)}
+            processed = {key: {"a": 2.0 * i} for i, key in enumerate(keys)}
+            sr._update_parameter_history(parameters, keys, processed)
+            self.assertEqual(sr.parameter_history, {"a": [0.0, 2.0]})
+            self.assertEqual(sr.processed_parameter_history, {"a": [0.0, 4.0]})
+
+        def test_processed_history_falls_back_when_not_recorded(self):
+            sr = StudyResults()
+            sr._parameter_history = OrderedDict(a=[1.0, 2.0])
+            self.assertEqual(sr.processed_parameter_history, {"a": [1.0, 2.0]})
+
+        def test_processed_history_not_duplicated_without_preprocessing(self):
+            sr = StudyResults()
+            sr._update_parameter_history({"test1": {"a": 1.0}}, ["test1"])
+            self.assertEqual(sr._processed_parameter_history, {})
+
+        def test_results_saved_before_processed_history(self):
+            saved = StudyResults()
+            saved._update_parameter_history({"test1": {"a": 2.0}}, ["test1"])
+            old_state = dict(saved.__dict__)
+            del old_state["_processed_parameter_history"]
+            sr = StudyResults.__new__(StudyResults)
+            sr.__setstate__(old_state)
+            self.assertEqual(sr.parameter_history, {"a": [2.0]})
+            self.assertEqual(sr.processed_parameter_history, {"a": [2.0]})
+            sr._update_parameter_history({"test2": {"a": 3.0}}, ["test2"],
+                                         {"test2": {"a": 6.0}})
+            self.assertEqual(sr.processed_parameter_history, {"a": [2.0, 6.0]})
+
         def test_results_save_frequency(self):
             neval = 26
             sr = self._random_init(neval, results_save_frequency=5)
@@ -935,6 +992,27 @@ class TestStudyResults(StudyResultsBaseUnitTests.CommonTests):
         self.assertTrue(results.success, True)
         self.assertEqual(results.exit_status, 0)
         self.assertEqual(results.exit_message, "Successful:\n\nAlgorithm returned exit status:\n0")
+
+    def test_parameter_histories_with_preprocessor(self):
+        coeff = Parameter("coeff", 0, 10)
+        power = Parameter("power", 0, 10)
+        study = ParameterStudy(ParameterCollection("test params", coeff, power))
+        state = State("one", offset=1)
+        data = convert_dictionary_to_data(model_func(2.0, 3.0, 1))
+        data.set_state(state)
+        study.add_evaluation_set(PythonModel(model_func_ignoring_extra_parameters),
+                                 CurveBasedInterpolatedObjective("x", "y"),
+                                 DataCollection("test", data))
+        study.add_parameter_preprocessor(
+            UserDefinedParameterPreprocessor(double_coeff_and_add_table))
+        study.add_parameter_evaluation(coeff=1.0, power=3.0)
+        study.add_parameter_evaluation(coeff=1.5, power=3.0)
+        study.set_core_limit(2)
+        results = study.launch()
+        self.assertEqual(results.parameter_history,
+                         {"coeff": [1.0, 1.5], "power": [3.0, 3.0]})
+        self.assertEqual(results.processed_parameter_history["coeff"], [2.0, 3.0])
+        self.assertIn("table", results.processed_parameter_history)
 
     def test_export_eval_result_to_file(self):
         n_pts = 11
