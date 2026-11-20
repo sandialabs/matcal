@@ -5,6 +5,7 @@ for any new studies.
 """
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from collections.abc import Mapping
 from datetime import datetime
 from getpass import getuser
 import glob
@@ -773,15 +774,18 @@ class StudyBase(ABC):
 
     def _matcal_evaluate_parameter_sets_batch(self, parameter_sets, 
                                               is_finite_difference_eval=False):
-        formatted_parameter_sets = self._prepare_parameter_sets_to_evaluate(parameter_sets)
+        processed_parameter_sets, study_parameter_sets = (
+            self._prepare_parameter_sets_to_evaluate(parameter_sets))
         evaluator_func = self._parameter_batch_evaluator.evaluate_parameter_batch
-        batch_results = evaluator_func(formatted_parameter_sets, 
+        batch_results = evaluator_func(processed_parameter_sets, 
                                        self._needs_residuals, 
                                        self._restart_obj)
         batch_raw_objectives, total_objectives, batch_qois = _unpack_evaluation(batch_results)
         
-        _record_results(self._results, formatted_parameter_sets, batch_raw_objectives, 
-                             total_objectives, batch_qois, is_finite_difference_eval)
+        processed = processed_parameter_sets if self._parameter_preprocessors else None
+        _record_results(self._results, study_parameter_sets, batch_raw_objectives, 
+                             total_objectives, batch_qois, is_finite_difference_eval,
+                             processed_parameters=processed)
         self._plotter.plot()
         
         flattened_batch_results = flatten_evaluation_batch_results(batch_raw_objectives)
@@ -791,20 +795,27 @@ class StudyBase(ABC):
                                                          parameter_sets, batch_qois)
 
     def _prepare_parameter_sets_to_evaluate(self, parameter_sets):
-        prepared_parameter_sets = OrderedDict()
+        """
+        :return: the preprocessed parameter sets to evaluate and the same sets
+            before preprocessing, both keyed by evaluation directory.
+        """
+        processed_parameter_sets = OrderedDict()
+        study_parameter_sets = OrderedDict()
         if not isinstance(parameter_sets, list):
             parameter_sets = [parameter_sets]
         for parameter_set in parameter_sets:
-            eval_dir_name, param_dict  = self._get_eval_dir_and_parameter_dict(parameter_set)
-            prepared_parameter_sets[eval_dir_name] = param_dict
-        return prepared_parameter_sets
+            eval_dir_name, param_dict, processed_param_dict = (
+                self._get_eval_dir_and_parameter_dict(parameter_set))
+            processed_parameter_sets[eval_dir_name] = processed_param_dict
+            study_parameter_sets[eval_dir_name] = param_dict
+        return processed_parameter_sets, study_parameter_sets
 
     def _get_eval_dir_and_parameter_dict(self, param_set):
         eval_dir_name = MATCAL_WORKDIR_STR+f".{self._next_evaluation_id_number}"
         param_dict = self._format_parameters(param_set)
         processed_param_dict = self._preprocess_parameters(param_dict)
         self._next_evaluation_id_number += 1
-        return eval_dir_name, processed_param_dict
+        return eval_dir_name, param_dict, processed_param_dict
     
     def _updated_next_evaluation_id_number(self):
         if self._restart:
@@ -876,6 +887,7 @@ class StudyResults:
         self._record_objectives = record_objectives
         self._save_freq = results_save_frequency
         self._parameter_history: OrderedDict = OrderedDict()
+        self._processed_parameter_history: OrderedDict = OrderedDict()
         self._evaluation_sets: list = []
         self._evaluation_ids: list = []
         self._qoi_history: Optional[OrderedDict] = None
@@ -941,7 +953,12 @@ class StudyResults:
     @property
     def parameter_history(self):
         """
-        Stores the history of parameters evaluated during the study.
+        Stores the history of the study's parameters, as chosen by the study
+        algorithm, before any parameter preprocessors were applied.
+
+        Results saved by MatCal versions without
+        :meth:`~matcal.core.study_base.StudyResults.processed_parameter_history`
+        hold the preprocessed parameters here instead.
 
         :return: The history of parameters evaluated during the study
             where keys are the parameter names and the values are a list 
@@ -950,6 +967,21 @@ class StudyResults:
         """
 
         return self._parameter_history
+
+    @property
+    def processed_parameter_history(self) -> OrderedDict:
+        """
+        Stores the history of the parameters the models received, after any
+        parameter preprocessors were applied, including parameters the
+        preprocessors added. Without preprocessors, and for results saved
+        before this history existed, it returns
+        :meth:`~matcal.core.study_base.StudyResults.parameter_history`.
+
+        :return: the parameter names and, for each, the values in the order
+            they were evaluated.
+        :rtype: OrderedDict (str, list)
+        """
+        return self._processed_parameter_history or self._parameter_history
 
     @property
     def simulation_history(self):
@@ -1474,14 +1506,29 @@ class StudyResults:
         self._exit_message += f"\nAlgorithm returned exit status:\n{exit_status}"
 
         
-    def _update_parameter_history(self, batch_parameters, eval_order):
-        if len(self._parameter_history) < 1:
-            self._initialize_parameter_history(batch_parameters, eval_order)
-        for idx, key in enumerate(eval_order):
-            if idx % self._save_freq == 0:
-                for p_name, p_val in batch_parameters[key].items():
-                    if p_name in self._parameter_history: 
-                        self._parameter_history[p_name].append(p_val)
+    def _update_parameter_history(self, batch_parameters, eval_order,
+                                  processed_parameters=None):
+        if processed_parameters is not None:
+            self._update_processed_parameter_history(processed_parameters, eval_order)
+        _append_to_parameter_history(self._parameter_history, batch_parameters,
+                                     eval_order, self._save_freq)
+
+    def _update_processed_parameter_history(self, processed_parameters, eval_order):
+        if not self._processed_parameter_history:
+            # Until now the processed values equalled parameter_history (or,
+            # for older results, were stored in it); start from them so both
+            # histories stay aligned with the evaluations.
+            self._processed_parameter_history = OrderedDict(
+                (name, list(values))
+                for name, values in self._parameter_history.items())
+        _append_to_parameter_history(self._processed_parameter_history,
+                                     processed_parameters, eval_order,
+                                     self._save_freq)
+
+    def __setstate__(self, state):
+        # Results saved before processed_parameter_history existed.
+        self.__dict__.update(state)
+        self.__dict__.setdefault("_processed_parameter_history", OrderedDict())
 
     def _update_simulation_history(self, simulation_results_dc, model_name):
         if self._record_data:
@@ -1528,11 +1575,6 @@ class StudyResults:
                                                            obj_results.weighted_conditioned_residuals)
         self._obj_history[eval_set_name]._update_objectives(obj_results.objectives)
 
-    def _initialize_parameter_history(self, batch_parameters, key_order):
-        first_key = key_order[0]
-        for param_name in batch_parameters[first_key].keys():
-            self._parameter_history[param_name] = []
-            
     def _initialize_evaluation_sets(self, evaluation_sets_qois, key_order):
         if len(self._evaluation_sets) < 1:
             first_eval = key_order[0]
@@ -1720,12 +1762,25 @@ class QoiInformation:
             self.simulation_weighted_conditioned_qois.append(sim_wc_qois)
         
         
+def _append_to_parameter_history(history: OrderedDict, batch_parameters: Mapping,
+                                 eval_order: list, save_frequency: int) -> None:
+    if len(history) < 1:
+        for param_name in batch_parameters[eval_order[0]]:
+            history[param_name] = []
+    for idx, key in enumerate(eval_order):
+        if idx % save_frequency == 0:
+            for p_name, p_val in batch_parameters[key].items():
+                if p_name in history:
+                    history[p_name].append(p_val)
+
+
 def _record_results(results:StudyResults, formatted_parameters, raw_obj, total_obj, qois, skip,
-                    in_progress_save=True):
+                    in_progress_save=True, processed_parameters=None):
     if not skip:
         ordered_evaluation_keys = _sort_workdirs(list(formatted_parameters.keys()))
         results._initialize_evaluation_sets(qois, ordered_evaluation_keys)
-        results._update_parameter_history(formatted_parameters, ordered_evaluation_keys)
+        results._update_parameter_history(formatted_parameters, ordered_evaluation_keys,
+                                          processed_parameters)
         results._update_results_history(raw_obj, total_obj, qois, ordered_evaluation_keys)
         if in_progress_save:
             results.save(IN_PROGRESS_RESULTS_FILENAME+".joblib")   

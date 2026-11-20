@@ -498,7 +498,8 @@ def _select_model(simulation_history, model_name):
     return model_name
 
 def _parse_study_results(study_results, model_name, ):
-    input_hist = study_results.parameter_history
+    # The model received the preprocessed parameters.
+    input_hist = study_results.processed_parameter_history
     sim_history = study_results.simulation_history
     model_name = _select_model(sim_history, model_name)
     output_hist = sim_history[model_name]

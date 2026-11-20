@@ -4300,6 +4300,7 @@ class TestSparseGridAdaptiveSurrogateStudy(
             def __init__(self):
                 self.parameter_history = {"p1": [0.1, 0.2, 0.4],
                                           "p2": [0.3, 0.4, 0.25]}
+                self.processed_parameter_history = self.parameter_history
                 self.number_of_evaluations = 3
                 self.simulation_history = {}
                 self.qoi_history = {}
