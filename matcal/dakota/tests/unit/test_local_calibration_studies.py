@@ -4,7 +4,11 @@ import numpy as np
 
 from matcal.core.data import convert_dictionary_to_data
 from matcal.core.models import PythonModel
-from matcal.core.parameters import Parameter, ParameterCollection
+from matcal.core.parameters import (
+    Parameter,
+    ParameterCollection,
+    UserDefinedParameterPreprocessor,
+)
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 from matcal.core.objective import CurveBasedInterpolatedObjective
 
@@ -74,6 +78,12 @@ class TestCalibrationDakotaFile:
 def linear_function(**parameters):
     x = np.linspace(0, 10, 25)
     return {"x": x, "y": parameters["m"] * x + parameters["b"]}
+
+
+def double_slope_and_add_table(parameters):
+    parameters["m"] = 2.0 * parameters["m"]
+    parameters["table"] = "0.0, 0.0\n1.0, 2.0"
+    return parameters
 
 
 def _linear_calibration(method, *setters):
@@ -265,6 +275,24 @@ class TestGradientCalibrationMatCalChecks(MatcalUnitTest):
         with self.assertRaises(RuntimeError):
             study.launch()
         self.assertEqual(os.fstat(1).st_ino, stdout_before.st_ino)
+
+    def test_preprocessor_outcome_is_in_dakota_parameters(self):
+        study = _linear_calibration("nl2sol")
+        study.add_parameter_preprocessor(
+            UserDefinedParameterPreprocessor(double_slope_and_add_table))
+        results = study.launch()
+        self.assertEqual(set(results.outcome), {"best:m", "best:b"})
+        self.assertAlmostEqual(results.outcome["best:m"], 1.0, delta=1e-6)
+
+    def test_matcal_stop_with_preprocessor_reports_dakota_parameters(self):
+        study = _linear_calibration(
+            "conmin_mfd", lambda study: study.set_absolute_convergence_tolerance(1e-2))
+        study.add_parameter_preprocessor(
+            UserDefinedParameterPreprocessor(double_slope_and_add_table))
+        results = study.launch()
+        self.assertIn("MatCal", results.exit_message)
+        self.assertEqual(set(results.outcome), {"best:m", "best:b"})
+        self.assertAlmostEqual(results.outcome["best:m"], 1.0, delta=0.05)
 
     def test_matcal_function_evaluation_limit_for_rol(self):
         study = _linear_calibration(

@@ -3422,8 +3422,9 @@ class AdaptiveSurrogateStudyBase(HaltonStudy):
 
     def _format_params(self, results):
         params_formatted = []
-        for param in results.parameter_history:
-            params_formatted.append(results.parameter_history[param])
+        # The model received the preprocessed parameters.
+        for param in results.processed_parameter_history:
+            params_formatted.append(results.processed_parameter_history[param])
         return np.array(params_formatted).T
 
     def _format_output(self, results):
