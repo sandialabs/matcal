@@ -1,6 +1,7 @@
 """
 This module contains MatCal's interface to Dakota's local calibration methods.
 """
+import math
 from dataclasses import replace
 from numbers import Real
 
@@ -62,6 +63,7 @@ class _GradientMethodKeys():
     conmin_mfd = "conmin_mfd"
     optpp_q_newton = "optpp_q_newton"
     optpp_fd_newton = "optpp_fd_newton"
+    optpp_cg = "optpp_cg"
     rol = "rol"
 
 
@@ -79,6 +81,8 @@ dakota_response_identifier.register(_GradientMethodKeys.optpp_q_newton,
                                     GradientResponseBlock)
 dakota_response_identifier.register(_GradientMethodKeys.optpp_fd_newton, 
                                     GradientResponseBlock)
+dakota_response_identifier.register(_GradientMethodKeys.optpp_cg, 
+                                    GradientResponseBlock)
 dakota_response_identifier.register(_GradientMethodKeys.rol, 
                                     GradientResponseBlock)
 
@@ -86,6 +90,8 @@ dakota_response_identifier.register(_GradientMethodKeys.rol,
 _STEP_SIZE_LIMITS = (1e-9, 1e-1)
 _DEFAULT_STEP_SIZE = NumericalGradientBlock.default_values[DakGradientKeys.fd_step_size]
 _STEP_SIZE_TYPES = ("relative", "absolute", "bounds")
+_BOUNDS_STEP_SIZE_TYPE = "bounds"
+_STEP_SIZE_TYPE_INDEX = 2
 _FINITE_DIFFERENCE_INTERVALS = ("forward", "central")
 
 
@@ -108,6 +114,7 @@ class _GradientDakotaFile(DakotaCalibrationFile):
                         _GradientMethodKeys.conmin_mfd, 
                         _GradientMethodKeys.optpp_q_newton,
                         _GradientMethodKeys.optpp_fd_newton,
+                        _GradientMethodKeys.optpp_cg,
                         _GradientMethodKeys.rol]
 
     valid_methods = least_squares_methods+gradient_methods
@@ -129,6 +136,10 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         Some gradient methods that use an objective that are available but not recommended included 
         "dot_slp", "dot_mmfd", and  "optpp_fd_newton". These performed poorly on our production level tests, so 
         the other methods are recommended unless you have a specific case where these are required.
+
+        "optpp_cg" (nonlinear conjugate gradient) does not support bounds and
+        can only be used when every parameter has the bounds -np.inf and
+        np.inf.
 
         Convergence settings made before or after this call apply to the
         chosen method. See :class:`~matcal.dakota.local_calibration_studies.GradientCalibrationStudy`
@@ -178,7 +189,8 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         Set the variable convergence tolerance: the calibration stops when no
         parameter, scaled to its bounds, changes by more than this value
         between iterates. A value greater than 0.0 and less than 1.0 is
-        expected. Not set by default.
+        expected. Not set by default. Parameters with an infinite bound are
+        not scaled, so their change is measured in their own units.
 
         :param value: the variable convergence tolerance
         :type value: float
@@ -247,7 +259,9 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         Sets the finite difference step size for the gradient calculations.
         The default is a relative step of 5e-5. Because MatCal enables Dakota
         variable scaling, a relative step applies to the parameter value
-        scaled to its bounds.
+        scaled to its bounds. Parameters with an infinite bound are not
+        scaled, so a relative step applies to their raw value and is small
+        for values near zero; consider an "absolute" step type for them.
 
         :param value: the desired step size, between 1e-9 and 0.1.
         :type value: float
@@ -283,6 +297,8 @@ class _GradientDakotaFile(DakotaCalibrationFile):
         Set how Dakota interprets the finite difference step size:
         "relative" (the default) scales it by the parameter value, "absolute"
         uses it directly, and "bounds" scales it by the parameter's bound range.
+        "bounds" cannot be used with unbounded parameters; the study raises
+        a ValueError when launched.
 
         :param step_type: one of "relative", "absolute" or "bounds".
         :type step_type: str
@@ -295,7 +311,15 @@ class _GradientDakotaFile(DakotaCalibrationFile):
                              f"are: {', '.join(_STEP_SIZE_TYPES)}.")
         gradient_block = self.get_gradient_block()
         method_source_line = gradient_block.get_line(DakGradientKeys.method_source)
-        method_source_line.set(step_type, index=2)
+        method_source_line.set(step_type, index=_STEP_SIZE_TYPE_INDEX)
+
+    def _get_step_size_type(self) -> str | None:
+        method_source_line = self.get_gradient_block().get_line(
+            DakGradientKeys.method_source)
+        values = method_source_line.get_values()
+        if len(values) <= _STEP_SIZE_TYPE_INDEX:
+            return None
+        return values[_STEP_SIZE_TYPE_INDEX]
 
 
 class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
@@ -348,6 +372,13 @@ class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
     bound-scaled parameters. Dakota's own tests differ slightly from the
     definitions above: NL2SOL's relative test uses the predicted reduction,
     and NPSOL's convergence tolerance is an optimality tolerance.
+
+    Parameters may be unbounded (a bound of -np.inf or np.inf, with a
+    current value). Dakota does not scale them, so the variable tolerance
+    and relative finite difference steps apply to their raw values, the
+    "bounds" step size type is not allowed, and for rol MatCal leaves the
+    initial trust region radius to ROL. "optpp_cg" requires every parameter
+    to be unbounded.
     """
 
     _has_single_best_point = True
@@ -357,10 +388,41 @@ class GradientCalibrationStudy(_GradientDakotaFile, DakotaCalibrationStudyBase):
         _GradientDakotaFile.__init__(self, )
 
     def _prepare_dakota_input(self):
+        self._check_step_size_type_suits_bounds()
+        self._check_optpp_cg_parameters_are_unbounded()
         self._convergence_monitor = self._create_convergence_monitor()
         if self.get_method_type_block().name == _GradientMethodKeys.rol:
-            _write_text_file(ROL_OPTIONS_FILENAME, rol_options_xml(ROL_INITIAL_RADIUS))
+            _write_text_file(ROL_OPTIONS_FILENAME,
+                             rol_options_xml(self._rol_initial_radius()))
         return super()._prepare_dakota_input()
+
+    def _unbounded_parameter_names(self) -> list[str]:
+        return [name for name, parameter in self._parameter_collection.items()
+                if not parameter.is_bounded()]
+
+    def _rol_initial_radius(self) -> float | None:
+        # Dakota does not scale unbounded parameters, so a radius defined on
+        # the scaled range has no meaning for them; ROL then picks its own.
+        return None if self._unbounded_parameter_names() else ROL_INITIAL_RADIUS
+
+    def _check_step_size_type_suits_bounds(self) -> None:
+        unbounded = self._unbounded_parameter_names()
+        if unbounded and self._get_step_size_type() == _BOUNDS_STEP_SIZE_TYPE:
+            raise ValueError(
+                "The \"bounds\" step size type scales steps by the bound range, "
+                "which is infinite for the unbounded parameters "
+                f"{', '.join(unbounded)}. Use \"relative\" or \"absolute\".")
+
+    def _check_optpp_cg_parameters_are_unbounded(self) -> None:
+        if self.get_method_type_block().name != _GradientMethodKeys.optpp_cg:
+            return
+        bounded = [name for name, parameter in self._parameter_collection.items()
+                   if parameter.get_lower_bound() != -math.inf
+                   or parameter.get_upper_bound() != math.inf]
+        if bounded:
+            raise ValueError(
+                "\"optpp_cg\" does not support bounds. Give every parameter the "
+                f"bounds -np.inf and np.inf; bounded parameters: {', '.join(bounded)}.")
 
 
 class _NongradientMethodKeys():

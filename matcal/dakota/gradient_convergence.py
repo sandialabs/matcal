@@ -27,7 +27,8 @@ class ConvergenceSettings:
         between iterates is at most this value.
     :param absolute: stop when the total objective is at most this value.
     :param variable: stop when no bound-scaled parameter changes by more than
-        this value between iterates.
+        this value between iterates. Unbounded parameters are not scaled, so
+        their change is measured in their own units.
     :param max_function_evaluations: stop after this many evaluations.
     """
 
@@ -95,6 +96,8 @@ ROL_OPTIONS_FILENAME = "matcal_rol_options.xml"
 # On bound-scaled parameters ROL's automatic initial trust region radius can
 # collapse when the projected gradient path reaches a bound, which ends the
 # run on its step tolerance after one iteration. 0.1 is 10% of each range.
+# Dakota leaves unbounded parameters unscaled, so when any parameter is
+# unbounded MatCal leaves the initial radius to ROL.
 ROL_INITIAL_RADIUS = 0.1
 
 # DOT and CONMIN combine their relative test with absolute objective change
@@ -172,11 +175,14 @@ def method_specific_lines(method: str) -> dict[str, str | float]:
     return dict(_method_settings(method).fixed_lines)
 
 
-def rol_options_xml(initial_radius: float) -> str:
+def rol_options_xml(initial_radius: float | None) -> str:
     """
-    :param initial_radius: the trust region radius for ROL's first iteration.
+    :param initial_radius: the trust region radius for ROL's first iteration,
+        or None to let ROL choose it.
     :return: a ROL parameter list for Dakota's ``options_file`` keyword.
     """
+    if initial_radius is None:
+        return '<ParameterList name="Inputs">\n</ParameterList>\n'
     return (
         '<ParameterList name="Inputs">\n'
         '  <ParameterList name="Step">\n'

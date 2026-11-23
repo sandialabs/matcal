@@ -86,9 +86,10 @@ def double_slope_and_add_table(parameters):
     return parameters
 
 
-def _linear_calibration(method, *setters):
-    slope = Parameter("m", 0.0, 10.0, 1.0)
-    intercept = Parameter("b", -5.0, 5.0, 0.5)
+def _linear_calibration(method, *setters, slope_bounds=(0.0, 10.0),
+                        intercept_bounds=(-5.0, 5.0)):
+    slope = Parameter("m", *slope_bounds, 1.0)
+    intercept = Parameter("b", *intercept_bounds, 0.5)
     study = GradientCalibrationStudy(ParameterCollection("line", slope, intercept))
     study.set_method(method)
     goal = convert_dictionary_to_data(linear_function(m=2.0, b=0.0))
@@ -323,6 +324,81 @@ class TestGradientCalibrationMatCalChecks(MatcalUnitTest):
         self.assertTrue(results.success)
         self.assertAlmostEqual(results.outcome["best:m"], 2.0, delta=1e-2)
         self.assertAlmostEqual(results.outcome["best:b"], 0.0, delta=5e-2)
+
+
+UNBOUNDED = (-np.inf, np.inf)
+
+
+class TestGradientCalibrationUnboundedParameters(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def _assert_line_found(self, results, slope_delta=1e-2, intercept_delta=5e-2):
+        self.assertAlmostEqual(results.outcome["best:m"], 2.0, delta=slope_delta)
+        self.assertAlmostEqual(results.outcome["best:b"], 0.0, delta=intercept_delta)
+
+    def test_unbounded_calibration_converges(self):
+        for method in ["nl2sol", "optpp_g_newton", "rol"]:
+            with self.subTest(method=method):
+                study = _linear_calibration(method, slope_bounds=UNBOUNDED,
+                                            intercept_bounds=UNBOUNDED)
+                self._assert_line_found(study.launch())
+
+    def test_unbounded_optpp_objective_methods_converge(self):
+        # As with bounded parameters, the default relative tolerance stops
+        # these methods early on this problem (m near 1.9).
+        for method in ["optpp_q_newton", "optpp_cg"]:
+            with self.subTest(method=method):
+                study = _linear_calibration(
+                    method, lambda study: study.set_convergence_tolerance(1e-8),
+                    slope_bounds=UNBOUNDED, intercept_bounds=UNBOUNDED)
+                self._assert_line_found(study.launch())
+
+    def test_unbounded_optpp_fd_newton_improves(self):
+        # optpp_fd_newton converges only partly on this problem, bounded or not.
+        study = _linear_calibration("optpp_fd_newton", slope_bounds=UNBOUNDED,
+                                    intercept_bounds=UNBOUNDED)
+        results = study.launch()
+        self.assertTrue(results.success)
+        self.assertAlmostEqual(results.outcome["best:m"], 2.0, delta=0.25)
+
+    def test_mixed_bounded_and_unbounded_calibration_converges(self):
+        for method in ["nl2sol", "rol"]:
+            with self.subTest(method=method):
+                study = _linear_calibration(method, slope_bounds=(0.0, np.inf))
+                self._assert_line_found(study.launch())
+        with open("matcal_rol_options.xml") as options_file:
+            self.assertNotIn("Initial Radius", options_file.read())
+
+    def test_rol_leaves_initial_radius_to_rol_when_unbounded(self):
+        study = _linear_calibration("rol", slope_bounds=(0.0, np.inf))
+        self.assertIsNone(study._rol_initial_radius())
+        bounded_study = _linear_calibration("rol")
+        self.assertEqual(bounded_study._rol_initial_radius(), 0.1)
+
+    def test_bounds_step_size_type_rejects_unbounded_parameters(self):
+        study = _linear_calibration(
+            "nl2sol", lambda study: study.set_step_size_type("bounds"),
+            slope_bounds=(0.0, np.inf))
+        with self.assertRaisesRegex(ValueError, "unbounded parameters m"):
+            study.launch()
+
+    def test_bounds_step_size_type_allowed_for_bounded_parameters(self):
+        study = _linear_calibration(
+            "nl2sol", lambda study: study.set_step_size_type("bounds"))
+        study._check_step_size_type_suits_bounds()
+        self.assertEqual(study._get_step_size_type(), "bounds")
+
+    def test_default_step_size_type_is_unset(self):
+        study = _linear_calibration("nl2sol", slope_bounds=(0.0, np.inf))
+        self.assertIsNone(study._get_step_size_type())
+        study._check_step_size_type_suits_bounds()
+
+    def test_optpp_cg_rejects_bounded_parameters(self):
+        study = _linear_calibration("optpp_cg", slope_bounds=(0.0, np.inf),
+                                    intercept_bounds=UNBOUNDED)
+        with self.assertRaisesRegex(ValueError, "bounded parameters: m"):
+            study.launch()
 
 
 class TestGradientCalibrationStudyDefaultNl2sol(TestDakotaStudyBase.CommonTests):
