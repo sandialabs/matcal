@@ -112,13 +112,6 @@ Next, we plot the data to verify we imported the data as expected.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/data.py:588: UserWarning: Ignoring specified arguments in this call because figure with num: 1 already exists
-      plt.figure(figure.number, constrained_layout=True)
-
 
 
 
@@ -302,15 +295,15 @@ and launch the study.
  .. code-block:: none
 
     Initial covariance estimate:
-     [[ 1.32115570e+01  4.61400061e+01 -1.00034011e+00 -1.02329273e+00]
-     [ 4.61400061e+01  2.67119860e+02 -5.48852002e+00 -4.06085165e+00]
-     [-1.00034011e+00 -5.48852002e+00  1.14461084e-01  8.58810450e-02]
-     [-1.02329273e+00 -4.06085165e+00  8.58810450e-02  8.21702040e-02]]
+     [[ 4.34984673e+00  1.72402114e+01 -3.44794251e-01 -3.70267370e-01]
+     [ 1.72402114e+01  1.50579863e+02 -3.07159207e+00 -1.71993300e+00]
+     [-3.44794251e-01 -3.07159207e+00  6.27073701e-02  3.45355698e-02]
+     [-3.70267370e-01 -1.71993300e+00  3.45355698e-02  3.27059616e-02]]
     Calibrated covariance estimate:
-     [[ 1.32115606e+01  4.61399850e+01 -1.01189534e+00 -1.02329366e+00]
-     [ 4.61399850e+01  2.67119452e+02 -5.48851392e+00 -4.09821969e+00]
-     [-1.01189534e+00 -5.48851392e+00  1.14461008e-01  8.58810924e-02]
-     [-1.02329366e+00 -4.09821969e+00  8.58810924e-02  8.21703308e-02]]
+     [[ 4.40954233e+00  1.71925868e+01 -3.42557691e-01 -3.62292371e-01]
+     [ 1.71925868e+01  1.54421855e+02 -3.03704262e+00 -1.70643797e+00]
+     [-3.42557691e-01 -3.03704262e+00  5.97838876e-02  3.28195093e-02]
+     [-3.62292371e-01 -1.70643797e+00  3.28195093e-02  3.08332166e-02]]
 
 
 
@@ -356,7 +349,7 @@ KDE pair plot
 
  .. code-block:: none
 
-    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/parameter_studies.py:918: RuntimeWarning: covariance is not symmetric positive-semidefinite.
+    /gpfs/knkarls/projects/matcal_devel/external_matcal/matcal/core/parameter_studies.py:1189: RuntimeWarning: covariance is not symmetric positive-semidefinite.
       samples = rng.multivariate_normal(mean, sigma, nsamples).T
 
 
@@ -365,7 +358,7 @@ KDE pair plot
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (5 minutes 25.156 seconds)
+   **Total running time of the script:** (4 minutes 15.944 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_304L_viscoplastic_calibration_plot_304L_f_tension_laplace_study_cluster.py:

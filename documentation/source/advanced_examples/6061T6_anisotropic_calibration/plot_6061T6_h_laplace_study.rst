@@ -222,7 +222,7 @@ With the data prepared,
 we can build the model as we did 
 in the previous example :ref:`6061T6 aluminum calibration with anisotropic yield`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 141-159
+.. GENERATED FROM PYTHON SOURCE LINES 141-160
 
 .. code-block:: Python
 
@@ -243,6 +243,7 @@ in the previous example :ref:`6061T6 aluminum calibration with anisotropic yield
 
     top_hat_model = TopHatShearModel(sierra_material, **top_hat_geo_params)
     top_hat_model.set_name('top_hat_shear')
+    top_hat_model.add_constants(temperature=530)
 
 
 
@@ -251,12 +252,12 @@ in the previous example :ref:`6061T6 aluminum calibration with anisotropic yield
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 160-162
+.. GENERATED FROM PYTHON SOURCE LINES 161-163
 
 Next, we set its allowable load drop factor 
 and provide boundary condition data. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 162-165
+.. GENERATED FROM PYTHON SOURCE LINES 163-166
 
 .. code-block:: Python
 
@@ -270,12 +271,12 @@ and provide boundary condition data.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 166-168
+.. GENERATED FROM PYTHON SOURCE LINES 167-169
 
 Lastly, we setup the platform information 
 for running the model. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 168-173
+.. GENERATED FROM PYTHON SOURCE LINES 169-174
 
 .. code-block:: Python
 
@@ -291,7 +292,7 @@ for running the model.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 174-180
+.. GENERATED FROM PYTHON SOURCE LINES 175-181
 
 We now create the objectives for the 
 calibration. 
@@ -300,7 +301,7 @@ using a :class:`~matcal.core.objective.CurveBasedInterpolatedObjective`.
 The tension specimen is calibrated to the engineering stress/strain data
 and the top hat specimen is calibrated to the load-displacement data.
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-185
+.. GENERATED FROM PYTHON SOURCE LINES 181-186
 
 .. code-block:: Python
 
@@ -316,7 +317,7 @@ and the top hat specimen is calibrated to the load-displacement data.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 186-191
+.. GENERATED FROM PYTHON SOURCE LINES 187-192
 
 We now create our parameters for the
 study. The study parameters are the ``yield_stress``, ``hardening`` and 
@@ -324,7 +325,7 @@ study. The study parameters are the ``yield_stress``, ``hardening`` and
 :ref:`6061T6 aluminum calibration with anisotropic yield` with 
 their current value set to their calibration values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 191-198
+.. GENERATED FROM PYTHON SOURCE LINES 192-199
 
 .. code-block:: Python
 
@@ -342,12 +343,12 @@ their current value set to their calibration values.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 199-201
+.. GENERATED FROM PYTHON SOURCE LINES 200-202
 
 To simplify setting up the laplace study, 
 we put all the parameters in a :class:`~matcal.core.parameters.ParameterCollection`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 201-204
+.. GENERATED FROM PYTHON SOURCE LINES 202-205
 
 .. code-block:: Python
 
@@ -361,12 +362,12 @@ we put all the parameters in a :class:`~matcal.core.parameters.ParameterCollecti
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 205-207
+.. GENERATED FROM PYTHON SOURCE LINES 206-208
 
 We also need the anisotropy so we store those parameters with the 
 current value equal to the calibrated parameter values from the calibration step.
 
-.. GENERATED FROM PYTHON SOURCE LINES 207-218
+.. GENERATED FROM PYTHON SOURCE LINES 208-219
 
 .. code-block:: Python
 
@@ -388,7 +389,7 @@ current value equal to the calibrated parameter values from the calibration step
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 219-224
+.. GENERATED FROM PYTHON SOURCE LINES 220-225
 
 The anisotropy parameters and temperature dependence parameters from 
 :ref:`6061T6 aluminum temperature dependent calibration`
@@ -396,7 +397,7 @@ will be added as model constants because they are
 being treated as deterministic and are still required for the models.        
 They are added for the two models for this study.
 
-.. GENERATED FROM PYTHON SOURCE LINES 224-230
+.. GENERATED FROM PYTHON SOURCE LINES 225-231
 
 .. code-block:: Python
 
@@ -413,12 +414,12 @@ They are added for the two models for this study.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 231-233
+.. GENERATED FROM PYTHON SOURCE LINES 232-234
 
 Now we can create our laplace study
 and add our two evaluation sets. 
 
-.. GENERATED FROM PYTHON SOURCE LINES 233-240
+.. GENERATED FROM PYTHON SOURCE LINES 234-241
 
 .. code-block:: Python
 
@@ -436,7 +437,7 @@ and add our two evaluation sets.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 241-250
+.. GENERATED FROM PYTHON SOURCE LINES 242-251
 
 Laplace study specific options include 
 :meth:`~matcal.core.parameter_studies.LaplaceStudy.set_step_size` to 
@@ -448,7 +449,7 @@ the default. Results are likely sensitive to
 this value for practical problems, and re-running the study 
 with different values may be required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-251
+.. GENERATED FROM PYTHON SOURCE LINES 251-252
 
 .. code-block:: Python
 
@@ -460,7 +461,7 @@ with different values may be required.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 252-262
+.. GENERATED FROM PYTHON SOURCE LINES 253-263
 
 For this study type, 
 providing an inaccurate noise estimate can result in unreasonable solutions. 
@@ -473,7 +474,7 @@ providing an inaccurate noise estimate can result in unreasonable solutions.
    the study as a restart after changing the noise estimate or by calling
    :meth:`~matcal.core.parameter_studies.LaplaceStudy.update_laplace_estimate`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 262-265
+.. GENERATED FROM PYTHON SOURCE LINES 263-266
 
 .. code-block:: Python
 
@@ -487,7 +488,7 @@ providing an inaccurate noise estimate can result in unreasonable solutions.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 266-276
+.. GENERATED FROM PYTHON SOURCE LINES 267-277
 
 After the study completes, there are two results of concern:
  #. The estimated parameter covariance -  calculated directly from the residual magnitude 
@@ -500,7 +501,7 @@ After the study completes, there are two results of concern:
 We print both of these values below and save the results to be used in the next 
 step of this example.
 
-.. GENERATED FROM PYTHON SOURCE LINES 276-280
+.. GENERATED FROM PYTHON SOURCE LINES 277-281
 
 .. code-block:: Python
 
@@ -517,18 +518,18 @@ step of this example.
  .. code-block:: none
 
     Initial covariance estimate:
-     [[ 113.66447863  -20.90050619 -422.18930642]
-     [ -20.90050619    5.62379061   70.41401601]
-     [-422.18930642   70.41401601 1607.23724872]]
+     [[ 0.16231536 -0.03103513 -0.18622823]
+     [-0.03103513  0.4092347  -0.62153526]
+     [-0.18622823 -0.62153526  1.89414626]]
     Calibrated covariance estimate:
-     [[ 125.77931866  -22.62114298 -485.48255954]
-     [ -22.62114298    5.84238658   77.55667787]
-     [-485.48255954   77.55667787 1915.39817462]]
+     [[ 0.16236219 -0.03142088 -0.18638363]
+     [-0.03142088  0.40954859 -0.62166538]
+     [-0.18638363 -0.62166538  1.89376745]]
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 281-286
+.. GENERATED FROM PYTHON SOURCE LINES 282-287
 
 As noted above, the results can be sensitive to the estimated noise. To illustrate this point, 
 we re-run the study results processing with updated noise estimates and print the results. 
@@ -536,7 +537,7 @@ Before updating the results, we save the previous
 results as copy of themselves because the update just updates the values on the results 
 object.
 
-.. GENERATED FROM PYTHON SOURCE LINES 286-300
+.. GENERATED FROM PYTHON SOURCE LINES 287-301
 
 .. code-block:: Python
 
@@ -563,26 +564,26 @@ object.
  .. code-block:: none
 
     Initial covariance estimate noise set to 1e-2:
-     [[ 113.66447863  -20.90050619 -422.18930642]
-     [ -20.90050619    5.62379061   70.41401601]
-     [-422.18930642   70.41401601 1607.23724872]]
+     [[ 0.16231536 -0.03103513 -0.18622823]
+     [-0.03103513  0.4092347  -0.62153526]
+     [-0.18622823 -0.62153526  1.89414626]]
     Calibrated covariance estimate noise set to 1e-2:
-     [[ 125.77931866  -22.62114298 -485.48255954]
-     [ -22.62114298    5.84238658   77.55667787]
-     [-485.48255954   77.55667787 1915.39817462]]
+     [[ 0.16236219 -0.03142088 -0.18638363]
+     [-0.03142088  0.40954859 -0.62166538]
+     [-0.18638363 -0.62166538  1.89376745]]
     Initial covariance estimate noise set to 1e-1:
-     [[ 113.66447862  -20.90050619 -422.18930638]
-     [ -20.90050619    5.62379061   70.414016  ]
-     [-422.18930638   70.414016   1607.23724857]]
+     [[ 0.16231536 -0.03103513 -0.18622823]
+     [-0.03103513  0.4092347  -0.62153526]
+     [-0.18622823 -0.62153526  1.89414625]]
     Calibrated covariance estimate noise set to 1e-1:
-     [[ 116.61950646  -21.1831117  -430.32258055]
-     [ -21.1831117     5.65767236   72.91811568]
-     [-430.32258055   72.91811568 1626.45894062]]
+     [[ 0.16231536 -0.0310355  -0.18622823]
+     [-0.0310355   0.4092347  -0.62153526]
+     [-0.18622823 -0.62153526  1.89414625]]
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 301-308
+.. GENERATED FROM PYTHON SOURCE LINES 302-309
 
 Note the difference in the result.
 This highlights the sensitivity of the method to the noise estimate. Some iteration may be
@@ -592,7 +593,7 @@ Next, we sample the multivariate normal provided by the study covariance
 and calibrated values as the mean and visualize the results using seaborn's
 KDE pair plot
 
-.. GENERATED FROM PYTHON SOURCE LINES 308-321
+.. GENERATED FROM PYTHON SOURCE LINES 309-322
 
 .. code-block:: Python
 
@@ -618,20 +619,13 @@ KDE pair plot
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/matcal/core/parameter_studies.py:919: RuntimeWarning: covariance is not symmetric positive-semidefinite.
-      samples = rng.multivariate_normal(mean, sigma, nsamples).T
-
 
 
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (25 minutes 24.911 seconds)
+   **Total running time of the script:** (18 minutes 18.493 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_h_laplace_study.py:

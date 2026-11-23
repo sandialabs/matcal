@@ -173,7 +173,7 @@ data and model as we did in :ref:`6061T6 aluminum calibration with anisotropic y
     tension_model.add_constants(**high_temp_calibrated_params,
                                 **RT_calibrated_params)
     top_hat_model.add_constants(**high_temp_calibrated_params,
-                                **RT_calibrated_params)
+                                **RT_calibrated_params, temperature=530)
 
     results = matcal_load("laplace_study_results.joblib")
 
@@ -204,13 +204,6 @@ uncertainties using :func:`~matcal.core.parameter_studies.sample_multivariate_no
 
 
 
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /gpfs/knkarls/projects/matcal-stable/external_matcal/matcal/core/parameter_studies.py:919: RuntimeWarning: covariance is not symmetric positive-semidefinite.
-      samples = rng.multivariate_normal(mean, sigma, nsamples).T
 
 
 
@@ -283,56 +276,56 @@ to add each parameter set sample to the study.
 
  .. code-block:: none
 
-    Skipping evaluation with (61.64202992956656, 8.820403820213212, -57.71647171700347). Parameters out of range. 
-    Running evaluation (44.1321519596135, 11.389462014361424, 19.68326819492298)
-    Skipping evaluation with (60.811678877883026, 6.748047202094249, -52.00979933449834). Parameters out of range. 
-    Running evaluation (39.298824203331726, 13.466423383094437, 27.288520869839335)
-    Skipping evaluation with (53.407906161067004, 8.701519925871798, -25.11025160297849). Parameters out of range. 
-    Skipping evaluation with (68.73508060351831, 7.554226721149954, -81.7724233523923). Parameters out of range. 
-    Running evaluation (36.206480975163345, 14.230059944796583, 34.70195533092863)
-    Skipping evaluation with (36.420625785679924, 10.53747748382464, 46.43342100522773). Parameters out of range. 
-    Skipping evaluation with (36.274353547447674, 12.194217358063414, 43.020784187904155). Parameters out of range. 
-    Running evaluation (42.04079235171928, 12.478665037058063, 12.602130503968048)
-    Skipping evaluation with (28.920575501564883, 13.329312809871965, 70.73128227285274). Parameters out of range. 
-    Skipping evaluation with (69.59956263479413, 8.36089404754379, -97.10625193145192). Parameters out of range. 
-    Skipping evaluation with (55.91588082262706, 11.739100541417915, -44.32646791164149). Parameters out of range. 
-    Skipping evaluation with (43.083673191449684, 13.459286764575976, 0.677586331267193). Parameters out of range. 
-    Skipping evaluation with (48.032432271333285, 8.633523977033503, -0.31458421474919085). Parameters out of range. 
-    Skipping evaluation with (24.448520809569693, 14.606140103358797, 81.62300501307931). Parameters out of range. 
-    Running evaluation (39.95147774276401, 9.99819413261834, 35.49716217232876)
-    Skipping evaluation with (35.75673165345737, 13.22777871505103, 40.632644787883386). Parameters out of range. 
-    Skipping evaluation with (25.961313980180577, 12.620705459256978, 85.60171085561089). Parameters out of range. 
-    Skipping evaluation with (11.051337656117745, 18.543713057749944, 134.4925063783011). Parameters out of range. 
-    Running evaluation (37.871754385403385, 12.644189325148723, 34.16074176502345)
-    Skipping evaluation with (46.359545095708064, 9.612597730684623, 5.558162107430143). Parameters out of range. 
-    Skipping evaluation with (57.85729130869147, 9.251977140452384, -38.64727797893396). Parameters out of range. 
-    Skipping evaluation with (47.63431561832262, 8.439087314748601, 7.197076758806417). Parameters out of range. 
-    Skipping evaluation with (27.862387617781735, 12.911795120750512, 81.02538367639127). Parameters out of range. 
-    Skipping evaluation with (31.774864910982366, 14.64344625675167, 53.01650635370366). Parameters out of range. 
-    Skipping evaluation with (58.43416787989878, 12.002934411684944, -57.108148666904015). Parameters out of range. 
-    Skipping evaluation with (46.75074264245733, 9.650991915386046, 6.343523410539128). Parameters out of range. 
-    Skipping evaluation with (57.0807345826826, 5.829392968711009, -19.99036968650648). Parameters out of range. 
-    Running evaluation (42.16662301438605, 12.384082340721704, 20.022452078578695)
-    Skipping evaluation with (49.66642962226787, 8.66124484280135, -0.938375852397419). Parameters out of range. 
-    Skipping evaluation with (59.7061757227675, 8.328114713912528, -45.03015787298274). Parameters out of range. 
-    Running evaluation (39.38572497926737, 11.395769927376973, 36.85324771536459)
-    Skipping evaluation with (52.5258243302152, 6.97644239425619, -8.047507697169664). Parameters out of range. 
-    Skipping evaluation with (32.068389777994305, 16.007988791722937, 48.21224574561377). Parameters out of range. 
-    Skipping evaluation with (34.76578970465711, 14.039853791992712, 43.756172072472424). Parameters out of range. 
-    Running evaluation (39.674592468203414, 11.032053846604134, 35.02417824660738)
-    Skipping evaluation with (49.12978732739238, 9.87059656249545, -11.971209137508023). Parameters out of range. 
-    Running evaluation (42.786517958344355, 12.80659701183581, 13.16440502544331)
-    Skipping evaluation with (28.924734840583504, 12.240450666840609, 71.30689910207165). Parameters out of range. 
-    Running evaluation (36.093995353138624, 14.46078780025743, 34.702567857224)
-    Running evaluation (39.541953494935996, 13.179345538147047, 18.7082201210162)
-    Skipping evaluation with (37.467135650394965, 9.507344804174878, 50.0760855864975). Parameters out of range. 
-    Running evaluation (38.89504691654207, 12.942052333361614, 26.36547561974567)
-    Skipping evaluation with (62.24843582607608, 8.475249503837356, -60.7662335616826). Parameters out of range. 
-    Skipping evaluation with (46.93824647301174, 10.688946021434752, -1.0762149670402668). Parameters out of range. 
-    Skipping evaluation with (28.579636767923077, 14.154629425948674, 70.90548707851424). Parameters out of range. 
-    Skipping evaluation with (33.23063447404364, 13.086761487754906, 54.559609365143174). Parameters out of range. 
-    Skipping evaluation with (64.01437454759468, 9.34952320650384, -67.4716374650556). Parameters out of range. 
-    Running evaluation (40.87395654885983, 10.677586170801012, 29.988987054655645)
+    Running evaluation (43.836544515535245, 12.421365384596546, 10.238511169113849)
+    Running evaluation (44.328273566700105, 11.590965803134338, 12.719473179594779)
+    Running evaluation (43.61344762599625, 11.652888762511072, 10.137506667436046)
+    Running evaluation (43.5319635766722, 11.772382513668328, 13.011505236252784)
+    Running evaluation (43.48216605943101, 11.572279894618786, 11.060182910197321)
+    Skipping evaluation with (44.228159273538026, 12.707723451492589, 9.511309770482557). Parameters out of range. 
+    Running evaluation (43.13486194995968, 11.707751570483682, 13.227724210838923)
+    Running evaluation (43.52433534752829, 10.533949331828076, 13.22566678527395)
+    Running evaluation (43.491172829250786, 11.061465803507499, 13.301684954410058)
+    Running evaluation (43.118958560598216, 11.696960122354563, 12.432944803955774)
+    Running evaluation (43.29167951006937, 10.714710867411812, 14.148285907766931)
+    Skipping evaluation with (43.38335750058085, 13.021519294650814, 9.03086421205211). Parameters out of range. 
+    Running evaluation (43.3622286743222, 12.805382215375264, 10.833680494143469)
+    Running evaluation (42.67264051160577, 12.10111300052721, 12.13285859535066)
+    Running evaluation (43.557705953701394, 11.033524531174098, 11.746591010610652)
+    Running evaluation (42.76551694376237, 10.679717340648418, 14.492171962677517)
+    Running evaluation (43.827109634792606, 10.710680431433342, 12.920314168799907)
+    Running evaluation (43.284044045716634, 11.341817256656034, 13.310011952518556)
+    Running evaluation (43.30980328969766, 10.197195427301025, 14.48457798864095)
+    Running evaluation (42.97026720391453, 10.683728148093756, 16.395415137608722)
+    Running evaluation (43.42200250044003, 11.36053182462539, 13.09424318952576)
+    Running evaluation (43.61395991442168, 11.19500801433712, 12.021095786853769)
+    Running evaluation (44.12228954285013, 12.20857641145007, 10.856671148696373)
+    Running evaluation (44.0200412119028, 10.95000389412072, 12.011516788274253)
+    Running evaluation (43.699055991662746, 10.492061290894682, 14.456546742237917)
+    Running evaluation (43.102817478688806, 11.41364180287661, 13.768728038536386)
+    Running evaluation (43.270301846220086, 13.131522975712421, 10.494980071065639)
+    Running evaluation (43.84002457766084, 11.254534563739249, 12.085499249710097)
+    Running evaluation (44.78495001037038, 11.038556557053361, 11.12016567725922)
+    Running evaluation (43.79405060613452, 11.705401444903776, 12.742431678194295)
+    Running evaluation (44.137013362338806, 11.223939554801985, 11.831780549384312)
+    Running evaluation (44.100009857824155, 12.083570751781055, 10.579835992765563)
+    Running evaluation (43.99716488557089, 11.120926670884701, 13.134660863345367)
+    Running evaluation (44.293255760368055, 10.954413677976545, 11.485080233162918)
+    Running evaluation (43.06138854564817, 11.887562109917834, 13.774195259222084)
+    Running evaluation (43.33128152401365, 11.514110721494259, 13.489824470481691)
+    Running evaluation (43.87905161108155, 11.024864763879032, 13.025686983304093)
+    Running evaluation (43.20510373446959, 11.530780356237523, 11.497084145347035)
+    Running evaluation (43.517799231762424, 11.892627742882441, 12.55151449924527)
+    Running evaluation (43.13319731904888, 10.351836375564675, 14.02163114612598)
+    Running evaluation (43.13619359319747, 11.77255461092058, 13.252394647024621)
+    Running evaluation (42.824243333212934, 11.673193029223183, 12.624176235185171)
+    Running evaluation (44.04449502866375, 10.318486067364432, 13.305839185171557)
+    Running evaluation (43.19531832625137, 11.547893802410679, 12.872906377988631)
+    Running evaluation (43.737986584107574, 12.362866329539717, 10.101348587662796)
+    Running evaluation (43.467480882271, 11.597789691701248, 11.927796180860236)
+    Running evaluation (43.33500804402277, 10.954006988530404, 14.247869944767398)
+    Running evaluation (43.496214962367816, 11.060033477018427, 13.713779730725959)
+    Running evaluation (44.00276469201895, 12.830779432503743, 10.05525713149366)
+    Running evaluation (43.83408273481307, 11.022786232634795, 12.84223093466772)
 
 
 
@@ -424,6 +417,17 @@ We use functions to simplify the plotting processes.
          :class: sphx-glr-multi-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+    No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+    No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+    No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+    No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+    No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+
 
 
 
@@ -445,7 +449,7 @@ as the uncertain parameter distributions for the parameters.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (52 minutes 50.410 seconds)
+   **Total running time of the script:** (73 minutes 28.622 seconds)
 
 
 .. _sphx_glr_download_advanced_examples_6061T6_anisotropic_calibration_plot_6061T6_i_uq_validation_parameter_study.py:
