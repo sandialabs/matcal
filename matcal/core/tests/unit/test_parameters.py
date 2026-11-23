@@ -95,6 +95,41 @@ class ParameterTest(MatcalUnitTest):
     self.assertEqual(p.preprocessing_tags[0], MATCAL_PREPROCESSORS.log)
     self.assertEqual(p.preprocessing_tags[1], MATCAL_PREPROCESSORS.unit)
 
+  def test_unbounded_parameter_keeps_given_current_value(self):
+    p = Parameter("a", -np.inf, np.inf, 1.5)
+    self.assertEqual(p.get_current_value(), 1.5)
+    self.assertEqual(p.get_lower_bound(), -np.inf)
+    self.assertEqual(p.get_upper_bound(), np.inf)
+
+  def test_is_bounded(self):
+    self.assertTrue(Parameter("a", 0, 1).is_bounded())
+    self.assertFalse(Parameter("a", -np.inf, 1, 0).is_bounded())
+    self.assertFalse(Parameter("a", 0, np.inf, 1).is_bounded())
+
+  def test_unbounded_parameter_requires_current_value(self):
+    for lower, upper in [(-np.inf, np.inf), (0, np.inf), (-np.inf, 0)]:
+      with self.assertRaisesRegex(Parameter.InvalidCurrentValueError, "current value"):
+        Parameter("a", lower, upper)
+
+  def test_non_finite_current_value_is_rejected(self):
+    for value in [np.inf, -np.inf, np.nan]:
+      self.assert_error_type(Parameter.InvalidCurrentValueError, Parameter,
+                             "a", -np.inf, np.inf, value)
+
+  def test_nan_bound_is_rejected(self):
+    self.assert_error_type(Parameter.InvalidBoundError, Parameter, "a", np.nan, 1, 0)
+    self.assert_error_type(Parameter.InvalidBoundError, Parameter, "a", 0, np.nan, 0)
+
+  def test_unbounded_uniform_uncertain_is_rejected(self):
+    with self.assertRaisesRegex(Parameter.InvalidDistributionError, "finite bounds"):
+      Parameter("a", 0, np.inf, 1, distribution="uniform_uncertain")
+
+  def test_unit_preprocessing_rejects_unbounded_parameter(self):
+    p = Parameter("a", 0, np.inf, 1)
+    with self.assertRaisesRegex(Parameter.InvalidRangeError, "finite bounds"):
+      p._add_unit_preprocessing()
+    self.assertEqual(p.preprocessing_tags, [])
+
 
 def param_preprocessor_func(params):
   params["new"] = params["1"] + params["4"]

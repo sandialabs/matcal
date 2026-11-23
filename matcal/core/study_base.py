@@ -96,6 +96,9 @@ class StudyBase(ABC):
 
     _template_directory_name = "matcal_template"
     _state_filename = STATE_PARAMETER_FILE
+    # Studies that sample or scale within the parameter bounds set this to
+    # True so that unbounded parameters are rejected when the study is built.
+    _requires_finite_bounds: bool = False
 
     def __init__(self, *parameters):
         """
@@ -697,11 +700,24 @@ class StudyBase(ABC):
             :class:`~matcal.core.parameters.ParameterCollection`
 
         :raises StudyTypeError: if the parameters are of incorrect type.
+        :raises StudyInputError: if the study requires finite bounds and a
+            parameter is unbounded.
         """
         param_collection = self._check_set_params_arguments(parameters, ParameterCollection, 
                                                             "parameters")
+        if self._requires_finite_bounds:
+            self._check_parameters_are_bounded(param_collection)
         param_collection = self._apply_parameter_preprocessing(param_collection)
         self._parameter_collection = param_collection 
+
+    def _check_parameters_are_bounded(self, 
+                                      param_collection: ParameterCollection) -> None:
+        unbounded = [name for name, parameter in param_collection.items()
+                     if not parameter.is_bounded()]
+        if unbounded:
+            raise self.StudyInputError(
+                f"{type(self).__name__} requires finite parameter bounds. "
+                f"Unbounded parameters: {', '.join(unbounded)}.")
 
     def _apply_parameter_preprocessing(self, 
                                        param_col:ParameterCollection)->ParameterCollection:

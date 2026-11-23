@@ -66,7 +66,7 @@ from matcal.core.parameters import Parameter
 from matcal.core.parameter_studies import HaltonStudy
 from matcal.core.qoi_extractor import UserDefinedExtractor, InterpolatingExtractor
 from matcal.core.serializer_wrapper import matcal_load
-from matcal.core.study_base import StudyResults
+from matcal.core.study_base import StudyBase, StudyResults
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
 
@@ -1934,6 +1934,19 @@ class TestSparseGridStoppingCriteria(MatcalUnitTest):
         should_stop = self.study._stopping_criterion_met(training_batch_number=4)
         self.assertFalse(should_stop,
                          "Stopping should NOT be triggered when no criteria are met")
+
+class TestAdaptiveSurrogateStudiesRequireFiniteBounds(MatcalUnitTest):
+    def setUp(self):
+        super().setUp(__file__)
+
+    def test_adaptive_surrogate_studies_reject_unbounded_parameters(self):
+        for study_class in [SparseGridAdaptiveSurrogateStudy,
+                            VoronoiAdaptiveSurrogateStudy]:
+            with self.subTest(study_class=study_class.__name__), \
+                    self.assertRaisesRegex(StudyBase.StudyInputError, "y"):
+                study_class(Parameter("x", 0.0, 1.0),
+                            Parameter("y", -np.inf, 1.0, 0.0))
+
 
 class TestGlobalHelperFunctions(MatcalUnitTest):
 

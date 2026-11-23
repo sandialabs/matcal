@@ -150,6 +150,8 @@ class ParameterStudy(StudyBase):
 
 class HaltonStudy(ParameterStudy):
 
+    _requires_finite_bounds = True
+
     def __init__(self, *parameters):
         super().__init__(*parameters)
         self.l_bounds = []

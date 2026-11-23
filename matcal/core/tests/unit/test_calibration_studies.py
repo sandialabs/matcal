@@ -28,8 +28,8 @@ def run_study_for_method(test, method=None, study=ScipyMinimizeStudy,
                          step_size=1e-6, 
                          initial_guess=100.0,
                          central_finite_diff=False, metric_function=None, core_limit=6,
-                         **kwargs):
-    slope = Parameter("m", -100., 100., initial_guess)
+                         bounds=(-100., 100.), **kwargs):
+    slope = Parameter("m", *bounds, initial_guess)
     parameter_collection = ParameterCollection("one_parameter", slope)
 
     goal_value = 2.
@@ -336,6 +336,17 @@ class TestScipyMinimizeStudy(StudyBaseUnitTests.CommonTests):
         bounds = study._get_bounds()
         self.assertEqual(None, bounds)
 
+    def test_get_bounds_passes_infinite_bounds(self):
+        study = self._study_class(Parameter("a", 0, np.inf, 1.0))
+        self.assertEqual([[0.0, np.inf]], study._get_bounds())
+
+    def test_unbounded_calibration(self):
+        self.error_tol = 1e-5
+        for method in ["l-bfgs-b", "slsqp"]:
+            with self.subTest(method=method):
+                run_study_for_method(self, method, self._study_class,
+                                     bounds=(-np.inf, np.inf))
+
 
 
 class TestScipyLeastSquaresStudy(StudyBaseUnitTests.CommonTests):
@@ -421,6 +432,14 @@ class TestScipyLeastSquaresStudy(StudyBaseUnitTests.CommonTests):
         study = self._study_class(self.parameter_collection, method='lm')
         bounds = study._get_bounds()
         self.assertEqual((-np.inf, np.inf), bounds)
+
+    def test_get_bounds_passes_infinite_bounds(self):
+        study = self._study_class(Parameter("a", -np.inf, 10, 1.0))
+        self.assertEqual(([-np.inf], [10.0]), study._get_bounds())
+
+    def test_unbounded_calibration(self):
+        self.error_tol = 1e-6
+        run_study_for_method(self, "trf", self._study_class, bounds=(0.0, np.inf))
 
 
 class TestAlgorithmOptions(MatcalUnitTest):
