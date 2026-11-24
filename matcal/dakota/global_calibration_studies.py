@@ -207,6 +207,7 @@ class MultiObjectiveGACalibrationStudy(_JegaCalibrationDakotaFile, DakotaCalibra
     requires many objective function evaluations and is slow to
     converge. This is the MatCal implementation of the MOGA Dakota method.
     """
+    _requires_finite_bounds = True
 
     def __init__(self, *parameters):
             DakotaCalibrationStudyBase.__init__(self, *parameters)
@@ -224,6 +225,7 @@ class SingleObjectiveGACalibrationStudy(_JegaCalibrationDakotaFile, DakotaCalibr
     implementation of the SOGA method
     from Dakota.
     """
+    _requires_finite_bounds = True
 
     def __init__(self, *parameters):
             DakotaCalibrationStudyBase.__init__(self, *parameters)

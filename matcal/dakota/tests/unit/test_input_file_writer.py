@@ -1,6 +1,8 @@
 import os
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 from matcal.core.parameters import Parameter, ParameterCollection
 from matcal.core.tests.MatcalUnitTest import MatcalUnitTest
 
@@ -98,6 +100,16 @@ class DakotaVariableBlockTest(MatcalUnitTest):
         self.assertEqual(var_block.get_line_value(
             DakVarKeys.upper_bounds, index=2), 2)
          
+    def test_continuous_design_vars_do_not_scale_unbounded_parameters(self):
+        var_block = ContinuousDesignBlock()
+        pc = ParameterCollection("test", Parameter("a", 0, np.inf, 1.0),
+                                 Parameter("b", 0, 2, 0.2),
+                                 Parameter("c", -np.inf, np.inf, 0.0))
+        var_block.set_parameters(pc)
+        scale_types = var_block.get_line(DakVarKeys.scale_types).get_values()[1:]
+        self.assertEqual(scale_types, ['"none"', '"auto"', '"none"'])
+        self.assertEqual(var_block.get_line_value(DakVarKeys.upper_bounds), np.inf)
+
     def test_write_uniform_uncertain_vars(self):
         var_block = UniformUncertainBlock()
         param1 = Parameter("a", 0, 1, 0.1, distribution="uniform_uncertain")

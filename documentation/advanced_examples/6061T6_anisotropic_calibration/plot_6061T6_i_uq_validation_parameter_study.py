@@ -150,7 +150,7 @@ high_temp_calibrated_params = matcal_load("temperature_dependent_parameters.seri
 tension_model.add_constants(**high_temp_calibrated_params,
                             **RT_calibrated_params)
 top_hat_model.add_constants(**high_temp_calibrated_params,
-                            **RT_calibrated_params)
+                            **RT_calibrated_params, temperature=530)
 
 results = matcal_load("laplace_study_results.joblib")
 

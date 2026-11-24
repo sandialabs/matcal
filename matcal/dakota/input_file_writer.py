@@ -99,6 +99,24 @@ class ContinuousDesignBlock(BaseDakotaVariablesBlock):
     default_values = dict(**BaseDakotaVariablesBlock.default_values, 
                           **block_specific_default_values)
 
+    def set_parameters(self, pc) -> None:
+        """
+        Add the parameter lines. Dakota's "auto" scaling computes a
+        degenerate scale for a parameter with one infinite bound, so when
+        any parameter is unbounded the scale types are set per parameter:
+        "auto" for bounded parameters and "none" for unbounded ones.
+
+        :param pc: the parameters to write.
+        :type pc: :class:`~matcal.core.parameters.ParameterCollection`
+        """
+        super().set_parameters(pc)
+        parameters = [pc[name] for name in pc.get_item_names()]
+        if all(parameter.is_bounded() for parameter in parameters):
+            return
+        scale_types = ["\"auto\"" if parameter.is_bounded() else "\"none\""
+                       for parameter in parameters]
+        self.add_line(InputFileLine(DakVarKeys.scale_types, *scale_types), replace=True)
+
 
 class UniformUncertainBlock(BaseDakotaVariablesBlock):
     type = "uniform_uncertain"

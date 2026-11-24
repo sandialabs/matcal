@@ -76,6 +76,7 @@ class LhsSensitivityStudy(_DakotaSensitivityFile, DakotaStudyBase):
     use_overall_objective method.  
     """
     study_class = "Sensitivity"
+    _requires_finite_bounds = True
 
     def __init__(self, *parameters):
         DakotaStudyBase.__init__(self, *parameters)

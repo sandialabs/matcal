@@ -143,4 +143,23 @@ them to a study :class:`~matcal.core.parameter_studies.ParameterStudy`
 to perform mesh or time step convergence on the calibrated 
 models.
 
-   
+Unbounded Study Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+A bound may be infinite, for example ``Parameter("m", -np.inf, np.inf, 1.0)``
+or ``Parameter("E", 0, np.inf, 200e9)``. An unbounded parameter must be given
+a current value, because the average of the bounds is not finite.
+
+Unbounded parameters are supported by the
+:class:`~matcal.dakota.local_calibration_studies.GradientCalibrationStudy`,
+:class:`~matcal.core.calibration_studies.ScipyMinimizeStudy`,
+:class:`~matcal.core.calibration_studies.ScipyLeastSquaresStudy` and
+:class:`~matcal.core.parameter_studies.ParameterStudy`.
+Studies that sample within the bounds, such as the Halton, Latin hypercube,
+adaptive surrogate and genetic algorithm studies, raise an error for them,
+and the "uniform_uncertain" distribution requires finite bounds.
+
+Dakota does not scale unbounded parameters to their bounds. In a gradient
+calibration their variable tolerance and relative finite difference steps
+therefore apply to the raw parameter value, and the "bounds" step size type
+cannot be used. The "optpp_cg" method is available only when every parameter
+has the bounds ``-np.inf`` and ``np.inf``.

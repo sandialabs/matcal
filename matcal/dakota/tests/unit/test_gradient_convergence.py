@@ -295,6 +295,11 @@ class TestRolOptions(MatcalUnitTest):
     def test_other_methods_have_no_specific_lines(self):
         self.assertEqual(method_specific_lines("nl2sol"), {})
 
+    def test_rol_options_xml_without_radius_is_empty_list(self):
+        root = ElementTree.fromstring(rol_options_xml(None))
+        self.assertEqual(root.get("name"), "Inputs")
+        self.assertIsNone(root.find(".//Parameter[@name='Initial Radius']"))
+
     def test_rol_options_xml_sets_initial_radius(self):
         root = ElementTree.fromstring(rol_options_xml(0.25))
         radius = root.find(".//Parameter[@name='Initial Radius']")

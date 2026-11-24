@@ -126,6 +126,16 @@ class StudyBaseUnitTests(object):
 
     class CommonTests(CommonSetup):
 
+        def test_unbounded_parameters_follow_finite_bounds_requirement(self):
+            unbounded = Parameter("a", 0, np.inf, 5)
+            if getattr(self._study_class, "_requires_finite_bounds", False):
+                with self.assertRaisesRegex(StudyBase.StudyInputError,
+                                            "Unbounded parameters: a"):
+                    self._study_class(unbounded)
+            else:
+                study = self._study_class(unbounded)
+                self.assertFalse(study._parameter_collection["a"].is_bounded())
+
         def test_launch_with_no_evaluation_set(self):
             study = self._study_class(self.parameter_collection)
             with self.assertRaises(StudyBase.StudyError):

@@ -155,6 +155,7 @@ top_hat_geo_params = {"total_height":1.25,
 
 top_hat_model = TopHatShearModel(sierra_material, **top_hat_geo_params)
 top_hat_model.set_name('top_hat_shear')
+top_hat_model.add_constants(temperature=530)
 
 #%%
 # Next, we set its allowable load drop factor 

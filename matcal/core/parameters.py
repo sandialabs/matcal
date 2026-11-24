@@ -3,6 +3,7 @@ This module contains all classes related to
 study parameters. 
 """
 from collections import OrderedDict
+import math
 import numbers
 from copy import deepcopy 
 from typing import Any
@@ -51,7 +52,8 @@ class Parameter():
 
     :param current_value: Some MatCal study algorithms require an initial or current value for a parameter. The user can
           provide it here if required. If one is not provided and it is required for an algorithm, it will be set to the
-          average of the lower bound and upper bound.
+          average of the lower bound and upper bound. It is required when a bound is
+          infinite (an unbounded parameter, for example ``lower_bound=-np.inf``).
     :type current_value: float
 
     :param distribution: This specifies the distribution type for the parameters. The distribution type for a parameter is
@@ -75,9 +77,10 @@ class Parameter():
     :raises InvalidRangeError: The initial value is not within the bounds or the lower bound 
       is greater than the upper bound.
     
-    :raises InvalidBoundError: If the bounds are not numbers.
+    :raises InvalidBoundError: If the bounds are not numbers or are NaN.
 
-    :raises InvalidCurrentValueError: If the current value is not a number.
+    :raises InvalidCurrentValueError: If the current value is not a number, or
+      if it is not provided for an unbounded parameter.
 
     :raises InvalidUnitsError: If the units parameter is not a string.
     """
@@ -140,6 +143,14 @@ class Parameter():
     """
     return self._distribution
 
+  def is_bounded(self) -> bool:
+    """
+    :return: True if both bounds are finite. Parameters with an infinite bound
+      are unbounded and can only be used by studies that do not sample or
+      scale within the bounds.
+    """
+    return math.isfinite(self._lower_bound) and math.isfinite(self._upper_bound)
+
   def set_current_value(self,value):
 
     self._current_value = value
@@ -154,7 +165,11 @@ class Parameter():
     """
     return self._preprocessing_tags
 
-  def _add_unit_preprocessing(self):
+  def _add_unit_preprocessing(self) -> None:
+    if not self.is_bounded():
+      raise self.InvalidRangeError(
+        f"Parameter \"{self._name}\" is unbounded; unit preprocessing scales "
+        "parameters to their bounds and requires finite bounds.")
     self._preprocessing_tags.append(MATCAL_PREPROCESSORS.unit)
 
   def _add_log_preprocessing(self):
@@ -209,6 +224,10 @@ class Parameter():
         raise self.InvalidBoundError()
     if not isinstance(upper_bound, numbers.Number):
         raise self.InvalidBoundError()
+    if math.isnan(lower_bound) or math.isnan(upper_bound):
+        raise self.InvalidBoundError(f"Parameter \"{name}\" has a NaN bound.")
+    if not (math.isfinite(lower_bound) and math.isfinite(upper_bound)):
+        self._check_unbounded_inputs(name, current_value, distribution)
 
     if lower_bound >= upper_bound:
         raise self.InvalidRangeError()
@@ -216,6 +235,9 @@ class Parameter():
     if current_value is not None:
         if not isinstance(current_value, numbers.Number):
             raise self.InvalidCurrentValueError()
+        if not math.isfinite(current_value):
+            raise self.InvalidCurrentValueError(
+                f"Parameter \"{name}\" needs a finite current value.")
 
         if current_value < lower_bound or upper_bound < current_value:
             raise self.InvalidRangeError()
@@ -230,6 +252,17 @@ class Parameter():
         raise self.InvalidUnitsError()
           
     return True
+
+  def _check_unbounded_inputs(self, name: str, current_value: Any,
+                              distribution: Any) -> None:
+    if current_value is None:
+      raise self.InvalidCurrentValueError(
+        f"Parameter \"{name}\" has an infinite bound, so it needs a current value.")
+    if (isinstance(distribution, str) and matcal_name_format(distribution).lower()
+        == self.distributions.uniform_uncertain):
+      raise self.InvalidDistributionError(
+        f"Parameter \"{name}\" has an infinite bound; a uniform uncertain "
+        "distribution needs finite bounds.")
 
   def __eq__(self, other):
       name_equal = self.name == other.name
